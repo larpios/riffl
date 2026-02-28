@@ -38,12 +38,17 @@ impl AudioDevice {
 
 impl Default for AudioDevice {
     fn default() -> Self {
-        let host = cpal::default_host();
-        let device = host
-            .default_output_device()
-            .expect("Failed to get default output device");
-        Self::new(device).expect("Failed to create default AudioDevice")
+        default_device().expect("Failed to create default AudioDevice")
     }
+}
+
+/// Get the system default output device
+pub fn default_device() -> AudioResult<AudioDevice> {
+    let host = cpal::default_host();
+    let device = host
+        .default_output_device()
+        .ok_or(AudioError::NoDefaultDevice)?;
+    AudioDevice::new(device)
 }
 
 /// Enumerate all available output devices
@@ -96,5 +101,28 @@ mod tests {
         // Verify that at most one device is marked as default
         let default_count = devices.iter().filter(|d| d.is_default).count();
         assert!(default_count <= 1, "Multiple devices marked as default");
+    }
+
+    #[test]
+    fn test_default_device() {
+        let device = default_device();
+
+        // In CI/test environments without audio hardware, this might fail
+        // but on systems with audio devices, it should succeed
+        match device {
+            Ok(audio_device) => {
+                // Verify we can get the device name
+                let name = audio_device.name();
+                assert!(name.is_ok(), "Failed to get device name");
+                println!("Default device: {}", name.unwrap());
+            }
+            Err(AudioError::NoDefaultDevice) => {
+                // This is acceptable in environments without audio hardware
+                println!("No default audio device available (likely CI/test environment)");
+            }
+            Err(e) => {
+                panic!("Unexpected error getting default device: {:?}", e);
+            }
+        }
     }
 }
