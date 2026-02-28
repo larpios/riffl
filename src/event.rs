@@ -17,8 +17,6 @@ pub enum Event {
     Delete,
     /// Insert a new row (Insert)
     Insert,
-    /// Enter a note with pitch character and octave digit
-    NoteInput(char, u8),
     /// Quit the application ('q' or Ctrl+C)
     Quit,
     /// Resize terminal event
