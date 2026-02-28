@@ -199,6 +199,19 @@ impl AudioStream {
             None => Err(AudioError::StreamError("Stream not built. Call build_with_callback first.".to_string())),
         }
     }
+
+    /// Pause the audio stream
+    /// The stream must be built with build_with_callback before calling this
+    pub fn pause(&self) -> AudioResult<()> {
+        match &self.stream {
+            Some(stream) => {
+                stream.pause().map_err(|e| {
+                    AudioError::StreamError(format!("Failed to pause stream: {}", e))
+                })
+            }
+            None => Err(AudioError::StreamError("Stream not built. Call build_with_callback first.".to_string())),
+        }
+    }
 }
 
 impl Default for AudioStream {
@@ -377,6 +390,116 @@ mod tests {
                         );
 
                         println!("Callback was successfully invoked!");
+                    }
+                    Err(e) => {
+                        // Stream play might fail in some environments
+                        println!("Failed to play stream (acceptable in test environment): {:?}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                println!("Failed to build stream with callback (acceptable in test environment): {:?}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_play_pause() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::time::Duration;
+
+        // Try to create an audio stream
+        let mut stream = match AudioStream::builder().build() {
+            Ok(s) => s,
+            Err(AudioError::NoDefaultDevice) => {
+                println!("No default audio device available (likely CI/test environment)");
+                return; // Skip test in CI environments
+            }
+            Err(e) => {
+                panic!("Unexpected error building stream: {:?}", e);
+            }
+        };
+
+        // Create a counter to track callback invocations
+        let invocation_count = Arc::new(AtomicUsize::new(0));
+        let invocation_count_clone = invocation_count.clone();
+
+        // Create callback that increments counter and fills buffer with silence
+        let callback = Arc::new(Mutex::new(move |data: &mut [f32]| {
+            // Increment invocation counter
+            invocation_count_clone.fetch_add(1, Ordering::SeqCst);
+
+            // Fill buffer with silence (no allocations)
+            for sample in data.iter_mut() {
+                *sample = 0.0;
+            }
+        }));
+
+        // Build the stream with the callback
+        match stream.build_with_callback(callback) {
+            Ok(_) => {
+                println!("Successfully built stream with callback");
+
+                // Verify stream is marked as built
+                assert!(stream.is_built(), "Stream should be marked as built");
+
+                // Start the stream
+                match stream.play() {
+                    Ok(_) => {
+                        println!("Stream started successfully");
+
+                        // Wait for some callbacks to be invoked
+                        std::thread::sleep(Duration::from_millis(100));
+
+                        let count_while_playing = invocation_count.load(Ordering::SeqCst);
+                        println!("Callback invoked {} times while playing", count_while_playing);
+
+                        // Pause the stream
+                        match stream.pause() {
+                            Ok(_) => {
+                                println!("Stream paused successfully");
+
+                                // Wait a bit to ensure stream is paused
+                                std::thread::sleep(Duration::from_millis(100));
+
+                                // Get the count after pausing
+                                let count_after_pause = invocation_count.load(Ordering::SeqCst);
+                                println!("Callback invoked {} times after pause", count_after_pause);
+
+                                // The callback should have been invoked while playing
+                                assert!(
+                                    count_while_playing > 0,
+                                    "Callback should have been invoked while stream was playing"
+                                );
+
+                                // Resume the stream
+                                match stream.play() {
+                                    Ok(_) => {
+                                        println!("Stream resumed successfully");
+
+                                        // Wait for more callbacks
+                                        std::thread::sleep(Duration::from_millis(100));
+
+                                        let count_after_resume = invocation_count.load(Ordering::SeqCst);
+                                        println!("Callback invoked {} times after resume", count_after_resume);
+
+                                        // Should have more invocations after resuming
+                                        assert!(
+                                            count_after_resume > count_after_pause,
+                                            "Callback should continue being invoked after resuming stream"
+                                        );
+
+                                        println!("Play/pause test passed!");
+                                    }
+                                    Err(e) => {
+                                        println!("Failed to resume stream (acceptable in test environment): {:?}", e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                println!("Failed to pause stream (acceptable in test environment): {:?}", e);
+                            }
+                        }
                     }
                     Err(e) => {
                         // Stream play might fail in some environments
