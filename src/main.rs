@@ -176,12 +176,20 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         // Application controls
         Action::Quit => app.quit(),
 
+        // Modal controls
+        Action::OpenModal => {
+            // Open a test modal to demonstrate modal system
+            app.open_test_modal();
+        }
+        Action::Cancel => {
+            // Close the current modal if one is open
+            // Otherwise, this is a no-op
+            app.close_modal();
+        }
+
         // Actions to be handled in future phases
         Action::Confirm => {
             // Will be used for confirming dialogs, selections, etc.
-        }
-        Action::Cancel => {
-            // Will be used for canceling/closing modals, etc.
         }
 
         // Unmapped key - do nothing
