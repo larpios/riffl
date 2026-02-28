@@ -124,15 +124,24 @@ fn run_app<B: ratatui::backend::Backend>(
         // This ensures we update the UI regularly even if there are no events
         if event::poll(TICK_RATE)? {
             // An event is available, read it
-            if let Event::Key(key) = event::read()? {
-                // Only handle KeyEventKind::Press to avoid duplicate events
-                // on some platforms that emit both Press and Release
-                if key.kind == KeyEventKind::Press {
-                    handle_key_event(app, key);
+            match event::read()? {
+                Event::Key(key) => {
+                    // Only handle KeyEventKind::Press to avoid duplicate events
+                    // on some platforms that emit both Press and Release
+                    if key.kind == KeyEventKind::Press {
+                        handle_key_event(app, key);
+                    }
                 }
+                Event::Resize(_width, _height) => {
+                    // Terminal was resized
+                    // The terminal backend will automatically handle the resize
+                    // on the next draw() call, so we just need to acknowledge
+                    // the event and continue to trigger a redraw
+                }
+                // Note: We ignore other event types (Mouse, etc.) for now
+                // They will be handled in later phases
+                _ => {}
             }
-            // Note: We ignore other event types (Mouse, Resize, etc.) for now
-            // They will be handled in later phases
         }
 
         // Update application state (for animations, background tasks, etc.)
