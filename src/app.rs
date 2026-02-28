@@ -100,8 +100,11 @@ impl App {
     ///
     /// Increments the cursor Y position unless already at the maximum.
     /// This implements vim-style j key navigation.
+    /// Bounded to a maximum of 9 for the demo grid.
     pub fn move_down(&mut self) {
-        self.cursor_y = self.cursor_y.saturating_add(1);
+        if self.cursor_y < 9 {
+            self.cursor_y = self.cursor_y.saturating_add(1);
+        }
     }
 
     /// Move cursor up (vim: k)
@@ -116,8 +119,11 @@ impl App {
     ///
     /// Increments the cursor X position unless already at the maximum.
     /// This implements vim-style l key navigation.
+    /// Bounded to a maximum of 9 for the demo grid.
     pub fn move_right(&mut self) {
-        self.cursor_x = self.cursor_x.saturating_add(1);
+        if self.cursor_x < 9 {
+            self.cursor_x = self.cursor_x.saturating_add(1);
+        }
     }
 }
 
