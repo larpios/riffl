@@ -113,19 +113,25 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 /// Render the footer area
 ///
 /// The footer displays status information and keyboard shortcuts.
-/// It provides contextual help to the user.
+/// It provides contextual help to the user and shows the current cursor position.
 ///
 /// # Arguments
 /// * `frame` - The ratatui frame to render to
 /// * `area` - The rectangular area to render the footer in
-/// * `app` - The application state (for future context-sensitive help)
-fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, _app: &App) {
+/// * `app` - The application state (for displaying cursor position)
+fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let footer_text = vec![
         Span::raw(" "),
+        Span::styled("hjkl/arrows", Style::default().fg(Color::Green)),
+        Span::raw(": Navigate "),
+        Span::raw(" | "),
         Span::styled("q", Style::default().fg(Color::Green)),
         Span::raw(": Quit "),
         Span::raw(" | "),
-        Span::raw("TUI Framework: Ratatui + Crossterm"),
+        Span::styled(
+            format!("Cursor: ({}, {})", app.cursor_x, app.cursor_y),
+            Style::default().fg(Color::Yellow),
+        ),
     ];
 
     let footer = Paragraph::new(Line::from(footer_text))
