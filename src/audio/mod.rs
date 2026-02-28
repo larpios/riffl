@@ -9,4 +9,4 @@ pub mod stream;
 pub use device::{AudioDevice, DeviceInfo, SupportedConfig, default_device, enumerate_devices};
 pub use engine::AudioEngine;
 pub use error::{AudioError, AudioResult};
-pub use stream::AudioStream;
+pub use stream::{AudioStream, StreamBuilder, StreamConfig};
