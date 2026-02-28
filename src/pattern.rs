@@ -94,6 +94,12 @@ impl Note {
     }
 }
 
+impl std::fmt::Display for Note {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}{}", self.pitch.to_char(), self.octave)
+    }
+}
+
 /// Represents a row in the pattern (collection of notes across channels)
 pub type Row = Vec<Option<Note>>;
 
