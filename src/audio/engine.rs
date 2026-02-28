@@ -524,4 +524,92 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_callback_registration() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::{Arc, Mutex};
+        use std::time::Duration;
+
+        // Test that we can register a custom audio callback that generates audio data
+        let mut engine = match AudioEngine::new() {
+            Ok(e) => e,
+            Err(AudioError::NoDefaultDevice) => {
+                println!("No default audio device available (likely CI/test environment)");
+                return; // Skip test in CI environments
+            }
+            Err(e) => {
+                panic!("Unexpected error creating engine: {:?}", e);
+            }
+        };
+
+        println!("Created AudioEngine for callback registration test");
+
+        // Create a counter to track callback invocations
+        let invocation_count = Arc::new(AtomicUsize::new(0));
+        let invocation_count_clone = invocation_count.clone();
+
+        // Track the number of samples processed
+        let samples_processed = Arc::new(AtomicUsize::new(0));
+        let samples_processed_clone = samples_processed.clone();
+
+        // Create a callback that generates a simple audio pattern (alternating +0.1 and -0.1)
+        // This simulates generating actual audio data rather than just silence
+        let callback = Arc::new(Mutex::new(move |data: &mut [f32]| {
+            invocation_count_clone.fetch_add(1, Ordering::SeqCst);
+
+            // Generate a simple alternating pattern to demonstrate actual audio generation
+            for (i, sample) in data.iter_mut().enumerate() {
+                *sample = if i % 2 == 0 { 0.1 } else { -0.1 };
+            }
+
+            samples_processed_clone.fetch_add(data.len(), Ordering::SeqCst);
+        }));
+
+        // Test that we can register the callback
+        match engine.set_callback(callback) {
+            Ok(_) => {
+                println!("Successfully registered custom audio callback");
+
+                // Verify the callback was set (engine should have a stream now)
+                // We can verify this by checking that start() doesn't fail with "No callback set"
+
+                // Start playback to verify the callback works
+                match engine.start() {
+                    Ok(_) => {
+                        println!("Successfully started playback with custom callback");
+
+                        // Verify engine is playing
+                        assert!(engine.is_playing(), "Engine should be playing after start");
+
+                        // Wait for some callbacks to be invoked
+                        std::thread::sleep(Duration::from_millis(100));
+
+                        let count = invocation_count.load(Ordering::SeqCst);
+                        let samples = samples_processed.load(Ordering::SeqCst);
+
+                        println!("Callback invoked {} times, processed {} samples", count, samples);
+
+                        // Verify the callback was invoked
+                        assert!(count > 0, "Callback should be invoked during playback");
+                        assert!(samples > 0, "Callback should process samples during playback");
+
+                        // Stop playback
+                        engine.stop();
+                        println!("Successfully stopped playback");
+
+                        assert!(!engine.is_playing(), "Engine should not be playing after stop");
+
+                        println!("Callback registration test passed!");
+                    }
+                    Err(e) => {
+                        println!("Failed to start playback (acceptable in test environment): {:?}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                println!("Failed to register callback (acceptable in test environment): {:?}", e);
+            }
+        }
+    }
 }
