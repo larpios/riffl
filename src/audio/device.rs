@@ -12,6 +12,24 @@ pub struct DeviceInfo {
     pub is_default: bool,
 }
 
+/// Supported configuration for an audio device
+#[derive(Debug, Clone)]
+pub struct SupportedConfig {
+    /// Minimum supported sample rate
+    pub min_sample_rate: u32,
+    /// Maximum supported sample rate
+    pub max_sample_rate: u32,
+    /// Number of channels
+    pub channels: u16,
+}
+
+impl SupportedConfig {
+    /// Check if a specific sample rate is supported
+    pub fn supports_sample_rate(&self, rate: u32) -> bool {
+        rate >= self.min_sample_rate && rate <= self.max_sample_rate
+    }
+}
+
 /// Represents an audio device
 pub struct AudioDevice {
     device: cpal::Device,
@@ -33,6 +51,24 @@ impl AudioDevice {
         self.device
             .name()
             .map_err(|_| AudioError::DeviceNotFound)
+    }
+
+    /// Get supported output configurations for this device
+    pub fn supported_configs(&self) -> AudioResult<Vec<SupportedConfig>> {
+        let configs = self.device
+            .supported_output_configs()
+            .map_err(|_| AudioError::UnsupportedConfig("Failed to query supported configs".to_string()))?;
+
+        let mut supported = Vec::new();
+        for config_range in configs {
+            supported.push(SupportedConfig {
+                min_sample_rate: config_range.min_sample_rate().0,
+                max_sample_rate: config_range.max_sample_rate().0,
+                channels: config_range.channels(),
+            });
+        }
+
+        Ok(supported)
     }
 }
 
@@ -115,6 +151,60 @@ mod tests {
                 let name = audio_device.name();
                 assert!(name.is_ok(), "Failed to get device name");
                 println!("Default device: {}", name.unwrap());
+            }
+            Err(AudioError::NoDefaultDevice) => {
+                // This is acceptable in environments without audio hardware
+                println!("No default audio device available (likely CI/test environment)");
+            }
+            Err(e) => {
+                panic!("Unexpected error getting default device: {:?}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_supported_configs() {
+        let device = default_device();
+
+        match device {
+            Ok(audio_device) => {
+                // Query supported configurations
+                let configs = audio_device.supported_configs();
+                assert!(configs.is_ok(), "Failed to query supported configs");
+
+                let configs = configs.unwrap();
+                println!("Found {} supported configurations", configs.len());
+
+                // Common sample rates to check for
+                let common_rates = [44100, 48000];
+
+                for config in &configs {
+                    println!(
+                        "  Config: {} channels, sample rate {}-{} Hz",
+                        config.channels,
+                        config.min_sample_rate,
+                        config.max_sample_rate
+                    );
+
+                    // Check if common sample rates are supported
+                    for &rate in &common_rates {
+                        if config.supports_sample_rate(rate) {
+                            println!("    -> Supports {} Hz", rate);
+                        }
+                    }
+                }
+
+                // Verify at least one configuration exists
+                assert!(!configs.is_empty(), "Device should have at least one supported config");
+
+                // Verify sample rate ranges are valid
+                for config in &configs {
+                    assert!(
+                        config.min_sample_rate <= config.max_sample_rate,
+                        "Invalid sample rate range"
+                    );
+                    assert!(config.channels > 0, "Channel count must be positive");
+                }
             }
             Err(AudioError::NoDefaultDevice) => {
                 // This is acceptable in environments without audio hardware
