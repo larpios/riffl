@@ -33,6 +33,8 @@ fn build_pattern_table(editor: &Editor) -> Table<'static> {
     let pattern = editor.pattern();
     let num_rows = pattern.num_rows();
     let num_channels = pattern.num_channels();
+    let cursor_row = editor.current_row();
+    let cursor_col = editor.current_col();
 
     // Create header row
     let mut header_cells = vec![Cell::from("Row").style(Style::default().add_modifier(Modifier::BOLD))];
@@ -66,7 +68,17 @@ fn build_pattern_table(editor: &Editor) -> Table<'static> {
                 "---".to_string()
             };
 
-            cells.push(Cell::from(note_text));
+            // Apply cursor highlighting to the cell at cursor position
+            let cell_style = if row_idx == cursor_row && channel_idx == cursor_col {
+                Style::default()
+                    .bg(Color::Cyan)
+                    .fg(Color::Black)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+
+            cells.push(Cell::from(note_text).style(cell_style));
         }
 
         rows.push(Row::new(cells).height(1));
@@ -188,6 +200,29 @@ mod tests {
         let table = build_pattern_table(&editor);
 
         // Should handle larger patterns without panic
+        drop(table);
+    }
+
+    #[test]
+    fn test_cursor_highlighting() {
+        let mut editor = Editor::new(8, 4);
+
+        // Test cursor at default position (0, 0)
+        let table = build_pattern_table(&editor);
+        drop(table);
+
+        // Move cursor and rebuild table
+        editor.move_down();
+        editor.move_right();
+        let table = build_pattern_table(&editor);
+        drop(table);
+
+        // Move cursor to different positions
+        editor.move_down();
+        editor.move_down();
+        editor.move_right();
+        editor.move_right();
+        let table = build_pattern_table(&editor);
         drop(table);
     }
 }
