@@ -185,6 +185,30 @@ cargo clippy
 cargo fmt
 ```
 
+### Acceptance Testing
+
+A comprehensive acceptance test suite is included to verify all requirements:
+
+```bash
+# Run the automated acceptance test suite
+./run_acceptance_tests.sh
+
+# Or run the full feature demonstration
+cargo run --example full_demo
+```
+
+The acceptance test suite verifies:
+- ✓ Release build completes successfully
+- ✓ All unit tests pass
+- ✓ Device enumeration works
+- ✓ Latency is under 20ms
+- ✓ Sample rate switching (44.1kHz ↔ 48kHz)
+- ✓ Audio playback quality
+- ✓ Clean shutdown without artifacts
+- ✓ Code quality (formatting, clippy)
+
+See [ACCEPTANCE_TEST.md](./ACCEPTANCE_TEST.md) for detailed test documentation.
+
 ### Troubleshooting
 
 #### No audio devices found
