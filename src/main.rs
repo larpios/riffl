@@ -16,6 +16,7 @@ fn main() {
             println!("✓ AudioEngine initialized successfully");
             println!("  Sample rate: {}Hz", e.sample_rate());
             println!("  Device: {}", e.device().name().unwrap_or_else(|_| "Unknown".to_string()));
+            println!("  Latency: {:.2}ms (theoretical)", e.latency_ms());
             e
         }
         Err(e) => {
