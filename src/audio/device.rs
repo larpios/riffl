@@ -115,6 +115,30 @@ pub fn enumerate_devices() -> AudioResult<Vec<DeviceInfo>> {
     Ok(devices)
 }
 
+/// Get an audio device by index
+///
+/// # Arguments
+///
+/// * `index` - The index of the device to retrieve (from enumerate_devices)
+///
+/// # Errors
+///
+/// Returns an error if the index is out of bounds or the device cannot be accessed
+pub fn get_device_by_index(index: usize) -> AudioResult<AudioDevice> {
+    let host = cpal::default_host();
+
+    let output_devices = host
+        .output_devices()
+        .map_err(|_| AudioError::DeviceNotFound)?;
+
+    let device = output_devices
+        .skip(index)
+        .next()
+        .ok_or(AudioError::DeviceNotFound)?;
+
+    AudioDevice::new(device)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
