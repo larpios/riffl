@@ -4,9 +4,11 @@ mod ui;
 
 use std::io;
 use std::panic;
+use std::time::Duration;
 
 use anyhow::Result;
 use crossterm::{
+    event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -16,6 +18,12 @@ use ratatui::{
 };
 
 use app::App;
+
+/// Tick rate for the event loop (250ms = 4 FPS)
+///
+/// This controls how often we update the application state and redraw the UI.
+/// 250ms provides a good balance between responsiveness and CPU usage.
+const TICK_RATE: Duration = Duration::from_millis(250);
 
 fn main() -> Result<()> {
     // Set up panic hook to restore terminal before panicking
@@ -83,11 +91,16 @@ fn restore_terminal() -> Result<()> {
     Ok(())
 }
 
-/// Main application loop
+/// Main application loop with tick rate control
 ///
-/// This is a minimal event loop that will be expanded in the next subtask.
-/// For now, it just renders and immediately exits to verify terminal
-/// initialization and cleanup work correctly.
+/// This implements a standard TUI event loop pattern:
+/// - Poll for events with a timeout (tick rate)
+/// - Handle keyboard input events
+/// - Update application state on each tick
+/// - Render the UI
+///
+/// The loop continues while app.should_run() returns true.
+/// Pressing 'q' will trigger app.quit() and exit the loop.
 ///
 /// # Arguments
 /// * `terminal` - The terminal instance to render to
@@ -97,16 +110,54 @@ fn restore_terminal() -> Result<()> {
 /// Ok(()) if the app runs successfully
 ///
 /// # Errors
-/// Returns an error if rendering or app logic fails
+/// Returns an error if rendering, event polling, or app logic fails
 fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     app: &mut App,
 ) -> Result<()> {
-    // For now, just clear the terminal to verify initialization works
-    terminal.clear()?;
+    // Main event loop - runs until app signals it should quit
+    while app.should_run() {
+        // Render the UI
+        terminal.draw(|frame| ui::render(frame, app))?;
 
-    // The event loop will be implemented in the next subtask (subtask-2-3)
-    // For now, we just verify that the terminal initializes and cleans up properly
+        // Poll for events with a timeout equal to our tick rate
+        // This ensures we update the UI regularly even if there are no events
+        if event::poll(TICK_RATE)? {
+            // An event is available, read it
+            if let Event::Key(key) = event::read()? {
+                // Only handle KeyEventKind::Press to avoid duplicate events
+                // on some platforms that emit both Press and Release
+                if key.kind == KeyEventKind::Press {
+                    handle_key_event(app, key);
+                }
+            }
+            // Note: We ignore other event types (Mouse, Resize, etc.) for now
+            // They will be handled in later phases
+        }
+
+        // Update application state (for animations, background tasks, etc.)
+        app.update()?;
+    }
 
     Ok(())
+}
+
+/// Handle keyboard input events
+///
+/// This processes keyboard input and updates the application state accordingly.
+/// For now, we only handle 'q' to quit the application.
+/// More keybindings will be added in the input phase (phase-4).
+///
+/// # Arguments
+/// * `app` - The application state to update
+/// * `key` - The keyboard event to process
+fn handle_key_event(app: &mut App, key: KeyEvent) {
+    match key.code {
+        // Quit on 'q' key
+        KeyCode::Char('q') => {
+            app.quit();
+        }
+        // Add more keybindings in later phases
+        _ => {}
+    }
 }
