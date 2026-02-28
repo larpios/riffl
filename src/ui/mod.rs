@@ -69,8 +69,9 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect) {
 /// Render the main content area
 ///
 /// The content area displays the primary application content.
-/// For now, this shows a welcome message. In later phases, this will
-/// display the pattern editor, instrument list, and other tracker components.
+/// For now, this shows a navigable grid with cursor highlighting to demonstrate
+/// vim-style navigation. In later phases, this will display the pattern editor,
+/// instrument list, and other tracker components.
 ///
 /// # Arguments
 /// * `frame` - The ratatui frame to render to
@@ -80,32 +81,64 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let content_block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
-        .title(" Main Content ")
+        .title(" Main Content - Use hjkl or arrows to navigate ")
         .title_alignment(Alignment::Left);
 
-    // Create welcome text
-    let welcome_text = vec![
-        Line::from(""),
-        Line::from(Span::styled(
+    // Calculate the inner area (excluding borders)
+    let inner = content_block.inner(area);
+
+    // Create a navigable grid to demonstrate cursor movement
+    // Each cell shows its coordinates, and the cursor position is highlighted
+    let mut lines = Vec::new();
+
+    // Add a header
+    lines.push(Line::from(vec![
+        Span::styled(
             "Welcome to Tracker RS!",
             Style::default().fg(Color::Yellow),
-        )),
-        Line::from(""),
-        Line::from("This is a terminal-based music tracker with vim-style keybindings."),
-        Line::from(""),
-        Line::from("The application uses a responsive layout that adapts to terminal size."),
-        Line::from("Try resizing your terminal window to see the layout adapt gracefully."),
-        Line::from(""),
-        Line::from(""),
-        Line::from(Span::styled(
-            if app.running { "● Status: Running" } else { "○ Status: Stopped" },
-            Style::default().fg(if app.running { Color::Green } else { Color::Red }),
-        )),
-    ];
+        ),
+    ]));
+    lines.push(Line::from(""));
+    lines.push(Line::from("Navigate this grid using vim keys (hjkl) or arrow keys:"));
+    lines.push(Line::from(""));
 
-    let paragraph = Paragraph::new(welcome_text)
+    // Create a simple navigable grid (10x10)
+    // The cursor position will be highlighted with a different background
+    let grid_size = 10;
+    for y in 0..grid_size {
+        let mut row_spans = Vec::new();
+
+        for x in 0..grid_size {
+            // Check if this is the cursor position
+            let is_cursor = app.cursor_x == x && app.cursor_y == y;
+
+            // Create the cell content (coordinates)
+            let cell_text = format!("{:02},{:02} ", x, y);
+
+            // Style the cell - highlight if it's the cursor position
+            let cell_style = if is_cursor {
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Yellow) // Bright highlight for cursor
+            } else {
+                Style::default().fg(Color::DarkGray)
+            };
+
+            row_spans.push(Span::styled(cell_text, cell_style));
+        }
+
+        lines.push(Line::from(row_spans));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        if app.running { "● Status: Running" } else { "○ Status: Stopped" },
+        Style::default().fg(if app.running { Color::Green } else { Color::Red }),
+    )));
+
+    let paragraph = Paragraph::new(lines)
         .block(content_block)
-        .alignment(Alignment::Center);
+        .alignment(Alignment::Left);
 
     frame.render_widget(paragraph, area);
 }
