@@ -31,6 +31,7 @@ impl SupportedConfig {
 }
 
 /// Represents an audio device
+#[derive(Clone)]
 pub struct AudioDevice {
     device: cpal::Device,
 }
