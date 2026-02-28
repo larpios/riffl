@@ -66,6 +66,34 @@ impl AudioEngine {
         &self.config
     }
 
+    /// Get the current sample rate in Hz
+    pub fn sample_rate(&self) -> u32 {
+        self.config.sample_rate
+    }
+
+    /// Set the sample rate in Hz
+    ///
+    /// Common sample rates:
+    /// - 44100 Hz (CD quality)
+    /// - 48000 Hz (professional audio, default)
+    ///
+    /// # Arguments
+    ///
+    /// * `rate` - The sample rate in Hz
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the sample rate is invalid (e.g., 0 Hz)
+    pub fn set_sample_rate(&mut self, rate: u32) -> AudioResult<()> {
+        if rate == 0 {
+            return Err(AudioError::UnsupportedConfig(
+                "Sample rate must be greater than 0".to_string()
+            ));
+        }
+        self.config.sample_rate = rate;
+        Ok(())
+    }
+
     /// List all available audio output devices
     ///
     /// Returns a list of DeviceInfo containing device names and default status.
@@ -210,6 +238,52 @@ mod tests {
             Err(e) => {
                 // Device enumeration failed - acceptable in CI/test environments
                 println!("Device enumeration failed (likely CI/test environment): {:?}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_sample_rate_config() {
+        // Test that we can set and query sample rate
+        let engine = AudioEngine::new();
+
+        match engine {
+            Ok(mut eng) => {
+                // Verify default sample rate is 48kHz
+                assert_eq!(eng.sample_rate(), 48000, "Default sample rate should be 48kHz");
+                println!("Default sample rate: {}Hz", eng.sample_rate());
+
+                // Test setting to 44.1kHz (CD quality)
+                let result = eng.set_sample_rate(44100);
+                assert!(result.is_ok(), "Should be able to set sample rate to 44.1kHz");
+                assert_eq!(eng.sample_rate(), 44100, "Sample rate should be 44.1kHz after setting");
+                println!("Set sample rate to 44.1kHz: {}Hz", eng.sample_rate());
+
+                // Test setting to 48kHz (professional audio)
+                let result = eng.set_sample_rate(48000);
+                assert!(result.is_ok(), "Should be able to set sample rate to 48kHz");
+                assert_eq!(eng.sample_rate(), 48000, "Sample rate should be 48kHz after setting");
+                println!("Set sample rate to 48kHz: {}Hz", eng.sample_rate());
+
+                // Test invalid sample rate (0 Hz)
+                let result = eng.set_sample_rate(0);
+                assert!(result.is_err(), "Should fail when setting sample rate to 0");
+                if let Err(AudioError::UnsupportedConfig(msg)) = result {
+                    assert!(msg.contains("Sample rate"), "Error message should mention sample rate");
+                    println!("Correctly rejected invalid sample rate: {}", msg);
+                }
+
+                // Verify sample rate wasn't changed after invalid attempt
+                assert_eq!(eng.sample_rate(), 48000, "Sample rate should remain 48kHz after failed set");
+
+                println!("Sample rate configuration test passed!");
+            }
+            Err(AudioError::NoDefaultDevice) => {
+                // This is acceptable in CI/test environments without audio hardware
+                println!("No default audio device available (likely CI/test environment)");
+            }
+            Err(e) => {
+                panic!("Unexpected error initializing AudioEngine: {:?}", e);
             }
         }
     }
