@@ -16,6 +16,12 @@ pub struct App {
 
     /// Whether the application is running (for state management)
     pub running: bool,
+
+    /// Cursor X position (for vim-style navigation)
+    pub cursor_x: u16,
+
+    /// Cursor Y position (for vim-style navigation)
+    pub cursor_y: u16,
 }
 
 impl App {
@@ -27,6 +33,8 @@ impl App {
         Self {
             should_quit: false,
             running: false,
+            cursor_x: 0,
+            cursor_y: 0,
         }
     }
 
@@ -78,6 +86,38 @@ impl App {
     pub fn quit(&mut self) {
         self.should_quit = true;
         self.running = false;
+    }
+
+    /// Move cursor left (vim: h)
+    ///
+    /// Decrements the cursor X position unless already at the leftmost position.
+    /// This implements vim-style h key navigation.
+    pub fn move_left(&mut self) {
+        self.cursor_x = self.cursor_x.saturating_sub(1);
+    }
+
+    /// Move cursor down (vim: j)
+    ///
+    /// Increments the cursor Y position unless already at the maximum.
+    /// This implements vim-style j key navigation.
+    pub fn move_down(&mut self) {
+        self.cursor_y = self.cursor_y.saturating_add(1);
+    }
+
+    /// Move cursor up (vim: k)
+    ///
+    /// Decrements the cursor Y position unless already at the topmost position.
+    /// This implements vim-style k key navigation.
+    pub fn move_up(&mut self) {
+        self.cursor_y = self.cursor_y.saturating_sub(1);
+    }
+
+    /// Move cursor right (vim: l)
+    ///
+    /// Increments the cursor X position unless already at the maximum.
+    /// This implements vim-style l key navigation.
+    pub fn move_right(&mut self) {
+        self.cursor_x = self.cursor_x.saturating_add(1);
     }
 }
 
