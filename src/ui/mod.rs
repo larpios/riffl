@@ -36,7 +36,7 @@ pub fn render(frame: &mut Frame, app: &App) {
     let (header_area, content_area, footer_area) = layout::create_main_layout(full_area, 3, 1);
 
     // Render header
-    render_header(frame, header_area);
+    render_header(frame, header_area, app);
 
     // Render main content
     render_content(frame, content_area, app);
@@ -46,7 +46,7 @@ pub fn render(frame: &mut Frame, app: &App) {
 
     // Render modal on top if one is active
     if let Some(active_modal) = app.current_modal() {
-        modal::render_modal(frame, full_area, active_modal);
+        modal::render_modal(frame, full_area, active_modal, &app.theme);
     }
 }
 
@@ -58,17 +58,20 @@ pub fn render(frame: &mut Frame, app: &App) {
 /// # Arguments
 /// * `frame` - The ratatui frame to render to
 /// * `area` - The rectangular area to render the header in
-fn render_header(frame: &mut Frame, area: ratatui::layout::Rect) {
+/// * `app` - The application state (for theme access)
+fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let theme = &app.theme;
+
     let header_block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan))
+        .border_style(theme.border_style())
         .title(" Tracker RS - TUI Music Tracker ")
         .title_alignment(Alignment::Center);
 
     let header_text = Paragraph::new("A terminal-based music tracker built with Rust")
         .block(header_block)
         .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::White));
+        .style(theme.header_style());
 
     frame.render_widget(header_text, area);
 }
@@ -85,9 +88,11 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect) {
 /// * `area` - The rectangular area to render the content in
 /// * `app` - The application state to render
 fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let theme = &app.theme;
+
     let content_block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan))
+        .border_style(theme.border_style())
         .title(" Main Content - Use hjkl or arrows to navigate ")
         .title_alignment(Alignment::Left);
 
@@ -102,11 +107,14 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     lines.push(Line::from(vec![
         Span::styled(
             "Welcome to Tracker RS!",
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(theme.primary),
         ),
     ]));
     lines.push(Line::from(""));
-    lines.push(Line::from("Navigate this grid using vim keys (hjkl) or arrow keys:"));
+    lines.push(Line::from(Span::styled(
+        "Navigate this grid using vim keys (hjkl) or arrow keys:",
+        theme.text_style(),
+    )));
     lines.push(Line::from(""));
 
     // Create a simple navigable grid (10x10)
@@ -124,11 +132,9 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
             // Style the cell - highlight if it's the cursor position
             let cell_style = if is_cursor {
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::Yellow) // Bright highlight for cursor
+                theme.highlight_style()
             } else {
-                Style::default().fg(Color::DarkGray)
+                theme.dimmed_style()
             };
 
             row_spans.push(Span::styled(cell_text, cell_style));
@@ -140,7 +146,7 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
         if app.running { "● Status: Running" } else { "○ Status: Stopped" },
-        Style::default().fg(if app.running { Color::Green } else { Color::Red }),
+        Style::default().fg(if app.running { theme.success_color() } else { theme.error_color() }),
     )));
 
     let paragraph = Paragraph::new(lines)
@@ -160,28 +166,30 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 /// * `area` - The rectangular area to render the footer in
 /// * `app` - The application state (for displaying cursor position)
 fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let theme = &app.theme;
+
     let footer_text = vec![
         Span::raw(" "),
-        Span::styled("hjkl/arrows", Style::default().fg(Color::Green)),
+        Span::styled("hjkl/arrows", Style::default().fg(theme.success_color())),
         Span::raw(": Navigate "),
         Span::raw(" | "),
-        Span::styled("m", Style::default().fg(Color::Green)),
+        Span::styled("m", Style::default().fg(theme.success_color())),
         Span::raw(": Modal "),
         Span::raw(" | "),
-        Span::styled("ESC", Style::default().fg(Color::Green)),
+        Span::styled("ESC", Style::default().fg(theme.success_color())),
         Span::raw(": Close "),
         Span::raw(" | "),
-        Span::styled("q", Style::default().fg(Color::Green)),
+        Span::styled("q", Style::default().fg(theme.success_color())),
         Span::raw(": Quit "),
         Span::raw(" | "),
         Span::styled(
             format!("Cursor: ({}, {})", app.cursor_x, app.cursor_y),
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(theme.primary),
         ),
     ];
 
     let footer = Paragraph::new(Line::from(footer_text))
-        .style(Style::default().fg(Color::White).bg(Color::DarkGray));
+        .style(theme.footer_style());
 
     frame.render_widget(footer, area);
 }
