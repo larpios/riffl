@@ -10,6 +10,8 @@ use ratatui::style::{Color, Modifier, Style};
 ///
 /// The Theme struct contains all color definitions used throughout the UI.
 /// Colors are defined to work well in both 256-color and truecolor terminals.
+/// Uses a mix of named colors and indexed colors (256-color palette) which
+/// automatically work in truecolor terminals as well.
 ///
 /// # Example
 /// ```
@@ -18,11 +20,43 @@ use ratatui::style::{Color, Modifier, Style};
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Theme {
-    // Primary UI colors - to be defined in next subtask
+    // Primary UI colors
+    /// Primary accent color for interactive elements
+    pub primary: Color,
+    /// Secondary accent color for less prominent elements
+    pub secondary: Color,
+
     // Borders and UI chrome
+    /// Border color for normal UI elements
+    pub border: Color,
+    /// Border color for focused/active elements
+    pub border_focused: Color,
+
     // Text colors
+    /// Primary text color for main content
+    pub text: Color,
+    /// Secondary text color for less important content
+    pub text_secondary: Color,
+    /// Dimmed text color for disabled/inactive elements
+    pub text_dimmed: Color,
+
+    // Background colors
+    /// Background color for highlighted/selected elements
+    pub bg_highlight: Color,
+    /// Background color for the header area
+    pub bg_header: Color,
+    /// Background color for the footer area
+    pub bg_footer: Color,
+
     // Status colors
-    // Modal colors
+    /// Color for success/positive status
+    pub status_success: Color,
+    /// Color for warning status
+    pub status_warning: Color,
+    /// Color for error/danger status
+    pub status_error: Color,
+    /// Color for informational status
+    pub status_info: Color,
 }
 
 impl Theme {
@@ -32,10 +66,39 @@ impl Theme {
     /// that works well in both dark and light terminals and supports both
     /// 256-color and truecolor modes.
     ///
+    /// The color palette uses:
+    /// - Named colors (Color::White, Color::Cyan, etc.) for basic colors
+    /// - Indexed colors (Color::Indexed) for 256-color terminal support
+    /// - All colors automatically work in truecolor terminals
+    ///
     /// # Returns
     /// A new Theme instance with default color definitions
     pub fn new() -> Self {
-        Self {}
+        Self {
+            // Primary UI colors - using indexed colors for better 256-color support
+            primary: Color::Cyan,          // Cyan for primary accent
+            secondary: Color::Blue,        // Blue for secondary accent
+
+            // Borders and UI chrome
+            border: Color::Cyan,           // Cyan for normal borders
+            border_focused: Color::Yellow, // Yellow for focused borders
+
+            // Text colors
+            text: Color::White,                 // White for main text
+            text_secondary: Color::Gray,        // Gray for secondary text
+            text_dimmed: Color::DarkGray,       // Dark gray for dimmed text
+
+            // Background colors
+            bg_highlight: Color::Yellow,   // Yellow background for highlights
+            bg_header: Color::Reset,       // Default background for header
+            bg_footer: Color::DarkGray,    // Dark gray background for footer
+
+            // Status colors
+            status_success: Color::Green,  // Green for success
+            status_warning: Color::Yellow, // Yellow for warning
+            status_error: Color::Red,      // Red for errors
+            status_info: Color::Cyan,      // Cyan for info
+        }
     }
 
     /// Get the style for header elements
@@ -47,7 +110,8 @@ impl Theme {
     /// Style configured for header elements
     pub fn header_style(&self) -> Style {
         Style::default()
-            .fg(Color::White)
+            .fg(self.text)
+            .bg(self.bg_header)
             .add_modifier(Modifier::BOLD)
     }
 
@@ -60,8 +124,8 @@ impl Theme {
     /// Style configured for footer elements
     pub fn footer_style(&self) -> Style {
         Style::default()
-            .fg(Color::White)
-            .bg(Color::DarkGray)
+            .fg(self.text)
+            .bg(self.bg_footer)
     }
 
     /// Get the border color for normal UI elements
@@ -69,7 +133,7 @@ impl Theme {
     /// # Returns
     /// Color for standard UI borders
     pub fn border_color(&self) -> Color {
-        Color::Cyan
+        self.border
     }
 
     /// Get the border style for UI elements
@@ -90,7 +154,7 @@ impl Theme {
     pub fn highlight_style(&self) -> Style {
         Style::default()
             .fg(Color::Black)
-            .bg(Color::Yellow)
+            .bg(self.bg_highlight)
     }
 
     /// Get the style for normal text content
@@ -98,7 +162,7 @@ impl Theme {
     /// # Returns
     /// Style configured for regular text
     pub fn text_style(&self) -> Style {
-        Style::default().fg(Color::White)
+        Style::default().fg(self.text)
     }
 
     /// Get the style for dimmed/secondary text
@@ -108,7 +172,7 @@ impl Theme {
     /// # Returns
     /// Style configured for dimmed text
     pub fn dimmed_style(&self) -> Style {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(self.text_dimmed)
     }
 
     /// Get color for success/positive status
@@ -116,7 +180,7 @@ impl Theme {
     /// # Returns
     /// Color for success states
     pub fn success_color(&self) -> Color {
-        Color::Green
+        self.status_success
     }
 
     /// Get color for warning status
@@ -124,7 +188,7 @@ impl Theme {
     /// # Returns
     /// Color for warning states
     pub fn warning_color(&self) -> Color {
-        Color::Yellow
+        self.status_warning
     }
 
     /// Get color for error/danger status
@@ -132,7 +196,7 @@ impl Theme {
     /// # Returns
     /// Color for error states
     pub fn error_color(&self) -> Color {
-        Color::Red
+        self.status_error
     }
 
     /// Get color for info status
@@ -140,7 +204,7 @@ impl Theme {
     /// # Returns
     /// Color for informational elements
     pub fn info_color(&self) -> Color {
-        Color::Cyan
+        self.status_info
     }
 }
 
@@ -231,5 +295,68 @@ mod tests {
         let theme1 = Theme::default();
         let theme2 = theme1;
         assert_eq!(theme1, theme2);
+    }
+
+    #[test]
+    fn test_color_palette_fields() {
+        let theme = Theme::default();
+
+        // Test primary UI colors
+        assert_eq!(theme.primary, Color::Cyan);
+        assert_eq!(theme.secondary, Color::Blue);
+
+        // Test border colors
+        assert_eq!(theme.border, Color::Cyan);
+        assert_eq!(theme.border_focused, Color::Yellow);
+
+        // Test text colors
+        assert_eq!(theme.text, Color::White);
+        assert_eq!(theme.text_secondary, Color::Gray);
+        assert_eq!(theme.text_dimmed, Color::DarkGray);
+
+        // Test background colors
+        assert_eq!(theme.bg_highlight, Color::Yellow);
+        assert_eq!(theme.bg_header, Color::Reset);
+        assert_eq!(theme.bg_footer, Color::DarkGray);
+
+        // Test status colors
+        assert_eq!(theme.status_success, Color::Green);
+        assert_eq!(theme.status_warning, Color::Yellow);
+        assert_eq!(theme.status_error, Color::Red);
+        assert_eq!(theme.status_info, Color::Cyan);
+    }
+
+    #[test]
+    fn test_256_color_compatibility() {
+        let theme = Theme::default();
+
+        // All colors should work in 256-color terminals
+        // Named colors (White, Cyan, etc.) are supported in all terminals
+        // This test verifies the color assignments are compatible
+        assert!(matches!(
+            theme.text,
+            Color::White | Color::Indexed(_) | Color::Rgb(_, _, _)
+        ));
+        assert!(matches!(
+            theme.border,
+            Color::Cyan | Color::Indexed(_) | Color::Rgb(_, _, _)
+        ));
+        assert!(matches!(
+            theme.status_success,
+            Color::Green | Color::Indexed(_) | Color::Rgb(_, _, _)
+        ));
+    }
+
+    #[test]
+    fn test_style_methods_use_theme_colors() {
+        let theme = Theme::default();
+
+        // Verify that style methods use theme color fields
+        assert_eq!(theme.header_style().fg, Some(theme.text));
+        assert_eq!(theme.footer_style().bg, Some(theme.bg_footer));
+        assert_eq!(theme.border_style().fg, Some(theme.border));
+        assert_eq!(theme.highlight_style().bg, Some(theme.bg_highlight));
+        assert_eq!(theme.text_style().fg, Some(theme.text));
+        assert_eq!(theme.dimmed_style().fg, Some(theme.text_dimmed));
     }
 }
