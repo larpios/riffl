@@ -39,3 +39,47 @@ impl From<cpal::BuildStreamError> for AudioError {
 
 /// Type alias for Result with AudioError
 pub type AudioResult<T> = Result<T, AudioError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_device_not_found_error() {
+        let err = AudioError::DeviceNotFound;
+        assert_eq!(err.to_string(), "audio device not found");
+    }
+
+    #[test]
+    fn test_no_default_device_error() {
+        let err = AudioError::NoDefaultDevice;
+        assert_eq!(err.to_string(), "no default audio device available");
+    }
+
+    #[test]
+    fn test_unsupported_config_error() {
+        let msg = "48kHz not supported";
+        let err = AudioError::UnsupportedConfig(msg.to_string());
+        assert_eq!(err.to_string(), "unsupported configuration: 48kHz not supported");
+    }
+
+    #[test]
+    fn test_stream_error() {
+        let msg = "buffer underrun";
+        let err = AudioError::StreamError(msg.to_string());
+        assert_eq!(err.to_string(), "stream error: buffer underrun");
+    }
+
+    #[test]
+    fn test_audio_result_ok() {
+        let result: AudioResult<i32> = Ok(42);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[test]
+    fn test_audio_result_err() {
+        let result: AudioResult<i32> = Err(AudioError::DeviceNotFound);
+        assert!(result.is_err());
+    }
+}
