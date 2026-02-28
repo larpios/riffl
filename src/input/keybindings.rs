@@ -133,6 +133,29 @@ pub fn is_navigation_action(action: Action) -> bool {
     )
 }
 
+/// Check if an action dismisses modal dialogs
+///
+/// This is a utility function to determine if an action closes/dismisses
+/// modal dialogs. Both Cancel (ESC) and Confirm (Enter) can dismiss modals.
+///
+/// # Arguments
+/// * `action` - The action to check
+///
+/// # Returns
+/// true if the action dismisses modals (Cancel or Confirm), false otherwise
+///
+/// # Example
+/// ```no_run
+/// use tracker_rs::input::keybindings::{Action, is_modal_dismiss_action};
+///
+/// assert!(is_modal_dismiss_action(Action::Cancel));
+/// assert!(is_modal_dismiss_action(Action::Confirm));
+/// assert!(!is_modal_dismiss_action(Action::Quit));
+/// ```
+pub fn is_modal_dismiss_action(action: Action) -> bool {
+    matches!(action, Action::Cancel | Action::Confirm)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -200,5 +223,21 @@ mod tests {
         assert!(!is_navigation_action(Action::Confirm));
         assert!(!is_navigation_action(Action::Cancel));
         assert!(!is_navigation_action(Action::None));
+    }
+
+    #[test]
+    fn test_is_modal_dismiss_action() {
+        // These actions should dismiss modals
+        assert!(is_modal_dismiss_action(Action::Cancel));
+        assert!(is_modal_dismiss_action(Action::Confirm));
+
+        // These actions should not dismiss modals
+        assert!(!is_modal_dismiss_action(Action::Quit));
+        assert!(!is_modal_dismiss_action(Action::MoveLeft));
+        assert!(!is_modal_dismiss_action(Action::MoveDown));
+        assert!(!is_modal_dismiss_action(Action::MoveUp));
+        assert!(!is_modal_dismiss_action(Action::MoveRight));
+        assert!(!is_modal_dismiss_action(Action::OpenModal));
+        assert!(!is_modal_dismiss_action(Action::None));
     }
 }
