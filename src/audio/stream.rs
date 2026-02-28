@@ -220,6 +220,26 @@ impl Default for AudioStream {
     }
 }
 
+/// Implement Drop trait for clean stream shutdown
+/// This ensures no audio artifacts (clicks/pops) when the stream is destroyed
+impl Drop for AudioStream {
+    fn drop(&mut self) {
+        if let Some(stream) = &self.stream {
+            // Pause the stream first to prevent abrupt cutoff
+            // This reduces the likelihood of clicks/pops on shutdown
+            if let Err(e) = stream.pause() {
+                eprintln!("Warning: Failed to pause stream during shutdown: {}", e);
+            }
+
+            // Give the audio system a small amount of time to flush buffers
+            // This helps ensure a clean shutdown without artifacts
+            std::thread::sleep(std::time::Duration::from_millis(50));
+
+            // Stream will be automatically dropped after this, which stops it cleanly
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -503,6 +523,77 @@ mod tests {
                     }
                     Err(e) => {
                         // Stream play might fail in some environments
+                        println!("Failed to play stream (acceptable in test environment): {:?}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                println!("Failed to build stream with callback (acceptable in test environment): {:?}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_clean_shutdown() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::Duration;
+
+        // Try to create an audio stream
+        let mut stream = match AudioStream::builder().build() {
+            Ok(s) => s,
+            Err(AudioError::NoDefaultDevice) => {
+                println!("No default audio device available (likely CI/test environment)");
+                return; // Skip test in CI environments
+            }
+            Err(e) => {
+                panic!("Unexpected error building stream: {:?}", e);
+            }
+        };
+
+        // Create a flag to track if callback was invoked
+        let callback_invoked = Arc::new(AtomicBool::new(false));
+        let callback_invoked_clone = callback_invoked.clone();
+
+        // Create callback that fills buffer with silence
+        let callback = Arc::new(Mutex::new(move |data: &mut [f32]| {
+            callback_invoked_clone.store(true, Ordering::SeqCst);
+
+            // Fill buffer with silence (no allocations)
+            for sample in data.iter_mut() {
+                *sample = 0.0;
+            }
+        }));
+
+        // Build the stream with the callback
+        match stream.build_with_callback(callback) {
+            Ok(_) => {
+                println!("Successfully built stream with callback");
+
+                // Start the stream
+                match stream.play() {
+                    Ok(_) => {
+                        println!("Stream started successfully");
+
+                        // Wait for the callback to be invoked
+                        std::thread::sleep(Duration::from_millis(100));
+
+                        assert!(
+                            callback_invoked.load(Ordering::SeqCst),
+                            "Callback should have been invoked"
+                        );
+
+                        println!("Stream is playing, now testing clean shutdown...");
+
+                        // Drop the stream (this triggers the Drop trait)
+                        // The Drop implementation should:
+                        // 1. Pause the stream
+                        // 2. Wait for buffers to flush
+                        // 3. Drop cleanly without clicks/pops
+                        drop(stream);
+
+                        println!("Stream dropped cleanly (manual verification required for audio artifacts)");
+                    }
+                    Err(e) => {
                         println!("Failed to play stream (acceptable in test environment): {:?}", e);
                     }
                 }
