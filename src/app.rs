@@ -6,6 +6,7 @@
 use anyhow::Result;
 
 use crate::ui::modal::Modal;
+use crate::ui::theme::Theme;
 
 /// Application state
 ///
@@ -31,6 +32,12 @@ pub struct App {
     /// each other. The last modal in the Vec is the currently active one.
     /// When a modal is closed, it's popped from the stack.
     modal_stack: Vec<Modal>,
+
+    /// The application's color theme
+    ///
+    /// This theme is used throughout the UI to maintain consistent styling
+    /// and color choices. It supports both 256-color and truecolor terminals.
+    pub theme: Theme,
 }
 
 impl App {
@@ -45,6 +52,7 @@ impl App {
             cursor_x: 0,
             cursor_y: 0,
             modal_stack: Vec::new(),
+            theme: Theme::default(),
         }
     }
 

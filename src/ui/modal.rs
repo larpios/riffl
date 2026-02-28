@@ -13,6 +13,7 @@ use ratatui::{
 };
 
 use super::layout::create_centered_rect;
+use super::theme::Theme;
 
 /// Type of modal dialog
 ///
@@ -138,26 +139,32 @@ impl Modal {
         self
     }
 
-    /// Get the border color based on modal type
+    /// Get the border color based on modal type and theme
+    ///
+    /// # Arguments
+    /// * `theme` - The application theme to use for color selection
     ///
     /// # Returns
     /// The Color to use for the modal border
-    fn border_color(&self) -> Color {
+    fn border_color(&self, theme: &Theme) -> Color {
         match self.modal_type {
-            ModalType::Info => Color::Cyan,
-            ModalType::Warning => Color::Yellow,
-            ModalType::Error => Color::Red,
-            ModalType::Confirmation => Color::Green,
+            ModalType::Info => theme.info_color(),
+            ModalType::Warning => theme.warning_color(),
+            ModalType::Error => theme.error_color(),
+            ModalType::Confirmation => theme.success_color(),
         }
     }
 
-    /// Get the title style based on modal type
+    /// Get the title style based on modal type and theme
+    ///
+    /// # Arguments
+    /// * `theme` - The application theme to use for styling
     ///
     /// # Returns
     /// The Style to use for the modal title
-    fn title_style(&self) -> Style {
+    fn title_style(&self, theme: &Theme) -> Style {
         Style::default()
-            .fg(self.border_color())
+            .fg(self.border_color(theme))
             .add_modifier(Modifier::BOLD)
     }
 }
@@ -172,14 +179,15 @@ impl Modal {
 /// * `frame` - The ratatui frame to render to
 /// * `area` - The full screen area (modal will be centered within this)
 /// * `modal` - The modal dialog to render
+/// * `theme` - The application theme to use for styling
 ///
 /// # Example
 /// ```no_run
 /// if let Some(modal) = &app.active_modal {
-///     render_modal(frame, frame.area(), modal);
+///     render_modal(frame, frame.area(), modal, &app.theme);
 /// }
 /// ```
-pub fn render_modal(frame: &mut Frame, area: Rect, modal: &Modal) {
+pub fn render_modal(frame: &mut Frame, area: Rect, modal: &Modal, theme: &Theme) {
     // Create centered area for the modal
     let modal_area = create_centered_rect(area, modal.width_percent, modal.height_percent);
 
@@ -189,7 +197,7 @@ pub fn render_modal(frame: &mut Frame, area: Rect, modal: &Modal) {
     // Create the modal border and title
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(modal.border_color()))
+        .border_style(Style::default().fg(modal.border_color(theme)))
         .title(format!(" {} ", modal.title))
         .title_alignment(Alignment::Center)
         .style(Style::default().bg(Color::Black));
@@ -216,18 +224,18 @@ pub fn render_modal(frame: &mut Frame, area: Rect, modal: &Modal) {
         ModalType::Confirmation => {
             vec![
                 Span::raw("Press "),
-                Span::styled("Enter", Style::default().fg(Color::Green)),
+                Span::styled("Enter", Style::default().fg(theme.success_color())),
                 Span::raw(" to confirm, "),
-                Span::styled("ESC", Style::default().fg(Color::Red)),
+                Span::styled("ESC", Style::default().fg(theme.error_color())),
                 Span::raw(" to cancel"),
             ]
         }
         _ => {
             vec![
                 Span::raw("Press "),
-                Span::styled("ESC", Style::default().fg(Color::Green)),
+                Span::styled("ESC", Style::default().fg(theme.success_color())),
                 Span::raw(" or "),
-                Span::styled("Enter", Style::default().fg(Color::Green)),
+                Span::styled("Enter", Style::default().fg(theme.success_color())),
                 Span::raw(" to close"),
             ]
         }
@@ -238,7 +246,7 @@ pub fn render_modal(frame: &mut Frame, area: Rect, modal: &Modal) {
     let paragraph = Paragraph::new(lines)
         .alignment(Alignment::Center)
         .wrap(Wrap { trim: true })
-        .style(Style::default().fg(Color::White));
+        .style(theme.text_style());
 
     frame.render_widget(paragraph, inner_area);
 }
@@ -306,10 +314,11 @@ mod tests {
 
     #[test]
     fn test_border_colors() {
-        assert_eq!(Modal::info("".to_string(), "".to_string()).border_color(), Color::Cyan);
-        assert_eq!(Modal::warning("".to_string(), "".to_string()).border_color(), Color::Yellow);
-        assert_eq!(Modal::error("".to_string(), "".to_string()).border_color(), Color::Red);
-        assert_eq!(Modal::confirmation("".to_string(), "".to_string()).border_color(), Color::Green);
+        let theme = Theme::default();
+        assert_eq!(Modal::info("".to_string(), "".to_string()).border_color(&theme), Color::Cyan);
+        assert_eq!(Modal::warning("".to_string(), "".to_string()).border_color(&theme), Color::Yellow);
+        assert_eq!(Modal::error("".to_string(), "".to_string()).border_color(&theme), Color::Red);
+        assert_eq!(Modal::confirmation("".to_string(), "".to_string()).border_color(&theme), Color::Green);
     }
 
     #[test]
