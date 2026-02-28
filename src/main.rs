@@ -18,6 +18,7 @@ use ratatui::{
 };
 
 use app::App;
+use input::keybindings::{map_key_to_action, Action};
 
 /// Tick rate for the event loop (250ms = 4 FPS)
 ///
@@ -154,19 +155,36 @@ fn run_app<B: ratatui::backend::Backend>(
 /// Handle keyboard input events
 ///
 /// This processes keyboard input and updates the application state accordingly.
-/// For now, we only handle 'q' to quit the application.
-/// More keybindings will be added in the input phase (phase-4).
+/// Uses the keybinding handler to map keys to actions, supporting vim-style
+/// navigation (h/j/k/l) and standard keys (q for quit, etc.).
 ///
 /// # Arguments
 /// * `app` - The application state to update
 /// * `key` - The keyboard event to process
 fn handle_key_event(app: &mut App, key: KeyEvent) {
-    match key.code {
-        // Quit on 'q' key
-        KeyCode::Char('q') => {
-            app.quit();
+    // Map the key event to an action using the keybinding handler
+    let action = map_key_to_action(key);
+
+    // Handle the action
+    match action {
+        // Vim-style navigation
+        Action::MoveLeft => app.move_left(),
+        Action::MoveDown => app.move_down(),
+        Action::MoveUp => app.move_up(),
+        Action::MoveRight => app.move_right(),
+
+        // Application controls
+        Action::Quit => app.quit(),
+
+        // Actions to be handled in future phases
+        Action::Confirm => {
+            // Will be used for confirming dialogs, selections, etc.
         }
-        // Add more keybindings in later phases
-        _ => {}
+        Action::Cancel => {
+            // Will be used for canceling/closing modals, etc.
+        }
+
+        // Unmapped key - do nothing
+        Action::None => {}
     }
 }
