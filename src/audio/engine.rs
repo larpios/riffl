@@ -77,6 +77,28 @@ impl AudioEngine {
         self.config.sample_rate
     }
 
+    /// Get the theoretical audio latency in milliseconds
+    ///
+    /// This calculates the theoretical latency based on buffer size and sample rate.
+    /// Actual latency may be higher due to system audio processing and hardware delays.
+    ///
+    /// Formula: latency_ms = (buffer_size / sample_rate) * 1000
+    ///
+    /// # Returns
+    ///
+    /// The theoretical latency in milliseconds
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let engine = AudioEngine::new()?;
+    /// let latency = engine.latency_ms();
+    /// println!("Audio latency: {:.2}ms", latency);
+    /// ```
+    pub fn latency_ms(&self) -> f32 {
+        (self.config.buffer_size as f32 / self.config.sample_rate as f32) * 1000.0
+    }
+
     /// Set the sample rate in Hz
     ///
     /// Common sample rates:
@@ -350,6 +372,36 @@ mod tests {
             Err(e) => {
                 // Device enumeration failed - acceptable in CI/test environments
                 println!("Device enumeration failed (likely CI/test environment): {:?}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_latency_measurement() {
+        // Test that latency is calculated correctly
+        let engine = AudioEngine::new();
+
+        match engine {
+            Ok(eng) => {
+                let latency = eng.latency_ms();
+                println!("Latency: {:.2}ms", latency);
+
+                // Verify latency calculation
+                // Default config: 256 frames, 48000 Hz
+                // Expected: (256 / 48000) * 1000 = 5.33ms
+                let expected_latency = (eng.config().buffer_size as f32 / eng.config().sample_rate as f32) * 1000.0;
+                assert!((latency - expected_latency).abs() < 0.01, "Latency should match calculation");
+
+                // Verify latency is under 20ms (acceptance criteria)
+                assert!(latency < 20.0, "Latency should be under 20ms for optimal configuration");
+
+                println!("Latency measurement test passed!");
+            }
+            Err(AudioError::NoDefaultDevice) => {
+                println!("No default audio device available (likely CI/test environment)");
+            }
+            Err(e) => {
+                panic!("Unexpected error initializing AudioEngine: {:?}", e);
             }
         }
     }
