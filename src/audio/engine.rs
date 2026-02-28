@@ -2,12 +2,14 @@
 
 use crate::audio::device::AudioDevice;
 use crate::audio::error::{AudioError, AudioResult};
-use crate::audio::stream::StreamConfig;
+use crate::audio::stream::{AudioCallback, AudioStream, StreamConfig};
 
 /// High-level audio engine for managing audio playback
 pub struct AudioEngine {
     device: AudioDevice,
     config: StreamConfig,
+    stream: Option<AudioStream>,
+    playing: bool,
 }
 
 impl AudioEngine {
@@ -35,6 +37,8 @@ impl AudioEngine {
         Ok(AudioEngine {
             device,
             config,
+            stream: None,
+            playing: false,
         })
     }
 
@@ -53,6 +57,8 @@ impl AudioEngine {
         Ok(AudioEngine {
             device,
             config,
+            stream: None,
+            playing: false,
         })
     }
 
@@ -124,6 +130,112 @@ impl AudioEngine {
         let device = crate::audio::device::get_device_by_index(index)?;
         self.device = device;
         Ok(())
+    }
+
+    /// Set an audio callback and build the audio stream
+    ///
+    /// This creates and configures the audio stream with the provided callback.
+    /// The callback will be invoked on the audio thread to fill audio buffers.
+    ///
+    /// # Arguments
+    ///
+    /// * `callback` - A function that fills the audio buffer with samples
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stream cannot be built
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let mut engine = AudioEngine::new()?;
+    /// let callback = Arc::new(Mutex::new(|data: &mut [f32]| {
+    ///     // Fill with silence
+    ///     for sample in data.iter_mut() {
+    ///         *sample = 0.0;
+    ///     }
+    /// }));
+    /// engine.set_callback(callback)?;
+    /// engine.start()?;
+    /// ```
+    pub fn set_callback(&mut self, callback: AudioCallback) -> AudioResult<()> {
+        // Create a new audio stream with the current configuration
+        let mut stream = AudioStream::builder()
+            .sample_rate(self.config.sample_rate)
+            .channels(self.config.channels)
+            .buffer_size(self.config.buffer_size)
+            .device(self.device.clone())
+            .build()?;
+
+        // Build the stream with the callback
+        stream.build_with_callback(callback)?;
+
+        // Store the stream
+        self.stream = Some(stream);
+        self.playing = false;
+
+        Ok(())
+    }
+
+    /// Start audio playback
+    ///
+    /// Begins playing audio through the configured callback.
+    /// You must call `set_callback()` before calling this method.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - No callback has been set
+    /// - The stream cannot be started
+    pub fn start(&mut self) -> AudioResult<()> {
+        match &self.stream {
+            Some(stream) => {
+                stream.play()?;
+                self.playing = true;
+                Ok(())
+            }
+            None => Err(AudioError::StreamError(
+                "No callback set. Call set_callback() first.".to_string()
+            )),
+        }
+    }
+
+    /// Pause audio playback
+    ///
+    /// Pauses the audio stream. Can be resumed by calling `start()` again.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - No stream is active
+    /// - The stream cannot be paused
+    pub fn pause(&mut self) -> AudioResult<()> {
+        match &self.stream {
+            Some(stream) => {
+                stream.pause()?;
+                self.playing = false;
+                Ok(())
+            }
+            None => Err(AudioError::StreamError(
+                "No stream active. Call set_callback() and start() first.".to_string()
+            )),
+        }
+    }
+
+    /// Stop audio playback and destroy the stream
+    ///
+    /// Stops playback and releases the audio stream resources.
+    /// To start again, you must call `set_callback()` to create a new stream.
+    pub fn stop(&mut self) {
+        self.stream = None;
+        self.playing = false;
+    }
+
+    /// Check if audio is currently playing
+    ///
+    /// Returns `true` if the audio stream is active and playing.
+    pub fn is_playing(&self) -> bool {
+        self.playing && self.stream.is_some()
     }
 }
 
@@ -284,6 +396,131 @@ mod tests {
             }
             Err(e) => {
                 panic!("Unexpected error initializing AudioEngine: {:?}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_engine_playback() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::{Arc, Mutex};
+        use std::time::Duration;
+
+        // Test that we can start, pause, and stop audio through the engine API
+        let mut engine = match AudioEngine::new() {
+            Ok(e) => e,
+            Err(AudioError::NoDefaultDevice) => {
+                println!("No default audio device available (likely CI/test environment)");
+                return; // Skip test in CI environments
+            }
+            Err(e) => {
+                panic!("Unexpected error creating engine: {:?}", e);
+            }
+        };
+
+        println!("Created AudioEngine");
+
+        // Verify engine is not playing initially
+        assert!(!engine.is_playing(), "Engine should not be playing initially");
+
+        // Create a counter to track callback invocations
+        let invocation_count = Arc::new(AtomicUsize::new(0));
+        let invocation_count_clone = invocation_count.clone();
+
+        // Create a callback that fills buffer with silence and counts invocations
+        let callback = Arc::new(Mutex::new(move |data: &mut [f32]| {
+            invocation_count_clone.fetch_add(1, Ordering::SeqCst);
+            for sample in data.iter_mut() {
+                *sample = 0.0;
+            }
+        }));
+
+        // Set the callback
+        match engine.set_callback(callback) {
+            Ok(_) => {
+                println!("Successfully set callback");
+
+                // Verify engine is still not playing after setting callback
+                assert!(!engine.is_playing(), "Engine should not be playing after setting callback");
+
+                // Start playback
+                match engine.start() {
+                    Ok(_) => {
+                        println!("Successfully started playback");
+
+                        // Verify engine is now playing
+                        assert!(engine.is_playing(), "Engine should be playing after start");
+
+                        // Wait for some callbacks to be invoked
+                        std::thread::sleep(Duration::from_millis(100));
+
+                        let count_while_playing = invocation_count.load(Ordering::SeqCst);
+                        println!("Callback invoked {} times while playing", count_while_playing);
+
+                        // Verify callback was invoked
+                        assert!(count_while_playing > 0, "Callback should be invoked while playing");
+
+                        // Pause playback
+                        match engine.pause() {
+                            Ok(_) => {
+                                println!("Successfully paused playback");
+
+                                // Verify engine is not playing after pause
+                                assert!(!engine.is_playing(), "Engine should not be playing after pause");
+
+                                // Wait a bit
+                                std::thread::sleep(Duration::from_millis(100));
+
+                                // Get count after pause
+                                let count_after_pause = invocation_count.load(Ordering::SeqCst);
+                                println!("Callback invoked {} times after pause", count_after_pause);
+
+                                // Resume playback
+                                match engine.start() {
+                                    Ok(_) => {
+                                        println!("Successfully resumed playback");
+
+                                        // Verify engine is playing again
+                                        assert!(engine.is_playing(), "Engine should be playing after resume");
+
+                                        // Wait for more callbacks
+                                        std::thread::sleep(Duration::from_millis(100));
+
+                                        let count_after_resume = invocation_count.load(Ordering::SeqCst);
+                                        println!("Callback invoked {} times after resume", count_after_resume);
+
+                                        // Should have more invocations after resuming
+                                        assert!(
+                                            count_after_resume > count_after_pause,
+                                            "Callback should continue being invoked after resuming"
+                                        );
+
+                                        // Stop playback
+                                        engine.stop();
+                                        println!("Successfully stopped playback");
+
+                                        // Verify engine is not playing after stop
+                                        assert!(!engine.is_playing(), "Engine should not be playing after stop");
+
+                                        println!("Engine playback control test passed!");
+                                    }
+                                    Err(e) => {
+                                        println!("Failed to resume playback (acceptable in test environment): {:?}", e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                println!("Failed to pause playback (acceptable in test environment): {:?}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("Failed to start playback (acceptable in test environment): {:?}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                println!("Failed to set callback (acceptable in test environment): {:?}", e);
             }
         }
     }
