@@ -35,6 +35,9 @@ pub enum Action {
     /// Cancel/Escape from current context (Esc)
     Cancel,
 
+    /// Open a test modal (for testing modal system)
+    OpenModal,
+
     /// No action (unmapped key)
     None,
 }
@@ -95,6 +98,9 @@ pub fn map_key_to_action(key: KeyEvent) -> Action {
         KeyCode::Char('q') => Action::Quit,
         KeyCode::Enter => Action::Confirm,
         KeyCode::Esc => Action::Cancel,
+
+        // Modal test key
+        KeyCode::Char('m') => Action::OpenModal,
 
         // Unmapped key
         _ => Action::None,
