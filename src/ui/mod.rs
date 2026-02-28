@@ -26,12 +26,16 @@ pub mod modal;
 /// It uses a three-part layout with header, content, and footer areas
 /// that adapts responsively to terminal size changes.
 ///
+/// If a modal is active, it will be rendered on top of the main UI.
+///
 /// # Arguments
 /// * `frame` - The ratatui frame to render to
 /// * `app` - The application state to render
 pub fn render(frame: &mut Frame, app: &App) {
+    let full_area = frame.area();
+
     // Create main layout with header (3 lines), content (flexible), and footer (1 line)
-    let (header_area, content_area, footer_area) = layout::create_main_layout(frame.area(), 3, 1);
+    let (header_area, content_area, footer_area) = layout::create_main_layout(full_area, 3, 1);
 
     // Render header
     render_header(frame, header_area);
@@ -41,6 +45,11 @@ pub fn render(frame: &mut Frame, app: &App) {
 
     // Render footer
     render_footer(frame, footer_area, app);
+
+    // Render modal on top if one is active
+    if let Some(active_modal) = app.current_modal() {
+        modal::render_modal(frame, full_area, active_modal);
+    }
 }
 
 /// Render the header area
@@ -157,6 +166,12 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         Span::raw(" "),
         Span::styled("hjkl/arrows", Style::default().fg(Color::Green)),
         Span::raw(": Navigate "),
+        Span::raw(" | "),
+        Span::styled("m", Style::default().fg(Color::Green)),
+        Span::raw(": Modal "),
+        Span::raw(" | "),
+        Span::styled("ESC", Style::default().fg(Color::Green)),
+        Span::raw(": Close "),
         Span::raw(" | "),
         Span::styled("q", Style::default().fg(Color::Green)),
         Span::raw(": Quit "),
