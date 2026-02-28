@@ -3,23 +3,23 @@
   "spec": "001-tui-framework-setup-with-ratatui",
   "state": "building",
   "subtasks": {
-    "completed": 1,
+    "completed": 3,
     "total": 18,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Project Setup & Dependencies",
+    "current": "Core TUI Infrastructure",
     "id": null,
-    "total": 2
+    "total": 3
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 3,
+    "number": 5,
     "started_at": "2026-03-01T03:00:04.143918"
   },
-  "last_update": "2026-03-01T03:05:43.547418"
+  "last_update": "2026-03-01T03:09:44.254584"
 }
