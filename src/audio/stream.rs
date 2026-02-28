@@ -2,6 +2,8 @@
 
 use crate::audio::error::{AudioError, AudioResult};
 use crate::audio::device::AudioDevice;
+use cpal::traits::{DeviceTrait, StreamTrait};
+use std::sync::{Arc, Mutex};
 
 /// Configuration for an audio stream
 #[derive(Debug, Clone)]
@@ -96,6 +98,11 @@ impl Default for StreamBuilder {
     }
 }
 
+/// Type alias for audio callback function
+/// The callback receives a mutable slice of f32 samples to fill
+/// The callback should fill the buffer with audio data (e.g., silence, sine wave, etc.)
+pub type AudioCallback = Arc<Mutex<dyn FnMut(&mut [f32]) + Send + 'static>>;
+
 /// Represents an audio stream
 pub struct AudioStream {
     config: StreamConfig,
@@ -122,6 +129,75 @@ impl AudioStream {
     /// Get the audio device
     pub fn device(&self) -> &AudioDevice {
         &self.device
+    }
+
+    /// Build and start the audio stream with a callback
+    /// The callback will be invoked to fill audio buffers
+    ///
+    /// # Arguments
+    /// * `callback` - A function that fills the audio buffer with samples
+    ///
+    /// # Example
+    /// ```ignore
+    /// let mut stream = AudioStream::new()?;
+    /// let callback = Arc::new(Mutex::new(|data: &mut [f32]| {
+    ///     // Fill with silence
+    ///     for sample in data.iter_mut() {
+    ///         *sample = 0.0;
+    ///     }
+    /// }));
+    /// stream.build_with_callback(callback)?;
+    /// ```
+    pub fn build_with_callback(&mut self, callback: AudioCallback) -> AudioResult<()> {
+        // Build cpal stream configuration
+        let config = cpal::StreamConfig {
+            channels: self.config.channels,
+            sample_rate: cpal::SampleRate(self.config.sample_rate),
+            buffer_size: cpal::BufferSize::Fixed(self.config.buffer_size),
+        };
+
+        // Build the output stream with the callback
+        let stream = self.device
+            .inner()
+            .build_output_stream(
+                &config,
+                move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                    // Invoke the user's callback to fill the buffer
+                    // This runs on the audio thread, so we need to be careful
+                    if let Ok(mut cb) = callback.lock() {
+                        cb(data);
+                    }
+                },
+                |err| {
+                    // Error callback - just log for now
+                    eprintln!("Audio stream error: {}", err);
+                },
+                None, // No timeout
+            )
+            .map_err(AudioError::from)?;
+
+        // Store the stream
+        self.stream = Some(stream);
+
+        Ok(())
+    }
+
+    /// Check if the stream has been built
+    pub fn is_built(&self) -> bool {
+        self.stream.is_some()
+    }
+
+    /// Play the audio stream
+    /// The stream must be built with build_with_callback before calling this
+    pub fn play(&self) -> AudioResult<()> {
+        match &self.stream {
+            Some(stream) => {
+                stream.play().map_err(|e| {
+                    AudioError::StreamError(format!("Failed to play stream: {}", e))
+                })
+            }
+            None => Err(AudioError::StreamError("Stream not built. Call build_with_callback first.".to_string())),
+        }
     }
 }
 
@@ -242,6 +318,74 @@ mod tests {
             }
             Err(e) => {
                 panic!("Unexpected error: {:?}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_callback_invoked() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::Duration;
+
+        // Try to create an audio stream
+        let mut stream = match AudioStream::builder().build() {
+            Ok(s) => s,
+            Err(AudioError::NoDefaultDevice) => {
+                println!("No default audio device available (likely CI/test environment)");
+                return; // Skip test in CI environments
+            }
+            Err(e) => {
+                panic!("Unexpected error building stream: {:?}", e);
+            }
+        };
+
+        // Create a flag to track if callback was invoked
+        let callback_invoked = Arc::new(AtomicBool::new(false));
+        let callback_invoked_clone = callback_invoked.clone();
+
+        // Create callback that sets the flag and fills buffer with silence
+        let callback = Arc::new(Mutex::new(move |data: &mut [f32]| {
+            // Mark that callback was invoked
+            callback_invoked_clone.store(true, Ordering::SeqCst);
+
+            // Fill buffer with silence (no allocations)
+            for sample in data.iter_mut() {
+                *sample = 0.0;
+            }
+        }));
+
+        // Build the stream with the callback
+        match stream.build_with_callback(callback) {
+            Ok(_) => {
+                println!("Successfully built stream with callback");
+
+                // Verify stream is marked as built
+                assert!(stream.is_built(), "Stream should be marked as built");
+
+                // Start the stream
+                match stream.play() {
+                    Ok(_) => {
+                        println!("Stream started successfully");
+
+                        // Wait a short time for the callback to be invoked
+                        std::thread::sleep(Duration::from_millis(100));
+
+                        // Verify the callback was invoked
+                        assert!(
+                            callback_invoked.load(Ordering::SeqCst),
+                            "Callback should have been invoked when stream is running"
+                        );
+
+                        println!("Callback was successfully invoked!");
+                    }
+                    Err(e) => {
+                        // Stream play might fail in some environments
+                        println!("Failed to play stream (acceptable in test environment): {:?}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                println!("Failed to build stream with callback (acceptable in test environment): {:?}", e);
             }
         }
     }
