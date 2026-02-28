@@ -16,9 +16,7 @@ use crate::app::App;
 // Submodules
 pub mod layout;
 pub mod modal;
-
-// Submodules to be added in later phases:
-// pub mod theme;
+pub mod theme;
 
 /// Render the application UI
 ///
