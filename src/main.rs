@@ -187,9 +187,14 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             app.close_modal();
         }
 
-        // Actions to be handled in future phases
+        // Modal confirmation
         Action::Confirm => {
-            // Will be used for confirming dialogs, selections, etc.
+            // If a modal is open, close it (user confirmed/acknowledged)
+            // This allows both Enter and ESC to dismiss modals
+            if app.has_modal() {
+                app.close_modal();
+            }
+            // Otherwise, will be used for confirming selections, etc. in future phases
         }
 
         // Unmapped key - do nothing
