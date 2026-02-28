@@ -13,8 +13,10 @@ use ratatui::{
 
 use crate::app::App;
 
-// Submodules will be added in later phases:
-// pub mod layout;
+// Submodules
+pub mod layout;
+
+// Submodules to be added in later phases:
 // pub mod modal;
 // pub mod theme;
 
