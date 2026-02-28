@@ -1,21 +1,100 @@
 //! Audio device enumeration and management
 
 use crate::audio::error::{AudioError, AudioResult};
+use cpal::traits::{DeviceTrait, HostTrait};
+
+/// Information about an audio device
+#[derive(Debug, Clone)]
+pub struct DeviceInfo {
+    /// Device name
+    pub name: String,
+    /// Whether this is the default device
+    pub is_default: bool,
+}
 
 /// Represents an audio device
 pub struct AudioDevice {
-    // Placeholder - will be implemented in phase 2
+    device: cpal::Device,
 }
 
 impl AudioDevice {
-    /// Create a new AudioDevice
-    pub fn new() -> AudioResult<Self> {
-        Ok(AudioDevice {})
+    /// Create a new AudioDevice from a cpal device
+    pub fn new(device: cpal::Device) -> AudioResult<Self> {
+        Ok(AudioDevice { device })
+    }
+
+    /// Get the underlying cpal device
+    pub fn inner(&self) -> &cpal::Device {
+        &self.device
+    }
+
+    /// Get device name
+    pub fn name(&self) -> AudioResult<String> {
+        self.device
+            .name()
+            .map_err(|_| AudioError::DeviceNotFound)
     }
 }
 
 impl Default for AudioDevice {
     fn default() -> Self {
-        Self::new().expect("Failed to create default AudioDevice")
+        let host = cpal::default_host();
+        let device = host
+            .default_output_device()
+            .expect("Failed to get default output device");
+        Self::new(device).expect("Failed to create default AudioDevice")
+    }
+}
+
+/// Enumerate all available output devices
+pub fn enumerate_devices() -> AudioResult<Vec<DeviceInfo>> {
+    let host = cpal::default_host();
+
+    let default_device = host.default_output_device();
+    let default_name = default_device
+        .as_ref()
+        .and_then(|d| d.name().ok());
+
+    let mut devices = Vec::new();
+
+    let output_devices = host
+        .output_devices()
+        .map_err(|_| AudioError::DeviceNotFound)?;
+
+    for device in output_devices {
+        if let Ok(name) = device.name() {
+            let is_default = default_name.as_ref().map_or(false, |dn| dn == &name);
+            devices.push(DeviceInfo {
+                name,
+                is_default,
+            });
+        }
+    }
+
+    Ok(devices)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_enumerate_devices() {
+        let devices = enumerate_devices();
+        assert!(devices.is_ok(), "Failed to enumerate devices");
+
+        let devices = devices.unwrap();
+        // There should be at least one output device on most systems
+        // However, in CI or test environments, this might not be guaranteed
+        // so we just verify the function completes without error
+        println!("Found {} audio devices", devices.len());
+
+        for device in &devices {
+            println!("  Device: {} (default: {})", device.name, device.is_default);
+        }
+
+        // Verify that at most one device is marked as default
+        let default_count = devices.iter().filter(|d| d.is_default).count();
+        assert!(default_count <= 1, "Multiple devices marked as default");
     }
 }
