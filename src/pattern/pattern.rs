@@ -163,7 +163,7 @@ impl Default for Pattern {
 mod tests {
     use super::*;
     use crate::pattern::note::Pitch;
-    use crate::pattern::row::Effect;
+    use crate::pattern::effect::Effect;
 
     #[test]
     fn test_pattern_default() {
@@ -212,7 +212,7 @@ mod tests {
             note: Some(NoteEvent::On(note)),
             instrument: Some(0),
             volume: Some(0x40),
-            effect: Some(Effect::new(0, 0)),
+            effects: vec![Effect::new(0, 0)],
         };
 
         assert!(pat.set_cell(0, 0, cell));
@@ -224,9 +224,8 @@ mod tests {
     #[test]
     fn test_set_cell_out_of_bounds() {
         let mut pat = Pattern::new(16, 4);
-        let cell = Cell::empty();
-        assert!(!pat.set_cell(16, 0, cell));
-        assert!(!pat.set_cell(0, 4, cell));
+        assert!(!pat.set_cell(16, 0, Cell::empty()));
+        assert!(!pat.set_cell(0, 4, Cell::empty()));
     }
 
     #[test]
@@ -435,13 +434,13 @@ mod tests {
             note: Some(NoteEvent::On(Note::new(Pitch::A, 4, 127, 3))),
             instrument: Some(3),
             volume: Some(0x7F),
-            effect: Some(Effect::new(0xC, 0x40)),
+            effects: vec![Effect::new(0xC, 0x40)],
         };
         assert!(pat.set_cell(5, 2, cell));
         let retrieved = pat.get_cell(5, 2).unwrap();
         assert_eq!(retrieved.instrument, Some(3));
         assert_eq!(retrieved.volume, Some(0x7F));
-        assert_eq!(retrieved.effect, Some(Effect::new(0xC, 0x40)));
+        assert_eq!(retrieved.first_effect(), Some(&Effect::new(0xC, 0x40)));
     }
 
     // --- Track integration tests ---

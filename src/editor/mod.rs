@@ -420,7 +420,7 @@ impl Editor {
                     let mut row = Vec::new();
                     for c in c0..=c1 {
                         let cell = self.pattern.get_cell(r, c)
-                            .copied()
+                            .cloned()
                             .unwrap_or_else(Cell::empty);
                         row.push(cell);
                     }
@@ -431,7 +431,7 @@ impl Editor {
         } else {
             // Copy single cell at cursor
             let cell = self.pattern.get_cell(self.cursor_row, self.cursor_channel)
-                .copied()
+                .cloned()
                 .unwrap_or_else(Cell::empty);
             self.clipboard = Some(Clipboard::single(cell));
         }
@@ -450,7 +450,7 @@ impl Editor {
                 let target_row = self.cursor_row + dr;
                 let target_ch = self.cursor_channel + dc;
                 if target_row < self.pattern.num_rows() && target_ch < self.pattern.num_channels() {
-                    self.pattern.set_cell(target_row, target_ch, clipboard.cells()[dr][dc]);
+                    self.pattern.set_cell(target_row, target_ch, clipboard.cells()[dr][dc].clone());
                 }
             }
         }
@@ -493,7 +493,7 @@ impl Editor {
         self.save_history();
         for r in r0..=r1 {
             for c in c0..=c1 {
-                if let Some(cell) = self.pattern.get_cell(r, c).copied() {
+                if let Some(cell) = self.pattern.get_cell(r, c).cloned() {
                     if let Some(NoteEvent::On(note)) = cell.note {
                         if let Some(transposed) = note.transpose(semitones) {
                             let new_cell = Cell {
@@ -558,7 +558,7 @@ impl Editor {
                 let t = (r - start_row) as f64 / span;
                 let interpolated = start_val as f64 + t * (end_val as f64 - start_val as f64);
                 let vol = interpolated.round() as u8;
-                if let Some(cell) = self.pattern.get_cell(r, c).copied() {
+                if let Some(cell) = self.pattern.get_cell(r, c).cloned() {
                     let new_cell = Cell {
                         volume: Some(vol),
                         ..cell
