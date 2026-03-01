@@ -15,5 +15,5 @@ pub use engine::AudioEngine;
 pub use error::{AudioError, AudioResult};
 pub use loader::load_sample;
 pub use mixer::Mixer;
-pub use sample::Sample;
+pub use sample::{Sample, C4_MIDI};
 pub use stream::{AudioCallback, AudioStream, StreamConfig};
