@@ -16,7 +16,7 @@ use crate::pattern::note::Pitch;
 use crate::pattern::{Note, Pattern};
 use crate::project;
 use crate::song::Song;
-use crate::transport::{Transport, TransportState};
+use crate::transport::{AdvanceResult, PlaybackMode, Transport, TransportState};
 use crate::ui::arrangement::ArrangementView;
 use crate::ui::file_browser::FileBrowser;
 use crate::ui::modal::Modal;
@@ -179,26 +179,45 @@ impl App {
         Ok(())
     }
 
-    /// Update application state, advancing playback row based on BPM timing
+    /// Update application state, advancing playback row based on BPM timing.
+    ///
+    /// In Song mode, when the transport signals a pattern change, the editor
+    /// is updated to the new pattern from the song's arrangement.
     pub fn update(&mut self) -> Result<()> {
         let now = Instant::now();
         let delta = now.duration_since(self.last_update).as_secs_f64();
         self.last_update = now;
 
-        // Keep transport in sync with pattern size
+        // Keep transport in sync with current pattern size and arrangement length
         self.transport.set_num_rows(self.editor.pattern().num_rows());
+        self.transport.set_arrangement_length(self.song.arrangement.len());
 
         let was_playing = self.transport.is_playing();
 
-        if let Some(row) = self.transport.advance(delta) {
-            if let Ok(mut mixer) = self.mixer.lock() {
-                mixer.tick(row, self.editor.pattern());
+        match self.transport.advance(delta) {
+            AdvanceResult::Row(row) => {
+                if let Ok(mut mixer) = self.mixer.lock() {
+                    mixer.tick(row, self.editor.pattern());
+                }
             }
-        } else if self.transport.is_playing() {
-            // Even when no row advances, sync track state for real-time
-            // mute/solo/volume/pan changes to take effect immediately
-            if let Ok(mut mixer) = self.mixer.lock() {
-                mixer.update_tracks(self.editor.pattern().tracks());
+            AdvanceResult::PatternChange { arrangement_pos, row } => {
+                // Load the new pattern from the arrangement
+                self.load_arrangement_pattern(arrangement_pos);
+                if let Ok(mut mixer) = self.mixer.lock() {
+                    mixer.tick(row, self.editor.pattern());
+                }
+            }
+            AdvanceResult::Stopped => {
+                // Handled below in was_playing check
+            }
+            AdvanceResult::None => {
+                // Even when no row advances, sync track state for real-time
+                // mute/solo/volume/pan changes to take effect immediately
+                if self.transport.is_playing() {
+                    if let Ok(mut mixer) = self.mixer.lock() {
+                        mixer.update_tracks(self.editor.pattern().tracks());
+                    }
+                }
             }
         }
 
@@ -213,6 +232,16 @@ impl App {
         }
 
         Ok(())
+    }
+
+    /// Load the pattern at the given arrangement position into the editor.
+    fn load_arrangement_pattern(&mut self, arrangement_pos: usize) {
+        if let Some(&pattern_idx) = self.song.arrangement.get(arrangement_pos) {
+            if let Some(pattern) = self.song.patterns.get(pattern_idx) {
+                self.editor = Editor::new(pattern.clone());
+                self.transport.set_num_rows(pattern.num_rows());
+            }
+        }
     }
 
     /// Check if the application should continue running
@@ -240,10 +269,18 @@ impl App {
         self.running = false;
     }
 
-    /// Toggle audio playback between play and pause
+    /// Toggle audio playback between play and pause.
+    ///
+    /// In Song mode, starting from stopped loads the first arrangement pattern.
     pub fn toggle_play(&mut self) {
         match self.transport.state() {
             TransportState::Stopped => {
+                // Sync arrangement length before starting
+                self.transport.set_arrangement_length(self.song.arrangement.len());
+                // In Song mode, load the pattern at the current arrangement position
+                if self.transport.playback_mode() == PlaybackMode::Song {
+                    self.load_arrangement_pattern(self.transport.arrangement_position());
+                }
                 self.transport.play();
                 // Trigger first row
                 if let Ok(mut mixer) = self.mixer.lock() {
@@ -294,6 +331,33 @@ impl App {
     /// Toggle loop mode on/off
     pub fn toggle_loop(&mut self) {
         self.transport.toggle_loop();
+    }
+
+    /// Toggle between pattern and song playback modes
+    pub fn toggle_playback_mode(&mut self) {
+        self.transport.toggle_playback_mode();
+    }
+
+    /// Jump to the next pattern in the arrangement
+    pub fn jump_next_pattern(&mut self) {
+        self.transport.set_arrangement_length(self.song.arrangement.len());
+        let current = self.transport.arrangement_position();
+        let next = current + 1;
+        if next < self.song.arrangement.len() {
+            self.transport.jump_to_arrangement_position(next);
+            self.load_arrangement_pattern(next);
+        }
+    }
+
+    /// Jump to the previous pattern in the arrangement
+    pub fn jump_prev_pattern(&mut self) {
+        self.transport.set_arrangement_length(self.song.arrangement.len());
+        let current = self.transport.arrangement_position();
+        if current > 0 {
+            let prev = current - 1;
+            self.transport.jump_to_arrangement_position(prev);
+            self.load_arrangement_pattern(prev);
+        }
     }
 
     /// Toggle mute on the current track (channel under cursor)
@@ -530,5 +594,112 @@ mod tests {
         assert_eq!(app.current_view, AppView::InstrumentList);
         app.set_view(AppView::PatternEditor);
         assert_eq!(app.current_view, AppView::PatternEditor);
+    }
+
+    // --- Song-level playback tests ---
+
+    #[test]
+    fn test_default_playback_mode_is_pattern() {
+        let app = App::new();
+        assert_eq!(app.transport.playback_mode(), PlaybackMode::Pattern);
+    }
+
+    #[test]
+    fn test_toggle_playback_mode() {
+        let mut app = App::new();
+        assert_eq!(app.transport.playback_mode(), PlaybackMode::Pattern);
+
+        app.toggle_playback_mode();
+        assert_eq!(app.transport.playback_mode(), PlaybackMode::Song);
+
+        app.toggle_playback_mode();
+        assert_eq!(app.transport.playback_mode(), PlaybackMode::Pattern);
+    }
+
+    #[test]
+    fn test_jump_next_pattern_with_multiple_patterns() {
+        let mut app = App::new();
+        // Add a second pattern to the song pool
+        let pattern2 = Pattern::new(8, 4);
+        app.song.patterns.push(pattern2);
+        app.song.arrangement = vec![0, 1]; // Two entries in arrangement
+
+        assert_eq!(app.transport.arrangement_position(), 0);
+
+        app.jump_next_pattern();
+        assert_eq!(app.transport.arrangement_position(), 1);
+
+        // Already at last position — should not advance
+        app.jump_next_pattern();
+        assert_eq!(app.transport.arrangement_position(), 1);
+    }
+
+    #[test]
+    fn test_jump_prev_pattern() {
+        let mut app = App::new();
+        let pattern2 = Pattern::new(8, 4);
+        app.song.patterns.push(pattern2);
+        app.song.arrangement = vec![0, 1];
+
+        // Start at 0 — cannot go back
+        app.jump_prev_pattern();
+        assert_eq!(app.transport.arrangement_position(), 0);
+
+        // Jump to 1, then back to 0
+        app.jump_next_pattern();
+        assert_eq!(app.transport.arrangement_position(), 1);
+
+        app.jump_prev_pattern();
+        assert_eq!(app.transport.arrangement_position(), 0);
+    }
+
+    #[test]
+    fn test_jump_pattern_loads_correct_pattern_into_editor() {
+        let mut app = App::new();
+        // Pattern 0: 16 rows, Pattern 1: 8 rows
+        let pattern2 = Pattern::new(8, 4);
+        app.song.patterns.push(pattern2);
+        app.song.arrangement = vec![0, 1];
+
+        // Editor starts with pattern 0 (16 rows)
+        assert_eq!(app.editor.pattern().num_rows(), 16);
+
+        // Jump to pattern 1 (8 rows)
+        app.jump_next_pattern();
+        assert_eq!(app.editor.pattern().num_rows(), 8);
+
+        // Jump back to pattern 0 (16 rows)
+        app.jump_prev_pattern();
+        assert_eq!(app.editor.pattern().num_rows(), 16);
+    }
+
+    #[test]
+    fn test_stop_resets_arrangement_position() {
+        let mut app = App::new();
+        let pattern2 = Pattern::new(8, 4);
+        app.song.patterns.push(pattern2);
+        app.song.arrangement = vec![0, 1];
+
+        app.jump_next_pattern();
+        assert_eq!(app.transport.arrangement_position(), 1);
+
+        app.stop();
+        assert_eq!(app.transport.arrangement_position(), 0);
+        assert_eq!(app.transport.current_row(), 0);
+    }
+
+    #[test]
+    fn test_song_mode_toggle_play_loads_arrangement_pattern() {
+        let mut app = App::new();
+        let pattern2 = Pattern::new(8, 4);
+        app.song.patterns.push(pattern2);
+        app.song.arrangement = vec![0, 1];
+
+        app.toggle_playback_mode(); // Switch to Song mode
+        assert_eq!(app.transport.playback_mode(), PlaybackMode::Song);
+
+        // Starting playback in Song mode should load the arrangement pattern
+        app.toggle_play();
+        assert!(app.transport.is_playing());
     }
 }

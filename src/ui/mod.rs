@@ -14,7 +14,7 @@ use ratatui::{
 use crate::app::{App, AppView};
 use crate::editor::{EditorMode, SubColumn};
 use crate::pattern::note::NoteEvent;
-use crate::transport::TransportState;
+use crate::transport::{PlaybackMode, TransportState};
 
 // Submodules
 pub mod arrangement;
@@ -37,8 +37,10 @@ pub fn render(frame: &mut Frame, app: &App) {
     match app.current_view {
         AppView::PatternEditor => render_content(frame, content_area, app),
         AppView::Arrangement => {
-            let playback_pos = if app.transport.is_playing() {
-                Some(app.transport.current_pattern())
+            let playback_pos = if app.transport.is_playing()
+                && app.transport.playback_mode() == PlaybackMode::Song
+            {
+                Some(app.transport.arrangement_position())
             } else {
                 None
             };
@@ -91,8 +93,12 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         TransportState::Stopped => theme.text_dimmed,
     };
 
+    let mode_indicator = match app.transport.playback_mode() {
+        PlaybackMode::Pattern => "PAT",
+        PlaybackMode::Song => "SONG",
+    };
     let loop_indicator = if app.transport.loop_enabled() { " L" } else { "" };
-    let title = format!(" tracker-rs | BPM: {:.0} | {} {}{} ", app.transport.bpm(), play_icon, play_status, loop_indicator);
+    let title = format!(" tracker-rs | BPM: {:.0} | {} {}{} [{}] ", app.transport.bpm(), play_icon, play_status, loop_indicator, mode_indicator);
 
     let header_block = Block::default()
         .borders(Borders::ALL)
@@ -110,11 +116,40 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             Style::default().fg(play_color).add_modifier(Modifier::BOLD),
         ),
         Span::raw("  "),
-        Span::styled(
-            format!("Row: {:02X}/{:02X}", app.transport.current_row(), pattern.num_rows()),
-            Style::default().fg(theme.text_secondary),
-        ),
     ];
+
+    // Show arrangement position + row in Song mode, just row in Pattern mode
+    match app.transport.playback_mode() {
+        PlaybackMode::Song => {
+            status_spans.push(Span::styled(
+                format!(
+                    "Arr: {:02X}/{:02X}  Row: {:02X}/{:02X}",
+                    app.transport.arrangement_position(),
+                    app.song.arrangement.len(),
+                    app.transport.current_row(),
+                    pattern.num_rows(),
+                ),
+                Style::default().fg(theme.text_secondary),
+            ));
+        }
+        PlaybackMode::Pattern => {
+            status_spans.push(Span::styled(
+                format!("Row: {:02X}/{:02X}", app.transport.current_row(), pattern.num_rows()),
+                Style::default().fg(theme.text_secondary),
+            ));
+        }
+    }
+
+    // Playback mode indicator
+    let mode_color = match app.transport.playback_mode() {
+        PlaybackMode::Pattern => theme.text_secondary,
+        PlaybackMode::Song => theme.warning_color(),
+    };
+    status_spans.push(Span::raw("  "));
+    status_spans.push(Span::styled(
+        format!("[{}]", mode_indicator),
+        Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
+    ));
 
     if app.transport.loop_enabled() {
         status_spans.push(Span::raw("  "));

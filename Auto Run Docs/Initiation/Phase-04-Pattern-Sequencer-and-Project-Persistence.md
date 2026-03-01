@@ -71,8 +71,9 @@ This phase adds the ability to create multiple patterns, arrange them into a son
 - [x] Run `cargo test` and `cargo build` to verify everything compiles
   > ✅ All 435 tests pass. `cargo build` succeeds (only pre-existing warnings).
 
-- [ ] Update the transport to support song-level playback:
+- [x] Update the transport to support song-level playback:
   - When playing a song, advance through the arrangement sequence (pattern after pattern)
   - At end of arrangement: stop (or loop back to beginning if loop mode is on)
   - Display current arrangement position + pattern row in the header
   - Allow jumping to a specific arrangement position
+  > ✅ Implemented: Added `PlaybackMode` enum (Pattern/Song) and `AdvanceResult` enum to transport. Song mode advances through arrangement entries sequentially, with loop support. Header shows `Arr: XX/XX Row: XX/XX` in Song mode with `[SONG]`/`[PAT]` mode indicator. New keybindings: `Shift+P` toggles playback mode, `]`/`[` jump next/prev arrangement position. App coordinates pattern loading on transitions. 20 new tests (10 transport, 7 app, 3 keybindings). All 455 tests pass.

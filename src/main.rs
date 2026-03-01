@@ -179,6 +179,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::BpmUpLarge => app.adjust_bpm(10.0),
         Action::BpmDownLarge => app.adjust_bpm(-10.0),
         Action::ToggleLoop => app.toggle_loop(),
+        Action::TogglePlaybackMode => app.toggle_playback_mode(),
+        Action::JumpNextPattern => app.jump_next_pattern(),
+        Action::JumpPrevPattern => app.jump_prev_pattern(),
 
         // Track operations
         Action::ToggleMute => app.toggle_mute_current_track(),
