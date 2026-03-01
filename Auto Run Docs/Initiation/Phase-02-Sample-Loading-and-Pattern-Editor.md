@@ -43,12 +43,13 @@ This phase adds real sample loading from disk (WAV, FLAC, OGG via symphonia) and
   - Update `Action` enum with new actions: `EnterInsertMode`, `EnterNormalMode`, `EnterNote(char)`, `SetOctave(u8)`, `DeleteCell`, `InsertRow`, `DeleteRow`, `PageUp`, `PageDown`
   - ✅ Completed: Replaced `cursor_x`/`cursor_y`/`pattern` in App with `Editor` instance. `map_key_to_action()` now takes `EditorMode` parameter for mode-aware dispatch (Normal/Insert/Visual). Action enum expanded with all new variants. `handle_key_event` in main.rs routes through editor methods. UI footer shows mode indicator (NORMAL/INSERT/VISUAL) with mode-specific keybinding hints. All 224 tests pass (166 lib + 224 bin, 0 failures).
 
-- [ ] Update the pattern grid UI rendering to reflect editor state:
+- [x] Update the pattern grid UI rendering to reflect editor state:
   - Show the current editor mode in the footer (NORMAL / INSERT / VISUAL)
   - In Insert mode, highlight the current cell differently (e.g., blinking or different color)
   - Display note columns with proper tracker formatting: `C#4 01 64 ...` (note, instrument, volume, effects)
   - Empty cells show `--- .. .. ...`
   - Channel headers with channel numbers
+  - ✅ Completed: Insert mode uses LightMagenta highlight on the active sub-column (Note/Instrument/Volume/Effect) with dark background on inactive sub-columns, clearly distinguishing from Normal mode's yellow highlight. Visual mode selection highlighted in blue. New `format_cell_parts()` splits cell into sub-column strings for per-column styling. Added `insert_cursor_style()`, `insert_inactive_style()`, and `visual_selection_style()` to Theme. 5 new tests for `format_cell_parts`, 3 new theme tests. All 232 tests pass.
 
 - [ ] Add a basic sample browser / file picker using a modal:
   - When user presses a designated key (e.g., `F5` or `o`), open a file browser modal
