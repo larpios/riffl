@@ -363,4 +363,139 @@ mod tests {
         assert_eq!(cell.first_effect(), None);
         assert_eq!(cell.second_effect(), None);
     }
+
+    // --- Effect + Cell Integration Tests ---
+
+    #[test]
+    fn test_cell_serde_roundtrip_with_effects() {
+        let note = Note::new(Pitch::CSharp, 4, 100, 1);
+        let cell = Cell {
+            note: Some(NoteEvent::On(note)),
+            instrument: Some(1),
+            volume: Some(0x40),
+            effects: vec![Effect::new(0xA, 0x04), Effect::new(0xC, 0x40)],
+        };
+        let json = serde_json::to_string(&cell).unwrap();
+        let decoded: Cell = serde_json::from_str(&json).unwrap();
+        assert_eq!(cell, decoded);
+        assert_eq!(decoded.effects.len(), 2);
+        assert_eq!(decoded.first_effect(), Some(&Effect::new(0xA, 0x04)));
+        assert_eq!(decoded.second_effect(), Some(&Effect::new(0xC, 0x40)));
+    }
+
+    #[test]
+    fn test_cell_serde_roundtrip_empty() {
+        let cell = Cell::empty();
+        let json = serde_json::to_string(&cell).unwrap();
+        let decoded: Cell = serde_json::from_str(&json).unwrap();
+        assert_eq!(cell, decoded);
+        assert!(decoded.is_empty());
+    }
+
+    #[test]
+    fn test_cell_effects_stored_and_retrieved_by_type() {
+        let mut cell = Cell::empty();
+
+        // Add volume slide effect
+        let vol_slide = Effect::from_type(super::super::effect::EffectType::VolumeSlide, 0x04);
+        cell.add_effect(vol_slide);
+
+        // Add set speed effect
+        let set_speed = Effect::from_type(super::super::effect::EffectType::SetSpeed, 0x06);
+        cell.add_effect(set_speed);
+
+        // Verify effects are correctly stored and retrievable
+        let first = cell.first_effect().unwrap();
+        assert_eq!(first.effect_type(), Some(super::super::effect::EffectType::VolumeSlide));
+        assert_eq!(first.param, 0x04);
+        assert_eq!(format!("{}", first), "A04");
+
+        let second = cell.second_effect().unwrap();
+        assert_eq!(second.effect_type(), Some(super::super::effect::EffectType::SetSpeed));
+        assert_eq!(second.param, 0x06);
+        assert_eq!(format!("{}", second), "F06");
+    }
+
+    #[test]
+    fn test_cell_set_effect_replaces_first_preserves_second() {
+        let mut cell = Cell::empty();
+        cell.add_effect(Effect::new(0xA, 0x04));
+        cell.add_effect(Effect::new(0xC, 0x40));
+
+        // set_effect replaces the first effect only
+        cell.set_effect(Effect::new(0xF, 0x06));
+        assert_eq!(cell.effects.len(), 2);
+        assert_eq!(cell.first_effect(), Some(&Effect::new(0xF, 0x06)));
+        assert_eq!(cell.second_effect(), Some(&Effect::new(0xC, 0x40)));
+    }
+
+    #[test]
+    fn test_cell_display_with_all_effect_types() {
+        // Verify display with each known effect type as first effect
+        let test_cases = vec![
+            (Effect::new(0x0, 0x37), "--- .. .. 037"),
+            (Effect::new(0x1, 0x10), "--- .. .. 110"),
+            (Effect::new(0x2, 0x20), "--- .. .. 220"),
+            (Effect::new(0x3, 0x08), "--- .. .. 308"),
+            (Effect::new(0x4, 0x46), "--- .. .. 446"),
+            (Effect::new(0xA, 0x0F), "--- .. .. A0F"),
+            (Effect::new(0xB, 0x02), "--- .. .. B02"),
+            (Effect::new(0xC, 0x40), "--- .. .. C40"),
+            (Effect::new(0xD, 0x00), "--- .. .. D00"),
+            (Effect::new(0xF, 0x06), "--- .. .. F06"),
+        ];
+        for (effect, expected) in test_cases {
+            let cell = Cell {
+                note: None,
+                instrument: None,
+                volume: None,
+                effects: vec![effect],
+            };
+            assert_eq!(format!("{}", cell), expected, "Display mismatch for effect {}", effect);
+        }
+    }
+
+    #[test]
+    fn test_cell_clear_then_add_effects() {
+        let mut cell = Cell::empty();
+        cell.add_effect(Effect::new(0xA, 0x04));
+        cell.add_effect(Effect::new(0xC, 0x40));
+        assert_eq!(cell.effects.len(), 2);
+
+        cell.clear_effects();
+        assert!(cell.effects.is_empty());
+        assert_eq!(cell.first_effect(), None);
+
+        // Can add effects again after clearing
+        assert!(cell.add_effect(Effect::new(0xF, 0x06)));
+        assert_eq!(cell.effects.len(), 1);
+        assert_eq!(cell.first_effect(), Some(&Effect::new(0xF, 0x06)));
+    }
+
+    #[test]
+    fn test_cell_with_note_and_effects_display() {
+        let note = Note::new(Pitch::A, 4, 100, 5);
+        let cell = Cell {
+            note: Some(NoteEvent::On(note)),
+            instrument: Some(5),
+            volume: Some(0x64),
+            effects: vec![Effect::new(0x4, 0x37)],
+        };
+        assert_eq!(format!("{}", cell), "A-4 05 64 437");
+    }
+
+    #[test]
+    fn test_row_with_effects_across_channels() {
+        let mut row = new_row(4);
+
+        // Set effects on different channels
+        row[0].add_effect(Effect::new(0xC, 0x40));
+        row[1].add_effect(Effect::new(0xA, 0x04));
+        row[2].add_effect(Effect::new(0xF, 0x06));
+
+        assert_eq!(row[0].first_effect(), Some(&Effect::new(0xC, 0x40)));
+        assert_eq!(row[1].first_effect(), Some(&Effect::new(0xA, 0x04)));
+        assert_eq!(row[2].first_effect(), Some(&Effect::new(0xF, 0x06)));
+        assert_eq!(row[3].first_effect(), None);
+    }
 }
