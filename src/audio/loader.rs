@@ -321,6 +321,59 @@ mod tests {
     }
 
     #[test]
+    fn test_mono_values_duplicated_correctly() {
+        let dir = std::env::temp_dir().join("tracker_rs_test_mono_vals");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("mono_vals.wav");
+
+        // Known mono samples
+        let samples: Vec<i16> = vec![16383, -16383, 0, 8191];
+        write_test_wav(&path, 44100, 1, &samples);
+
+        let sample = load_sample(&path, 44100).unwrap();
+        let data = sample.data();
+        assert_eq!(data.len(), 8, "4 mono frames -> 8 stereo samples");
+
+        // Each mono sample should appear as identical L and R
+        for frame in 0..4 {
+            let l = data[frame * 2];
+            let r = data[frame * 2 + 1];
+            assert!(
+                (l - r).abs() < 1e-6,
+                "frame {} L={} R={} should match",
+                frame, l, r
+            );
+        }
+
+        // Verify values are non-zero where expected
+        assert!(data[0].abs() > 0.1, "first sample should be significant");
+        assert!(data[4].abs() < 1e-6, "third sample (0) should be near zero");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn test_duration_calculation() {
+        let dir = std::env::temp_dir().join("tracker_rs_test_duration");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("duration.wav");
+
+        // 44100 stereo frames at 44100 Hz = exactly 1 second
+        let samples: Vec<i16> = vec![0i16; 44100 * 2];
+        write_test_wav(&path, 44100, 2, &samples);
+
+        let sample = load_sample(&path, 44100).unwrap();
+        assert!(
+            (sample.duration() - 1.0).abs() < 0.001,
+            "expected ~1.0s, got {}",
+            sample.duration()
+        );
+        assert_eq!(sample.frame_count(), 44100);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn test_resample_linear_basic() {
         // 2 stereo frames: [1.0, 0.5, 0.0, -0.5]
         let data = vec![1.0f32, 0.5, 0.0, -0.5];
