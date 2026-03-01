@@ -21,10 +21,11 @@ This phase implements tracker effect commands (volume slides, pitch slides, arpe
   - Add `effects: Vec<Effect>` (up to 2 per cell) to the `Cell` struct
   - Register in `src/pattern/mod.rs`
 
-- [ ] Write tests for effect parsing and display:
+- [x] Write tests for effect parsing and display:
   - Test hex display formatting
   - Test that effect values are correctly encoded/decoded
   - Test integration with Cell — effects stored and retrieved correctly
+  <!-- Added 7 new tests to effect.rs (serde roundtrip, JSON structure, mid-range params, unknown commands, all variants from_type, nibble extraction combos) and 9 new tests to row.rs (Cell serde roundtrip with/without effects, effects stored/retrieved by type, set_effect preserves second, display with all effect types, clear-then-add, note+effects display, row effects across channels). All 283 tests pass. -->
 
 - [ ] Run `cargo test` for effects and fix any failures
 
