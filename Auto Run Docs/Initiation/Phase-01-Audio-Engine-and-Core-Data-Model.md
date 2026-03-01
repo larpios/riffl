@@ -52,7 +52,7 @@ This phase integrates the existing audio engine code from the unmerged `auto-cla
   - The goal: press space → hear a simple melodic pattern loop
   > ✅ Completed: Integrated audio engine into App struct with `Option<AudioEngine>` for graceful fallback, `Arc<Mutex<Mixer>>` shared between main thread and audio callback thread, transport state (`is_playing`, `current_row`, `bpm` at 120.0, `last_row_time` via `Instant`). Demo pattern: 16-row × 4-channel with C4/E4/G4/C5 arpeggio on channel 0 at rows 0/4/8/12. Demo sample: programmatically generated 440Hz sine wave, 0.25s, 44100Hz mono. Added `TogglePlay` action mapped to spacebar in keybindings. Audio callback calls `mixer.render()` on the audio thread; `app.update()` advances rows via BPM timing (seconds_per_row = 15.0/bpm, i.e., 125ms at 120 BPM) and calls `mixer.tick()`. Event loop tick rate changed from 250ms to 16ms (~60fps) for smooth timing. `toggle_play()` starts from row 0, ticks first row, starts engine; on stop, pauses engine and stops all voices. `quit()` cleans up audio. All 144 tests pass including new `test_spacebar_toggles_play`.
 
-- [ ] Update the TUI to show tracker-relevant information instead of the demo 10x10 grid:
+- [x] Update the TUI to show tracker-relevant information instead of the demo 10x10 grid:
   - Replace the placeholder grid in `src/ui/mod.rs` with a pattern grid renderer that displays the demo pattern's notes (rows × channels)
   - Each cell should display note name (e.g., "C-4", "---" for empty) in fixed-width columns
   - Show row numbers on the left (00-63 in hex, tracker convention)
@@ -60,6 +60,7 @@ This phase integrates the existing audio engine code from the unmerged `auto-cla
   - Keep the cursor navigation working (hjkl moves through the pattern grid)
   - Update the header to show "tracker-rs" title, BPM, and play/stop status
   - Update the footer to show relevant keybindings (space=play, q=quit, hjkl=navigate)
+  > ✅ Completed: Replaced placeholder 10x10 grid with full tracker pattern grid renderer. `render_content()` now displays pattern cells in tracker format ("C-4", "---", "===") with hex row numbers (00-0F), channel headers (CH0-CH3), cell columns showing note/instrument/volume/effect. Added scrolling support via `calculate_scroll_offset()` to keep cursor visible. Playback row highlighted in green with bold. Every 4th row uses accent color for beat markers. Cursor cell highlighted with theme highlight style. `render_header()` shows "tracker-rs" title, BPM, play/stop status, and current row counter. `render_footer()` shows space/hjkl/q keybindings and cursor position (CH:X ROW:XX). Cursor bounds in `app.rs` updated from hardcoded 9 to use `pattern.num_rows()` and `pattern.num_channels()`. Added `format_cell_display()` helper. 8 new unit tests for scroll offset logic and cell formatting. All 152 tests pass.
 
 - [ ] Run `cargo build` and `cargo test` to verify everything compiles and all tests pass. Fix any issues.
 
