@@ -219,6 +219,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         // Code editor
         Action::ToggleSplitView => app.toggle_split_view(),
         Action::ExecuteScript => app.execute_script(),
+        Action::OpenTemplates => app.code_editor.toggle_templates(),
 
         // View switching
         Action::SwitchView(view) => app.set_view(view),
@@ -261,6 +262,20 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
 fn handle_code_editor_key(app: &mut App, key: KeyEvent) {
     use crossterm::event::{KeyCode, KeyModifiers};
 
+    // If template menu is open, handle template navigation
+    if app.code_editor.show_templates {
+        if key.modifiers == KeyModifiers::NONE {
+            match key.code {
+                KeyCode::Up | KeyCode::Char('k') => app.code_editor.template_up(),
+                KeyCode::Down | KeyCode::Char('j') => app.code_editor.template_down(),
+                KeyCode::Enter => app.code_editor.load_selected_template(),
+                KeyCode::Esc => app.code_editor.close_templates(),
+                _ => {}
+            }
+        }
+        return;
+    }
+
     // Ctrl-modified keys: handle special code editor shortcuts
     if key.modifiers == KeyModifiers::CONTROL {
         match key.code {
@@ -270,6 +285,10 @@ fn handle_code_editor_key(app: &mut App, key: KeyEvent) {
             }
             KeyCode::Char('\\') => {
                 app.toggle_split_view();
+                return;
+            }
+            KeyCode::Char('t') => {
+                app.code_editor.toggle_templates();
                 return;
             }
             _ => {}

@@ -11,6 +11,8 @@ use ratatui::{
     Frame,
 };
 
+use crate::dsl::examples::TEMPLATES;
+
 use super::theme::Theme;
 
 /// Rhai keywords for syntax highlighting.
@@ -38,6 +40,10 @@ pub struct CodeEditor {
     pub output_is_error: bool,
     /// Whether the editor is currently focused/active.
     pub active: bool,
+    /// Whether the template menu overlay is visible.
+    pub show_templates: bool,
+    /// Currently highlighted template index in the menu.
+    pub template_cursor: usize,
 }
 
 impl CodeEditor {
@@ -52,6 +58,8 @@ impl CodeEditor {
             output: String::new(),
             output_is_error: false,
             active: false,
+            show_templates: false,
+            template_cursor: 0,
         }
     }
 
@@ -116,6 +124,43 @@ impl CodeEditor {
     pub fn clear_output(&mut self) {
         self.output.clear();
         self.output_is_error = false;
+    }
+
+    // ── Template menu ─────────────────────────────────────────
+
+    /// Toggle the template menu overlay.
+    pub fn toggle_templates(&mut self) {
+        self.show_templates = !self.show_templates;
+        if self.show_templates {
+            self.template_cursor = 0;
+        }
+    }
+
+    /// Move the template cursor up.
+    pub fn template_up(&mut self) {
+        if self.template_cursor > 0 {
+            self.template_cursor -= 1;
+        }
+    }
+
+    /// Move the template cursor down.
+    pub fn template_down(&mut self) {
+        if self.template_cursor + 1 < TEMPLATES.len() {
+            self.template_cursor += 1;
+        }
+    }
+
+    /// Load the currently selected template into the editor, closing the menu.
+    pub fn load_selected_template(&mut self) {
+        if let Some(t) = TEMPLATES.get(self.template_cursor) {
+            self.set_text(t.code);
+            self.show_templates = false;
+        }
+    }
+
+    /// Close the template menu without loading anything.
+    pub fn close_templates(&mut self) {
+        self.show_templates = false;
     }
 
     // ── Cursor navigation ──────────────────────────────────────
@@ -412,6 +457,11 @@ pub fn render_code_editor(frame: &mut Frame, area: Rect, editor: &CodeEditor, th
 
     render_editor_panel(frame, editor_area, editor, theme);
     render_output_panel(frame, output_area, editor, theme);
+
+    // Render template menu overlay if active
+    if editor.show_templates {
+        render_template_menu(frame, area, editor, theme);
+    }
 }
 
 /// Calculate a reasonable output panel height.
@@ -577,6 +627,63 @@ fn render_output_panel(frame: &mut Frame, area: Rect, editor: &CodeEditor, theme
         .wrap(Wrap { trim: false });
 
     frame.render_widget(paragraph, area);
+}
+
+/// Render the template menu as a centered overlay.
+fn render_template_menu(frame: &mut Frame, area: Rect, editor: &CodeEditor, theme: &Theme) {
+    // Calculate centered overlay area
+    let menu_width = 50u16.min(area.width.saturating_sub(4));
+    let menu_height = (TEMPLATES.len() as u16 * 2 + 3).min(area.height.saturating_sub(4));
+    let x = area.x + (area.width.saturating_sub(menu_width)) / 2;
+    let y = area.y + (area.height.saturating_sub(menu_height)) / 2;
+    let menu_area = Rect::new(x, y, menu_width, menu_height);
+
+    // Clear background
+    let clear = Paragraph::new("")
+        .block(Block::default().borders(Borders::NONE))
+        .style(Style::default().bg(Color::Black));
+    frame.render_widget(clear, menu_area);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.primary))
+        .title(" Templates (↑↓ Enter Esc) ")
+        .title_alignment(Alignment::Center);
+
+    let inner = block.inner(menu_area);
+    frame.render_widget(block, menu_area);
+
+    // Build menu items
+    let mut lines: Vec<Line> = Vec::new();
+    for (i, t) in TEMPLATES.iter().enumerate() {
+        let is_selected = i == editor.template_cursor;
+        let name_style = if is_selected {
+            Style::default()
+                .fg(Color::Black)
+                .bg(theme.primary)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD)
+        };
+        let desc_style = if is_selected {
+            Style::default().fg(Color::Black).bg(theme.primary)
+        } else {
+            Style::default().fg(theme.text_dimmed)
+        };
+
+        let prefix = if is_selected { "▸ " } else { "  " };
+        lines.push(Line::from(vec![
+            Span::styled(prefix, name_style),
+            Span::styled(t.name, name_style),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("    ", desc_style),
+            Span::styled(t.description, desc_style),
+        ]));
+    }
+
+    let paragraph = Paragraph::new(lines).alignment(Alignment::Left);
+    frame.render_widget(paragraph, inner);
 }
 
 // ── Tests ──────────────────────────────────────────────────────
@@ -959,5 +1066,143 @@ mod tests {
         assert_eq!(ed1.line_count(), ed2.line_count());
         assert_eq!(ed1.cursor_row(), ed2.cursor_row());
         assert_eq!(ed1.cursor_col(), ed2.cursor_col());
+    }
+
+    // ── Template menu tests ──────────────────────────────────
+
+    #[test]
+    fn test_template_menu_initially_hidden() {
+        let ed = CodeEditor::new();
+        assert!(!ed.show_templates);
+        assert_eq!(ed.template_cursor, 0);
+    }
+
+    #[test]
+    fn test_toggle_templates_opens_menu() {
+        let mut ed = CodeEditor::new();
+        ed.toggle_templates();
+        assert!(ed.show_templates);
+        assert_eq!(ed.template_cursor, 0);
+    }
+
+    #[test]
+    fn test_toggle_templates_closes_menu() {
+        let mut ed = CodeEditor::new();
+        ed.toggle_templates();
+        ed.toggle_templates();
+        assert!(!ed.show_templates);
+    }
+
+    #[test]
+    fn test_toggle_templates_resets_cursor() {
+        let mut ed = CodeEditor::new();
+        ed.toggle_templates();
+        ed.template_down();
+        ed.template_down();
+        assert_eq!(ed.template_cursor, 2);
+        // Close and reopen — cursor should reset
+        ed.toggle_templates();
+        ed.toggle_templates();
+        assert_eq!(ed.template_cursor, 0);
+    }
+
+    #[test]
+    fn test_template_up_down_navigation() {
+        let mut ed = CodeEditor::new();
+        ed.toggle_templates();
+
+        // Move down through all templates
+        ed.template_down();
+        assert_eq!(ed.template_cursor, 1);
+        ed.template_down();
+        assert_eq!(ed.template_cursor, 2);
+        ed.template_down();
+        assert_eq!(ed.template_cursor, 3);
+        // Can't go past last
+        ed.template_down();
+        assert_eq!(ed.template_cursor, 3);
+
+        // Move back up
+        ed.template_up();
+        assert_eq!(ed.template_cursor, 2);
+        ed.template_up();
+        assert_eq!(ed.template_cursor, 1);
+        ed.template_up();
+        assert_eq!(ed.template_cursor, 0);
+        // Can't go past first
+        ed.template_up();
+        assert_eq!(ed.template_cursor, 0);
+    }
+
+    #[test]
+    fn test_load_selected_template() {
+        let mut ed = CodeEditor::new();
+        ed.toggle_templates();
+        ed.load_selected_template();
+        // Menu should close
+        assert!(!ed.show_templates);
+        // Content should be loaded (first template: Simple Beat)
+        let text = ed.text();
+        assert!(text.contains("euclidean"), "Expected Simple Beat template");
+    }
+
+    #[test]
+    fn test_load_second_template() {
+        let mut ed = CodeEditor::new();
+        ed.toggle_templates();
+        ed.template_down();
+        ed.load_selected_template();
+        assert!(!ed.show_templates);
+        let text = ed.text();
+        assert!(text.contains("pentatonic"), "Expected Random Melody template");
+    }
+
+    #[test]
+    fn test_load_third_template() {
+        let mut ed = CodeEditor::new();
+        ed.toggle_templates();
+        ed.template_down();
+        ed.template_down();
+        ed.load_selected_template();
+        assert!(!ed.show_templates);
+        let text = ed.text();
+        assert!(text.contains("chord"), "Expected Arpeggiator template");
+    }
+
+    #[test]
+    fn test_load_fourth_template() {
+        let mut ed = CodeEditor::new();
+        ed.toggle_templates();
+        ed.template_down();
+        ed.template_down();
+        ed.template_down();
+        ed.load_selected_template();
+        assert!(!ed.show_templates);
+        let text = ed.text();
+        assert!(text.contains("Probability"), "Expected Probability Beat template");
+    }
+
+    #[test]
+    fn test_close_templates_without_loading() {
+        let mut ed = CodeEditor::new();
+        ed.set_text("existing code");
+        ed.toggle_templates();
+        ed.close_templates();
+        assert!(!ed.show_templates);
+        // Original content should be preserved
+        assert_eq!(ed.text(), "existing code");
+    }
+
+    #[test]
+    fn test_loading_template_resets_cursor_position() {
+        let mut ed = CodeEditor::new();
+        ed.set_text("line1\nline2\nline3");
+        ed.cursor_row = 2;
+        ed.cursor_col = 3;
+        ed.toggle_templates();
+        ed.load_selected_template();
+        // set_text resets cursor to 0, 0
+        assert_eq!(ed.cursor_row(), 0);
+        assert_eq!(ed.cursor_col(), 0);
     }
 }
