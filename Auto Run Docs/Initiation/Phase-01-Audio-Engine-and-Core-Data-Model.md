@@ -15,12 +15,13 @@ This phase integrates the existing audio engine code from the unmerged `auto-cla
   - Verify the code compiles with `cargo check`
   > ✅ Completed: The audio engine was already merged via PR #2. Restored TUI main.rs (PR merge had replaced it with a test tone demo), added sample.rs module, updated mod.rs with all 5 submodules (device, engine, error, sample, stream) and re-exports, added lib.rs for example compatibility, fixed layout.rs Rc<[Rect]> iteration issue. All 80 tests pass.
 
-- [ ] Create the pattern data model in `src/pattern/` with proper types for a tracker grid. Reference the data structures from the `auto-claude/005-basic-pattern-editor` branch's `src/pattern.rs` for inspiration, but restructure into a clean module:
+- [x] Create the pattern data model in `src/pattern/` with proper types for a tracker grid. Reference the data structures from the `auto-claude/005-basic-pattern-editor` branch's `src/pattern.rs` for inspiration, but restructure into a clean module:
   - `src/pattern/mod.rs` — module declarations and re-exports
   - `src/pattern/note.rs` — `Pitch` enum (C through B with sharps/flats), `Note` struct (pitch, octave 0-9, velocity 0-127, instrument index), `NoteOff` sentinel, display formatting as "C#4" style strings
   - `src/pattern/row.rs` — `Cell` struct (Option<Note>, Option<u8> instrument, Option<u8> volume, effect commands), `Row` as a Vec<Cell> across channels
   - `src/pattern/pattern.rs` — `Pattern` struct with configurable rows (default 64) and channels (default 4), methods: `get_cell(row, channel)`, `set_cell(row, channel, cell)`, `set_note(row, channel, note)`, `clear_cell(row, channel)`, `insert_row(at)`, `delete_row(at)`, `num_rows()`, `num_channels()`
   - Register the `pattern` module in `src/main.rs` with `mod pattern;`
+  > ✅ Completed: Created full pattern data model with 4 files. `note.rs` has 12-semitone `Pitch` enum with sharp/flat parsing, `Note` struct with tracker-style display ("C#4"), `NoteOff` sentinel, `NoteEvent` enum, frequency/MIDI calculations. `row.rs` has `Cell` struct with note/instrument/volume/effect fields, `Effect` command type, tracker-style display. `pattern.rs` has `Pattern` struct (default 64×4) with all required methods plus boundary protection. Module registered in both `main.rs` and `lib.rs`. 36 new tests all pass (93 total).
 
 - [ ] Write unit tests for the pattern data model:
   - Test `Note` creation, display formatting, and parsing from strings like "C#4", "A-5"
