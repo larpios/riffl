@@ -13,7 +13,7 @@ pub fn set_note(row: usize, channel: usize, note: Note) -> PatternCommand {
 }
 
 /// Generate commands to clear all cells in a pattern.
-pub fn clear_pattern(pattern: &Pattern) -> Vec<PatternCommand> {
+pub fn clear_pattern(_pattern: &Pattern) -> Vec<PatternCommand> {
     vec![PatternCommand::ClearPattern]
 }
 

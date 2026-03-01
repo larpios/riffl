@@ -6,7 +6,8 @@
 use rhai::{Engine, EvalAltResult, Array, Dynamic, Scope, INT};
 use rand::Rng;
 
-use crate::pattern::{Note, NoteEvent, Pattern, Pitch};
+use crate::pattern::{Note, Pattern, Pitch};
+use super::pattern_api;
 
 /// Result of evaluating a script.
 #[derive(Debug)]
@@ -83,6 +84,71 @@ impl ScriptEngine {
         let cmds_clone = commands.clone();
         engine.register_fn("clear_pattern", move || {
             cmds_clone.lock().unwrap().push(PatternCommand::ClearPattern);
+        });
+
+        // Register fill_column(channel, notes_array)
+        let cmds_clone = commands.clone();
+        let pat_clone = pattern.clone();
+        engine.register_fn("fill_column", move |channel: INT, notes: Array| {
+            if channel < 0 {
+                return;
+            }
+            let parsed_notes: Vec<Note> = notes
+                .iter()
+                .filter_map(|d| dynamic_to_note(d))
+                .collect();
+            let new_cmds = pattern_api::fill_column(&pat_clone, channel as usize, &parsed_notes);
+            cmds_clone.lock().unwrap().extend(new_cmds);
+        });
+
+        // Register generate_beat(channel, rhythm_array, note)
+        let cmds_clone = commands.clone();
+        let pat_clone = pattern.clone();
+        engine.register_fn("generate_beat", move |channel: INT, rhythm: Array, note: rhai::Map| {
+            if channel < 0 {
+                return;
+            }
+            let bools: Vec<bool> = rhythm
+                .iter()
+                .map(|d| d.as_bool().unwrap_or(false))
+                .collect();
+            if let Some(n) = map_to_note(&note) {
+                let new_cmds = pattern_api::generate_beat(&pat_clone, channel as usize, &bools, n);
+                cmds_clone.lock().unwrap().extend(new_cmds);
+            }
+        });
+
+        // Register transpose(semitones)
+        let cmds_clone = commands.clone();
+        let pat_clone = pattern.clone();
+        engine.register_fn("transpose", move |semitones: INT| {
+            let new_cmds = pattern_api::transpose(&pat_clone, semitones as i32);
+            cmds_clone.lock().unwrap().extend(new_cmds);
+        });
+
+        // Register reverse()
+        let cmds_clone = commands.clone();
+        let pat_clone = pattern.clone();
+        engine.register_fn("reverse", move || {
+            let new_cmds = pattern_api::reverse(&pat_clone);
+            cmds_clone.lock().unwrap().extend(new_cmds);
+        });
+
+        // Register rotate(offset)
+        let cmds_clone = commands.clone();
+        let pat_clone = pattern.clone();
+        engine.register_fn("rotate", move |offset: INT| {
+            let new_cmds = pattern_api::rotate(&pat_clone, offset as i32);
+            cmds_clone.lock().unwrap().extend(new_cmds);
+        });
+
+        // Register humanize(velocity_variance)
+        let cmds_clone = commands.clone();
+        let pat_clone = pattern.clone();
+        engine.register_fn("humanize", move |velocity_variance: INT| {
+            let variance = (velocity_variance.max(0).min(127)) as u8;
+            let new_cmds = pattern_api::humanize(&pat_clone, variance);
+            cmds_clone.lock().unwrap().extend(new_cmds);
         });
 
         let mut scope = Scope::new();
@@ -290,6 +356,31 @@ fn pitch_to_string(pitch: Pitch) -> String {
         Pitch::ASharp => "A#".to_string(),
         Pitch::B => "B".to_string(),
     }
+}
+
+/// Convert a Rhai Dynamic (expected to be a Map) to a Note.
+fn dynamic_to_note(d: &Dynamic) -> Option<Note> {
+    let map = d.read_lock::<rhai::Map>()?;
+    map_to_note(&map)
+}
+
+/// Convert a Rhai Map to a Note.
+fn map_to_note(note: &rhai::Map) -> Option<Note> {
+    let pitch_str = note.get("pitch")?.clone().into_string().ok()?;
+    let pitch = Pitch::from_str(&pitch_str)?;
+    let octave = note.get("octave")?.as_int().ok()? as u8;
+    let velocity = note
+        .get("velocity")
+        .and_then(|v| v.as_int().ok())
+        .unwrap_or(100) as u8;
+    let instrument = note
+        .get("instrument")
+        .and_then(|v| v.as_int().ok())
+        .unwrap_or(0) as u8;
+    if octave > 9 || velocity > 127 {
+        return None;
+    }
+    Some(Note::new(pitch, octave, velocity, instrument))
 }
 
 /// Convert a Rhai map + coordinates to a SetNote command.
@@ -855,5 +946,159 @@ mod tests {
             ScriptResult::Value(v) => assert_eq!(v, "100"),
             _ => panic!("Expected Value result"),
         }
+    }
+
+    #[test]
+    fn test_script_fill_column() {
+        let engine = ScriptEngine::new();
+        let pattern = Pattern::new(8, 2);
+        let code = r#"
+            let notes = [note("C", 4), note("E", 4)];
+            fill_column(0, notes);
+        "#;
+        let (_, commands) = engine.eval_with_pattern(code, &pattern).unwrap();
+        // fill_column should produce one SetNote per row (8 rows)
+        assert_eq!(commands.len(), 8);
+
+        // Apply and verify cycling
+        let mut pat = Pattern::new(8, 2);
+        apply_commands(&mut pat, &commands);
+        match &pat.get_cell(0, 0).unwrap().note {
+            Some(NoteEvent::On(n)) => assert_eq!(n.pitch, Pitch::C),
+            _ => panic!("Expected C at row 0"),
+        }
+        match &pat.get_cell(1, 0).unwrap().note {
+            Some(NoteEvent::On(n)) => assert_eq!(n.pitch, Pitch::E),
+            _ => panic!("Expected E at row 1"),
+        }
+        match &pat.get_cell(2, 0).unwrap().note {
+            Some(NoteEvent::On(n)) => assert_eq!(n.pitch, Pitch::C),
+            _ => panic!("Expected C at row 2 (cycling)"),
+        }
+    }
+
+    #[test]
+    fn test_script_generate_beat() {
+        let engine = ScriptEngine::new();
+        let pattern = Pattern::new(8, 1);
+        let code = r#"
+            let rhythm = euclidean(3, 8);
+            let kick = note("C", 2);
+            generate_beat(0, rhythm, kick);
+        "#;
+        let (_, commands) = engine.eval_with_pattern(code, &pattern).unwrap();
+        // Should have exactly 3 notes placed (3 pulses in euclidean(3,8))
+        let set_notes: Vec<_> = commands
+            .iter()
+            .filter(|c| matches!(c, PatternCommand::SetNote { .. }))
+            .collect();
+        assert_eq!(set_notes.len(), 3);
+    }
+
+    #[test]
+    fn test_script_transpose() {
+        let engine = ScriptEngine::new();
+        let mut pattern = Pattern::new(4, 1);
+        pattern.set_note(0, 0, Note::simple(Pitch::C, 4));
+        pattern.set_note(2, 0, Note::simple(Pitch::E, 4));
+
+        let code = r#"transpose(2);"#;
+        let (_, commands) = engine.eval_with_pattern(code, &pattern).unwrap();
+        assert_eq!(commands.len(), 2);
+
+        apply_commands(&mut pattern, &commands);
+        match &pattern.get_cell(0, 0).unwrap().note {
+            Some(NoteEvent::On(n)) => {
+                assert_eq!(n.pitch, Pitch::D);
+                assert_eq!(n.octave, 4);
+            }
+            _ => panic!("Expected transposed note at row 0"),
+        }
+        match &pattern.get_cell(2, 0).unwrap().note {
+            Some(NoteEvent::On(n)) => {
+                assert_eq!(n.pitch, Pitch::FSharp);
+                assert_eq!(n.octave, 4);
+            }
+            _ => panic!("Expected transposed note at row 2"),
+        }
+    }
+
+    #[test]
+    fn test_script_reverse() {
+        let engine = ScriptEngine::new();
+        let mut pattern = Pattern::new(4, 1);
+        pattern.set_note(0, 0, Note::simple(Pitch::C, 4));
+        pattern.set_note(3, 0, Note::simple(Pitch::G, 4));
+
+        let code = r#"reverse();"#;
+        let (_, commands) = engine.eval_with_pattern(code, &pattern).unwrap();
+        // Should have ClearPattern + 2 SetNote commands
+        assert!(commands.len() >= 3);
+
+        apply_commands(&mut pattern, &commands);
+        match &pattern.get_cell(0, 0).unwrap().note {
+            Some(NoteEvent::On(n)) => assert_eq!(n.pitch, Pitch::G),
+            _ => panic!("Expected G at row 0 after reverse"),
+        }
+        match &pattern.get_cell(3, 0).unwrap().note {
+            Some(NoteEvent::On(n)) => assert_eq!(n.pitch, Pitch::C),
+            _ => panic!("Expected C at row 3 after reverse"),
+        }
+    }
+
+    #[test]
+    fn test_script_rotate() {
+        let engine = ScriptEngine::new();
+        let mut pattern = Pattern::new(4, 1);
+        pattern.set_note(0, 0, Note::simple(Pitch::C, 4));
+
+        let code = r#"rotate(2);"#;
+        let (_, commands) = engine.eval_with_pattern(code, &pattern).unwrap();
+
+        apply_commands(&mut pattern, &commands);
+        assert!(pattern.get_cell(0, 0).unwrap().note.is_none());
+        match &pattern.get_cell(2, 0).unwrap().note {
+            Some(NoteEvent::On(n)) => assert_eq!(n.pitch, Pitch::C),
+            _ => panic!("Expected C at row 2 after rotate"),
+        }
+    }
+
+    #[test]
+    fn test_script_humanize() {
+        let engine = ScriptEngine::new();
+        let mut pattern = Pattern::new(4, 1);
+        pattern.set_note(0, 0, Note::new(Pitch::C, 4, 100, 0));
+        pattern.set_note(1, 0, Note::new(Pitch::E, 4, 100, 0));
+
+        let code = r#"humanize(10);"#;
+        let (_, commands) = engine.eval_with_pattern(code, &pattern).unwrap();
+        assert_eq!(commands.len(), 2);
+
+        apply_commands(&mut pattern, &commands);
+        for row in 0..2 {
+            if let Some(NoteEvent::On(n)) = &pattern.get_cell(row, 0).unwrap().note {
+                assert!(
+                    n.velocity >= 90 && n.velocity <= 110,
+                    "Velocity {} out of expected range for row {}",
+                    n.velocity,
+                    row
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_script_combined_operations() {
+        let engine = ScriptEngine::new();
+        let pattern = Pattern::new(8, 1);
+        let code = r#"
+            let s = scale("C", "pentatonic", 4);
+            fill_column(0, s);
+            transpose(3);
+        "#;
+        let (_, commands) = engine.eval_with_pattern(code, &pattern).unwrap();
+        // fill_column produces 8 commands, transpose works on the *original* pattern
+        // (which is empty), so it produces 0 transpose commands
+        assert_eq!(commands.len(), 8);
     }
 }
