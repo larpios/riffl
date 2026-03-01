@@ -76,6 +76,10 @@ pub enum Action {
     // Export
     OpenExportDialog,
 
+    // Code editor
+    ToggleSplitView,
+    ExecuteScript,
+
     // Application
     Quit,
     Confirm,
@@ -115,6 +119,8 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             KeyCode::Char('s') => Action::SaveProject,
             KeyCode::Char('o') => Action::LoadProject,
             KeyCode::Char('e') => Action::OpenExportDialog,
+            KeyCode::Char('\\') => Action::ToggleSplitView,
+            KeyCode::Enter => Action::ExecuteScript,
             _ => Action::None,
         };
     }
@@ -186,6 +192,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         KeyCode::F(1) => Action::SwitchView(AppView::PatternEditor),
         KeyCode::F(2) => Action::SwitchView(AppView::Arrangement),
         KeyCode::F(3) => Action::SwitchView(AppView::InstrumentList),
+        KeyCode::F(4) => Action::SwitchView(AppView::CodeEditor),
 
         // Application
         KeyCode::Char('q') => Action::Quit,
@@ -199,6 +206,15 @@ fn map_normal_mode(key: KeyEvent) -> Action {
 }
 
 fn map_insert_mode(key: KeyEvent) -> Action {
+    // Handle Ctrl-modified bindings in insert mode
+    if key.modifiers == KeyModifiers::CONTROL {
+        return match key.code {
+            KeyCode::Char('\\') => Action::ToggleSplitView,
+            KeyCode::Enter => Action::ExecuteScript,
+            _ => Action::None,
+        };
+    }
+
     if key.modifiers != KeyModifiers::NONE {
         return Action::None;
     }
@@ -714,5 +730,37 @@ mod tests {
     fn test_normal_mode_ctrl_e_opens_export() {
         let ctrl_e = KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL);
         assert_eq!(map_key_to_action(ctrl_e, EditorMode::Normal), Action::OpenExportDialog);
+    }
+
+    // --- Code Editor Keybinding Tests ---
+
+    #[test]
+    fn test_normal_mode_f4_switches_to_code_editor() {
+        let f4 = KeyEvent::new(KeyCode::F(4), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(f4, EditorMode::Normal), Action::SwitchView(AppView::CodeEditor));
+    }
+
+    #[test]
+    fn test_normal_mode_ctrl_backslash_toggles_split() {
+        let ctrl_bs = KeyEvent::new(KeyCode::Char('\\'), KeyModifiers::CONTROL);
+        assert_eq!(map_key_to_action(ctrl_bs, EditorMode::Normal), Action::ToggleSplitView);
+    }
+
+    #[test]
+    fn test_normal_mode_ctrl_enter_executes_script() {
+        let ctrl_enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL);
+        assert_eq!(map_key_to_action(ctrl_enter, EditorMode::Normal), Action::ExecuteScript);
+    }
+
+    #[test]
+    fn test_insert_mode_ctrl_backslash_toggles_split() {
+        let ctrl_bs = KeyEvent::new(KeyCode::Char('\\'), KeyModifiers::CONTROL);
+        assert_eq!(map_key_to_action(ctrl_bs, EditorMode::Insert), Action::ToggleSplitView);
+    }
+
+    #[test]
+    fn test_insert_mode_ctrl_enter_executes_script() {
+        let ctrl_enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL);
+        assert_eq!(map_key_to_action(ctrl_enter, EditorMode::Insert), Action::ExecuteScript);
     }
 }
