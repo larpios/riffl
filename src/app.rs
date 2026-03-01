@@ -158,6 +158,12 @@ impl App {
             if let Ok(mut mixer) = self.mixer.lock() {
                 mixer.tick(row, self.editor.pattern());
             }
+        } else if self.transport.is_playing() {
+            // Even when no row advances, sync track state for real-time
+            // mute/solo/volume/pan changes to take effect immediately
+            if let Ok(mut mixer) = self.mixer.lock() {
+                mixer.update_tracks(self.editor.pattern().tracks());
+            }
         }
 
         // Handle auto-stop (loop disabled, reached end)
