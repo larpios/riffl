@@ -130,6 +130,12 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    // If code editor is active, handle code editor input first
+    if app.is_code_editor_active() {
+        handle_code_editor_key(app, key);
+        return;
+    }
+
     // Escape during playback: stop transport (in addition to normal Escape behavior)
     if key.code == crossterm::event::KeyCode::Esc && !app.transport.is_stopped() {
         app.stop();
@@ -210,6 +216,10 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::ToggleSolo => app.toggle_solo_current_track(),
         Action::NextTrack => app.editor.next_track(),
 
+        // Code editor
+        Action::ToggleSplitView => app.toggle_split_view(),
+        Action::ExecuteScript => app.execute_script(),
+
         // View switching
         Action::SwitchView(view) => app.set_view(view),
 
@@ -245,6 +255,127 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             }
         }
         Action::None => {}
+    }
+}
+
+fn handle_code_editor_key(app: &mut App, key: KeyEvent) {
+    use crossterm::event::{KeyCode, KeyModifiers};
+
+    // Ctrl-modified keys: handle special code editor shortcuts
+    if key.modifiers == KeyModifiers::CONTROL {
+        match key.code {
+            KeyCode::Enter => {
+                app.execute_script();
+                return;
+            }
+            KeyCode::Char('\\') => {
+                app.toggle_split_view();
+                return;
+            }
+            _ => {}
+        }
+    }
+
+    // No modifiers: text editing and navigation
+    if key.modifiers == KeyModifiers::NONE {
+        match key.code {
+            // Escape: deactivate code editor, return to pattern editor
+            KeyCode::Esc => {
+                if app.split_view {
+                    // In split view, Esc deactivates the code editor focus
+                    app.code_editor.active = false;
+                } else {
+                    // In full-screen code editor, switch back to pattern editor
+                    app.set_view(app::AppView::PatternEditor);
+                }
+                return;
+            }
+            // Text editing
+            KeyCode::Char(c) => {
+                app.code_editor.insert_char(c);
+                return;
+            }
+            KeyCode::Enter => {
+                app.code_editor.insert_newline();
+                return;
+            }
+            KeyCode::Backspace => {
+                app.code_editor.backspace();
+                return;
+            }
+            KeyCode::Delete => {
+                app.code_editor.delete();
+                return;
+            }
+            // Cursor navigation
+            KeyCode::Left => {
+                app.code_editor.move_left();
+                return;
+            }
+            KeyCode::Right => {
+                app.code_editor.move_right();
+                return;
+            }
+            KeyCode::Up => {
+                app.code_editor.move_up();
+                return;
+            }
+            KeyCode::Down => {
+                app.code_editor.move_down();
+                return;
+            }
+            KeyCode::Home => {
+                app.code_editor.move_home();
+                return;
+            }
+            KeyCode::End => {
+                app.code_editor.move_end();
+                return;
+            }
+            KeyCode::PageUp => {
+                app.code_editor.page_up(20);
+                return;
+            }
+            KeyCode::PageDown => {
+                app.code_editor.page_down(20);
+                return;
+            }
+            // View switching with F-keys still works
+            KeyCode::F(1) => {
+                app.set_view(app::AppView::PatternEditor);
+                app.split_view = false;
+                return;
+            }
+            KeyCode::F(2) => {
+                app.set_view(app::AppView::Arrangement);
+                app.split_view = false;
+                return;
+            }
+            KeyCode::F(3) => {
+                app.set_view(app::AppView::InstrumentList);
+                app.split_view = false;
+                return;
+            }
+            KeyCode::F(4) => {
+                app.set_view(app::AppView::CodeEditor);
+                return;
+            }
+            KeyCode::Tab => {
+                // Insert 2 spaces for indentation
+                app.code_editor.insert_char(' ');
+                app.code_editor.insert_char(' ');
+                return;
+            }
+            _ => {}
+        }
+    }
+
+    // Shift+characters for uppercase in the editor
+    if key.modifiers == KeyModifiers::SHIFT {
+        if let KeyCode::Char(c) = key.code {
+            app.code_editor.insert_char(c);
+            return;
+        }
     }
 }
 
