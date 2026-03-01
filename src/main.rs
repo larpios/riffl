@@ -120,6 +120,11 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    // Escape during playback: stop transport (in addition to normal Escape behavior)
+    if key.code == crossterm::event::KeyCode::Esc && !app.transport.is_stopped() {
+        app.stop();
+    }
+
     let action = map_key_to_action(key, app.editor_mode());
 
     match action {
@@ -150,9 +155,17 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::DeleteRow => app.editor.delete_row(),
         Action::Undo => { app.editor.undo(); }
 
+        // Transport
+        Action::TogglePlay => app.toggle_play(),
+        Action::Stop => app.stop(),
+        Action::BpmUp => app.adjust_bpm(1.0),
+        Action::BpmDown => app.adjust_bpm(-1.0),
+        Action::BpmUpLarge => app.adjust_bpm(10.0),
+        Action::BpmDownLarge => app.adjust_bpm(-10.0),
+        Action::ToggleLoop => app.toggle_loop(),
+
         // Application
         Action::Quit => app.quit(),
-        Action::TogglePlay => app.toggle_play(),
         Action::OpenModal => app.open_test_modal(),
         Action::OpenFileBrowser => app.open_file_browser(),
         Action::Cancel => { app.close_modal(); }
