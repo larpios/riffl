@@ -39,6 +39,7 @@ pub fn render(frame: &mut Frame, app: &App) {
 /// Render the header with title, BPM, and play/stop status
 fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let theme = &app.theme;
+    let pattern = app.editor.pattern();
 
     let play_status = if app.is_playing { "PLAYING" } else { "STOPPED" };
     let play_color = if app.is_playing { theme.success_color() } else { theme.text_dimmed };
@@ -62,7 +63,7 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         ),
         Span::raw("  "),
         Span::styled(
-            format!("Row: {:02X}/{:02X}", app.current_row, app.pattern.num_rows()),
+            format!("Row: {:02X}/{:02X}", app.current_row, pattern.num_rows()),
             Style::default().fg(theme.text_secondary),
         ),
     ];
@@ -78,6 +79,9 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 /// Render the main content area with the tracker pattern grid
 fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let theme = &app.theme;
+    let pattern = app.editor.pattern();
+    let cursor_row = app.editor.cursor_row();
+    let cursor_channel = app.editor.cursor_channel();
 
     let content_block = Block::default()
         .borders(Borders::ALL)
@@ -90,9 +94,9 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
     // Calculate scroll offset to keep cursor visible
     let scroll_offset = calculate_scroll_offset(
-        app.cursor_y as usize,
+        cursor_row,
         visible_rows.saturating_sub(1), // reserve 1 row for channel header
-        app.pattern.num_rows(),
+        pattern.num_rows(),
     );
 
     let mut lines: Vec<Line> = Vec::new();
@@ -100,7 +104,7 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     // Channel header row
     let mut header_spans = Vec::new();
     header_spans.push(Span::styled("  ROW ", Style::default().fg(theme.text_secondary)));
-    for ch in 0..app.pattern.num_channels() {
+    for ch in 0..pattern.num_channels() {
         header_spans.push(Span::styled(
             format!("│ CH{:<11}", ch),
             Style::default().fg(theme.primary).add_modifier(Modifier::BOLD),
@@ -112,7 +116,7 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let rows_to_show = visible_rows.saturating_sub(1); // subtract header
     for display_idx in 0..rows_to_show {
         let row_idx = scroll_offset + display_idx;
-        if row_idx >= app.pattern.num_rows() {
+        if row_idx >= pattern.num_rows() {
             break;
         }
 
@@ -123,7 +127,6 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         let row_num_style = if is_playback_row {
             Style::default().fg(Color::Black).bg(theme.success_color()).add_modifier(Modifier::BOLD)
         } else if row_idx % 4 == 0 {
-            // Highlight every 4th row for beat markers
             Style::default().fg(theme.primary)
         } else {
             Style::default().fg(theme.text_secondary)
@@ -132,11 +135,11 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         row_spans.push(Span::styled(format!("  {:02X}  ", row_idx), row_num_style));
 
         // Cells for each channel
-        for ch in 0..app.pattern.num_channels() {
+        for ch in 0..pattern.num_channels() {
             row_spans.push(Span::styled("│ ", Style::default().fg(theme.text_dimmed)));
 
-            let cell = app.pattern.get_cell(row_idx, ch);
-            let is_cursor = app.cursor_y as usize == row_idx && app.cursor_x as usize == ch;
+            let cell = pattern.get_cell(row_idx, ch);
+            let is_cursor = cursor_row == row_idx && cursor_channel == ch;
 
             // Format cell: note (3 chars) + space + inst (2) + space + vol (2) + space + eff (3) = 14 chars
             let cell_text = if let Some(cell) = cell {
@@ -209,30 +212,78 @@ fn calculate_scroll_offset(cursor_row: usize, visible_rows: usize, total_rows: u
     }
 }
 
-/// Render the footer with relevant keybindings
+/// Render the footer with mode indicator and keybindings
 fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let theme = &app.theme;
+    let mode = app.editor.mode();
+    let cursor_row = app.editor.cursor_row();
+    let cursor_channel = app.editor.cursor_channel();
 
     let key_style = Style::default().fg(theme.success_color());
+    let mode_style = Style::default()
+        .fg(Color::Black)
+        .bg(theme.primary)
+        .add_modifier(Modifier::BOLD);
 
-    let footer_text = vec![
+    let mut footer_spans = vec![
         Span::raw(" "),
-        Span::styled("space", key_style),
-        Span::raw(": play/stop "),
-        Span::raw("| "),
-        Span::styled("hjkl/arrows", key_style),
-        Span::raw(": navigate "),
-        Span::raw("| "),
-        Span::styled("q", key_style),
-        Span::raw(": quit "),
-        Span::raw("| "),
-        Span::styled(
-            format!("CH:{} ROW:{:02X}", app.cursor_x, app.cursor_y),
-            Style::default().fg(theme.primary),
-        ),
+        Span::styled(format!(" {} ", mode.label()), mode_style),
+        Span::raw(" "),
     ];
 
-    let footer = Paragraph::new(Line::from(footer_text))
+    // Show mode-specific hints
+    match mode {
+        crate::editor::EditorMode::Normal => {
+            footer_spans.extend([
+                Span::styled("i", key_style),
+                Span::raw(":insert "),
+                Span::styled("v", key_style),
+                Span::raw(":visual "),
+                Span::styled("space", key_style),
+                Span::raw(":play "),
+                Span::styled("x", key_style),
+                Span::raw(":delete "),
+                Span::styled("u", key_style),
+                Span::raw(":undo "),
+                Span::styled("q", key_style),
+                Span::raw(":quit"),
+            ]);
+        }
+        crate::editor::EditorMode::Insert => {
+            footer_spans.extend([
+                Span::styled("A-G", key_style),
+                Span::raw(":note "),
+                Span::styled("0-9", key_style),
+                Span::raw(":octave "),
+                Span::styled("Esc", key_style),
+                Span::raw(":normal "),
+                Span::styled(
+                    format!("Oct:{}", app.editor.current_octave()),
+                    Style::default().fg(theme.warning_color()),
+                ),
+            ]);
+        }
+        crate::editor::EditorMode::Visual => {
+            footer_spans.extend([
+                Span::styled("hjkl", key_style),
+                Span::raw(":select "),
+                Span::styled("x", key_style),
+                Span::raw(":delete "),
+                Span::styled("Esc", key_style),
+                Span::raw(":normal"),
+            ]);
+        }
+    }
+
+    footer_spans.extend([
+        Span::raw(" | "),
+        Span::styled(
+            format!("CH:{} ROW:{:02X}", cursor_channel, cursor_row),
+            Style::default().fg(theme.primary),
+        ),
+    ]);
+
+    let footer = Paragraph::new(Line::from(footer_spans))
         .style(theme.footer_style());
 
     frame.render_widget(footer, area);
@@ -257,7 +308,6 @@ mod tests {
 
     #[test]
     fn test_scroll_offset_middle() {
-        // Cursor in the middle should center it
         assert_eq!(calculate_scroll_offset(30, 10, 64), 25);
     }
 

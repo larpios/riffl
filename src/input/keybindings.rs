@@ -1,165 +1,169 @@
-/// Keybinding handling with vim-style navigation
+/// Keybinding handling with vim-style navigation and mode-aware dispatch
 ///
 /// This module provides keybinding infrastructure for the application,
-/// with support for vim-style navigation keys (h/j/k/l) and extensible
-/// action mapping for future features.
+/// with support for vim-style navigation keys (h/j/k/l) and modal editing
+/// (Normal, Insert, Visual modes).
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use crate::editor::EditorMode;
+
 /// Actions that can be triggered by keybindings
-///
-/// This enum represents all possible user actions that can be triggered
-/// via keyboard input. It provides a layer of abstraction between raw
-/// key events and application logic, making it easy to rebind keys or
-/// add new actions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
-    /// Move cursor/selection left (vim: h)
+    // Navigation
     MoveLeft,
-
-    /// Move cursor/selection down (vim: j)
     MoveDown,
-
-    /// Move cursor/selection up (vim: k)
     MoveUp,
-
-    /// Move cursor/selection right (vim: l)
     MoveRight,
+    PageUp,
+    PageDown,
 
-    /// Quit the application
+    // Mode transitions
+    EnterInsertMode,
+    EnterNormalMode,
+    EnterVisualMode,
+
+    // Editing (Insert mode)
+    EnterNote(char),
+    SetOctave(u8),
+
+    // Editing (Normal mode)
+    DeleteCell,
+    InsertRow,
+    DeleteRow,
+    Undo,
+
+    // Application
     Quit,
-
-    /// Confirm/Accept current selection (Enter)
     Confirm,
-
-    /// Cancel/Escape from current context (Esc)
     Cancel,
-
-    /// Open a test modal (for testing modal system)
     OpenModal,
-
-    /// Toggle audio playback (space)
     TogglePlay,
 
     /// No action (unmapped key)
     None,
 }
 
-/// Map a keyboard event to an action
-///
-/// This function implements the keybinding logic, translating raw keyboard
-/// events into application actions. It supports vim-style navigation with
-/// h/j/k/l keys and standard keys like q for quit, Enter for confirm, etc.
-///
-/// # Vim-style navigation:
-/// - h: Move left
-/// - j: Move down
-/// - k: Move up
-/// - l: Move right
-///
-/// # Standard keys:
-/// - q: Quit (when not in a modal or text input)
-/// - Enter: Confirm/Accept
-/// - Esc: Cancel/Escape
-///
-/// # Arguments
-/// * `key` - The keyboard event to map
-///
-/// # Returns
-/// The corresponding Action, or Action::None if the key is not mapped
-///
-/// # Example
-/// ```no_run
-/// use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-/// use tracker_rs::input::keybindings::{Action, map_key_to_action};
-///
-/// let key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
-/// let action = map_key_to_action(key);
-/// assert_eq!(action, Action::MoveDown);
-/// ```
-pub fn map_key_to_action(key: KeyEvent) -> Action {
-    // For now, we only handle unmodified keys (no Ctrl, Alt, Shift combinations)
-    // Modifier support will be added in future phases for advanced keybindings
+/// Map a keyboard event to an action, aware of the current editor mode
+pub fn map_key_to_action(key: KeyEvent, mode: EditorMode) -> Action {
+    match mode {
+        EditorMode::Normal => map_normal_mode(key),
+        EditorMode::Insert => map_insert_mode(key),
+        EditorMode::Visual => map_visual_mode(key),
+    }
+}
+
+fn map_normal_mode(key: KeyEvent) -> Action {
     if key.modifiers != KeyModifiers::NONE {
         return Action::None;
     }
 
     match key.code {
-        // Vim-style navigation
+        // Vim navigation
         KeyCode::Char('h') => Action::MoveLeft,
         KeyCode::Char('j') => Action::MoveDown,
         KeyCode::Char('k') => Action::MoveUp,
         KeyCode::Char('l') => Action::MoveRight,
 
-        // Arrow keys (alternative to vim keys)
+        // Arrow keys
         KeyCode::Left => Action::MoveLeft,
         KeyCode::Down => Action::MoveDown,
         KeyCode::Up => Action::MoveUp,
         KeyCode::Right => Action::MoveRight,
 
-        // Standard application keys
+        // Page navigation
+        KeyCode::PageUp => Action::PageUp,
+        KeyCode::PageDown => Action::PageDown,
+
+        // Mode transitions
+        KeyCode::Char('i') => Action::EnterInsertMode,
+        KeyCode::Char('v') => Action::EnterVisualMode,
+
+        // Editing
+        KeyCode::Char('x') | KeyCode::Delete => Action::DeleteCell,
+        KeyCode::Char('u') => Action::Undo,
+
+        // Application
         KeyCode::Char('q') => Action::Quit,
+        KeyCode::Char(' ') => Action::TogglePlay,
+        KeyCode::Char('m') => Action::OpenModal,
         KeyCode::Enter => Action::Confirm,
         KeyCode::Esc => Action::Cancel,
 
-        // Modal test key
-        KeyCode::Char('m') => Action::OpenModal,
+        _ => Action::None,
+    }
+}
 
-        // Toggle audio playback
+fn map_insert_mode(key: KeyEvent) -> Action {
+    if key.modifiers != KeyModifiers::NONE {
+        return Action::None;
+    }
+
+    match key.code {
+        // Escape returns to Normal mode
+        KeyCode::Esc => Action::EnterNormalMode,
+
+        // Note entry (A-G)
+        KeyCode::Char(c @ ('a'..='g' | 'A'..='G')) => Action::EnterNote(c),
+
+        // Octave setting (0-9)
+        KeyCode::Char(c @ '0'..='9') => Action::SetOctave(c as u8 - b'0'),
+
+        // Navigation still works in Insert mode
+        KeyCode::Left => Action::MoveLeft,
+        KeyCode::Down => Action::MoveDown,
+        KeyCode::Up => Action::MoveUp,
+        KeyCode::Right => Action::MoveRight,
+        KeyCode::PageUp => Action::PageUp,
+        KeyCode::PageDown => Action::PageDown,
+
+        // Space for play/pause even in insert mode
         KeyCode::Char(' ') => Action::TogglePlay,
 
-        // Unmapped key
+        // Delete current cell
+        KeyCode::Delete | KeyCode::Backspace => Action::DeleteCell,
+
+        _ => Action::None,
+    }
+}
+
+fn map_visual_mode(key: KeyEvent) -> Action {
+    if key.modifiers != KeyModifiers::NONE {
+        return Action::None;
+    }
+
+    match key.code {
+        // Escape returns to Normal mode
+        KeyCode::Esc => Action::EnterNormalMode,
+
+        // Navigation in Visual mode
+        KeyCode::Char('h') | KeyCode::Left => Action::MoveLeft,
+        KeyCode::Char('j') | KeyCode::Down => Action::MoveDown,
+        KeyCode::Char('k') | KeyCode::Up => Action::MoveUp,
+        KeyCode::Char('l') | KeyCode::Right => Action::MoveRight,
+        KeyCode::PageUp => Action::PageUp,
+        KeyCode::PageDown => Action::PageDown,
+
+        // Delete selection
+        KeyCode::Char('x') | KeyCode::Delete => Action::DeleteCell,
+
         _ => Action::None,
     }
 }
 
 /// Check if an action represents a navigation movement
-///
-/// This is a utility function to determine if an action is a navigation
-/// action (move left/right/up/down). Useful for context-sensitive behavior.
-///
-/// # Arguments
-/// * `action` - The action to check
-///
-/// # Returns
-/// true if the action is a navigation movement, false otherwise
-///
-/// # Example
-/// ```no_run
-/// use tracker_rs::input::keybindings::{Action, is_navigation_action};
-///
-/// assert!(is_navigation_action(Action::MoveLeft));
-/// assert!(is_navigation_action(Action::MoveDown));
-/// assert!(!is_navigation_action(Action::Quit));
-/// ```
 pub fn is_navigation_action(action: Action) -> bool {
     matches!(
         action,
         Action::MoveLeft | Action::MoveDown | Action::MoveUp | Action::MoveRight
+            | Action::PageUp | Action::PageDown
     )
 }
 
 /// Check if an action dismisses modal dialogs
-///
-/// This is a utility function to determine if an action closes/dismisses
-/// modal dialogs. Both Cancel (ESC) and Confirm (Enter) can dismiss modals.
-///
-/// # Arguments
-/// * `action` - The action to check
-///
-/// # Returns
-/// true if the action dismisses modals (Cancel or Confirm), false otherwise
-///
-/// # Example
-/// ```no_run
-/// use tracker_rs::input::keybindings::{Action, is_modal_dismiss_action};
-///
-/// assert!(is_modal_dismiss_action(Action::Cancel));
-/// assert!(is_modal_dismiss_action(Action::Confirm));
-/// assert!(!is_modal_dismiss_action(Action::Quit));
-/// ```
 pub fn is_modal_dismiss_action(action: Action) -> bool {
-    matches!(action, Action::Cancel | Action::Confirm)
+    matches!(action, Action::Cancel | Action::Confirm | Action::EnterNormalMode)
 }
 
 #[cfg(test)]
@@ -167,56 +171,161 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_vim_navigation_keys() {
-        let h_key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
-        let j_key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
-        let k_key = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
-        let l_key = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE);
+    fn test_normal_mode_vim_navigation() {
+        let h = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
+        let j = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
+        let k = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
+        let l = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE);
 
-        assert_eq!(map_key_to_action(h_key), Action::MoveLeft);
-        assert_eq!(map_key_to_action(j_key), Action::MoveDown);
-        assert_eq!(map_key_to_action(k_key), Action::MoveUp);
-        assert_eq!(map_key_to_action(l_key), Action::MoveRight);
+        assert_eq!(map_key_to_action(h, EditorMode::Normal), Action::MoveLeft);
+        assert_eq!(map_key_to_action(j, EditorMode::Normal), Action::MoveDown);
+        assert_eq!(map_key_to_action(k, EditorMode::Normal), Action::MoveUp);
+        assert_eq!(map_key_to_action(l, EditorMode::Normal), Action::MoveRight);
     }
 
     #[test]
-    fn test_arrow_keys() {
+    fn test_normal_mode_arrow_keys() {
         let left = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
         let down = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         let up = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
         let right = KeyEvent::new(KeyCode::Right, KeyModifiers::NONE);
 
-        assert_eq!(map_key_to_action(left), Action::MoveLeft);
-        assert_eq!(map_key_to_action(down), Action::MoveDown);
-        assert_eq!(map_key_to_action(up), Action::MoveUp);
-        assert_eq!(map_key_to_action(right), Action::MoveRight);
+        assert_eq!(map_key_to_action(left, EditorMode::Normal), Action::MoveLeft);
+        assert_eq!(map_key_to_action(down, EditorMode::Normal), Action::MoveDown);
+        assert_eq!(map_key_to_action(up, EditorMode::Normal), Action::MoveUp);
+        assert_eq!(map_key_to_action(right, EditorMode::Normal), Action::MoveRight);
     }
 
     #[test]
-    fn test_standard_keys() {
-        let q_key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
-        let enter_key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
-        let esc_key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
-
-        assert_eq!(map_key_to_action(q_key), Action::Quit);
-        assert_eq!(map_key_to_action(enter_key), Action::Confirm);
-        assert_eq!(map_key_to_action(esc_key), Action::Cancel);
+    fn test_normal_mode_enter_insert() {
+        let i = KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(i, EditorMode::Normal), Action::EnterInsertMode);
     }
 
     #[test]
-    fn test_unmapped_key() {
-        let x_key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(x_key), Action::None);
+    fn test_normal_mode_enter_visual() {
+        let v = KeyEvent::new(KeyCode::Char('v'), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(v, EditorMode::Normal), Action::EnterVisualMode);
     }
 
     #[test]
-    fn test_modified_keys_ignored() {
+    fn test_normal_mode_delete_cell() {
+        let x = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
+        let del = KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(x, EditorMode::Normal), Action::DeleteCell);
+        assert_eq!(map_key_to_action(del, EditorMode::Normal), Action::DeleteCell);
+    }
+
+    #[test]
+    fn test_normal_mode_undo() {
+        let u = KeyEvent::new(KeyCode::Char('u'), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(u, EditorMode::Normal), Action::Undo);
+    }
+
+    #[test]
+    fn test_normal_mode_standard_keys() {
+        let q = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
+        let enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+
+        assert_eq!(map_key_to_action(q, EditorMode::Normal), Action::Quit);
+        assert_eq!(map_key_to_action(enter, EditorMode::Normal), Action::Confirm);
+        assert_eq!(map_key_to_action(esc, EditorMode::Normal), Action::Cancel);
+    }
+
+    #[test]
+    fn test_normal_mode_toggle_play() {
+        let space = KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(space, EditorMode::Normal), Action::TogglePlay);
+    }
+
+    #[test]
+    fn test_normal_mode_page_navigation() {
+        let pgup = KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE);
+        let pgdn = KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(pgup, EditorMode::Normal), Action::PageUp);
+        assert_eq!(map_key_to_action(pgdn, EditorMode::Normal), Action::PageDown);
+    }
+
+    #[test]
+    fn test_normal_mode_modified_keys_ignored() {
         let ctrl_h = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::CONTROL);
-        let alt_j = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::ALT);
-
-        assert_eq!(map_key_to_action(ctrl_h), Action::None);
-        assert_eq!(map_key_to_action(alt_j), Action::None);
+        assert_eq!(map_key_to_action(ctrl_h, EditorMode::Normal), Action::None);
     }
+
+    // --- Insert Mode Tests ---
+
+    #[test]
+    fn test_insert_mode_note_entry() {
+        let c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE);
+        let g = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE);
+        let a_upper = KeyEvent::new(KeyCode::Char('A'), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(c, EditorMode::Insert), Action::EnterNote('c'));
+        assert_eq!(map_key_to_action(g, EditorMode::Insert), Action::EnterNote('g'));
+        assert_eq!(map_key_to_action(a_upper, EditorMode::Insert), Action::EnterNote('A'));
+    }
+
+    #[test]
+    fn test_insert_mode_octave_entry() {
+        let zero = KeyEvent::new(KeyCode::Char('0'), KeyModifiers::NONE);
+        let five = KeyEvent::new(KeyCode::Char('5'), KeyModifiers::NONE);
+        let nine = KeyEvent::new(KeyCode::Char('9'), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(zero, EditorMode::Insert), Action::SetOctave(0));
+        assert_eq!(map_key_to_action(five, EditorMode::Insert), Action::SetOctave(5));
+        assert_eq!(map_key_to_action(nine, EditorMode::Insert), Action::SetOctave(9));
+    }
+
+    #[test]
+    fn test_insert_mode_escape_to_normal() {
+        let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(esc, EditorMode::Insert), Action::EnterNormalMode);
+    }
+
+    #[test]
+    fn test_insert_mode_arrow_navigation() {
+        let up = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+        let down = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(up, EditorMode::Insert), Action::MoveUp);
+        assert_eq!(map_key_to_action(down, EditorMode::Insert), Action::MoveDown);
+    }
+
+    #[test]
+    fn test_insert_mode_delete() {
+        let del = KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE);
+        let bs = KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(del, EditorMode::Insert), Action::DeleteCell);
+        assert_eq!(map_key_to_action(bs, EditorMode::Insert), Action::DeleteCell);
+    }
+
+    #[test]
+    fn test_insert_mode_toggle_play() {
+        let space = KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(space, EditorMode::Insert), Action::TogglePlay);
+    }
+
+    // --- Visual Mode Tests ---
+
+    #[test]
+    fn test_visual_mode_escape_to_normal() {
+        let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(esc, EditorMode::Visual), Action::EnterNormalMode);
+    }
+
+    #[test]
+    fn test_visual_mode_navigation() {
+        let h = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
+        let j = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(h, EditorMode::Visual), Action::MoveLeft);
+        assert_eq!(map_key_to_action(j, EditorMode::Visual), Action::MoveDown);
+    }
+
+    #[test]
+    fn test_visual_mode_delete() {
+        let x = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(x, EditorMode::Visual), Action::DeleteCell);
+    }
+
+    // --- Utility Function Tests ---
 
     #[test]
     fn test_is_navigation_action() {
@@ -224,11 +333,12 @@ mod tests {
         assert!(is_navigation_action(Action::MoveDown));
         assert!(is_navigation_action(Action::MoveUp));
         assert!(is_navigation_action(Action::MoveRight));
+        assert!(is_navigation_action(Action::PageUp));
+        assert!(is_navigation_action(Action::PageDown));
 
         assert!(!is_navigation_action(Action::Quit));
-        assert!(!is_navigation_action(Action::Confirm));
-        assert!(!is_navigation_action(Action::Cancel));
-        assert!(!is_navigation_action(Action::TogglePlay));
+        assert!(!is_navigation_action(Action::EnterInsertMode));
+        assert!(!is_navigation_action(Action::EnterNote('c')));
         assert!(!is_navigation_action(Action::None));
     }
 
@@ -236,20 +346,11 @@ mod tests {
     fn test_is_modal_dismiss_action() {
         assert!(is_modal_dismiss_action(Action::Cancel));
         assert!(is_modal_dismiss_action(Action::Confirm));
+        assert!(is_modal_dismiss_action(Action::EnterNormalMode));
 
         assert!(!is_modal_dismiss_action(Action::Quit));
         assert!(!is_modal_dismiss_action(Action::MoveLeft));
-        assert!(!is_modal_dismiss_action(Action::MoveDown));
-        assert!(!is_modal_dismiss_action(Action::MoveUp));
-        assert!(!is_modal_dismiss_action(Action::MoveRight));
-        assert!(!is_modal_dismiss_action(Action::OpenModal));
         assert!(!is_modal_dismiss_action(Action::TogglePlay));
         assert!(!is_modal_dismiss_action(Action::None));
-    }
-
-    #[test]
-    fn test_spacebar_toggles_play() {
-        let space = KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(space), Action::TogglePlay);
     }
 }
