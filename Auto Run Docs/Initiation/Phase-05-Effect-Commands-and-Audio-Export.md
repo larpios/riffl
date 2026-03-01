@@ -45,11 +45,12 @@ This phase implements tracker effect commands (volume slides, pitch slides, arpe
   - Register in `src/audio/mod.rs`
   <!-- Created src/audio/effect_processor.rs with EffectProcessor (per-channel ChannelEffectState), TransportCommand enum, and full integration with mixer. Mixer.tick() now returns Vec<TransportCommand> for BPM/position changes. Mixer.render() applies effect pitch modulation and volume overrides per-frame. 45 new tests added to effect_processor.rs covering all effect types, transport commands, arpeggio cycling, vibrato modulation, pitch slides, volume slides, portamento, and frame advancement. All 537 tests pass (0 failures). -->
 
-- [ ] Update the pattern editor UI to display and edit effects:
+- [x] Update the pattern editor UI to display and edit effects:
   - Each cell now shows: `C#4 01 64 A04` (note, instrument, volume, effect)
   - Effect column is navigable — cursor can move to the effect sub-column
   - In Insert mode on effect column: type hex digits (0-9, A-F) to enter effect commands
   - Show effect mnemonics in a help bar when cursor is on effect column
+  <!-- Added effect digit entry system: Editor tracks 3-position hex entry (command, param_hi, param_lo) with auto-advance to next row after 3 digits. Main.rs intercepts hex keys (0-9, A-F) on Effect sub-column in Insert mode. Footer shows effect mnemonic and digit position indicator when cursor is on Effect column. Effect digit position resets on cursor movement and mode changes. 21 new tests added (17 editor effect digit tests + 4 hex_char_to_digit tests). All 558 tests pass (0 failures). -->
 
 - [ ] Implement audio export in `src/export.rs`:
   - `export_wav(path: &Path, song: &Song, samples: &[Sample], sample_rate: u32) -> Result<()>`

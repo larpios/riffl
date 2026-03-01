@@ -3,6 +3,7 @@
 /// Provides a vim-inspired modal editor for the tracker pattern grid.
 /// Supports Normal (navigation), Insert (note entry), and Visual (selection) modes.
 
+use crate::pattern::effect::Effect;
 use crate::pattern::note::{Note, NoteEvent, Pitch};
 use crate::pattern::pattern::Pattern;
 use crate::pattern::row::Cell;
@@ -140,6 +141,8 @@ pub struct Editor {
     visual_anchor: Option<(usize, usize)>,
     /// Clipboard for copy/paste operations.
     clipboard: Option<Clipboard>,
+    /// Current hex digit entry position for the effect column (0=command, 1=param_hi, 2=param_lo).
+    effect_digit_position: u8,
 }
 
 impl Editor {
@@ -156,6 +159,7 @@ impl Editor {
             history: Vec::new(),
             visual_anchor: None,
             clipboard: None,
+            effect_digit_position: 0,
         }
     }
 
@@ -198,6 +202,7 @@ impl Editor {
     /// Move cursor up by one row.
     pub fn move_up(&mut self) {
         self.cursor_row = self.cursor_row.saturating_sub(1);
+        self.effect_digit_position = 0;
     }
 
     /// Move cursor down by one row.
@@ -206,11 +211,13 @@ impl Editor {
         if self.cursor_row < max {
             self.cursor_row += 1;
         }
+        self.effect_digit_position = 0;
     }
 
     /// Move cursor left. In Normal mode, moves by channel. In Insert mode,
     /// moves by sub-column first, then wraps to previous channel.
     pub fn move_left(&mut self) {
+        self.effect_digit_position = 0;
         if self.mode == EditorMode::Insert {
             if self.sub_column != SubColumn::Note {
                 self.sub_column = self.sub_column.prev();
@@ -226,6 +233,7 @@ impl Editor {
     /// Move cursor right. In Normal mode, moves by channel. In Insert mode,
     /// moves by sub-column first, then wraps to next channel.
     pub fn move_right(&mut self) {
+        self.effect_digit_position = 0;
         let max_ch = self.pattern.num_channels().saturating_sub(1);
         if self.mode == EditorMode::Insert {
             if self.sub_column != SubColumn::Effect {
@@ -242,12 +250,14 @@ impl Editor {
     /// Move cursor up by a page (PAGE_SIZE rows).
     pub fn page_up(&mut self) {
         self.cursor_row = self.cursor_row.saturating_sub(PAGE_SIZE);
+        self.effect_digit_position = 0;
     }
 
     /// Move cursor down by a page (PAGE_SIZE rows).
     pub fn page_down(&mut self) {
         let max = self.pattern.num_rows().saturating_sub(1);
         self.cursor_row = (self.cursor_row + PAGE_SIZE).min(max);
+        self.effect_digit_position = 0;
     }
 
     /// Move cursor to the first row.
@@ -266,6 +276,7 @@ impl Editor {
         self.cursor_channel = (self.cursor_channel + 1) % max_ch;
         // Reset sub-column to Note when jumping tracks
         self.sub_column = SubColumn::Note;
+        self.effect_digit_position = 0;
     }
 
     // --- Mode Transitions ---
@@ -273,12 +284,14 @@ impl Editor {
     /// Enter Insert mode.
     pub fn enter_insert_mode(&mut self) {
         self.mode = EditorMode::Insert;
+        self.effect_digit_position = 0;
     }
 
     /// Enter Normal mode (from any mode).
     pub fn enter_normal_mode(&mut self) {
         self.mode = EditorMode::Normal;
         self.visual_anchor = None;
+        self.effect_digit_position = 0;
     }
 
     /// Enter Visual mode, anchoring at the current position.
@@ -361,6 +374,56 @@ impl Editor {
         if octave <= 9 {
             self.current_octave = octave;
         }
+    }
+
+    /// Get the current effect digit entry position (0=command, 1=param_hi, 2=param_lo).
+    pub fn effect_digit_position(&self) -> u8 {
+        self.effect_digit_position
+    }
+
+    /// Enter a hex digit (0-15) at the current effect digit position.
+    ///
+    /// The effect column has 3 hex positions: command (1 nibble), param_hi (1 nibble),
+    /// param_lo (1 nibble). Each call fills one position and advances. After the
+    /// third digit, the cursor advances to the next row and resets the position.
+    ///
+    /// Only works in Insert mode on the Effect sub-column.
+    pub fn enter_effect_digit(&mut self, digit: u8) {
+        if self.mode != EditorMode::Insert || self.sub_column != SubColumn::Effect {
+            return;
+        }
+        let digit = digit & 0x0F; // clamp to single nibble
+        self.save_history();
+
+        if let Some(cell) = self.pattern.get_cell_mut(self.cursor_row, self.cursor_channel) {
+            let current = cell.first_effect().copied().unwrap_or(Effect::new(0, 0));
+
+            let new_effect = match self.effect_digit_position {
+                0 => Effect::new(digit, current.param),
+                1 => {
+                    let new_param = (digit << 4) | (current.param & 0x0F);
+                    Effect::new(current.command, new_param)
+                }
+                _ => {
+                    let new_param = (current.param & 0xF0) | digit;
+                    Effect::new(current.command, new_param)
+                }
+            };
+
+            cell.set_effect(new_effect);
+
+            self.effect_digit_position = (self.effect_digit_position + 1) % 3;
+
+            // After completing all 3 digits, advance to next row
+            if self.effect_digit_position == 0 {
+                self.move_down();
+            }
+        }
+    }
+
+    /// Reset the effect digit entry position to 0.
+    pub fn reset_effect_digit_position(&mut self) {
+        self.effect_digit_position = 0;
     }
 
     /// Delete (clear) the current cell.
@@ -1475,5 +1538,256 @@ mod tests {
         assert_eq!(editor.pattern().get_cell(1, 0).unwrap().volume, Some(80));
         assert_eq!(editor.pattern().get_cell(2, 0).unwrap().volume, Some(40));
         assert_eq!(editor.pattern().get_cell(3, 0).unwrap().volume, Some(0));
+    }
+
+    // --- Effect Digit Entry Tests ---
+
+    #[test]
+    fn test_effect_digit_position_starts_at_zero() {
+        let editor = test_editor();
+        assert_eq!(editor.effect_digit_position(), 0);
+    }
+
+    #[test]
+    fn test_enter_effect_digit_sets_command() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.sub_column = SubColumn::Effect;
+
+        // Enter command nibble 0xA (volume slide)
+        editor.enter_effect_digit(0xA);
+
+        let cell = editor.pattern().get_cell(0, 0).unwrap();
+        let eff = cell.first_effect().unwrap();
+        assert_eq!(eff.command, 0xA);
+        assert_eq!(eff.param, 0x00);
+        assert_eq!(editor.effect_digit_position(), 1);
+    }
+
+    #[test]
+    fn test_enter_effect_digit_sets_param_high_nibble() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.sub_column = SubColumn::Effect;
+
+        editor.enter_effect_digit(0xA); // command
+        editor.enter_effect_digit(0x0); // param hi
+
+        let cell = editor.pattern().get_cell(0, 0).unwrap();
+        let eff = cell.first_effect().unwrap();
+        assert_eq!(eff.command, 0xA);
+        assert_eq!(eff.param, 0x00);
+        assert_eq!(editor.effect_digit_position(), 2);
+    }
+
+    #[test]
+    fn test_enter_effect_digit_sets_param_low_nibble_and_advances() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.sub_column = SubColumn::Effect;
+
+        editor.enter_effect_digit(0xA); // command = A
+        editor.enter_effect_digit(0x0); // param hi = 0
+        editor.enter_effect_digit(0x4); // param lo = 4 → "A04"
+
+        // After 3 digits, cursor should advance to next row and reset position
+        assert_eq!(editor.cursor_row(), 1);
+        assert_eq!(editor.effect_digit_position(), 0);
+
+        // Check the effect on row 0
+        let cell = editor.pattern().get_cell(0, 0).unwrap();
+        let eff = cell.first_effect().unwrap();
+        assert_eq!(eff.command, 0xA);
+        assert_eq!(eff.param, 0x04);
+        assert_eq!(format!("{}", eff), "A04");
+    }
+
+    #[test]
+    fn test_enter_effect_digit_full_sequence_c40() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.sub_column = SubColumn::Effect;
+
+        editor.enter_effect_digit(0xC); // Set Volume command
+        editor.enter_effect_digit(0x4); // param hi
+        editor.enter_effect_digit(0x0); // param lo → "C40"
+
+        let cell = editor.pattern().get_cell(0, 0).unwrap();
+        let eff = cell.first_effect().unwrap();
+        assert_eq!(format!("{}", eff), "C40");
+    }
+
+    #[test]
+    fn test_enter_effect_digit_full_sequence_fff() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.sub_column = SubColumn::Effect;
+
+        editor.enter_effect_digit(0xF);
+        editor.enter_effect_digit(0xF);
+        editor.enter_effect_digit(0xF);
+
+        let cell = editor.pattern().get_cell(0, 0).unwrap();
+        let eff = cell.first_effect().unwrap();
+        assert_eq!(format!("{}", eff), "FFF");
+    }
+
+    #[test]
+    fn test_enter_effect_digit_only_in_insert_mode() {
+        let mut editor = test_editor();
+        // Normal mode — should not enter effect
+        editor.sub_column = SubColumn::Effect;
+        editor.enter_effect_digit(0xA);
+
+        let cell = editor.pattern().get_cell(0, 0).unwrap();
+        assert!(cell.first_effect().is_none());
+    }
+
+    #[test]
+    fn test_enter_effect_digit_only_on_effect_column() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        // Note column — should not enter effect
+        editor.sub_column = SubColumn::Note;
+        editor.enter_effect_digit(0xA);
+
+        let cell = editor.pattern().get_cell(0, 0).unwrap();
+        assert!(cell.first_effect().is_none());
+    }
+
+    #[test]
+    fn test_effect_digit_position_resets_on_mode_change() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.sub_column = SubColumn::Effect;
+        editor.enter_effect_digit(0xA); // position now 1
+
+        editor.enter_normal_mode();
+        assert_eq!(editor.effect_digit_position(), 0);
+
+        editor.enter_insert_mode();
+        assert_eq!(editor.effect_digit_position(), 0);
+    }
+
+    #[test]
+    fn test_effect_digit_position_resets_on_cursor_move() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.sub_column = SubColumn::Effect;
+        editor.enter_effect_digit(0xA); // position now 1
+
+        // Moving up should reset
+        editor.move_up();
+        assert_eq!(editor.effect_digit_position(), 0);
+    }
+
+    #[test]
+    fn test_effect_digit_position_resets_on_move_left() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.sub_column = SubColumn::Effect;
+        editor.enter_effect_digit(0xA); // position now 1
+
+        editor.move_left();
+        assert_eq!(editor.effect_digit_position(), 0);
+    }
+
+    #[test]
+    fn test_effect_digit_position_resets_on_move_right() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.sub_column = SubColumn::Effect;
+        editor.cursor_channel = 0;
+        editor.enter_effect_digit(0xA); // position now 1
+
+        // Move right wraps to next channel since we're on Effect
+        editor.move_right();
+        assert_eq!(editor.effect_digit_position(), 0);
+    }
+
+    #[test]
+    fn test_effect_digit_position_resets_on_page_up() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.sub_column = SubColumn::Effect;
+        editor.cursor_row = 10;
+        editor.enter_effect_digit(0xA);
+
+        editor.page_up();
+        assert_eq!(editor.effect_digit_position(), 0);
+    }
+
+    #[test]
+    fn test_effect_digit_position_resets_on_next_track() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.sub_column = SubColumn::Effect;
+        editor.enter_effect_digit(0xA);
+
+        editor.next_track();
+        assert_eq!(editor.effect_digit_position(), 0);
+    }
+
+    #[test]
+    fn test_enter_effect_digit_clamps_to_nibble() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.sub_column = SubColumn::Effect;
+
+        // Pass a value > 0xF — should be clamped
+        editor.enter_effect_digit(0xFF);
+        let cell = editor.pattern().get_cell(0, 0).unwrap();
+        let eff = cell.first_effect().unwrap();
+        assert_eq!(eff.command, 0x0F); // 0xFF & 0x0F = 0x0F
+    }
+
+    #[test]
+    fn test_enter_effect_digit_supports_undo() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.sub_column = SubColumn::Effect;
+
+        editor.enter_effect_digit(0xC);
+        editor.enter_effect_digit(0x4);
+        editor.enter_effect_digit(0x0);
+
+        // Verify effect was placed
+        let cell = editor.pattern().get_cell(0, 0).unwrap();
+        assert!(cell.first_effect().is_some());
+
+        // Undo all three edits
+        editor.undo();
+        editor.undo();
+        editor.undo();
+
+        // Effect should be gone
+        let cell = editor.pattern().get_cell(0, 0).unwrap();
+        assert!(cell.first_effect().is_none());
+    }
+
+    #[test]
+    fn test_enter_multiple_effects_on_consecutive_rows() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.sub_column = SubColumn::Effect;
+
+        // Enter A04 on row 0
+        editor.enter_effect_digit(0xA);
+        editor.enter_effect_digit(0x0);
+        editor.enter_effect_digit(0x4);
+        assert_eq!(editor.cursor_row(), 1);
+
+        // Enter C40 on row 1
+        editor.enter_effect_digit(0xC);
+        editor.enter_effect_digit(0x4);
+        editor.enter_effect_digit(0x0);
+        assert_eq!(editor.cursor_row(), 2);
+
+        // Verify both
+        let eff0 = editor.pattern().get_cell(0, 0).unwrap().first_effect().unwrap();
+        assert_eq!(format!("{}", eff0), "A04");
+
+        let eff1 = editor.pattern().get_cell(1, 0).unwrap().first_effect().unwrap();
+        assert_eq!(format!("{}", eff1), "C40");
     }
 }
