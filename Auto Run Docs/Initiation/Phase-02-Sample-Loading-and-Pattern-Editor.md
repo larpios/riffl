@@ -21,7 +21,8 @@ This phase adds real sample loading from disk (WAV, FLAC, OGG via symphonia) and
   - Test that the loaded sample has correct metadata (sample rate, channels, duration)
   - ✅ 9 tests total in `loader.rs`: stereo WAV load, mono→stereo conversion (structure + values), missing file, invalid file, metadata, duration calculation, resampling frame count, resample_linear basic
 
-- [ ] Run `cargo test` for the sample loader and fix any failures
+- [x] Run `cargo test` for the sample loader and fix any failures
+  - ✅ All 161 tests pass (116 lib + 161 bin, including 9 loader-specific tests). No failures to fix. Warnings are non-blocking (unused imports).
 
 - [ ] Build the pattern editor state machine in `src/editor/mod.rs`:
   - `EditorMode` enum: `Normal` (navigation), `Insert` (note entry), `Visual` (selection)
