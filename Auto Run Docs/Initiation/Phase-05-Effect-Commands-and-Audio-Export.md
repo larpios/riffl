@@ -68,10 +68,11 @@ This phase implements tracker effect commands (volume slides, pitch slides, arpe
   - On completion, display success message with file path and duration
   <!-- Created src/ui/export_dialog.rs with ExportDialog state machine (Configure/Exporting/Done/Failed phases), field navigation (SampleRate/BitDepth/Confirm), and full rendering. Added Ctrl+E keybinding (Action::OpenExportDialog) in keybindings.rs. App.open_export_dialog() derives default path from project name. App.execute_export() runs offline rendering synchronously, showing success with file path, duration, sample rate, and bit depth, or error message on failure. Export dialog input handling supports j/k navigation, l/h/Space toggle, Enter to confirm, Esc to cancel. 23 new tests added (16 export_dialog unit tests + 6 app integration tests + 1 keybinding test). All 593 tests pass (0 failures). -->
 
-- [ ] Write tests for audio export:
+- [x] Write tests for audio export:
   - Test that exporting a simple pattern produces a valid WAV file
   - Test that the WAV file has correct metadata (sample rate, channels, duration)
   - Test that silence exports as near-zero samples
   - Test that a pattern with notes produces non-zero audio data
+  <!-- Added 6 new dedicated tests to export.rs: (1) test_export_wav_valid_file_readable_by_hound — verifies WAV structural integrity by reading all samples and checking stereo interleaving, (2) test_export_wav_metadata_all_fields_correct — comprehensive metadata check at 48kHz/24-bit/140BPM with duration calculation, (3) test_export_wav_silence_all_channels_empty — multi-pattern empty song produces only zero samples, (4) test_export_wav_notes_produce_varying_audio — multi-channel multi-note output with amplitude and value diversity checks, (5) test_export_wav_different_bpm_changes_duration — verifies 60BPM produces 4x longer audio than 240BPM, (6) test_export_wav_empty_arrangement — empty arrangement still creates valid WAV with progress=1.0. Combined with 12 pre-existing export tests, total export test coverage is 18 tests. All 599 tests pass (0 failures). -->
 
 - [ ] Run `cargo test` and `cargo build` to verify everything compiles and passes
