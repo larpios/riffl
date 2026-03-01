@@ -21,7 +21,7 @@ This phase delivers the core differentiator of tracker-rs: a live coding scripti
     - `eval(code: &str) -> Result<ScriptResult>` — execute code and return result
   - Register `mod dsl;` in `src/main.rs`
 
-- [ ] Create pattern manipulation functions accessible from scripts in `src/dsl/pattern_api.rs`:
+- [x] Create pattern manipulation functions accessible from scripts in `src/dsl/pattern_api.rs`:
   - `set_note(pattern, row, channel, note)` — place a note in the pattern
   - `clear_pattern(pattern)` — clear all cells
   - `fill_column(pattern, channel, notes_array)` — fill a channel with a repeating note sequence
