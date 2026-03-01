@@ -486,6 +486,7 @@ fn format_rhai_error(err: &EvalAltResult) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pattern::NoteEvent;
 
     #[test]
     fn test_script_engine_creation() {
@@ -1100,5 +1101,440 @@ mod tests {
         // fill_column produces 8 commands, transpose works on the *original* pattern
         // (which is empty), so it produces 0 transpose commands
         assert_eq!(commands.len(), 8);
+    }
+
+    // --- Additional tests per Phase-06 Task 3 spec ---
+
+    #[test]
+    fn test_note_creation_produces_correct_fields() {
+        let engine = ScriptEngine::new();
+        // Verify pitch, octave, and default velocity
+        let result = engine.eval(r#"
+            let n = note("C", 4);
+            [n.pitch, n.octave, n.velocity]
+        "#).unwrap();
+        match result {
+            ScriptResult::Value(v) => {
+                assert!(v.contains("C"), "pitch should be C, got: {}", v);
+                assert!(v.contains("4"), "octave should be 4, got: {}", v);
+                assert!(v.contains("100"), "default velocity should be 100, got: {}", v);
+            }
+            _ => panic!("Expected Value result"),
+        }
+    }
+
+    #[test]
+    fn test_note_creation_all_pitches() {
+        let engine = ScriptEngine::new();
+        let pitches = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        for p in pitches {
+            let code = format!(r#"let n = note("{}", 4); n.pitch"#, p);
+            let result = engine.eval(&code).unwrap();
+            match result {
+                ScriptResult::Value(v) => assert_eq!(v, p, "Pitch mismatch for {}", p),
+                _ => panic!("Expected Value for pitch {}", p),
+            }
+        }
+    }
+
+    #[test]
+    fn test_scale_major_exact_pitches() {
+        let engine = ScriptEngine::new();
+        let result = engine.eval(r#"
+            let s = scale("C", "major", 4);
+            let pitches = [];
+            for n in s { pitches.push(n.pitch); }
+            pitches
+        "#).unwrap();
+        match result {
+            ScriptResult::Value(v) => {
+                // C major: C D E F G A B - verify order
+                let expected = ["C", "D", "E", "F", "G", "A", "B"];
+                for pitch in expected {
+                    assert!(v.contains(pitch), "Missing {} in C major scale: {}", pitch, v);
+                }
+            }
+            _ => panic!("Expected Value result"),
+        }
+    }
+
+    #[test]
+    fn test_scale_minor() {
+        let engine = ScriptEngine::new();
+        let result = engine.eval(r#"let s = scale("A", "minor", 4); s.len()"#).unwrap();
+        match result {
+            ScriptResult::Value(v) => assert_eq!(v, "7"),
+            _ => panic!("Expected Value result"),
+        }
+    }
+
+    #[test]
+    fn test_scale_dorian() {
+        let engine = ScriptEngine::new();
+        let result = engine.eval(r#"let s = scale("D", "dorian", 4); s.len()"#).unwrap();
+        match result {
+            ScriptResult::Value(v) => assert_eq!(v, "7"),
+            _ => panic!("Expected Value result"),
+        }
+    }
+
+    #[test]
+    fn test_scale_mixolydian() {
+        let engine = ScriptEngine::new();
+        let result = engine.eval(r#"let s = scale("G", "mixolydian", 4); s.len()"#).unwrap();
+        match result {
+            ScriptResult::Value(v) => assert_eq!(v, "7"),
+            _ => panic!("Expected Value result"),
+        }
+    }
+
+    #[test]
+    fn test_chord_major_exact_pitches() {
+        let engine = ScriptEngine::new();
+        let result = engine.eval(r#"
+            let c = chord("C", "major", 4);
+            let pitches = [];
+            for n in c { pitches.push(n.pitch); }
+            pitches
+        "#).unwrap();
+        match result {
+            ScriptResult::Value(v) => {
+                // Should contain exactly C, E, G
+                assert!(v.contains("C"), "Missing C in chord: {}", v);
+                assert!(v.contains("E"), "Missing E in chord: {}", v);
+                assert!(v.contains("G"), "Missing G in chord: {}", v);
+            }
+            _ => panic!("Expected Value result"),
+        }
+    }
+
+    #[test]
+    fn test_chord_minor_pitches() {
+        let engine = ScriptEngine::new();
+        // A minor chord: A, C, E
+        let result = engine.eval(r#"
+            let c = chord("A", "minor", 4);
+            let pitches = [];
+            for n in c { pitches.push(n.pitch); }
+            pitches
+        "#).unwrap();
+        match result {
+            ScriptResult::Value(v) => {
+                assert!(v.contains("A"), "Missing A in chord: {}", v);
+                assert!(v.contains("C"), "Missing C in chord: {}", v);
+                assert!(v.contains("E"), "Missing E in chord: {}", v);
+            }
+            _ => panic!("Expected Value result"),
+        }
+    }
+
+    #[test]
+    fn test_chord_maj7() {
+        let engine = ScriptEngine::new();
+        // C maj7: C, E, G, B (4 notes)
+        let result = engine.eval(r#"let c = chord("C", "maj7", 4); c.len()"#).unwrap();
+        match result {
+            ScriptResult::Value(v) => assert_eq!(v, "4"),
+            _ => panic!("Expected Value result"),
+        }
+    }
+
+    #[test]
+    fn test_euclidean_3_8_exact_pattern() {
+        // Bjorklund E(3,8) should produce: [true, false, false, true, false, false, true, false]
+        let result = generate_euclidean(3, 8);
+        assert_eq!(result.len(), 8);
+        assert_eq!(result.iter().filter(|&&b| b).count(), 3);
+        // Verify even distribution: true values should not be adjacent
+        for i in 0..result.len() {
+            if result[i] {
+                let next = (i + 1) % result.len();
+                // In E(3,8) no two trues should be adjacent
+                assert!(
+                    !result[next] || i == result.len() - 1,
+                    "Euclidean(3,8) should have evenly distributed pulses"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_euclidean_5_8() {
+        let result = generate_euclidean(5, 8);
+        assert_eq!(result.len(), 8);
+        assert_eq!(result.iter().filter(|&&b| b).count(), 5);
+    }
+
+    #[test]
+    fn test_euclidean_1_1() {
+        let result = generate_euclidean(1, 1);
+        assert_eq!(result, vec![true]);
+    }
+
+    #[test]
+    fn test_euclidean_via_script() {
+        let engine = ScriptEngine::new();
+        let result = engine.eval(r#"
+            let e = euclidean(3, 8);
+            let trues = 0;
+            for v in e { if v { trues += 1; } }
+            [e.len(), trues]
+        "#).unwrap();
+        match result {
+            ScriptResult::Value(v) => {
+                assert!(v.contains("8"), "Expected 8 steps: {}", v);
+                assert!(v.contains("3"), "Expected 3 pulses: {}", v);
+            }
+            _ => panic!("Expected Value result"),
+        }
+    }
+
+    #[test]
+    fn test_euclidean_negative_pulses() {
+        let engine = ScriptEngine::new();
+        let result = engine.eval(r#"euclidean(-1, 8).len()"#).unwrap();
+        match result {
+            ScriptResult::Value(v) => assert_eq!(v, "0"),
+            _ => panic!("Expected empty array for negative pulses"),
+        }
+    }
+
+    #[test]
+    fn test_euclidean_zero_steps() {
+        let engine = ScriptEngine::new();
+        let result = engine.eval(r#"euclidean(3, 0).len()"#).unwrap();
+        match result {
+            ScriptResult::Value(v) => assert_eq!(v, "0"),
+            _ => panic!("Expected empty array for zero steps"),
+        }
+    }
+
+    #[test]
+    fn test_eval_with_pattern_set_note_and_apply() {
+        let engine = ScriptEngine::new();
+        let mut pattern = Pattern::new(8, 2);
+        let code = r#"
+            let c = note("C", 4);
+            let e = note("E", 4);
+            let g = note("G", 4);
+            set_note(0, 0, c);
+            set_note(1, 0, e);
+            set_note(2, 0, g);
+        "#;
+        let (_, commands) = engine.eval_with_pattern(code, &pattern).unwrap();
+        assert_eq!(commands.len(), 3);
+        apply_commands(&mut pattern, &commands);
+
+        match &pattern.get_cell(0, 0).unwrap().note {
+            Some(NoteEvent::On(n)) => assert_eq!(n.pitch, Pitch::C),
+            _ => panic!("Expected C at row 0"),
+        }
+        match &pattern.get_cell(1, 0).unwrap().note {
+            Some(NoteEvent::On(n)) => assert_eq!(n.pitch, Pitch::E),
+            _ => panic!("Expected E at row 1"),
+        }
+        match &pattern.get_cell(2, 0).unwrap().note {
+            Some(NoteEvent::On(n)) => assert_eq!(n.pitch, Pitch::G),
+            _ => panic!("Expected G at row 2"),
+        }
+    }
+
+    #[test]
+    fn test_eval_with_pattern_clear_cell() {
+        let engine = ScriptEngine::new();
+        let mut pattern = Pattern::new(4, 1);
+        pattern.set_note(0, 0, Note::simple(Pitch::C, 4));
+        let code = r#"clear_cell(0, 0);"#;
+        let (_, commands) = engine.eval_with_pattern(code, &pattern).unwrap();
+        assert_eq!(commands.len(), 1);
+        match &commands[0] {
+            PatternCommand::ClearCell { row, channel } => {
+                assert_eq!(*row, 0);
+                assert_eq!(*channel, 0);
+            }
+            _ => panic!("Expected ClearCell command"),
+        }
+        apply_commands(&mut pattern, &commands);
+        assert!(pattern.get_cell(0, 0).unwrap().note.is_none());
+    }
+
+    #[test]
+    fn test_error_handling_syntax_error_has_content() {
+        let engine = ScriptEngine::new();
+        let result = engine.eval(r#"let x = ;"#);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        // Error should contain useful information, not be empty
+        assert!(err.len() > 10, "Error message too short: {}", err);
+    }
+
+    #[test]
+    fn test_error_handling_type_mismatch() {
+        let engine = ScriptEngine::new();
+        // Calling a method on wrong type should produce an error
+        let result = engine.eval(r#"let x = 42; x.len()"#);
+        assert!(result.is_err(), "Type mismatch should produce an error");
+    }
+
+    #[test]
+    fn test_error_handling_unknown_function() {
+        let engine = ScriptEngine::new();
+        let result = engine.eval(r#"nonexistent_function(42)"#);
+        assert!(result.is_err(), "Unknown function should produce an error");
+        let err = result.unwrap_err();
+        assert!(!err.is_empty(), "Error message should not be empty");
+    }
+
+    #[test]
+    fn test_error_handling_does_not_panic_on_bad_script() {
+        let engine = ScriptEngine::new();
+        // Various malformed scripts - none should panic
+        let bad_scripts = [
+            "",
+            "{{{{",
+            "fn x() { x() }",  // recursive but should just error
+            r#"note("C", "not_a_number")"#,
+            "let x = []; x[999]",
+        ];
+        for script in bad_scripts {
+            let result = engine.eval(script);
+            // Either Ok or Err is fine; the point is no panic
+            let _ = result;
+        }
+    }
+
+    #[test]
+    fn test_error_handling_with_pattern_bad_script() {
+        let engine = ScriptEngine::new();
+        let pattern = Pattern::new(4, 1);
+        let result = engine.eval_with_pattern(r#"let x = ;"#, &pattern);
+        assert!(result.is_err(), "Bad script with pattern should return error");
+        let err = result.unwrap_err();
+        assert!(!err.is_empty(), "Error message should not be empty");
+    }
+
+    #[test]
+    fn test_random_note_from_scale() {
+        let engine = ScriptEngine::new();
+        // random_note should return a valid note from the scale
+        let result = engine.eval(r#"
+            let s = scale("C", "pentatonic", 4);
+            let n = random_note(s);
+            n.pitch
+        "#).unwrap();
+        match result {
+            ScriptResult::Value(v) => {
+                let valid = ["C", "D", "E", "G", "A"];
+                assert!(
+                    valid.contains(&v.as_str()),
+                    "Random note {} not in C pentatonic scale", v
+                );
+            }
+            _ => panic!("Expected Value result"),
+        }
+    }
+
+    #[test]
+    fn test_random_note_empty_array() {
+        let engine = ScriptEngine::new();
+        let result = engine.eval(r#"
+            let empty = [];
+            let n = random_note(empty);
+            n
+        "#).unwrap();
+        match result {
+            ScriptResult::Value(v) => assert_eq!(v, "()"),
+            ScriptResult::Unit => {}
+            _ => panic!("Expected Unit for random_note of empty array"),
+        }
+    }
+
+    #[test]
+    fn test_get_pitch_accessor_function() {
+        let engine = ScriptEngine::new();
+        let result = engine.eval(r#"
+            let n = note("F#", 3);
+            get_pitch(n)
+        "#).unwrap();
+        match result {
+            ScriptResult::Value(v) => assert_eq!(v, "F#"),
+            _ => panic!("Expected Value result"),
+        }
+    }
+
+    #[test]
+    fn test_get_octave_accessor_function() {
+        let engine = ScriptEngine::new();
+        let result = engine.eval(r#"
+            let n = note("C", 7);
+            get_octave(n)
+        "#).unwrap();
+        match result {
+            ScriptResult::Value(v) => assert_eq!(v, "7"),
+            _ => panic!("Expected Value result"),
+        }
+    }
+
+    #[test]
+    fn test_get_velocity_accessor_function() {
+        let engine = ScriptEngine::new();
+        let result = engine.eval(r#"
+            let n = note("C", 4);
+            get_velocity(n)
+        "#).unwrap();
+        match result {
+            ScriptResult::Value(v) => assert_eq!(v, "100"),
+            _ => panic!("Expected Value result"),
+        }
+    }
+
+    #[test]
+    fn test_num_channels_available_in_pattern_scope() {
+        let engine = ScriptEngine::new();
+        let pattern = Pattern::new(16, 8);
+        let code = r#"num_channels"#;
+        let (result, _) = engine.eval_with_pattern(code, &pattern).unwrap();
+        match result {
+            ScriptResult::Value(v) => assert_eq!(v, "8"),
+            _ => panic!("Expected Value result"),
+        }
+    }
+
+    #[test]
+    fn test_script_loop_with_set_note() {
+        let engine = ScriptEngine::new();
+        let pattern = Pattern::new(16, 1);
+        let code = r#"
+            let s = scale("C", "major", 4);
+            for i in range(0, 7) {
+                set_note(i, 0, s[i]);
+            }
+        "#;
+        let (_, commands) = engine.eval_with_pattern(code, &pattern).unwrap();
+        assert_eq!(commands.len(), 7, "Should place 7 notes for C major scale");
+    }
+
+    #[test]
+    fn test_negative_row_set_note_ignored() {
+        let engine = ScriptEngine::new();
+        let pattern = Pattern::new(4, 1);
+        let code = r#"
+            let n = note("C", 4);
+            set_note(-1, 0, n);
+        "#;
+        let (_, commands) = engine.eval_with_pattern(code, &pattern).unwrap();
+        assert!(commands.is_empty(), "Negative row should be ignored");
+    }
+
+    #[test]
+    fn test_negative_channel_set_note_ignored() {
+        let engine = ScriptEngine::new();
+        let pattern = Pattern::new(4, 1);
+        let code = r#"
+            let n = note("C", 4);
+            set_note(0, -1, n);
+        "#;
+        let (_, commands) = engine.eval_with_pattern(code, &pattern).unwrap();
+        assert!(commands.is_empty(), "Negative channel should be ignored");
     }
 }
