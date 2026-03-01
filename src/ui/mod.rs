@@ -413,7 +413,7 @@ fn format_cell_parts(cell: Option<&crate::pattern::row::Cell>) -> (String, Strin
                 Some(vol) => format!("{:02X}", vol),
                 None => "..".to_string(),
             };
-            let eff_str = match &cell.effect {
+            let eff_str = match cell.first_effect() {
                 Some(eff) => format!("{}", eff),
                 None => "...".to_string(),
             };
@@ -446,7 +446,7 @@ fn format_cell_display(cell: &crate::pattern::row::Cell) -> String {
         None => "..".to_string(),
     };
 
-    let eff_str = match &cell.effect {
+    let eff_str = match cell.first_effect() {
         Some(eff) => format!("{}", eff),
         None => "...".to_string(),
     };
@@ -709,12 +709,12 @@ mod tests {
     #[test]
     fn test_format_cell_full() {
         use crate::pattern::note::{Note, Pitch};
-        use crate::pattern::row::Effect;
+        use crate::pattern::effect::Effect;
         let cell = crate::pattern::row::Cell {
             note: Some(NoteEvent::On(Note::new(Pitch::CSharp, 4, 100, 1))),
             instrument: Some(1),
             volume: Some(0x40),
-            effect: Some(Effect::new(0xC, 0x20)),
+            effects: vec![Effect::new(0xC, 0x20)],
         };
         assert_eq!(format_cell_display(&cell), "C#4 01 40 C20");
     }
@@ -754,12 +754,12 @@ mod tests {
     #[test]
     fn test_format_cell_parts_full() {
         use crate::pattern::note::{Note, Pitch};
-        use crate::pattern::row::Effect;
+        use crate::pattern::effect::Effect;
         let cell = crate::pattern::row::Cell {
             note: Some(NoteEvent::On(Note::new(Pitch::CSharp, 4, 100, 1))),
             instrument: Some(1),
             volume: Some(0x40),
-            effect: Some(Effect::new(0xC, 0x20)),
+            effects: vec![Effect::new(0xC, 0x20)],
         };
         let (n, i, v, e) = format_cell_parts(Some(&cell));
         assert_eq!(n, "C#4");
