@@ -41,7 +41,8 @@ This phase delivers the core differentiator of tracker-rs: a live coding scripti
   - Test error handling: invalid code produces helpful error messages, not panics
   - *(Completed: Added 30+ new tests covering all specified cases. Total DSL tests: 86 across engine.rs and pattern_api.rs. All 685 project tests pass.)*
 
-- [ ] Run `cargo test` for the DSL module and fix any failures
+- [x] Run `cargo test` for the DSL module and fix any failures
+  - *(Completed: All 86 DSL tests pass (engine.rs + pattern_api.rs). Full project test suite: 685 tests pass, 0 failures. No fixes needed.)*
 
 - [ ] Build the code editor panel UI in `src/ui/code_editor.rs`:
   - A text editor widget for writing Rhai scripts
