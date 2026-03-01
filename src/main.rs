@@ -34,8 +34,15 @@ fn main() -> Result<()> {
         original_hook(panic_info);
     }));
 
-    // Initialize terminal
-    let mut terminal = init_terminal()?;
+    // Initialize terminal — requires a TTY (won't work in CI/headless environments)
+    let mut terminal = match init_terminal() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("tracker-rs: Failed to initialize terminal: {}", e);
+            eprintln!("This application requires an interactive terminal (TTY) to run.");
+            return Err(e);
+        }
+    };
 
     // Create and initialize app
     let mut app = App::new();
