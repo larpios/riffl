@@ -64,7 +64,7 @@ This phase delivers the core differentiator of tracker-rs: a live coding scripti
   - Error messages from script execution displayed in the output area with line numbers
   - *(Completed: Added AppView::CodeEditor (F4), split view toggle (Ctrl+\), full code editor key handling with text editing/navigation, Ctrl+Enter script execution via DSL engine with pattern command application, error display in output panel. Added 17 new tests (12 app tests + 5 keybinding tests). All 740 project tests pass.)*
 
-- [ ] Create a set of example scripts that ship as built-in templates:
+- [x] Create a set of example scripts that ship as built-in templates:
   - Store as string constants in `src/dsl/examples.rs`
   - Accessible via a menu in the code editor (e.g., `Ctrl+T` for templates)
   - Templates include:
@@ -73,6 +73,7 @@ This phase delivers the core differentiator of tracker-rs: a live coding scripti
     - "Arpeggiator" — cycle through chord tones across rows
     - "Probability Beat" — notes placed with random probability
   - Each template includes comments explaining what it does
+  - *(Completed: Created `src/dsl/examples.rs` with Template struct and 4 commented templates. Added template menu overlay to CodeEditor with Ctrl+T toggle, ↑/↓/Enter/Esc navigation. Registered `OpenTemplates` action in keybindings (Ctrl+T in Normal and Insert modes). Added 23 new tests (10 examples.rs, 11 code_editor template tests, 2 keybinding tests). All 763 project tests pass.)*
 
 - [ ] Wire live script execution to the audio engine:
   - When a script generates or modifies a pattern, the changes should be immediately audible if playback is active

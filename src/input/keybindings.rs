@@ -79,6 +79,7 @@ pub enum Action {
     // Code editor
     ToggleSplitView,
     ExecuteScript,
+    OpenTemplates,
 
     // Application
     Quit,
@@ -120,6 +121,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             KeyCode::Char('o') => Action::LoadProject,
             KeyCode::Char('e') => Action::OpenExportDialog,
             KeyCode::Char('\\') => Action::ToggleSplitView,
+            KeyCode::Char('t') => Action::OpenTemplates,
             KeyCode::Enter => Action::ExecuteScript,
             _ => Action::None,
         };
@@ -210,6 +212,7 @@ fn map_insert_mode(key: KeyEvent) -> Action {
     if key.modifiers == KeyModifiers::CONTROL {
         return match key.code {
             KeyCode::Char('\\') => Action::ToggleSplitView,
+            KeyCode::Char('t') => Action::OpenTemplates,
             KeyCode::Enter => Action::ExecuteScript,
             _ => Action::None,
         };
@@ -762,5 +765,19 @@ mod tests {
     fn test_insert_mode_ctrl_enter_executes_script() {
         let ctrl_enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL);
         assert_eq!(map_key_to_action(ctrl_enter, EditorMode::Insert), Action::ExecuteScript);
+    }
+
+    // --- Template Menu Keybinding Tests ---
+
+    #[test]
+    fn test_normal_mode_ctrl_t_opens_templates() {
+        let ctrl_t = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL);
+        assert_eq!(map_key_to_action(ctrl_t, EditorMode::Normal), Action::OpenTemplates);
+    }
+
+    #[test]
+    fn test_insert_mode_ctrl_t_opens_templates() {
+        let ctrl_t = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL);
+        assert_eq!(map_key_to_action(ctrl_t, EditorMode::Insert), Action::OpenTemplates);
     }
 }
