@@ -199,4 +199,80 @@ mod tests {
         assert_eq!(row.len(), 4);
         assert!(row.iter().all(|c| c.is_empty()));
     }
+
+    #[test]
+    fn test_new_row_single_channel() {
+        let row = new_row(1);
+        assert_eq!(row.len(), 1);
+        assert!(row[0].is_empty());
+    }
+
+    #[test]
+    fn test_cell_with_all_fields() {
+        let note = Note::new(Pitch::A, 4, 64, 2);
+        let cell = Cell {
+            note: Some(NoteEvent::On(note)),
+            instrument: Some(2),
+            volume: Some(64),
+            effect: Some(Effect::new(0xF, 0x06)),
+        };
+        assert!(!cell.is_empty());
+        assert_eq!(cell.instrument, Some(2));
+        assert_eq!(cell.volume, Some(64));
+        assert_eq!(format!("{}", cell), "A-4 02 40 F06");
+    }
+
+    #[test]
+    fn test_cell_partial_fields() {
+        // Cell with only instrument set (no note, no volume, no effect)
+        let cell = Cell {
+            note: None,
+            instrument: Some(5),
+            volume: None,
+            effect: None,
+        };
+        assert!(!cell.is_empty());
+        assert_eq!(format!("{}", cell), "--- 05 .. ...");
+    }
+
+    #[test]
+    fn test_cell_only_volume() {
+        let cell = Cell {
+            note: None,
+            instrument: None,
+            volume: Some(0x7F),
+            effect: None,
+        };
+        assert!(!cell.is_empty());
+        assert_eq!(format!("{}", cell), "--- .. 7F ...");
+    }
+
+    #[test]
+    fn test_cell_only_effect() {
+        let cell = Cell {
+            note: None,
+            instrument: None,
+            volume: None,
+            effect: Some(Effect::new(0xA, 0x0F)),
+        };
+        assert!(!cell.is_empty());
+        assert_eq!(format!("{}", cell), "--- .. .. A0F");
+    }
+
+    #[test]
+    fn test_effect_boundary_values() {
+        let min = Effect::new(0, 0);
+        assert_eq!(format!("{}", min), "000");
+
+        let max = Effect::new(0xF, 0xFF);
+        assert_eq!(format!("{}", max), "FFF");
+    }
+
+    #[test]
+    fn test_cell_clone_eq() {
+        let note = Note::simple(Pitch::C, 4);
+        let cell = Cell::with_note(NoteEvent::On(note));
+        let cloned = cell;
+        assert_eq!(cell, cloned);
+    }
 }
