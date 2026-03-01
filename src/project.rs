@@ -74,7 +74,7 @@ mod tests {
             note: Some(NoteEvent::On(note)),
             instrument: Some(1),
             volume: Some(0x40),
-            effect: Some(Effect::new(0xC, 0x20)),
+            effects: vec![Effect::new(0xC, 0x20)],
         });
         song.patterns[0].set_cell(1, 0, Cell::with_note(NoteEvent::Off));
 
@@ -134,7 +134,7 @@ mod tests {
             note: None,
             instrument: None,
             volume: None,
-            effect: Some(Effect::new(0xF, 0xFF)),
+            effects: vec![Effect::new(0xF, 0xFF)],
         });
 
         // Test cell with only volume
@@ -142,7 +142,7 @@ mod tests {
             note: None,
             instrument: None,
             volume: Some(0x7F),
-            effect: None,
+            effects: Vec::new(),
         });
 
         let dir = std::env::temp_dir();

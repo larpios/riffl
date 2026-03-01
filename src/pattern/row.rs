@@ -7,32 +7,8 @@
 use std::fmt;
 use serde::{Serialize, Deserialize};
 
+pub use super::effect::{Effect, MAX_EFFECTS_PER_CELL};
 use super::note::NoteEvent;
-
-/// An effect command applied to a channel at a specific row.
-///
-/// Effect commands modify playback behavior (e.g., pitch slides, vibrato,
-/// volume changes). Each effect has a type byte and a parameter byte.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Effect {
-    /// Effect type identifier.
-    pub command: u8,
-    /// Effect parameter value.
-    pub param: u8,
-}
-
-impl Effect {
-    /// Create a new effect command.
-    pub fn new(command: u8, param: u8) -> Self {
-        Self { command, param }
-    }
-}
-
-impl fmt::Display for Effect {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:01X}{:02X}", self.command, self.param)
-    }
-}
 
 /// A single cell in the tracker pattern grid.
 ///
@@ -40,10 +16,10 @@ impl fmt::Display for Effect {
 /// - A note event (note-on or note-off)
 /// - An instrument number
 /// - A volume value
-/// - An effect command
+/// - Up to 2 effect commands
 ///
-/// All fields are optional; an empty cell has all fields as None.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// All fields are optional; an empty cell has all fields as None/empty.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Cell {
     /// The note event (note-on, note-off, or empty).
     pub note: Option<NoteEvent>,
@@ -51,8 +27,8 @@ pub struct Cell {
     pub instrument: Option<u8>,
     /// Volume override (0-127, independent of note velocity).
     pub volume: Option<u8>,
-    /// Effect command.
-    pub effect: Option<Effect>,
+    /// Effect commands (up to 2 per cell).
+    pub effects: Vec<Effect>,
 }
 
 impl Cell {
@@ -62,7 +38,7 @@ impl Cell {
             note: None,
             instrument: None,
             volume: None,
-            effect: None,
+            effects: Vec::new(),
         }
     }
 
@@ -79,7 +55,44 @@ impl Cell {
         self.note.is_none()
             && self.instrument.is_none()
             && self.volume.is_none()
-            && self.effect.is_none()
+            && self.effects.is_empty()
+    }
+
+    /// Get the first effect, if any.
+    pub fn first_effect(&self) -> Option<&Effect> {
+        self.effects.first()
+    }
+
+    /// Get the second effect, if any.
+    pub fn second_effect(&self) -> Option<&Effect> {
+        self.effects.get(1)
+    }
+
+    /// Add an effect to this cell.
+    ///
+    /// Returns true if the effect was added, false if the cell already
+    /// has the maximum number of effects.
+    pub fn add_effect(&mut self, effect: Effect) -> bool {
+        if self.effects.len() < MAX_EFFECTS_PER_CELL {
+            self.effects.push(effect);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Set the first effect, replacing any existing first effect.
+    pub fn set_effect(&mut self, effect: Effect) {
+        if self.effects.is_empty() {
+            self.effects.push(effect);
+        } else {
+            self.effects[0] = effect;
+        }
+    }
+
+    /// Clear all effects from this cell.
+    pub fn clear_effects(&mut self) {
+        self.effects.clear();
     }
 }
 
@@ -90,7 +103,10 @@ impl Default for Cell {
 }
 
 impl fmt::Display for Cell {
-    /// Display in tracker format: "C#4 01 40 000" or "--- .. .. ..."
+    /// Display in tracker format: "C#4 01 40 A04" or "--- .. .. ..."
+    ///
+    /// Shows the first effect column. If two effects are present,
+    /// only the first is shown in the standard display.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Note column (3 chars)
         match &self.note {
@@ -116,8 +132,8 @@ impl fmt::Display for Cell {
 
         write!(f, " ")?;
 
-        // Effect column (3 chars)
-        match &self.effect {
+        // Effect column (3 chars) — shows first effect
+        match self.first_effect() {
             Some(eff) => write!(f, "{}", eff)?,
             None => write!(f, "...")?,
         }
@@ -131,7 +147,7 @@ pub type Row = Vec<Cell>;
 
 /// Create a new empty row with the given number of channels.
 pub fn new_row(channels: usize) -> Row {
-    vec![Cell::empty(); channels]
+    (0..channels).map(|_| Cell::empty()).collect()
 }
 
 #[cfg(test)]
@@ -146,7 +162,7 @@ mod tests {
         assert_eq!(cell.note, None);
         assert_eq!(cell.instrument, None);
         assert_eq!(cell.volume, None);
-        assert_eq!(cell.effect, None);
+        assert!(cell.effects.is_empty());
     }
 
     #[test]
@@ -176,7 +192,7 @@ mod tests {
             note: Some(NoteEvent::On(note)),
             instrument: Some(1),
             volume: Some(0x40),
-            effect: Some(Effect::new(0xC, 0x20)),
+            effects: vec![Effect::new(0xC, 0x20)],
         };
         assert_eq!(format!("{}", cell), "C#4 01 40 C20");
     }
@@ -215,7 +231,7 @@ mod tests {
             note: Some(NoteEvent::On(note)),
             instrument: Some(2),
             volume: Some(64),
-            effect: Some(Effect::new(0xF, 0x06)),
+            effects: vec![Effect::new(0xF, 0x06)],
         };
         assert!(!cell.is_empty());
         assert_eq!(cell.instrument, Some(2));
@@ -225,12 +241,11 @@ mod tests {
 
     #[test]
     fn test_cell_partial_fields() {
-        // Cell with only instrument set (no note, no volume, no effect)
         let cell = Cell {
             note: None,
             instrument: Some(5),
             volume: None,
-            effect: None,
+            effects: Vec::new(),
         };
         assert!(!cell.is_empty());
         assert_eq!(format!("{}", cell), "--- 05 .. ...");
@@ -242,7 +257,7 @@ mod tests {
             note: None,
             instrument: None,
             volume: Some(0x7F),
-            effect: None,
+            effects: Vec::new(),
         };
         assert!(!cell.is_empty());
         assert_eq!(format!("{}", cell), "--- .. 7F ...");
@@ -254,7 +269,7 @@ mod tests {
             note: None,
             instrument: None,
             volume: None,
-            effect: Some(Effect::new(0xA, 0x0F)),
+            effects: vec![Effect::new(0xA, 0x0F)],
         };
         assert!(!cell.is_empty());
         assert_eq!(format!("{}", cell), "--- .. .. A0F");
@@ -273,7 +288,79 @@ mod tests {
     fn test_cell_clone_eq() {
         let note = Note::simple(Pitch::C, 4);
         let cell = Cell::with_note(NoteEvent::On(note));
-        let cloned = cell;
+        let cloned = cell.clone();
         assert_eq!(cell, cloned);
+    }
+
+    // --- Multi-effect tests ---
+
+    #[test]
+    fn test_cell_two_effects() {
+        let cell = Cell {
+            note: None,
+            instrument: None,
+            volume: None,
+            effects: vec![Effect::new(0xA, 0x04), Effect::new(0xC, 0x40)],
+        };
+        assert!(!cell.is_empty());
+        assert_eq!(cell.effects.len(), 2);
+        assert_eq!(cell.first_effect(), Some(&Effect::new(0xA, 0x04)));
+        assert_eq!(cell.second_effect(), Some(&Effect::new(0xC, 0x40)));
+    }
+
+    #[test]
+    fn test_cell_add_effect() {
+        let mut cell = Cell::empty();
+        assert!(cell.add_effect(Effect::new(0xA, 0x04)));
+        assert_eq!(cell.effects.len(), 1);
+        assert!(cell.add_effect(Effect::new(0xC, 0x40)));
+        assert_eq!(cell.effects.len(), 2);
+        // Third effect should fail
+        assert!(!cell.add_effect(Effect::new(0xF, 0x06)));
+        assert_eq!(cell.effects.len(), 2);
+    }
+
+    #[test]
+    fn test_cell_set_effect() {
+        let mut cell = Cell::empty();
+        cell.set_effect(Effect::new(0xA, 0x04));
+        assert_eq!(cell.effects.len(), 1);
+        assert_eq!(cell.first_effect(), Some(&Effect::new(0xA, 0x04)));
+
+        // Replace first effect
+        cell.set_effect(Effect::new(0xC, 0x40));
+        assert_eq!(cell.effects.len(), 1);
+        assert_eq!(cell.first_effect(), Some(&Effect::new(0xC, 0x40)));
+    }
+
+    #[test]
+    fn test_cell_clear_effects() {
+        let mut cell = Cell {
+            note: None,
+            instrument: None,
+            volume: None,
+            effects: vec![Effect::new(0xA, 0x04), Effect::new(0xC, 0x40)],
+        };
+        cell.clear_effects();
+        assert!(cell.effects.is_empty());
+    }
+
+    #[test]
+    fn test_cell_display_shows_first_effect_only() {
+        let cell = Cell {
+            note: None,
+            instrument: None,
+            volume: None,
+            effects: vec![Effect::new(0xA, 0x04), Effect::new(0xC, 0x40)],
+        };
+        // Display should show first effect
+        assert_eq!(format!("{}", cell), "--- .. .. A04");
+    }
+
+    #[test]
+    fn test_cell_first_effect_none_when_empty() {
+        let cell = Cell::empty();
+        assert_eq!(cell.first_effect(), None);
+        assert_eq!(cell.second_effect(), None);
     }
 }
