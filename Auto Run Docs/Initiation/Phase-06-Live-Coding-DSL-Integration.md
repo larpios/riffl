@@ -44,7 +44,7 @@ This phase delivers the core differentiator of tracker-rs: a live coding scripti
 - [x] Run `cargo test` for the DSL module and fix any failures
   - *(Completed: All 86 DSL tests pass (engine.rs + pattern_api.rs). Full project test suite: 685 tests pass, 0 failures. No fixes needed.)*
 
-- [ ] Build the code editor panel UI in `src/ui/code_editor.rs`:
+- [x] Build the code editor panel UI in `src/ui/code_editor.rs`:
   - A text editor widget for writing Rhai scripts
   - Line numbers on the left
   - Basic syntax highlighting: keywords (let, if, for, fn, return) in one color, strings in another, numbers in another, comments (//) dimmed
@@ -53,6 +53,7 @@ This phase delivers the core differentiator of tracker-rs: a live coding scripti
   - Multi-line support with vertical scrolling
   - Display area for script output/errors below the editor
   - Register in `src/ui/mod.rs`
+  - *(Completed: Created CodeEditor struct with full text editing, syntax highlighting for keywords/strings/numbers/comments, cursor navigation, vertical scrolling, and output/error display panel. Registered as `pub mod code_editor` in ui/mod.rs. Added 38 tests covering text editing, cursor navigation, syntax highlighting, and edge cases. All 723 project tests pass.)*
 
 - [ ] Integrate the code editor as a split view:
   - Add `CodeEditor` view to `AppView` enum (accessible via `F4`)
