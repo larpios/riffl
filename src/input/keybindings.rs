@@ -43,6 +43,11 @@ pub enum Action {
     BpmDownLarge,
     ToggleLoop,
 
+    // Track operations
+    ToggleMute,
+    ToggleSolo,
+    NextTrack,
+
     // Application
     Quit,
     Confirm,
@@ -69,6 +74,9 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         return match key.code {
             // Toggle loop mode (Shift+L = 'L')
             KeyCode::Char('L') => Action::ToggleLoop,
+            // Track operations (Shift+M = 'M', Shift+S = 'S')
+            KeyCode::Char('M') => Action::ToggleMute,
+            KeyCode::Char('S') => Action::ToggleSolo,
             // BPM adjustment: Shift+F1/F2 for ±10
             KeyCode::F(1) => Action::BpmDownLarge,
             KeyCode::F(2) => Action::BpmUpLarge,
@@ -99,6 +107,9 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         // Page navigation
         KeyCode::PageUp => Action::PageUp,
         KeyCode::PageDown => Action::PageDown,
+
+        // Track navigation
+        KeyCode::Tab => Action::NextTrack,
 
         // Mode transitions
         KeyCode::Char('i') => Action::EnterInsertMode,
@@ -148,6 +159,9 @@ fn map_insert_mode(key: KeyEvent) -> Action {
         KeyCode::Right => Action::MoveRight,
         KeyCode::PageUp => Action::PageUp,
         KeyCode::PageDown => Action::PageDown,
+
+        // Track navigation
+        KeyCode::Tab => Action::NextTrack,
 
         // Space for play/pause even in insert mode
         KeyCode::Char(' ') => Action::TogglePlay,
@@ -425,6 +439,32 @@ mod tests {
     fn test_normal_mode_open_file_browser_f5() {
         let f5 = KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE);
         assert_eq!(map_key_to_action(f5, EditorMode::Normal), Action::OpenFileBrowser);
+    }
+
+    // --- Track Operation Tests ---
+
+    #[test]
+    fn test_normal_mode_toggle_mute() {
+        let shift_m = KeyEvent::new(KeyCode::Char('M'), KeyModifiers::SHIFT);
+        assert_eq!(map_key_to_action(shift_m, EditorMode::Normal), Action::ToggleMute);
+    }
+
+    #[test]
+    fn test_normal_mode_toggle_solo() {
+        let shift_s = KeyEvent::new(KeyCode::Char('S'), KeyModifiers::SHIFT);
+        assert_eq!(map_key_to_action(shift_s, EditorMode::Normal), Action::ToggleSolo);
+    }
+
+    #[test]
+    fn test_normal_mode_next_track() {
+        let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(tab, EditorMode::Normal), Action::NextTrack);
+    }
+
+    #[test]
+    fn test_insert_mode_next_track() {
+        let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(tab, EditorMode::Insert), Action::NextTrack);
     }
 
     #[test]
