@@ -1,6 +1,7 @@
 mod app;
 mod audio;
 mod editor;
+mod export;
 mod input;
 mod pattern;
 mod project;

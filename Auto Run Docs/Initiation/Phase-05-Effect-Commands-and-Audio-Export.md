@@ -52,13 +52,14 @@ This phase implements tracker effect commands (volume slides, pitch slides, arpe
   - Show effect mnemonics in a help bar when cursor is on effect column
   <!-- Added effect digit entry system: Editor tracks 3-position hex entry (command, param_hi, param_lo) with auto-advance to next row after 3 digits. Main.rs intercepts hex keys (0-9, A-F) on Effect sub-column in Insert mode. Footer shows effect mnemonic and digit position indicator when cursor is on Effect column. Effect digit position resets on cursor movement and mode changes. 21 new tests added (17 editor effect digit tests + 4 hex_char_to_digit tests). All 558 tests pass (0 failures). -->
 
-- [ ] Implement audio export in `src/export.rs`:
+- [x] Implement audio export in `src/export.rs`:
   - `export_wav(path: &Path, song: &Song, samples: &[Sample], sample_rate: u32) -> Result<()>`
   - Offline rendering: process the entire song row-by-row through the mixer without real-time constraints
   - Write output to WAV file using the `hound` crate (add to Cargo.toml)
   - Support configurable sample rate (44100, 48000) and bit depth (16-bit, 24-bit)
   - Progress callback for UI integration (percentage complete)
   - Register `mod export;` in `src/main.rs`
+  <!-- Created src/export.rs with export_wav() function, ExportConfig struct (sample_rate, BitDepth), and song_duration() helper. Uses hound crate (v3.5) for WAV writing. Offline rendering processes each arrangement pattern row-by-row through the Mixer, supporting 44100/48000 Hz sample rates and 16-bit/24-bit integer output. Progress callback receives f32 percentage (0.0-1.0). Added 12 tests covering: valid WAV creation, correct duration, silence output, non-zero audio with notes, 48kHz export, 24-bit export, config defaults, bit depth conversion, song duration calculation, multi-pattern duration, monotonic progress, and multi-arrangement export. Registered `mod export;` in src/main.rs. All 570 tests pass (0 failures). -->
 
 - [ ] Add an export UI flow:
   - Keybinding: `Ctrl+E` opens export dialog modal
