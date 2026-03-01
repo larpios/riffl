@@ -4,14 +4,15 @@
 /// theming, and modal dialogs.
 
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout},
-    style::{Color, Style},
+    layout::Alignment,
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
 use crate::app::App;
+use crate::pattern::note::NoteEvent;
 
 // Submodules
 pub mod layout;
@@ -19,29 +20,14 @@ pub mod modal;
 pub mod theme;
 
 /// Render the application UI
-///
-/// This is the main rendering function that draws the entire UI.
-/// It uses a three-part layout with header, content, and footer areas
-/// that adapts responsively to terminal size changes.
-///
-/// If a modal is active, it will be rendered on top of the main UI.
-///
-/// # Arguments
-/// * `frame` - The ratatui frame to render to
-/// * `app` - The application state to render
 pub fn render(frame: &mut Frame, app: &App) {
     let full_area = frame.area();
 
     // Create main layout with header (3 lines), content (flexible), and footer (1 line)
     let (header_area, content_area, footer_area) = layout::create_main_layout(full_area, 3, 1);
 
-    // Render header
     render_header(frame, header_area, app);
-
-    // Render main content
     render_content(frame, content_area, app);
-
-    // Render footer
     render_footer(frame, footer_area, app);
 
     // Render modal on top if one is active
@@ -50,25 +36,38 @@ pub fn render(frame: &mut Frame, app: &App) {
     }
 }
 
-/// Render the header area
-///
-/// The header displays the application title and branding.
-/// It uses a bordered block with centered text.
-///
-/// # Arguments
-/// * `frame` - The ratatui frame to render to
-/// * `area` - The rectangular area to render the header in
-/// * `app` - The application state (for theme access)
+/// Render the header with title, BPM, and play/stop status
 fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let theme = &app.theme;
+
+    let play_status = if app.is_playing { "PLAYING" } else { "STOPPED" };
+    let play_color = if app.is_playing { theme.success_color() } else { theme.text_dimmed };
+
+    let title = format!(" tracker-rs | BPM: {:.0} | {} ", app.bpm, play_status);
 
     let header_block = Block::default()
         .borders(Borders::ALL)
         .border_style(theme.border_style())
-        .title(" Tracker RS - TUI Music Tracker ")
+        .title(title)
         .title_alignment(Alignment::Center);
 
-    let header_text = Paragraph::new("A terminal-based music tracker built with Rust")
+    let status_spans = vec![
+        Span::styled("tracker-rs", Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
+        Span::raw("  "),
+        Span::styled(format!("BPM: {:.0}", app.bpm), Style::default().fg(theme.text)),
+        Span::raw("  "),
+        Span::styled(
+            format!("[{}]", play_status),
+            Style::default().fg(play_color).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            format!("Row: {:02X}/{:02X}", app.current_row, app.pattern.num_rows()),
+            Style::default().fg(theme.text_secondary),
+        ),
+    ];
+
+    let header_text = Paragraph::new(Line::from(status_spans))
         .block(header_block)
         .alignment(Alignment::Center)
         .style(theme.header_style());
@@ -76,78 +75,92 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     frame.render_widget(header_text, area);
 }
 
-/// Render the main content area
-///
-/// The content area displays the primary application content.
-/// For now, this shows a navigable grid with cursor highlighting to demonstrate
-/// vim-style navigation. In later phases, this will display the pattern editor,
-/// instrument list, and other tracker components.
-///
-/// # Arguments
-/// * `frame` - The ratatui frame to render to
-/// * `area` - The rectangular area to render the content in
-/// * `app` - The application state to render
+/// Render the main content area with the tracker pattern grid
 fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let theme = &app.theme;
 
     let content_block = Block::default()
         .borders(Borders::ALL)
         .border_style(theme.border_style())
-        .title(" Main Content - Use hjkl or arrows to navigate ")
+        .title(" Pattern Editor ")
         .title_alignment(Alignment::Left);
 
-    // Calculate the inner area (excluding borders)
     let inner = content_block.inner(area);
+    let visible_rows = inner.height as usize;
 
-    // Create a navigable grid to demonstrate cursor movement
-    // Each cell shows its coordinates, and the cursor position is highlighted
-    let mut lines = Vec::new();
+    // Calculate scroll offset to keep cursor visible
+    let scroll_offset = calculate_scroll_offset(
+        app.cursor_y as usize,
+        visible_rows.saturating_sub(1), // reserve 1 row for channel header
+        app.pattern.num_rows(),
+    );
 
-    // Add a header
-    lines.push(Line::from(vec![
-        Span::styled(
-            "Welcome to Tracker RS!",
-            Style::default().fg(theme.primary),
-        ),
-    ]));
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "Navigate this grid using vim keys (hjkl) or arrow keys:",
-        theme.text_style(),
-    )));
-    lines.push(Line::from(""));
+    let mut lines: Vec<Line> = Vec::new();
 
-    // Create a simple navigable grid (10x10)
-    // The cursor position will be highlighted with a different background
-    let grid_size = 10;
-    for y in 0..grid_size {
+    // Channel header row
+    let mut header_spans = Vec::new();
+    header_spans.push(Span::styled("  ROW ", Style::default().fg(theme.text_secondary)));
+    for ch in 0..app.pattern.num_channels() {
+        header_spans.push(Span::styled(
+            format!("│ CH{:<11}", ch),
+            Style::default().fg(theme.primary).add_modifier(Modifier::BOLD),
+        ));
+    }
+    lines.push(Line::from(header_spans));
+
+    // Pattern rows
+    let rows_to_show = visible_rows.saturating_sub(1); // subtract header
+    for display_idx in 0..rows_to_show {
+        let row_idx = scroll_offset + display_idx;
+        if row_idx >= app.pattern.num_rows() {
+            break;
+        }
+
         let mut row_spans = Vec::new();
 
-        for x in 0..grid_size {
-            // Check if this is the cursor position
-            let is_cursor = app.cursor_x == x && app.cursor_y == y;
+        // Row number in hex (tracker convention)
+        let is_playback_row = app.is_playing && row_idx == app.current_row;
+        let row_num_style = if is_playback_row {
+            Style::default().fg(Color::Black).bg(theme.success_color()).add_modifier(Modifier::BOLD)
+        } else if row_idx % 4 == 0 {
+            // Highlight every 4th row for beat markers
+            Style::default().fg(theme.primary)
+        } else {
+            Style::default().fg(theme.text_secondary)
+        };
 
-            // Create the cell content (coordinates)
-            let cell_text = format!("{:02},{:02} ", x, y);
+        row_spans.push(Span::styled(format!("  {:02X}  ", row_idx), row_num_style));
 
-            // Style the cell - highlight if it's the cursor position
+        // Cells for each channel
+        for ch in 0..app.pattern.num_channels() {
+            row_spans.push(Span::styled("│ ", Style::default().fg(theme.text_dimmed)));
+
+            let cell = app.pattern.get_cell(row_idx, ch);
+            let is_cursor = app.cursor_y as usize == row_idx && app.cursor_x as usize == ch;
+
+            // Format cell: note (3 chars) + space + inst (2) + space + vol (2) + space + eff (3) = 14 chars
+            let cell_text = if let Some(cell) = cell {
+                format_cell_display(cell)
+            } else {
+                "--- .. .. ...".to_string()
+            };
+
             let cell_style = if is_cursor {
                 theme.highlight_style()
+            } else if is_playback_row {
+                Style::default().fg(theme.success_color()).add_modifier(Modifier::BOLD)
+            } else if cell.map_or(true, |c| c.is_empty()) {
+                Style::default().fg(theme.text_dimmed)
             } else {
-                theme.dimmed_style()
+                Style::default().fg(theme.text)
             };
 
             row_spans.push(Span::styled(cell_text, cell_style));
+            row_spans.push(Span::raw(" "));
         }
 
         lines.push(Line::from(row_spans));
     }
-
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        if app.running { "● Status: Running" } else { "○ Status: Stopped" },
-        Style::default().fg(if app.running { theme.success_color() } else { theme.error_color() }),
-    )));
 
     let paragraph = Paragraph::new(lines)
         .block(content_block)
@@ -156,34 +169,65 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     frame.render_widget(paragraph, area);
 }
 
-/// Render the footer area
-///
-/// The footer displays status information and keyboard shortcuts.
-/// It provides contextual help to the user and shows the current cursor position.
-///
-/// # Arguments
-/// * `frame` - The ratatui frame to render to
-/// * `area` - The rectangular area to render the footer in
-/// * `app` - The application state (for displaying cursor position)
+/// Format a cell for display in the tracker grid
+fn format_cell_display(cell: &crate::pattern::row::Cell) -> String {
+    let note_str = match &cell.note {
+        Some(NoteEvent::On(note)) => note.display_str(),
+        Some(NoteEvent::Off) => "===".to_string(),
+        None => "---".to_string(),
+    };
+
+    let inst_str = match cell.instrument {
+        Some(inst) => format!("{:02X}", inst),
+        None => "..".to_string(),
+    };
+
+    let vol_str = match cell.volume {
+        Some(vol) => format!("{:02X}", vol),
+        None => "..".to_string(),
+    };
+
+    let eff_str = match &cell.effect {
+        Some(eff) => format!("{}", eff),
+        None => "...".to_string(),
+    };
+
+    format!("{} {} {} {}", note_str, inst_str, vol_str, eff_str)
+}
+
+/// Calculate scroll offset to keep a target row visible
+fn calculate_scroll_offset(cursor_row: usize, visible_rows: usize, total_rows: usize) -> usize {
+    if visible_rows >= total_rows {
+        return 0;
+    }
+    if cursor_row < visible_rows / 2 {
+        0
+    } else if cursor_row + visible_rows / 2 >= total_rows {
+        total_rows.saturating_sub(visible_rows)
+    } else {
+        cursor_row.saturating_sub(visible_rows / 2)
+    }
+}
+
+/// Render the footer with relevant keybindings
 fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let theme = &app.theme;
 
+    let key_style = Style::default().fg(theme.success_color());
+
     let footer_text = vec![
         Span::raw(" "),
-        Span::styled("hjkl/arrows", Style::default().fg(theme.success_color())),
-        Span::raw(": Navigate "),
-        Span::raw(" | "),
-        Span::styled("m", Style::default().fg(theme.success_color())),
-        Span::raw(": Modal "),
-        Span::raw(" | "),
-        Span::styled("ESC", Style::default().fg(theme.success_color())),
-        Span::raw(": Close "),
-        Span::raw(" | "),
-        Span::styled("q", Style::default().fg(theme.success_color())),
-        Span::raw(": Quit "),
-        Span::raw(" | "),
+        Span::styled("space", key_style),
+        Span::raw(": play/stop "),
+        Span::raw("| "),
+        Span::styled("hjkl/arrows", key_style),
+        Span::raw(": navigate "),
+        Span::raw("| "),
+        Span::styled("q", key_style),
+        Span::raw(": quit "),
+        Span::raw("| "),
         Span::styled(
-            format!("Cursor: ({}, {})", app.cursor_x, app.cursor_y),
+            format!("CH:{} ROW:{:02X}", app.cursor_x, app.cursor_y),
             Style::default().fg(theme.primary),
         ),
     ];
@@ -192,4 +236,65 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .style(theme.footer_style());
 
     frame.render_widget(footer, area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scroll_offset_small_pattern() {
+        // Pattern fits in view
+        assert_eq!(calculate_scroll_offset(0, 20, 16), 0);
+        assert_eq!(calculate_scroll_offset(15, 20, 16), 0);
+    }
+
+    #[test]
+    fn test_scroll_offset_at_top() {
+        assert_eq!(calculate_scroll_offset(0, 10, 64), 0);
+        assert_eq!(calculate_scroll_offset(3, 10, 64), 0);
+    }
+
+    #[test]
+    fn test_scroll_offset_middle() {
+        // Cursor in the middle should center it
+        assert_eq!(calculate_scroll_offset(30, 10, 64), 25);
+    }
+
+    #[test]
+    fn test_scroll_offset_at_bottom() {
+        assert_eq!(calculate_scroll_offset(63, 10, 64), 54);
+    }
+
+    #[test]
+    fn test_format_cell_empty() {
+        let cell = crate::pattern::row::Cell::empty();
+        assert_eq!(format_cell_display(&cell), "--- .. .. ...");
+    }
+
+    #[test]
+    fn test_format_cell_with_note() {
+        use crate::pattern::note::{Note, Pitch};
+        let cell = crate::pattern::row::Cell::with_note(NoteEvent::On(Note::simple(Pitch::C, 4)));
+        assert_eq!(format_cell_display(&cell), "C-4 .. .. ...");
+    }
+
+    #[test]
+    fn test_format_cell_note_off() {
+        let cell = crate::pattern::row::Cell::with_note(NoteEvent::Off);
+        assert_eq!(format_cell_display(&cell), "=== .. .. ...");
+    }
+
+    #[test]
+    fn test_format_cell_full() {
+        use crate::pattern::note::{Note, Pitch};
+        use crate::pattern::row::Effect;
+        let cell = crate::pattern::row::Cell {
+            note: Some(NoteEvent::On(Note::new(Pitch::CSharp, 4, 100, 1))),
+            instrument: Some(1),
+            volume: Some(0x40),
+            effect: Some(Effect::new(0xC, 0x20)),
+        };
+        assert_eq!(format_cell_display(&cell), "C#4 01 40 C20");
+    }
 }
