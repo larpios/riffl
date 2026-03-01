@@ -14,6 +14,7 @@ use ratatui::{
 use crate::app::App;
 use crate::editor::{EditorMode, SubColumn};
 use crate::pattern::note::NoteEvent;
+use crate::transport::TransportState;
 
 // Submodules
 pub mod file_browser;
@@ -48,10 +49,19 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let theme = &app.theme;
     let pattern = app.editor.pattern();
 
-    let play_status = if app.is_playing { "PLAYING" } else { "STOPPED" };
-    let play_color = if app.is_playing { theme.success_color() } else { theme.text_dimmed };
+    let play_status = match app.transport.state() {
+        TransportState::Playing => "PLAYING",
+        TransportState::Paused => "PAUSED",
+        TransportState::Stopped => "STOPPED",
+    };
+    let play_color = match app.transport.state() {
+        TransportState::Playing => theme.success_color(),
+        TransportState::Paused => theme.warning_color(),
+        TransportState::Stopped => theme.text_dimmed,
+    };
 
-    let title = format!(" tracker-rs | BPM: {:.0} | {} ", app.bpm, play_status);
+    let loop_indicator = if app.transport.loop_enabled() { " L" } else { "" };
+    let title = format!(" tracker-rs | BPM: {:.0} | {}{} ", app.transport.bpm(), play_status, loop_indicator);
 
     let header_block = Block::default()
         .borders(Borders::ALL)
@@ -59,10 +69,10 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .title(title)
         .title_alignment(Alignment::Center);
 
-    let status_spans = vec![
+    let mut status_spans = vec![
         Span::styled("tracker-rs", Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
         Span::raw("  "),
-        Span::styled(format!("BPM: {:.0}", app.bpm), Style::default().fg(theme.text)),
+        Span::styled(format!("BPM: {:.0}", app.transport.bpm()), Style::default().fg(theme.text)),
         Span::raw("  "),
         Span::styled(
             format!("[{}]", play_status),
@@ -70,10 +80,18 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         ),
         Span::raw("  "),
         Span::styled(
-            format!("Row: {:02X}/{:02X}", app.current_row, pattern.num_rows()),
+            format!("Row: {:02X}/{:02X}", app.transport.current_row(), pattern.num_rows()),
             Style::default().fg(theme.text_secondary),
         ),
     ];
+
+    if app.transport.loop_enabled() {
+        status_spans.push(Span::raw("  "));
+        status_spans.push(Span::styled(
+            "[LOOP]",
+            Style::default().fg(theme.info_color()).add_modifier(Modifier::BOLD),
+        ));
+    }
 
     let header_text = Paragraph::new(Line::from(status_spans))
         .block(header_block)
@@ -130,7 +148,7 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         let mut row_spans = Vec::new();
 
         // Row number in hex (tracker convention)
-        let is_playback_row = app.is_playing && row_idx == app.current_row;
+        let is_playback_row = app.transport.is_playing() && row_idx == app.transport.current_row();
         let row_num_style = if is_playback_row {
             Style::default().fg(Color::Black).bg(theme.success_color()).add_modifier(Modifier::BOLD)
         } else if row_idx % 4 == 0 {
@@ -410,10 +428,10 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 Span::raw(":load "),
                 Span::styled("space", key_style),
                 Span::raw(":play "),
-                Span::styled("x", key_style),
-                Span::raw(":delete "),
-                Span::styled("u", key_style),
-                Span::raw(":undo "),
+                Span::styled("+/-", key_style),
+                Span::raw(":bpm "),
+                Span::styled("L", key_style),
+                Span::raw(":loop "),
                 Span::styled("q", key_style),
                 Span::raw(":quit"),
             ]);

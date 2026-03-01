@@ -34,13 +34,21 @@ pub enum Action {
     DeleteRow,
     Undo,
 
+    // Transport
+    TogglePlay,
+    Stop,
+    BpmUp,
+    BpmDown,
+    BpmUpLarge,
+    BpmDownLarge,
+    ToggleLoop,
+
     // Application
     Quit,
     Confirm,
     Cancel,
     OpenModal,
     OpenFileBrowser,
-    TogglePlay,
 
     /// No action (unmapped key)
     None,
@@ -56,6 +64,21 @@ pub fn map_key_to_action(key: KeyEvent, mode: EditorMode) -> Action {
 }
 
 fn map_normal_mode(key: KeyEvent) -> Action {
+    // Handle Shift-modified bindings first
+    if key.modifiers == KeyModifiers::SHIFT {
+        return match key.code {
+            // Toggle loop mode (Shift+L = 'L')
+            KeyCode::Char('L') => Action::ToggleLoop,
+            // BPM adjustment: Shift+F1/F2 for ±10
+            KeyCode::F(1) => Action::BpmDownLarge,
+            KeyCode::F(2) => Action::BpmUpLarge,
+            // '+' key (Shift+'=' on US keyboards) for BPM up
+            KeyCode::Char('+') => Action::BpmUp,
+            _ => Action::None,
+        };
+    }
+
+    // All other modified keys are ignored
     if key.modifiers != KeyModifiers::NONE {
         return Action::None;
     }
@@ -85,9 +108,15 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         KeyCode::Char('x') | KeyCode::Delete => Action::DeleteCell,
         KeyCode::Char('u') => Action::Undo,
 
+        // Transport
+        KeyCode::Char(' ') => Action::TogglePlay,
+        KeyCode::Char('=') => Action::BpmUp,
+        KeyCode::Char('-') => Action::BpmDown,
+        KeyCode::F(1) => Action::BpmDown,
+        KeyCode::F(2) => Action::BpmUp,
+
         // Application
         KeyCode::Char('q') => Action::Quit,
-        KeyCode::Char(' ') => Action::TogglePlay,
         KeyCode::Char('m') => Action::OpenModal,
         KeyCode::Char('o') | KeyCode::F(5) => Action::OpenFileBrowser,
         KeyCode::Enter => Action::Confirm,
@@ -253,6 +282,48 @@ mod tests {
     fn test_normal_mode_modified_keys_ignored() {
         let ctrl_h = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::CONTROL);
         assert_eq!(map_key_to_action(ctrl_h, EditorMode::Normal), Action::None);
+    }
+
+    // --- BPM and Transport Tests ---
+
+    #[test]
+    fn test_normal_mode_bpm_up() {
+        let eq = KeyEvent::new(KeyCode::Char('='), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(eq, EditorMode::Normal), Action::BpmUp);
+    }
+
+    #[test]
+    fn test_normal_mode_bpm_down() {
+        let minus = KeyEvent::new(KeyCode::Char('-'), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(minus, EditorMode::Normal), Action::BpmDown);
+    }
+
+    #[test]
+    fn test_normal_mode_bpm_f1_f2() {
+        let f1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
+        let f2 = KeyEvent::new(KeyCode::F(2), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(f1, EditorMode::Normal), Action::BpmDown);
+        assert_eq!(map_key_to_action(f2, EditorMode::Normal), Action::BpmUp);
+    }
+
+    #[test]
+    fn test_normal_mode_bpm_shift_plus() {
+        let plus = KeyEvent::new(KeyCode::Char('+'), KeyModifiers::SHIFT);
+        assert_eq!(map_key_to_action(plus, EditorMode::Normal), Action::BpmUp);
+    }
+
+    #[test]
+    fn test_normal_mode_bpm_large_shift_f1_f2() {
+        let sf1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::SHIFT);
+        let sf2 = KeyEvent::new(KeyCode::F(2), KeyModifiers::SHIFT);
+        assert_eq!(map_key_to_action(sf1, EditorMode::Normal), Action::BpmDownLarge);
+        assert_eq!(map_key_to_action(sf2, EditorMode::Normal), Action::BpmUpLarge);
+    }
+
+    #[test]
+    fn test_normal_mode_toggle_loop() {
+        let shift_l = KeyEvent::new(KeyCode::Char('L'), KeyModifiers::SHIFT);
+        assert_eq!(map_key_to_action(shift_l, EditorMode::Normal), Action::ToggleLoop);
     }
 
     // --- Insert Mode Tests ---
