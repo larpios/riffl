@@ -14,11 +14,12 @@ This phase adds real sample loading from disk (WAV, FLAC, OGG via symphonia) and
   - Register in `src/audio/mod.rs`
   - ✅ Completed: `load_sample(path, target_sample_rate)` decodes via symphonia, mono→stereo conversion, linear interpolation resampling, `LoadError` variant added to `AudioError`
 
-- [ ] Write tests for the sample loader:
+- [x] Write tests for the sample loader:
   - Test loading a programmatically-created WAV file (use `hound` crate or write raw WAV bytes to a temp file)
   - Test that mono files are correctly converted to stereo
   - Test error handling for invalid/missing files
   - Test that the loaded sample has correct metadata (sample rate, channels, duration)
+  - ✅ 9 tests total in `loader.rs`: stereo WAV load, mono→stereo conversion (structure + values), missing file, invalid file, metadata, duration calculation, resampling frame count, resample_linear basic
 
 - [ ] Run `cargo test` for the sample loader and fix any failures
 
