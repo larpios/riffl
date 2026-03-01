@@ -27,7 +27,8 @@ This phase implements tracker effect commands (volume slides, pitch slides, arpe
   - Test integration with Cell — effects stored and retrieved correctly
   <!-- Added 7 new tests to effect.rs (serde roundtrip, JSON structure, mid-range params, unknown commands, all variants from_type, nibble extraction combos) and 9 new tests to row.rs (Cell serde roundtrip with/without effects, effects stored/retrieved by type, set_effect preserves second, display with all effect types, clear-then-add, note+effects display, row effects across channels). All 283 tests pass. -->
 
-- [ ] Run `cargo test` for effects and fix any failures
+- [x] Run `cargo test` for effects and fix any failures
+  <!-- All 492 tests pass (0 failures, 0 filtered). Compiler warnings present (unused imports) but no test failures. -->
 
 - [ ] Implement effect processing in the mixer/playback engine:
   - Create `src/audio/effect_processor.rs` with per-channel effect state
