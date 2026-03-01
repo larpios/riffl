@@ -1,0 +1,12 @@
+//! Audio module providing low-latency audio playback using cpal
+
+pub mod device;
+pub mod engine;
+pub mod error;
+pub mod stream;
+
+// Re-export main public API
+pub use device::{AudioDevice, DeviceInfo, SupportedConfig, default_device, enumerate_devices, get_device_by_index};
+pub use engine::AudioEngine;
+pub use error::{AudioError, AudioResult};
+pub use stream::{AudioCallback, AudioStream, StreamBuilder, StreamConfig};
