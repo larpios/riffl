@@ -341,4 +341,128 @@ mod tests {
         let off = NoteEvent::Off;
         assert_eq!(format!("{}", off), "===");
     }
+
+    #[test]
+    fn test_pitch_all_contains_12_semitones() {
+        assert_eq!(Pitch::ALL.len(), 12);
+        for (i, pitch) in Pitch::ALL.iter().enumerate() {
+            assert_eq!(pitch.semitone() as usize, i);
+        }
+    }
+
+    #[test]
+    fn test_pitch_from_str_all_flats() {
+        // Verify all flat notation parses correctly
+        assert_eq!(Pitch::from_str("Db"), Some(Pitch::CSharp));
+        assert_eq!(Pitch::from_str("Eb"), Some(Pitch::DSharp));
+        assert_eq!(Pitch::from_str("Fb"), Some(Pitch::E));
+        assert_eq!(Pitch::from_str("Gb"), Some(Pitch::FSharp));
+        assert_eq!(Pitch::from_str("Ab"), Some(Pitch::GSharp));
+        assert_eq!(Pitch::from_str("Bb"), Some(Pitch::ASharp));
+        assert_eq!(Pitch::from_str("Cb"), Some(Pitch::B));
+    }
+
+    #[test]
+    fn test_pitch_from_str_enharmonic_sharps() {
+        assert_eq!(Pitch::from_str("E#"), Some(Pitch::F));
+    }
+
+    #[test]
+    fn test_note_from_tracker_str_lowercase() {
+        let note = Note::from_tracker_str("c#4").unwrap();
+        assert_eq!(note.pitch, Pitch::CSharp);
+        assert_eq!(note.octave, 4);
+    }
+
+    #[test]
+    fn test_note_from_tracker_str_with_whitespace() {
+        let note = Note::from_tracker_str("  C#4  ").unwrap();
+        assert_eq!(note.pitch, Pitch::CSharp);
+        assert_eq!(note.octave, 4);
+    }
+
+    #[test]
+    fn test_note_from_tracker_str_all_octaves() {
+        for octave in 0..=9 {
+            let s = format!("C-{}", octave);
+            let note = Note::from_tracker_str(&s).unwrap();
+            assert_eq!(note.octave, octave);
+        }
+    }
+
+    #[test]
+    fn test_note_from_tracker_str_invalid_modifier() {
+        assert!(Note::from_tracker_str("C*4").is_none());
+        assert!(Note::from_tracker_str("C!4").is_none());
+    }
+
+    #[test]
+    fn test_note_from_tracker_str_flat_notation() {
+        let note = Note::from_tracker_str("Db3").unwrap();
+        assert_eq!(note.pitch, Pitch::CSharp); // Db => C#
+        assert_eq!(note.octave, 3);
+    }
+
+    #[test]
+    fn test_note_display_roundtrip() {
+        // Verify display_str output can be re-parsed
+        let original = Note::simple(Pitch::CSharp, 4);
+        let display = original.display_str();
+        let parsed = Note::from_tracker_str(&display).unwrap();
+        assert_eq!(parsed.pitch, original.pitch);
+        assert_eq!(parsed.octave, original.octave);
+    }
+
+    #[test]
+    fn test_note_display_all_pitches() {
+        // Every pitch should produce a 3-character display string
+        for pitch in &Pitch::ALL {
+            let note = Note::simple(*pitch, 4);
+            let display = note.display_str();
+            assert_eq!(display.len(), 3, "Display for {:?} was '{}' (len {})", pitch, display, display.len());
+        }
+    }
+
+    #[test]
+    fn test_note_boundary_octaves() {
+        let low = Note::simple(Pitch::C, 0);
+        assert_eq!(low.midi_note(), 0);
+        assert_eq!(low.display_str(), "C-0");
+
+        let high = Note::simple(Pitch::B, 9);
+        assert_eq!(high.midi_note(), 119);
+        assert_eq!(high.display_str(), "B-9");
+    }
+
+    #[test]
+    fn test_note_boundary_velocity() {
+        let quiet = Note::new(Pitch::C, 4, 0, 0);
+        assert_eq!(quiet.velocity, 0);
+
+        let loud = Note::new(Pitch::C, 4, 127, 0);
+        assert_eq!(loud.velocity, 127);
+    }
+
+    #[test]
+    fn test_note_clone_and_eq() {
+        let note = Note::new(Pitch::FSharp, 5, 80, 3);
+        let cloned = note;
+        assert_eq!(note, cloned);
+    }
+
+    #[test]
+    fn test_note_event_equality() {
+        let on1 = NoteEvent::On(Note::simple(Pitch::C, 4));
+        let on2 = NoteEvent::On(Note::simple(Pitch::C, 4));
+        let off = NoteEvent::Off;
+        assert_eq!(on1, on2);
+        assert_ne!(on1, off);
+    }
+
+    #[test]
+    fn test_note_frequency_middle_c() {
+        let c4 = Note::simple(Pitch::C, 4);
+        // Middle C is approximately 261.63 Hz
+        assert!((c4.frequency() - 261.63).abs() < 0.1);
+    }
 }

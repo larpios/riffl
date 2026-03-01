@@ -272,4 +272,136 @@ mod tests {
         assert_eq!(row.len(), 4);
         assert!(pat.get_row(16).is_none());
     }
+
+    #[test]
+    fn test_set_note_out_of_bounds() {
+        let mut pat = Pattern::new(16, 4);
+        let note = Note::simple(Pitch::C, 4);
+        assert!(!pat.set_note(16, 0, note));
+        assert!(!pat.set_note(0, 4, note));
+        assert!(!pat.set_note(100, 100, note));
+    }
+
+    #[test]
+    fn test_clear_cell_out_of_bounds() {
+        let mut pat = Pattern::new(16, 4);
+        assert!(!pat.clear_cell(16, 0));
+        assert!(!pat.clear_cell(0, 4));
+    }
+
+    #[test]
+    fn test_overwrite_cell() {
+        let mut pat = Pattern::new(16, 4);
+        let note_c = Note::simple(Pitch::C, 4);
+        let note_e = Note::simple(Pitch::E, 4);
+
+        pat.set_note(0, 0, note_c);
+        assert_eq!(pat.get_cell(0, 0).unwrap().note, Some(NoteEvent::On(note_c)));
+
+        // Overwrite with a different note
+        pat.set_note(0, 0, note_e);
+        assert_eq!(pat.get_cell(0, 0).unwrap().note, Some(NoteEvent::On(note_e)));
+    }
+
+    #[test]
+    fn test_get_cell_mut() {
+        let mut pat = Pattern::new(16, 4);
+        if let Some(cell) = pat.get_cell_mut(0, 0) {
+            cell.instrument = Some(5);
+            cell.volume = Some(0x40);
+        }
+        let cell = pat.get_cell(0, 0).unwrap();
+        assert_eq!(cell.instrument, Some(5));
+        assert_eq!(cell.volume, Some(0x40));
+    }
+
+    #[test]
+    fn test_get_cell_mut_out_of_bounds() {
+        let mut pat = Pattern::new(16, 4);
+        assert!(pat.get_cell_mut(16, 0).is_none());
+        assert!(pat.get_cell_mut(0, 4).is_none());
+    }
+
+    #[test]
+    fn test_pattern_single_row_single_channel() {
+        let pat = Pattern::new(1, 1);
+        assert_eq!(pat.num_rows(), 1);
+        assert_eq!(pat.num_channels(), 1);
+        assert!(pat.get_cell(0, 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_insert_row_at_beginning() {
+        let mut pat = Pattern::new(4, 1);
+        pat.set_note(0, 0, Note::simple(Pitch::C, 4));
+        pat.insert_row(0);
+        assert_eq!(pat.num_rows(), 5);
+        // Original row 0 should now be at row 1
+        assert!(pat.get_cell(0, 0).unwrap().is_empty());
+        assert!(!pat.get_cell(1, 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_insert_row_at_end() {
+        let mut pat = Pattern::new(4, 1);
+        pat.insert_row(4); // at the end
+        assert_eq!(pat.num_rows(), 5);
+        assert!(pat.get_cell(4, 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_delete_all_but_one_row() {
+        let mut pat = Pattern::new(3, 1);
+        assert!(pat.delete_row(0));
+        assert_eq!(pat.num_rows(), 2);
+        assert!(pat.delete_row(0));
+        assert_eq!(pat.num_rows(), 1);
+        // Cannot delete the last row
+        assert!(!pat.delete_row(0));
+        assert_eq!(pat.num_rows(), 1);
+    }
+
+    #[test]
+    fn test_multiple_channels_independent() {
+        let mut pat = Pattern::new(4, 4);
+        pat.set_note(0, 0, Note::simple(Pitch::C, 4));
+        pat.set_note(0, 1, Note::simple(Pitch::E, 4));
+        pat.set_note(0, 2, Note::simple(Pitch::G, 4));
+
+        // Each channel is independent
+        let c0 = pat.get_cell(0, 0).unwrap();
+        let c1 = pat.get_cell(0, 1).unwrap();
+        let c2 = pat.get_cell(0, 2).unwrap();
+        let c3 = pat.get_cell(0, 3).unwrap();
+
+        assert_eq!(c0.note, Some(NoteEvent::On(Note::simple(Pitch::C, 4))));
+        assert_eq!(c1.note, Some(NoteEvent::On(Note::simple(Pitch::E, 4))));
+        assert_eq!(c2.note, Some(NoteEvent::On(Note::simple(Pitch::G, 4))));
+        assert!(c3.is_empty());
+    }
+
+    #[test]
+    fn test_pattern_large_dimensions() {
+        let pat = Pattern::new(256, 16);
+        assert_eq!(pat.num_rows(), 256);
+        assert_eq!(pat.num_channels(), 16);
+        assert!(pat.get_cell(255, 15).is_some());
+        assert!(pat.get_cell(256, 0).is_none());
+    }
+
+    #[test]
+    fn test_set_cell_with_full_data() {
+        let mut pat = Pattern::new(16, 4);
+        let cell = Cell {
+            note: Some(NoteEvent::On(Note::new(Pitch::A, 4, 127, 3))),
+            instrument: Some(3),
+            volume: Some(0x7F),
+            effect: Some(Effect::new(0xC, 0x40)),
+        };
+        assert!(pat.set_cell(5, 2, cell));
+        let retrieved = pat.get_cell(5, 2).unwrap();
+        assert_eq!(retrieved.instrument, Some(3));
+        assert_eq!(retrieved.volume, Some(0x7F));
+        assert_eq!(retrieved.effect, Some(Effect::new(0xC, 0x40)));
+    }
 }

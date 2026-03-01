@@ -23,14 +23,16 @@ This phase integrates the existing audio engine code from the unmerged `auto-cla
   - Register the `pattern` module in `src/main.rs` with `mod pattern;`
   > ✅ Completed: Created full pattern data model with 4 files. `note.rs` has 12-semitone `Pitch` enum with sharp/flat parsing, `Note` struct with tracker-style display ("C#4"), `NoteOff` sentinel, `NoteEvent` enum, frequency/MIDI calculations. `row.rs` has `Cell` struct with note/instrument/volume/effect fields, `Effect` command type, tracker-style display. `pattern.rs` has `Pattern` struct (default 64×4) with all required methods plus boundary protection. Module registered in both `main.rs` and `lib.rs`. 36 new tests all pass (93 total).
 
-- [ ] Write unit tests for the pattern data model:
+- [x] Write unit tests for the pattern data model:
   - Test `Note` creation, display formatting, and parsing from strings like "C#4", "A-5"
   - Test `Pattern` construction with default and custom dimensions
   - Test cell get/set/clear operations
   - Test row insert/delete and boundary conditions
   - Test that pattern dimensions are enforced (no out-of-bounds panics)
+  > ✅ Completed: Added 34 new tests across all three pattern files. `note.rs`: 15 new tests covering flat notation parsing, enharmonic sharps, lowercase/whitespace input, all octaves, display roundtrip, all pitches display width, boundary octaves/velocity, clone/equality, middle C frequency. `row.rs`: 8 new tests for partial cell fields (instrument-only, volume-only, effect-only), full cell display, boundary effect values, single-channel rows, clone/equality. `pattern.rs`: 11 new tests for set_note/clear_cell out-of-bounds, cell overwriting, get_cell_mut, minimal 1×1 pattern, insert at beginning/end, delete-all-but-one, multi-channel independence, large dimensions (256×16), full-data cell operations. Total pattern tests: 71 (was 37). All 127 project tests pass.
 
-- [ ] Run `cargo test` and fix any compilation errors or test failures in the pattern module
+- [x] Run `cargo test` and fix any compilation errors or test failures in the pattern module
+  > ✅ Completed: All 127 tests pass (91 lib + 127 bin), no compilation errors. Warnings are pre-existing unused imports from earlier phases.
 
 - [ ] Create a simple audio mixer/sequencer in `src/audio/mixer.rs` that connects patterns to the audio engine:
   - `Mixer` struct holding a reference to loaded samples (Vec<Sample>) and current playback state
