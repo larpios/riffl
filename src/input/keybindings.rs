@@ -57,6 +57,9 @@ pub enum Action {
     BpmUpLarge,
     BpmDownLarge,
     ToggleLoop,
+    TogglePlaybackMode,
+    JumpNextPattern,
+    JumpPrevPattern,
 
     // Track operations
     ToggleMute,
@@ -117,6 +120,8 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         return match key.code {
             // Toggle loop mode (Shift+L = 'L')
             KeyCode::Char('L') => Action::ToggleLoop,
+            // Toggle playback mode (Shift+P = 'P')
+            KeyCode::Char('P') => Action::TogglePlaybackMode,
             // Track operations (Shift+M = 'M', Shift+S = 'S')
             KeyCode::Char('M') => Action::ToggleMute,
             KeyCode::Char('S') => Action::ToggleSolo,
@@ -170,6 +175,8 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         KeyCode::Char(' ') => Action::TogglePlay,
         KeyCode::Char('=') => Action::BpmUp,
         KeyCode::Char('-') => Action::BpmDown,
+        KeyCode::Char(']') => Action::JumpNextPattern,
+        KeyCode::Char('[') => Action::JumpPrevPattern,
 
         // View switching
         KeyCode::F(1) => Action::SwitchView(AppView::PatternEditor),
@@ -675,5 +682,25 @@ mod tests {
     fn test_visual_mode_ctrl_x_cut() {
         let ctrl_x = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL);
         assert_eq!(map_key_to_action(ctrl_x, EditorMode::Visual), Action::Cut);
+    }
+
+    // --- Song Playback Keybinding Tests ---
+
+    #[test]
+    fn test_normal_mode_toggle_playback_mode() {
+        let shift_p = KeyEvent::new(KeyCode::Char('P'), KeyModifiers::SHIFT);
+        assert_eq!(map_key_to_action(shift_p, EditorMode::Normal), Action::TogglePlaybackMode);
+    }
+
+    #[test]
+    fn test_normal_mode_jump_next_pattern() {
+        let rb = KeyEvent::new(KeyCode::Char(']'), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(rb, EditorMode::Normal), Action::JumpNextPattern);
+    }
+
+    #[test]
+    fn test_normal_mode_jump_prev_pattern() {
+        let lb = KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(lb, EditorMode::Normal), Action::JumpPrevPattern);
     }
 }

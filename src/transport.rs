@@ -1,7 +1,7 @@
 /// Transport system for playback control
 ///
 /// Manages play/stop/pause state, BPM timing, row advancement,
-/// and pattern looping for the tracker sequencer.
+/// pattern looping, and song-level arrangement sequencing for the tracker.
 
 /// Transport playback state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -9,6 +9,31 @@ pub enum TransportState {
     Stopped,
     Playing,
     Paused,
+}
+
+/// Playback mode: single pattern loop or full song arrangement
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaybackMode {
+    /// Loop the current pattern only
+    Pattern,
+    /// Play through the arrangement sequence (pattern after pattern)
+    Song,
+}
+
+/// Result of a transport advance, describing what happened
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AdvanceResult {
+    /// No row change occurred (not enough time elapsed or not playing)
+    None,
+    /// Advanced to a new row within the current pattern
+    Row(usize),
+    /// Advanced to a new pattern in the arrangement (arrangement_index, first_row)
+    PatternChange {
+        arrangement_pos: usize,
+        row: usize,
+    },
+    /// Playback stopped (reached end of arrangement without loop)
+    Stopped,
 }
 
 /// Transport controls for sequencer playback
@@ -23,17 +48,23 @@ pub struct Transport {
     /// Current row position within the pattern
     current_row: usize,
 
-    /// Current pattern index (for future song/order-list support)
-    current_pattern: usize,
+    /// Current arrangement position (index into the arrangement Vec)
+    arrangement_position: usize,
 
-    /// Whether the pattern loops when reaching the end
+    /// Whether the pattern/song loops when reaching the end
     loop_enabled: bool,
+
+    /// Playback mode: pattern-only or song arrangement
+    playback_mode: PlaybackMode,
 
     /// Accumulated time for BPM-based row advancement
     tick_accumulator: f64,
 
     /// Total number of rows in the current pattern
     num_rows: usize,
+
+    /// Length of the arrangement sequence (set by App)
+    arrangement_length: usize,
 }
 
 /// Minimum allowed BPM
@@ -50,20 +81,25 @@ impl Transport {
             state: TransportState::Stopped,
             bpm: 120.0,
             current_row: 0,
-            current_pattern: 0,
+            arrangement_position: 0,
             loop_enabled: true,
+            playback_mode: PlaybackMode::Pattern,
             tick_accumulator: 0.0,
             num_rows: 64,
+            arrangement_length: 1,
         }
     }
 
     /// Advance the transport by the given delta time in seconds.
     ///
-    /// Returns `Some(row_index)` when it's time to advance to a new row,
-    /// or `None` if not enough time has elapsed.
-    pub fn advance(&mut self, delta_time: f64) -> Option<usize> {
+    /// Returns an `AdvanceResult` describing what happened:
+    /// - `None`: no row change
+    /// - `Row(idx)`: advanced to a new row in the current pattern
+    /// - `PatternChange { arrangement_pos, row }`: moved to next pattern in arrangement
+    /// - `Stopped`: playback ended (arrangement finished, no loop)
+    pub fn advance(&mut self, delta_time: f64) -> AdvanceResult {
         if self.state != TransportState::Playing {
-            return None;
+            return AdvanceResult::None;
         }
 
         self.tick_accumulator += delta_time;
@@ -73,30 +109,61 @@ impl Transport {
             self.tick_accumulator -= seconds_per_row;
 
             // Prevent accumulator from building up too much
-            // (e.g., if the app was frozen for a long time)
             if self.tick_accumulator > seconds_per_row {
                 self.tick_accumulator = 0.0;
             }
 
             let next_row = self.current_row + 1;
             if next_row >= self.num_rows {
-                if self.loop_enabled {
-                    self.current_row = 0;
-                } else {
-                    // Reached end without looping — stop playback
-                    self.state = TransportState::Stopped;
-                    self.current_row = 0;
-                    self.tick_accumulator = 0.0;
-                    return None;
+                // End of current pattern — behavior depends on playback mode
+                match self.playback_mode {
+                    PlaybackMode::Pattern => {
+                        if self.loop_enabled {
+                            self.current_row = 0;
+                            return AdvanceResult::Row(0);
+                        } else {
+                            self.state = TransportState::Stopped;
+                            self.current_row = 0;
+                            self.tick_accumulator = 0.0;
+                            return AdvanceResult::Stopped;
+                        }
+                    }
+                    PlaybackMode::Song => {
+                        let next_pos = self.arrangement_position + 1;
+                        if next_pos >= self.arrangement_length {
+                            // End of arrangement
+                            if self.loop_enabled {
+                                self.arrangement_position = 0;
+                                self.current_row = 0;
+                                return AdvanceResult::PatternChange {
+                                    arrangement_pos: 0,
+                                    row: 0,
+                                };
+                            } else {
+                                self.state = TransportState::Stopped;
+                                self.current_row = 0;
+                                self.arrangement_position = 0;
+                                self.tick_accumulator = 0.0;
+                                return AdvanceResult::Stopped;
+                            }
+                        } else {
+                            // Move to next pattern in arrangement
+                            self.arrangement_position = next_pos;
+                            self.current_row = 0;
+                            return AdvanceResult::PatternChange {
+                                arrangement_pos: next_pos,
+                                row: 0,
+                            };
+                        }
+                    }
                 }
             } else {
                 self.current_row = next_row;
+                return AdvanceResult::Row(next_row);
             }
-
-            Some(self.current_row)
-        } else {
-            None
         }
+
+        AdvanceResult::None
     }
 
     /// Start playback from the current position (or from the beginning if stopped)
@@ -121,6 +188,7 @@ impl Transport {
     pub fn stop(&mut self) {
         self.state = TransportState::Stopped;
         self.current_row = 0;
+        self.arrangement_position = 0;
         self.tick_accumulator = 0.0;
     }
 
@@ -166,9 +234,32 @@ impl Transport {
         self.current_row
     }
 
-    /// Get the current pattern index
+    /// Get the current arrangement position (index into the arrangement Vec)
+    pub fn arrangement_position(&self) -> usize {
+        self.arrangement_position
+    }
+
+    /// Get the current pattern index (alias for arrangement_position for backward compat)
     pub fn current_pattern(&self) -> usize {
-        self.current_pattern
+        self.arrangement_position
+    }
+
+    /// Get the playback mode
+    pub fn playback_mode(&self) -> PlaybackMode {
+        self.playback_mode
+    }
+
+    /// Set the playback mode
+    pub fn set_playback_mode(&mut self, mode: PlaybackMode) {
+        self.playback_mode = mode;
+    }
+
+    /// Toggle between pattern and song playback modes
+    pub fn toggle_playback_mode(&mut self) {
+        self.playback_mode = match self.playback_mode {
+            PlaybackMode::Pattern => PlaybackMode::Song,
+            PlaybackMode::Song => PlaybackMode::Pattern,
+        };
     }
 
     /// Check if loop mode is enabled
@@ -197,6 +288,32 @@ impl Transport {
     /// Get the number of rows
     pub fn num_rows(&self) -> usize {
         self.num_rows
+    }
+
+    /// Set the arrangement length (number of entries in the song arrangement)
+    pub fn set_arrangement_length(&mut self, length: usize) {
+        self.arrangement_length = length.max(1);
+        if self.arrangement_position >= self.arrangement_length {
+            self.arrangement_position = 0;
+        }
+    }
+
+    /// Get the arrangement length
+    pub fn arrangement_length(&self) -> usize {
+        self.arrangement_length
+    }
+
+    /// Jump to a specific arrangement position, resetting the row to 0.
+    /// Returns true if the position was valid.
+    pub fn jump_to_arrangement_position(&mut self, pos: usize) -> bool {
+        if pos < self.arrangement_length {
+            self.arrangement_position = pos;
+            self.current_row = 0;
+            self.tick_accumulator = 0.0;
+            true
+        } else {
+            false
+        }
     }
 
     /// Check if the transport is currently playing
@@ -239,6 +356,8 @@ mod tests {
         assert_eq!(transport.current_row(), 0);
         assert!(transport.loop_enabled());
         assert!(transport.is_stopped());
+        assert_eq!(transport.playback_mode(), PlaybackMode::Pattern);
+        assert_eq!(transport.arrangement_position(), 0);
     }
 
     #[test]
@@ -309,13 +428,13 @@ mod tests {
         let spr = 0.125;
 
         // Not enough time — should not advance
-        assert_eq!(transport.advance(0.05), None);
+        assert_eq!(transport.advance(0.05), AdvanceResult::None);
 
         // Enough time to advance (0.05 + 0.08 = 0.13 > 0.125)
-        assert_eq!(transport.advance(0.08), Some(1));
+        assert_eq!(transport.advance(0.08), AdvanceResult::Row(1));
 
         // Advance again after full row period
-        assert_eq!(transport.advance(spr), Some(2));
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(2));
     }
 
     #[test]
@@ -329,10 +448,10 @@ mod tests {
         let spr = 0.125;
 
         // Advance through all 4 rows (0 -> 1 -> 2 -> 3 -> 0)
-        assert_eq!(transport.advance(spr), Some(1));
-        assert_eq!(transport.advance(spr), Some(2));
-        assert_eq!(transport.advance(spr), Some(3));
-        assert_eq!(transport.advance(spr), Some(0)); // Wraps back to 0
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(1));
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(2));
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(3));
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(0)); // Wraps back to 0
         assert!(transport.is_playing()); // Still playing
     }
 
@@ -346,12 +465,12 @@ mod tests {
 
         let spr = 0.125;
 
-        assert_eq!(transport.advance(spr), Some(1));
-        assert_eq!(transport.advance(spr), Some(2));
-        assert_eq!(transport.advance(spr), Some(3));
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(1));
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(2));
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(3));
 
         // At end of pattern without loop — should stop
-        assert_eq!(transport.advance(spr), None);
+        assert_eq!(transport.advance(spr), AdvanceResult::Stopped);
         assert!(transport.is_stopped());
         assert_eq!(transport.current_row(), 0);
     }
@@ -415,12 +534,12 @@ mod tests {
     fn test_advance_when_not_playing() {
         let mut transport = Transport::new();
         // Stopped
-        assert_eq!(transport.advance(1.0), None);
+        assert_eq!(transport.advance(1.0), AdvanceResult::None);
 
         // Paused
         transport.play();
         transport.pause();
-        assert_eq!(transport.advance(1.0), None);
+        assert_eq!(transport.advance(1.0), AdvanceResult::None);
     }
 
     #[test]
@@ -461,7 +580,222 @@ mod tests {
         transport.set_num_rows(16);
         transport.play();
 
-        assert_eq!(transport.advance(0.06), None); // Not quite enough
-        assert_eq!(transport.advance(0.01), Some(1)); // 0.07 > 0.0625
+        assert_eq!(transport.advance(0.06), AdvanceResult::None); // Not quite enough
+        assert_eq!(transport.advance(0.01), AdvanceResult::Row(1)); // 0.07 > 0.0625
+    }
+
+    // --- Song-level playback tests ---
+
+    #[test]
+    fn test_song_mode_advances_through_arrangement() {
+        let mut transport = Transport::new();
+        transport.set_bpm(120.0);
+        transport.set_num_rows(4); // 4 rows per pattern
+        transport.set_arrangement_length(3); // 3 patterns in arrangement
+        transport.set_playback_mode(PlaybackMode::Song);
+        transport.set_loop_enabled(false);
+        transport.play();
+
+        let spr = 0.125;
+
+        // Pattern 0: rows 0-3
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(1));
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(2));
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(3));
+
+        // End of pattern 0 → advance to pattern 1
+        assert_eq!(transport.advance(spr), AdvanceResult::PatternChange {
+            arrangement_pos: 1,
+            row: 0,
+        });
+        assert_eq!(transport.arrangement_position(), 1);
+        assert_eq!(transport.current_row(), 0);
+
+        // Pattern 1: rows 0-3
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(1));
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(2));
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(3));
+
+        // End of pattern 1 → advance to pattern 2
+        assert_eq!(transport.advance(spr), AdvanceResult::PatternChange {
+            arrangement_pos: 2,
+            row: 0,
+        });
+        assert_eq!(transport.arrangement_position(), 2);
+
+        // Pattern 2: rows 0-3
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(1));
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(2));
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(3));
+
+        // End of arrangement without loop → stop
+        assert_eq!(transport.advance(spr), AdvanceResult::Stopped);
+        assert!(transport.is_stopped());
+    }
+
+    #[test]
+    fn test_song_mode_loops_arrangement() {
+        let mut transport = Transport::new();
+        transport.set_bpm(120.0);
+        transport.set_num_rows(2); // 2 rows per pattern for brevity
+        transport.set_arrangement_length(2); // 2 patterns
+        transport.set_playback_mode(PlaybackMode::Song);
+        transport.set_loop_enabled(true);
+        transport.play();
+
+        let spr = 0.125;
+
+        // Pattern 0
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(1));
+        // End of pattern 0 → pattern 1
+        assert_eq!(transport.advance(spr), AdvanceResult::PatternChange {
+            arrangement_pos: 1,
+            row: 0,
+        });
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(1));
+        // End of arrangement → loop back to pattern 0
+        assert_eq!(transport.advance(spr), AdvanceResult::PatternChange {
+            arrangement_pos: 0,
+            row: 0,
+        });
+        assert!(transport.is_playing());
+        assert_eq!(transport.arrangement_position(), 0);
+        assert_eq!(transport.current_row(), 0);
+    }
+
+    #[test]
+    fn test_song_mode_stop_resets_arrangement_position() {
+        let mut transport = Transport::new();
+        transport.set_num_rows(4);
+        transport.set_arrangement_length(3);
+        transport.set_playback_mode(PlaybackMode::Song);
+        transport.play();
+
+        let spr = 0.125;
+        // Advance past first pattern
+        for _ in 0..4 {
+            transport.advance(spr);
+        }
+        assert_eq!(transport.arrangement_position(), 1);
+
+        transport.stop();
+        assert_eq!(transport.arrangement_position(), 0);
+        assert_eq!(transport.current_row(), 0);
+    }
+
+    #[test]
+    fn test_jump_to_arrangement_position() {
+        let mut transport = Transport::new();
+        transport.set_arrangement_length(5);
+
+        assert!(transport.jump_to_arrangement_position(3));
+        assert_eq!(transport.arrangement_position(), 3);
+        assert_eq!(transport.current_row(), 0);
+
+        // Out of bounds
+        assert!(!transport.jump_to_arrangement_position(5));
+        assert_eq!(transport.arrangement_position(), 3); // unchanged
+    }
+
+    #[test]
+    fn test_jump_to_arrangement_position_resets_row() {
+        let mut transport = Transport::new();
+        transport.set_num_rows(16);
+        transport.set_arrangement_length(4);
+        transport.play();
+
+        let spr = 0.125;
+        // Advance some rows
+        transport.advance(spr);
+        transport.advance(spr);
+        assert_eq!(transport.current_row(), 2);
+
+        // Jump to different arrangement position
+        transport.jump_to_arrangement_position(2);
+        assert_eq!(transport.current_row(), 0);
+        assert_eq!(transport.arrangement_position(), 2);
+    }
+
+    #[test]
+    fn test_toggle_playback_mode() {
+        let mut transport = Transport::new();
+        assert_eq!(transport.playback_mode(), PlaybackMode::Pattern);
+
+        transport.toggle_playback_mode();
+        assert_eq!(transport.playback_mode(), PlaybackMode::Song);
+
+        transport.toggle_playback_mode();
+        assert_eq!(transport.playback_mode(), PlaybackMode::Pattern);
+    }
+
+    #[test]
+    fn test_set_arrangement_length_clamps_position() {
+        let mut transport = Transport::new();
+        transport.set_arrangement_length(5);
+        transport.jump_to_arrangement_position(4);
+        assert_eq!(transport.arrangement_position(), 4);
+
+        // Shrink arrangement — position should reset
+        transport.set_arrangement_length(2);
+        assert_eq!(transport.arrangement_position(), 0);
+    }
+
+    #[test]
+    fn test_pattern_mode_ignores_arrangement() {
+        let mut transport = Transport::new();
+        transport.set_bpm(120.0);
+        transport.set_num_rows(4);
+        transport.set_arrangement_length(3);
+        transport.set_playback_mode(PlaybackMode::Pattern);
+        transport.set_loop_enabled(true);
+        transport.play();
+
+        let spr = 0.125;
+
+        // Advance through one pattern
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(1));
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(2));
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(3));
+        // Loops within pattern, does NOT advance to next arrangement entry
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(0));
+        assert_eq!(transport.arrangement_position(), 0); // unchanged
+    }
+
+    #[test]
+    fn test_song_mode_single_pattern_arrangement_loops() {
+        let mut transport = Transport::new();
+        transport.set_bpm(120.0);
+        transport.set_num_rows(2);
+        transport.set_arrangement_length(1);
+        transport.set_playback_mode(PlaybackMode::Song);
+        transport.set_loop_enabled(true);
+        transport.play();
+
+        let spr = 0.125;
+
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(1));
+        // End of single-entry arrangement → loops back
+        assert_eq!(transport.advance(spr), AdvanceResult::PatternChange {
+            arrangement_pos: 0,
+            row: 0,
+        });
+        assert!(transport.is_playing());
+    }
+
+    #[test]
+    fn test_song_mode_single_pattern_no_loop_stops() {
+        let mut transport = Transport::new();
+        transport.set_bpm(120.0);
+        transport.set_num_rows(2);
+        transport.set_arrangement_length(1);
+        transport.set_playback_mode(PlaybackMode::Song);
+        transport.set_loop_enabled(false);
+        transport.play();
+
+        let spr = 0.125;
+
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(1));
+        assert_eq!(transport.advance(spr), AdvanceResult::Stopped);
+        assert!(transport.is_stopped());
     }
 }
