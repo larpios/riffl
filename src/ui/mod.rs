@@ -180,6 +180,14 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         ));
     }
 
+    if app.live_mode {
+        status_spans.push(Span::raw("  "));
+        status_spans.push(Span::styled(
+            "[LIVE]",
+            Style::default().fg(theme.error_color()).add_modifier(Modifier::BOLD),
+        ));
+    }
+
     let header_text = Paragraph::new(Line::from(status_spans))
         .block(header_block)
         .alignment(Alignment::Center)
