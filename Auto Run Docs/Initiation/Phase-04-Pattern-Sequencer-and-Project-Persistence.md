@@ -45,12 +45,13 @@ This phase adds the ability to create multiple patterns, arrange them into a son
   - Register in `src/ui/mod.rs`
   > ✅ Implemented: `ArrangementView` struct with cursor navigation, pattern append/remove/create operations, `render_arrangement()` function with scroll, playback position highlighting, and pattern note preview. Song and ArrangementView added to App. 23 new tests (415 total pass).
 
-- [ ] Add a view/tab switching system to the App:
+- [x] Add a view/tab switching system to the App:
   - `AppView` enum: `PatternEditor`, `Arrangement`, `InstrumentList`
   - F1 = Pattern Editor, F2 = Arrangement, F3 = Instrument List
   - Each view has its own render function and keybinding context
   - Status bar shows which view is active
   - Update `src/ui/mod.rs` to dispatch to the correct renderer based on active view
+  > ✅ Implemented: `AppView` enum in `src/app.rs`, `SwitchView` action in keybindings, F1/F2/F3 mapped to views (replaced old BPM F1/F2 bindings; `=`/`-` still work for BPM). Render dispatch in `src/ui/mod.rs` routes to pattern editor, arrangement, or instrument list view. Footer shows active view indicator. New `src/ui/instrument_list.rs` renderer. 10 new tests (8 in app, 2 in instrument_list). All 425 tests pass.
 
 - [ ] Implement project save/load using serde and JSON (add `serde`, `serde_json` to Cargo.toml):
   - Derive `Serialize`/`Deserialize` on all data model structs: `Song`, `Pattern`, `Note`, `Pitch`, `Cell`, `Row`, `Track`, `Instrument`

@@ -19,6 +19,17 @@ use crate::ui::file_browser::FileBrowser;
 use crate::ui::modal::Modal;
 use crate::ui::theme::Theme;
 
+/// Which top-level view is currently active.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppView {
+    /// Pattern editor (default) — F1
+    PatternEditor,
+    /// Arrangement / song sequence — F2
+    Arrangement,
+    /// Instrument list — F3
+    InstrumentList,
+}
+
 /// Application state
 pub struct App {
     /// Whether the application should exit
@@ -44,6 +55,9 @@ pub struct App {
 
     /// Names of loaded instruments (indexed by instrument number)
     instrument_names: Vec<String>,
+
+    /// Currently active top-level view
+    pub current_view: AppView,
 
     /// The application's color theme
     pub theme: Theme,
@@ -111,6 +125,7 @@ impl App {
             modal_stack: Vec::new(),
             file_browser,
             instrument_names: vec!["sine440".to_string()],
+            current_view: AppView::PatternEditor,
             theme: Theme::default(),
             audio_engine,
             mixer,
@@ -363,6 +378,11 @@ impl App {
         self.instrument_names.len()
     }
 
+    /// Switch to a different top-level view.
+    pub fn set_view(&mut self, view: AppView) {
+        self.current_view = view;
+    }
+
     /// Open a test modal (for demonstration purposes)
     pub fn open_test_modal(&mut self) {
         let modal = Modal::info(
@@ -377,5 +397,73 @@ impl App {
 impl Default for App {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_view_default_is_pattern_editor() {
+        let app = App::new();
+        assert_eq!(app.current_view, AppView::PatternEditor);
+    }
+
+    #[test]
+    fn test_set_view_to_arrangement() {
+        let mut app = App::new();
+        app.set_view(AppView::Arrangement);
+        assert_eq!(app.current_view, AppView::Arrangement);
+    }
+
+    #[test]
+    fn test_set_view_to_instrument_list() {
+        let mut app = App::new();
+        app.set_view(AppView::InstrumentList);
+        assert_eq!(app.current_view, AppView::InstrumentList);
+    }
+
+    #[test]
+    fn test_set_view_back_to_pattern_editor() {
+        let mut app = App::new();
+        app.set_view(AppView::Arrangement);
+        app.set_view(AppView::PatternEditor);
+        assert_eq!(app.current_view, AppView::PatternEditor);
+    }
+
+    #[test]
+    fn test_set_view_same_view_is_noop() {
+        let mut app = App::new();
+        app.set_view(AppView::PatternEditor);
+        assert_eq!(app.current_view, AppView::PatternEditor);
+    }
+
+    #[test]
+    fn test_app_view_enum_equality() {
+        assert_eq!(AppView::PatternEditor, AppView::PatternEditor);
+        assert_eq!(AppView::Arrangement, AppView::Arrangement);
+        assert_eq!(AppView::InstrumentList, AppView::InstrumentList);
+        assert_ne!(AppView::PatternEditor, AppView::Arrangement);
+        assert_ne!(AppView::Arrangement, AppView::InstrumentList);
+    }
+
+    #[test]
+    fn test_app_view_is_copy() {
+        let view = AppView::Arrangement;
+        let copy = view;
+        assert_eq!(view, copy); // Both still valid (Copy trait)
+    }
+
+    #[test]
+    fn test_view_cycle_all_three() {
+        let mut app = App::new();
+        assert_eq!(app.current_view, AppView::PatternEditor);
+        app.set_view(AppView::Arrangement);
+        assert_eq!(app.current_view, AppView::Arrangement);
+        app.set_view(AppView::InstrumentList);
+        assert_eq!(app.current_view, AppView::InstrumentList);
+        app.set_view(AppView::PatternEditor);
+        assert_eq!(app.current_view, AppView::PatternEditor);
     }
 }

@@ -11,7 +11,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::App;
+use crate::app::{App, AppView};
 use crate::editor::{EditorMode, SubColumn};
 use crate::pattern::note::NoteEvent;
 use crate::transport::TransportState;
@@ -19,6 +19,7 @@ use crate::transport::TransportState;
 // Submodules
 pub mod arrangement;
 pub mod file_browser;
+pub mod instrument_list;
 pub mod layout;
 pub mod modal;
 pub mod theme;
@@ -31,7 +32,36 @@ pub fn render(frame: &mut Frame, app: &App) {
     let (header_area, content_area, footer_area) = layout::create_main_layout(full_area, 3, 1);
 
     render_header(frame, header_area, app);
-    render_content(frame, content_area, app);
+
+    // Dispatch to the correct view renderer based on the active view
+    match app.current_view {
+        AppView::PatternEditor => render_content(frame, content_area, app),
+        AppView::Arrangement => {
+            let playback_pos = if app.transport.is_playing() {
+                Some(app.transport.current_pattern())
+            } else {
+                None
+            };
+            arrangement::render_arrangement(
+                frame,
+                content_area,
+                &app.song,
+                &app.arrangement_view,
+                playback_pos,
+                &app.theme,
+            );
+        }
+        AppView::InstrumentList => {
+            instrument_list::render_instrument_list(
+                frame,
+                content_area,
+                &app.song,
+                app.instrument_names(),
+                &app.theme,
+            );
+        }
+    }
+
     render_footer(frame, footer_area, app);
 
     // Render file browser on top if active
@@ -565,7 +595,18 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         }
     }
 
+    // View indicator
+    let view_label = match app.current_view {
+        AppView::PatternEditor => "F1:PAT",
+        AppView::Arrangement => "F2:ARR",
+        AppView::InstrumentList => "F3:INS",
+    };
     footer_spans.extend([
+        Span::raw(" | "),
+        Span::styled(
+            view_label,
+            Style::default().fg(theme.info_color()).add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" | "),
         Span::styled(
             format!("CH:{} ROW:{:02X}", cursor_channel, cursor_row),
