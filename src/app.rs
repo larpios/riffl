@@ -215,11 +215,10 @@ impl App {
 
     /// Move cursor down (vim: j)
     ///
-    /// Increments the cursor Y position unless already at the maximum.
-    /// This implements vim-style j key navigation.
-    /// Bounded to a maximum of 9 for the demo grid.
+    /// Increments the cursor Y position, bounded to pattern rows.
     pub fn move_down(&mut self) {
-        if self.cursor_y < 9 {
+        let max_row = self.pattern.num_rows().saturating_sub(1) as u16;
+        if self.cursor_y < max_row {
             self.cursor_y = self.cursor_y.saturating_add(1);
         }
     }
@@ -234,11 +233,10 @@ impl App {
 
     /// Move cursor right (vim: l)
     ///
-    /// Increments the cursor X position unless already at the maximum.
-    /// This implements vim-style l key navigation.
-    /// Bounded to a maximum of 9 for the demo grid.
+    /// Increments the cursor X position, bounded to pattern channels.
     pub fn move_right(&mut self) {
-        if self.cursor_x < 9 {
+        let max_ch = self.pattern.num_channels().saturating_sub(1) as u16;
+        if self.cursor_x < max_ch {
             self.cursor_x = self.cursor_x.saturating_add(1);
         }
     }
