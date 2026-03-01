@@ -6,8 +6,10 @@
 pub mod note;
 pub mod pattern;
 pub mod row;
+pub mod track;
 
 // Re-export commonly used types
 pub use note::{Note, NoteEvent, NoteOff, Pitch};
 pub use pattern::Pattern;
 pub use row::{Cell, Effect, Row};
+pub use track::Track;
