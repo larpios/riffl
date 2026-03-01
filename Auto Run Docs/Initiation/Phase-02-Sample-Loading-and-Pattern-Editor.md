@@ -66,7 +66,8 @@ This phase adds real sample loading from disk (WAV, FLAC, OGG via symphonia) and
   - Support note-off to stop a playing sample
   - ✅ Completed: Added `base_note` field to `Sample` (default C-4 = MIDI 48) with `with_base_note()` builder and `base_frequency()` method. Mixer now uses `sample.base_frequency()` instead of hardcoded 440Hz for pitch calculation. Demo sine sample tagged with base_note A-4 (57). 6 new tests: C-4 original rate, higher-note-plays-faster, custom base_note, instrument lookup by index, note-off stops sample, sample base_frequency. All 252 tests pass (0 failures).
 
-- [ ] Run `cargo test` and `cargo build` to verify all code compiles and tests pass
+- [x] Run `cargo test` and `cargo build` to verify all code compiles and tests pass
+  - ✅ All 252 tests pass (175 lib + 252 bin, 0 failures). Build compiles cleanly. 14 non-blocking warnings (unused imports/dead code). 3 doc-tests ignored (hardware-dependent).
 
 - [ ] Manual verification: run `cargo run` and confirm:
   - Can navigate the pattern grid in Normal mode
