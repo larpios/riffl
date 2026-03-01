@@ -108,7 +108,8 @@ impl App {
         }
     }
 
-    /// Generate a sine wave sample at the given frequency and duration
+    /// Generate a sine wave sample at the given frequency and duration.
+    /// The base_note is set to A-4 (MIDI 57) since the demo sine is at 440Hz.
     fn generate_sine_sample(freq: f32, duration_secs: f32, sample_rate: u32) -> Sample {
         let num_samples = (sample_rate as f32 * duration_secs) as usize;
         let mut data = Vec::with_capacity(num_samples);
@@ -117,6 +118,7 @@ impl App {
             data.push((2.0 * std::f32::consts::PI * freq * t).sin());
         }
         Sample::new(data, sample_rate, 1, Some("sine440".to_string()))
+            .with_base_note(57) // A-4 = MIDI 57 (440Hz)
     }
 
     /// Initialize the application and set up the audio callback

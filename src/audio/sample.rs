@@ -4,6 +4,9 @@
 //! in memory. Samples can be loaded from various formats (WAV, FLAC, OGG) and
 //! are stored in a format ready for playback.
 
+/// MIDI note number for C-4 (standard tracker base pitch).
+pub const C4_MIDI: u8 = 48;
+
 /// Represents a loaded audio sample
 #[derive(Clone, Debug)]
 pub struct Sample {
@@ -15,17 +18,39 @@ pub struct Sample {
     channels: u16,
     /// Optional name or filename for this sample
     name: Option<String>,
+    /// MIDI note number of the sample's natural pitch (default: C-4 = 48).
+    /// Playing this note will reproduce the sample at its original rate.
+    base_note: u8,
 }
 
 impl Sample {
-    /// Create a new Sample instance
+    /// Create a new Sample instance with default base note C-4.
     pub fn new(data: Vec<f32>, sample_rate: u32, channels: u16, name: Option<String>) -> Self {
         Self {
             data,
             sample_rate,
             channels,
             name,
+            base_note: C4_MIDI,
         }
+    }
+
+    /// Create a new Sample with an explicit base note (MIDI note number).
+    pub fn with_base_note(mut self, base_note: u8) -> Self {
+        self.base_note = base_note;
+        self
+    }
+
+    /// Get the MIDI note number of this sample's natural pitch.
+    pub fn base_note(&self) -> u8 {
+        self.base_note
+    }
+
+    /// Get the frequency in Hz of this sample's base note.
+    pub fn base_frequency(&self) -> f64 {
+        let a4_midi: i32 = 57; // A-4 = octave 4 * 12 + semitone 9
+        let semitone_diff = self.base_note as i32 - a4_midi;
+        440.0 * 2.0_f64.powf(semitone_diff as f64 / 12.0)
     }
 
     /// Get a reference to the raw audio data
@@ -77,6 +102,7 @@ impl Default for Sample {
             sample_rate: 44100,
             channels: 1,
             name: None,
+            base_note: C4_MIDI,
         }
     }
 }

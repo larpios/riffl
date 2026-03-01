@@ -88,11 +88,9 @@ impl Mixer {
                     if instrument < self.samples.len() {
                         let sample = &self.samples[instrument];
                         // Calculate playback rate to pitch the sample to the desired note.
-                        // We assume the sample is recorded at its natural pitch (e.g., C-4 for
-                        // a typical single-cycle waveform or a specific base note).
-                        // For a simple sine wave sample at 440Hz (A-4), we adjust the rate
-                        // based on the ratio of desired frequency to the sample's base frequency.
-                        let base_freq = 440.0; // Assume samples are tuned to A-4
+                        // The sample's base_note (default C-4) plays at original speed.
+                        // Higher notes play faster, lower notes play slower.
+                        let base_freq = sample.base_frequency();
                         let target_freq = note.frequency();
                         let sample_rate_ratio =
                             sample.sample_rate() as f64 / self.output_sample_rate as f64;
@@ -234,6 +232,7 @@ mod tests {
     use crate::pattern::row::Cell;
 
     /// Create a simple sine wave sample at 440Hz for testing.
+    /// Base note is set to A-4 (MIDI 57) to match the 440Hz content.
     fn make_test_sample(sample_rate: u32, duration_secs: f32) -> Sample {
         let num_samples = (sample_rate as f32 * duration_secs) as usize;
         let mut data = Vec::with_capacity(num_samples);
@@ -243,6 +242,7 @@ mod tests {
             data.push((2.0 * std::f32::consts::PI * freq * t).sin());
         }
         Sample::new(data, sample_rate, 1, Some("sine440".to_string()))
+            .with_base_note(57) // A-4
     }
 
     #[test]
@@ -519,6 +519,180 @@ mod tests {
         let right = output[1];
         assert!(left > 0.0, "Left channel should be positive, got {}", left);
         assert!(right < 0.0, "Right channel should be negative, got {}", right);
+    }
+
+    #[test]
+    fn test_mixer_c4_plays_at_original_rate() {
+        // A sample with default base_note C-4: playing C-4 should give playback_rate ~1.0
+        // (when sample rate matches output rate)
+        let data: Vec<f32> = vec![0.5; 4410];
+        let sample = Sample::new(data, 44100, 1, Some("test".to_string()));
+        assert_eq!(sample.base_note(), 48); // C-4 default
+
+        let mut mixer = Mixer::new(vec![sample], 4, 44100);
+        let mut pattern = Pattern::new(16, 4);
+        // C-4 note should play at original rate
+        pattern.set_note(0, 0, Note::new(Pitch::C, 4, 100, 0));
+
+        mixer.tick(0, &pattern);
+        assert_eq!(mixer.active_voice_count(), 1);
+
+        // Render and verify audio is produced
+        let mut output = vec![0.0f32; 64];
+        mixer.render(&mut output);
+        let has_audio = output.iter().any(|&s| s != 0.0);
+        assert!(has_audio, "C-4 on C-4-based sample should produce audio");
+    }
+
+    #[test]
+    fn test_mixer_higher_note_plays_faster() {
+        // Higher notes should consume the sample faster (higher playback rate)
+        let data: Vec<f32> = (0..4410).map(|i| i as f32 / 4410.0).collect();
+        let sample = Sample::new(data, 44100, 1, None);
+
+        let mut mixer_low = Mixer::new(vec![sample.clone()], 4, 44100);
+        let mut mixer_high = Mixer::new(vec![sample], 4, 44100);
+
+        let mut pattern_low = Pattern::new(16, 4);
+        pattern_low.set_note(0, 0, Note::new(Pitch::C, 3, 100, 0)); // C-3: one octave below base
+
+        let mut pattern_high = Pattern::new(16, 4);
+        pattern_high.set_note(0, 0, Note::new(Pitch::C, 5, 100, 0)); // C-5: one octave above base
+
+        mixer_low.tick(0, &pattern_low);
+        mixer_high.tick(0, &pattern_high);
+
+        // Render same number of frames
+        let mut output_low = vec![0.0f32; 512];
+        let mut output_high = vec![0.0f32; 512];
+        mixer_low.render(&mut output_low);
+        mixer_high.render(&mut output_high);
+
+        // The high-pitched version should have progressed further through the ramp sample,
+        // producing higher average values in the output (since the ramp goes 0→1)
+        let avg_low: f32 = output_low.iter().map(|s| s.abs()).sum::<f32>() / output_low.len() as f32;
+        let avg_high: f32 = output_high.iter().map(|s| s.abs()).sum::<f32>() / output_high.len() as f32;
+        assert!(
+            avg_high > avg_low,
+            "Higher note should progress faster through sample (avg_high={} > avg_low={})",
+            avg_high, avg_low
+        );
+    }
+
+    #[test]
+    fn test_mixer_custom_base_note() {
+        // Sample with base_note set to A-4 (57): playing A-4 should be original rate
+        let data: Vec<f32> = vec![0.8; 4410];
+        let sample = Sample::new(data, 44100, 1, Some("a4_sample".to_string()))
+            .with_base_note(57); // A-4
+
+        let mut mixer = Mixer::new(vec![sample], 4, 44100);
+        let mut pattern = Pattern::new(16, 4);
+        pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+
+        mixer.tick(0, &pattern);
+
+        let mut output = vec![0.0f32; 64];
+        mixer.render(&mut output);
+
+        // At original rate (1.0), each frame reads consecutive samples
+        // All samples are 0.8, so output should be ~0.8 * (100/127)
+        let expected_gain = 100.0 / 127.0;
+        let expected_val = 0.8 * expected_gain;
+        assert!(
+            (output[0] - expected_val).abs() < 0.01,
+            "A-4 on A-4-based sample should play at original rate, got {} expected ~{}",
+            output[0], expected_val
+        );
+    }
+
+    #[test]
+    fn test_mixer_instrument_lookup_by_index() {
+        // Create two distinct samples and verify instrument index selects the right one
+        let sample_a = Sample::new(vec![0.3; 4410], 44100, 1, Some("A".to_string()));
+        let sample_b = Sample::new(vec![0.9; 4410], 44100, 1, Some("B".to_string()));
+
+        let mut mixer = Mixer::new(vec![sample_a, sample_b], 4, 44100);
+
+        let mut pattern = Pattern::new(16, 4);
+        // Channel 0: instrument 0 (quieter sample)
+        pattern.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
+        // Channel 1: instrument 1 (louder sample)
+        pattern.set_note(0, 1, Note::new(Pitch::C, 4, 127, 1));
+
+        mixer.tick(0, &pattern);
+        assert_eq!(mixer.active_voice_count(), 2);
+
+        let mut output_a = vec![0.0f32; 64];
+        let mut output_b = vec![0.0f32; 64];
+
+        // Render with only instrument 0
+        let mut mixer_a = Mixer::new(
+            vec![Sample::new(vec![0.3; 4410], 44100, 1, None)],
+            4, 44100,
+        );
+        let mut pat_a = Pattern::new(16, 4);
+        pat_a.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
+        mixer_a.tick(0, &pat_a);
+        mixer_a.render(&mut output_a);
+
+        // Render with only instrument 1 (louder)
+        let mut mixer_b = Mixer::new(
+            vec![Sample::new(vec![0.0; 1], 44100, 1, None), Sample::new(vec![0.9; 4410], 44100, 1, None)],
+            4, 44100,
+        );
+        let mut pat_b = Pattern::new(16, 4);
+        pat_b.set_note(0, 0, Note::new(Pitch::C, 4, 127, 1));
+        mixer_b.tick(0, &pat_b);
+        mixer_b.render(&mut output_b);
+
+        let peak_a: f32 = output_a.iter().map(|s| s.abs()).fold(0.0, f32::max);
+        let peak_b: f32 = output_b.iter().map(|s| s.abs()).fold(0.0, f32::max);
+
+        assert!(
+            peak_b > peak_a,
+            "Instrument 1 (0.9) should be louder than instrument 0 (0.3): {} vs {}",
+            peak_b, peak_a
+        );
+    }
+
+    #[test]
+    fn test_mixer_note_off_stops_sample() {
+        let sample = Sample::new(vec![0.5; 44100], 44100, 1, None); // 1 second sample
+        let mut mixer = Mixer::new(vec![sample], 4, 44100);
+
+        let mut pattern = Pattern::new(16, 4);
+        pattern.set_note(0, 0, Note::new(Pitch::C, 4, 100, 0));
+        pattern.set_cell(1, 0, Cell::with_note(NoteEvent::Off));
+
+        // Trigger note
+        mixer.tick(0, &pattern);
+        assert_eq!(mixer.active_voice_count(), 1);
+
+        // Render some audio to confirm it's playing
+        let mut output = vec![0.0f32; 64];
+        mixer.render(&mut output);
+        assert!(output.iter().any(|&s| s != 0.0), "Voice should be producing audio");
+
+        // Note off
+        mixer.tick(1, &pattern);
+        assert_eq!(mixer.active_voice_count(), 0);
+
+        // Render after note-off should be silent
+        let mut output2 = vec![0.0f32; 64];
+        mixer.render(&mut output2);
+        assert!(output2.iter().all(|&s| s == 0.0), "After note-off, output should be silent");
+    }
+
+    #[test]
+    fn test_sample_base_frequency() {
+        // C-4 default base note should give ~261.63 Hz
+        let sample = Sample::new(vec![], 44100, 1, None);
+        assert!((sample.base_frequency() - 261.63).abs() < 0.1);
+
+        // A-4 base note should give 440 Hz
+        let sample_a4 = Sample::new(vec![], 44100, 1, None).with_base_note(57);
+        assert!((sample_a4.base_frequency() - 440.0).abs() < 0.01);
     }
 
     #[test]
