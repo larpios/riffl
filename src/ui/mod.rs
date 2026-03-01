@@ -12,6 +12,7 @@ use ratatui::{
 };
 
 use crate::app::App;
+use crate::editor::{EditorMode, SubColumn};
 use crate::pattern::note::NoteEvent;
 
 // Submodules
@@ -135,30 +136,61 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         row_spans.push(Span::styled(format!("  {:02X}  ", row_idx), row_num_style));
 
         // Cells for each channel
+        let mode = app.editor.mode();
+        let sub_column = app.editor.sub_column();
+        let visual_sel = app.editor.visual_selection();
+
         for ch in 0..pattern.num_channels() {
             row_spans.push(Span::styled("│ ", Style::default().fg(theme.text_dimmed)));
 
             let cell = pattern.get_cell(row_idx, ch);
             let is_cursor = cursor_row == row_idx && cursor_channel == ch;
 
-            // Format cell: note (3 chars) + space + inst (2) + space + vol (2) + space + eff (3) = 14 chars
-            let cell_text = if let Some(cell) = cell {
-                format_cell_display(cell)
+            // Check if this cell is inside a visual selection
+            let is_visual_selected = if mode == EditorMode::Visual {
+                visual_sel.map_or(false, |((r0, c0), (r1, c1))| {
+                    row_idx >= r0 && row_idx <= r1 && ch >= c0 && ch <= c1
+                })
             } else {
-                "--- .. .. ...".to_string()
+                false
             };
 
-            let cell_style = if is_cursor {
-                theme.highlight_style()
-            } else if is_playback_row {
-                Style::default().fg(theme.success_color()).add_modifier(Modifier::BOLD)
-            } else if cell.map_or(true, |c| c.is_empty()) {
-                Style::default().fg(theme.text_dimmed)
-            } else {
-                Style::default().fg(theme.text)
-            };
+            // Format cell parts
+            let (note_str, inst_str, vol_str, eff_str) = format_cell_parts(cell);
 
-            row_spans.push(Span::styled(cell_text, cell_style));
+            if is_cursor && mode == EditorMode::Insert {
+                // Insert mode: highlight the active sub-column distinctly
+                let active = theme.insert_cursor_style();
+                let inactive = theme.insert_inactive_style();
+                let (ns, is, vs, es) = match sub_column {
+                    SubColumn::Note       => (active, inactive, inactive, inactive),
+                    SubColumn::Instrument => (inactive, active, inactive, inactive),
+                    SubColumn::Volume     => (inactive, inactive, active, inactive),
+                    SubColumn::Effect     => (inactive, inactive, inactive, active),
+                };
+                row_spans.push(Span::styled(note_str, ns));
+                row_spans.push(Span::styled(" ", inactive));
+                row_spans.push(Span::styled(inst_str, is));
+                row_spans.push(Span::styled(" ", inactive));
+                row_spans.push(Span::styled(vol_str, vs));
+                row_spans.push(Span::styled(" ", inactive));
+                row_spans.push(Span::styled(eff_str, es));
+            } else {
+                // Single style for the whole cell
+                let cell_text = format!("{} {} {} {}", note_str, inst_str, vol_str, eff_str);
+                let cell_style = if is_cursor {
+                    theme.highlight_style()
+                } else if is_visual_selected {
+                    theme.visual_selection_style()
+                } else if is_playback_row {
+                    Style::default().fg(theme.success_color()).add_modifier(Modifier::BOLD)
+                } else if cell.map_or(true, |c| c.is_empty()) {
+                    Style::default().fg(theme.text_dimmed)
+                } else {
+                    Style::default().fg(theme.text)
+                };
+                row_spans.push(Span::styled(cell_text, cell_style));
+            }
             row_spans.push(Span::raw(" "));
         }
 
@@ -170,6 +202,38 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .alignment(Alignment::Left);
 
     frame.render_widget(paragraph, area);
+}
+
+/// Format a cell into its four sub-column parts: (note, instrument, volume, effect).
+fn format_cell_parts(cell: Option<&crate::pattern::row::Cell>) -> (String, String, String, String) {
+    match cell {
+        Some(cell) => {
+            let note_str = match &cell.note {
+                Some(NoteEvent::On(note)) => note.display_str(),
+                Some(NoteEvent::Off) => "===".to_string(),
+                None => "---".to_string(),
+            };
+            let inst_str = match cell.instrument {
+                Some(inst) => format!("{:02X}", inst),
+                None => "..".to_string(),
+            };
+            let vol_str = match cell.volume {
+                Some(vol) => format!("{:02X}", vol),
+                None => "..".to_string(),
+            };
+            let eff_str = match &cell.effect {
+                Some(eff) => format!("{}", eff),
+                None => "...".to_string(),
+            };
+            (note_str, inst_str, vol_str, eff_str)
+        }
+        None => (
+            "---".to_string(),
+            "..".to_string(),
+            "..".to_string(),
+            "...".to_string(),
+        ),
+    }
 }
 
 /// Format a cell for display in the tracker grid
@@ -233,7 +297,7 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
     // Show mode-specific hints
     match mode {
-        crate::editor::EditorMode::Normal => {
+        EditorMode::Normal => {
             footer_spans.extend([
                 Span::styled("i", key_style),
                 Span::raw(":insert "),
@@ -249,7 +313,7 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 Span::raw(":quit"),
             ]);
         }
-        crate::editor::EditorMode::Insert => {
+        EditorMode::Insert => {
             footer_spans.extend([
                 Span::styled("A-G", key_style),
                 Span::raw(":note "),
@@ -263,7 +327,7 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 ),
             ]);
         }
-        crate::editor::EditorMode::Visual => {
+        EditorMode::Visual => {
             footer_spans.extend([
                 Span::styled("hjkl", key_style),
                 Span::raw(":select "),
@@ -346,5 +410,61 @@ mod tests {
             effect: Some(Effect::new(0xC, 0x20)),
         };
         assert_eq!(format_cell_display(&cell), "C#4 01 40 C20");
+    }
+
+    // --- format_cell_parts tests ---
+
+    #[test]
+    fn test_format_cell_parts_none() {
+        let (n, i, v, e) = format_cell_parts(None);
+        assert_eq!(n, "---");
+        assert_eq!(i, "..");
+        assert_eq!(v, "..");
+        assert_eq!(e, "...");
+    }
+
+    #[test]
+    fn test_format_cell_parts_empty() {
+        let cell = crate::pattern::row::Cell::empty();
+        let (n, i, v, e) = format_cell_parts(Some(&cell));
+        assert_eq!(n, "---");
+        assert_eq!(i, "..");
+        assert_eq!(v, "..");
+        assert_eq!(e, "...");
+    }
+
+    #[test]
+    fn test_format_cell_parts_with_note() {
+        use crate::pattern::note::{Note, Pitch};
+        let cell = crate::pattern::row::Cell::with_note(NoteEvent::On(Note::simple(Pitch::C, 4)));
+        let (n, i, v, e) = format_cell_parts(Some(&cell));
+        assert_eq!(n, "C-4");
+        assert_eq!(i, "..");
+        assert_eq!(v, "..");
+        assert_eq!(e, "...");
+    }
+
+    #[test]
+    fn test_format_cell_parts_full() {
+        use crate::pattern::note::{Note, Pitch};
+        use crate::pattern::row::Effect;
+        let cell = crate::pattern::row::Cell {
+            note: Some(NoteEvent::On(Note::new(Pitch::CSharp, 4, 100, 1))),
+            instrument: Some(1),
+            volume: Some(0x40),
+            effect: Some(Effect::new(0xC, 0x20)),
+        };
+        let (n, i, v, e) = format_cell_parts(Some(&cell));
+        assert_eq!(n, "C#4");
+        assert_eq!(i, "01");
+        assert_eq!(v, "40");
+        assert_eq!(e, "C20");
+    }
+
+    #[test]
+    fn test_format_cell_parts_note_off() {
+        let cell = crate::pattern::row::Cell::with_note(NoteEvent::Off);
+        let (n, _i, _v, _e) = format_cell_parts(Some(&cell));
+        assert_eq!(n, "===");
     }
 }

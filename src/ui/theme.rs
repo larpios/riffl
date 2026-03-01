@@ -144,7 +144,7 @@ impl Theme {
         Style::default().fg(self.border_color())
     }
 
-    /// Get the style for highlighted/selected elements
+    /// Get the style for highlighted/selected elements (Normal mode cursor)
     ///
     /// Returns the style used for cursor position, selected items,
     /// and other highlighted UI elements.
@@ -155,6 +155,42 @@ impl Theme {
         Style::default()
             .fg(Color::Black)
             .bg(self.bg_highlight)
+    }
+
+    /// Get the style for Insert mode cursor (active sub-column)
+    ///
+    /// Uses a distinct color from Normal mode to make the mode visually obvious.
+    ///
+    /// # Returns
+    /// Style configured for Insert mode active sub-column
+    pub fn insert_cursor_style(&self) -> Style {
+        Style::default()
+            .fg(Color::Black)
+            .bg(Color::LightMagenta)
+            .add_modifier(Modifier::BOLD)
+    }
+
+    /// Get the style for Insert mode cursor (inactive sub-columns)
+    ///
+    /// Shows the rest of the cell in a muted highlight to indicate the cursor row
+    /// without drawing attention away from the active sub-column.
+    ///
+    /// # Returns
+    /// Style configured for Insert mode inactive sub-columns
+    pub fn insert_inactive_style(&self) -> Style {
+        Style::default()
+            .fg(Color::White)
+            .bg(Color::Indexed(236)) // dark gray background
+    }
+
+    /// Get the style for Visual mode selection highlight
+    ///
+    /// # Returns
+    /// Style configured for selected cells in Visual mode
+    pub fn visual_selection_style(&self) -> Style {
+        Style::default()
+            .fg(Color::White)
+            .bg(Color::Blue)
     }
 
     /// Get the style for normal text content
@@ -265,6 +301,30 @@ mod tests {
         let style = theme.highlight_style();
         assert_eq!(style.fg, Some(Color::Black));
         assert_eq!(style.bg, Some(Color::Yellow));
+    }
+
+    #[test]
+    fn test_insert_cursor_style() {
+        let theme = Theme::default();
+        let style = theme.insert_cursor_style();
+        assert_eq!(style.fg, Some(Color::Black));
+        assert_eq!(style.bg, Some(Color::LightMagenta));
+    }
+
+    #[test]
+    fn test_insert_inactive_style() {
+        let theme = Theme::default();
+        let style = theme.insert_inactive_style();
+        assert_eq!(style.fg, Some(Color::White));
+        assert_eq!(style.bg, Some(Color::Indexed(236)));
+    }
+
+    #[test]
+    fn test_visual_selection_style() {
+        let theme = Theme::default();
+        let style = theme.visual_selection_style();
+        assert_eq!(style.fg, Some(Color::White));
+        assert_eq!(style.bg, Some(Color::Blue));
     }
 
     #[test]
