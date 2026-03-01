@@ -1,5 +1,6 @@
 mod app;
 mod audio;
+mod dsl;
 mod editor;
 mod export;
 mod input;
