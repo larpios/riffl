@@ -24,7 +24,7 @@ use ratatui::{
 };
 
 use app::App;
-use editor::Editor;
+use editor::{Editor, EditorMode, SubColumn};
 use input::keybindings::{map_key_to_action, Action};
 
 /// Tick rate for the event loop (16ms ≈ 60 FPS for smooth BPM timing)
@@ -125,6 +125,20 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
     // Escape during playback: stop transport (in addition to normal Escape behavior)
     if key.code == crossterm::event::KeyCode::Esc && !app.transport.is_stopped() {
         app.stop();
+    }
+
+    // In Insert mode on the Effect sub-column, intercept hex digit keys (0-9, A-F)
+    // for effect entry instead of their normal note/octave mappings.
+    if app.editor.mode() == EditorMode::Insert
+        && app.editor.sub_column() == SubColumn::Effect
+        && key.modifiers == crossterm::event::KeyModifiers::NONE
+    {
+        if let crossterm::event::KeyCode::Char(c) = key.code {
+            if let Some(digit) = hex_char_to_digit(c) {
+                app.editor.enter_effect_digit(digit);
+                return;
+            }
+        }
     }
 
     let action = map_key_to_action(key, app.editor_mode());
@@ -266,5 +280,50 @@ fn handle_file_browser_key(app: &mut App, key: KeyEvent) {
             }
         }
         _ => {}
+    }
+}
+
+/// Convert a character to a hex digit value (0-15), or None if not a hex digit.
+fn hex_char_to_digit(c: char) -> Option<u8> {
+    match c {
+        '0'..='9' => Some(c as u8 - b'0'),
+        'a'..='f' => Some(c as u8 - b'a' + 10),
+        'A'..='F' => Some(c as u8 - b'A' + 10),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hex_char_to_digit_numerics() {
+        assert_eq!(hex_char_to_digit('0'), Some(0));
+        assert_eq!(hex_char_to_digit('5'), Some(5));
+        assert_eq!(hex_char_to_digit('9'), Some(9));
+    }
+
+    #[test]
+    fn test_hex_char_to_digit_lowercase() {
+        assert_eq!(hex_char_to_digit('a'), Some(10));
+        assert_eq!(hex_char_to_digit('c'), Some(12));
+        assert_eq!(hex_char_to_digit('f'), Some(15));
+    }
+
+    #[test]
+    fn test_hex_char_to_digit_uppercase() {
+        assert_eq!(hex_char_to_digit('A'), Some(10));
+        assert_eq!(hex_char_to_digit('C'), Some(12));
+        assert_eq!(hex_char_to_digit('F'), Some(15));
+    }
+
+    #[test]
+    fn test_hex_char_to_digit_invalid() {
+        assert_eq!(hex_char_to_digit('g'), None);
+        assert_eq!(hex_char_to_digit('G'), None);
+        assert_eq!(hex_char_to_digit('z'), None);
+        assert_eq!(hex_char_to_digit(' '), None);
+        assert_eq!(hex_char_to_digit('#'), None);
     }
 }
