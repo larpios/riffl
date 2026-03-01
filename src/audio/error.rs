@@ -15,6 +15,8 @@ pub enum AudioError {
     UnsupportedConfig(String),
     /// Stream error
     StreamError(String),
+    /// Error loading a sample file
+    LoadError(String),
 }
 
 impl fmt::Display for AudioError {
@@ -25,6 +27,7 @@ impl fmt::Display for AudioError {
             AudioError::NoDefaultDevice => write!(f, "no default audio device available"),
             AudioError::UnsupportedConfig(msg) => write!(f, "unsupported configuration: {}", msg),
             AudioError::StreamError(msg) => write!(f, "stream error: {}", msg),
+            AudioError::LoadError(msg) => write!(f, "sample load error: {}", msg),
         }
     }
 }
