@@ -18,6 +18,7 @@ use crate::transport::{PlaybackMode, TransportState};
 
 // Submodules
 pub mod arrangement;
+pub mod code_editor;
 pub mod export_dialog;
 pub mod file_browser;
 pub mod instrument_list;
