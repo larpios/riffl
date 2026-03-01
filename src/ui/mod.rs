@@ -7,7 +7,7 @@ use ratatui::{
     layout::Alignment,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
 
@@ -16,6 +16,7 @@ use crate::editor::{EditorMode, SubColumn};
 use crate::pattern::note::NoteEvent;
 
 // Submodules
+pub mod file_browser;
 pub mod layout;
 pub mod modal;
 pub mod theme;
@@ -30,6 +31,11 @@ pub fn render(frame: &mut Frame, app: &App) {
     render_header(frame, header_area, app);
     render_content(frame, content_area, app);
     render_footer(frame, footer_area, app);
+
+    // Render file browser on top if active
+    if app.has_file_browser() {
+        render_file_browser(frame, full_area, app);
+    }
 
     // Render modal on top if one is active
     if let Some(active_modal) = app.current_modal() {
@@ -276,6 +282,103 @@ fn calculate_scroll_offset(cursor_row: usize, visible_rows: usize, total_rows: u
     }
 }
 
+/// Render the file browser overlay for loading audio samples
+fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let theme = &app.theme;
+    let browser = &app.file_browser;
+
+    // Create centered area (70% width, 60% height)
+    let browser_area = layout::create_centered_rect(area, 70, 60);
+    frame.render_widget(Clear, browser_area);
+
+    let dir_display = browser.directory().display().to_string();
+    let title = format!(" Load Sample - {} ", dir_display);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.info_color()))
+        .title(title)
+        .title_alignment(Alignment::Left)
+        .style(Style::default().bg(Color::Black));
+
+    let inner_area = block.inner(browser_area);
+    frame.render_widget(block, browser_area);
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    if browser.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "  No audio files found (.wav, .flac, .ogg)",
+            Style::default().fg(theme.text_dimmed),
+        )));
+        lines.push(Line::from(""));
+    } else {
+        // Calculate scroll for the file list
+        let visible_rows = inner_area.height.saturating_sub(3) as usize; // reserve header + footer
+        let selected = browser.selected_index();
+        let total = browser.entries().len();
+        let scroll_offset = if visible_rows >= total {
+            0
+        } else if selected < visible_rows / 2 {
+            0
+        } else if selected + visible_rows / 2 >= total {
+            total.saturating_sub(visible_rows)
+        } else {
+            selected.saturating_sub(visible_rows / 2)
+        };
+
+        // Header line
+        lines.push(Line::from(Span::styled(
+            format!("  {} file(s) found", total),
+            Style::default().fg(theme.text_secondary),
+        )));
+        lines.push(Line::from(""));
+
+        for idx in scroll_offset..(scroll_offset + visible_rows).min(total) {
+            let entry = &browser.entries()[idx];
+            let name = entry
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("???");
+
+            let is_selected = idx == selected;
+            let prefix = if is_selected { "▸ " } else { "  " };
+            let text = format!("{}{}", prefix, name);
+
+            let style = if is_selected {
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(theme.info_color())
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(theme.text)
+            };
+
+            lines.push(Line::from(Span::styled(text, style)));
+        }
+    }
+
+    // Footer with instructions
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        Span::styled("j/k", Style::default().fg(theme.success_color())),
+        Span::raw(":navigate  "),
+        Span::styled("Enter", Style::default().fg(theme.success_color())),
+        Span::raw(":load  "),
+        Span::styled("Esc", Style::default().fg(theme.error_color())),
+        Span::raw(":cancel"),
+    ]));
+
+    let paragraph = Paragraph::new(lines)
+        .alignment(Alignment::Left)
+        .wrap(Wrap { trim: false })
+        .style(theme.text_style());
+
+    frame.render_widget(paragraph, inner_area);
+}
+
 /// Render the footer with mode indicator and keybindings
 fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let theme = &app.theme;
@@ -303,6 +406,8 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 Span::raw(":insert "),
                 Span::styled("v", key_style),
                 Span::raw(":visual "),
+                Span::styled("o", key_style),
+                Span::raw(":load "),
                 Span::styled("space", key_style),
                 Span::raw(":play "),
                 Span::styled("x", key_style),
@@ -344,6 +449,11 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         Span::styled(
             format!("CH:{} ROW:{:02X}", cursor_channel, cursor_row),
             Style::default().fg(theme.primary),
+        ),
+        Span::raw(" "),
+        Span::styled(
+            format!("Inst:{}", app.instrument_count()),
+            Style::default().fg(theme.text_secondary),
         ),
     ]);
 

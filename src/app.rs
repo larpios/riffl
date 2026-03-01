@@ -8,10 +8,11 @@ use std::time::Instant;
 
 use anyhow::Result;
 
-use crate::audio::{AudioEngine, Mixer, Sample};
+use crate::audio::{AudioEngine, Mixer, Sample, load_sample};
 use crate::editor::{Editor, EditorMode};
 use crate::pattern::note::Pitch;
 use crate::pattern::{Note, Pattern};
+use crate::ui::file_browser::FileBrowser;
 use crate::ui::modal::Modal;
 use crate::ui::theme::Theme;
 
@@ -28,6 +29,12 @@ pub struct App {
 
     /// Stack of active modal dialogs (top modal is last in Vec)
     modal_stack: Vec<Modal>,
+
+    /// File browser for loading audio samples
+    pub file_browser: FileBrowser,
+
+    /// Names of loaded instruments (indexed by instrument number)
+    instrument_names: Vec<String>,
 
     /// The application's color theme
     pub theme: Theme,
@@ -80,11 +87,17 @@ impl App {
 
         let editor = Editor::new(pattern);
 
+        // Initialize file browser at current working directory
+        let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let file_browser = FileBrowser::new(&cwd);
+
         Self {
             should_quit: false,
             running: false,
             editor,
             modal_stack: Vec::new(),
+            file_browser,
+            instrument_names: vec!["sine440".to_string()],
             theme: Theme::default(),
             audio_engine,
             mixer,
@@ -214,6 +227,59 @@ impl App {
     /// Check if any modal is currently open
     pub fn has_modal(&self) -> bool {
         !self.modal_stack.is_empty()
+    }
+
+    /// Open the file browser overlay
+    pub fn open_file_browser(&mut self) {
+        self.file_browser.open();
+    }
+
+    /// Close the file browser overlay
+    pub fn close_file_browser(&mut self) {
+        self.file_browser.close();
+    }
+
+    /// Check if the file browser is open
+    pub fn has_file_browser(&self) -> bool {
+        self.file_browser.active
+    }
+
+    /// Load the currently selected file from the file browser.
+    /// Returns Ok(instrument_index) on success, or an error message.
+    pub fn load_selected_sample(&mut self) -> Result<usize, String> {
+        let path = self.file_browser.selected_path()
+            .ok_or_else(|| "No file selected".to_string())?
+            .to_path_buf();
+
+        let output_sample_rate = self.audio_engine
+            .as_ref()
+            .map(|e| e.sample_rate())
+            .unwrap_or(44100);
+
+        let sample = load_sample(&path, output_sample_rate)
+            .map_err(|e| format!("Failed to load: {}", e))?;
+
+        let name = sample.name().unwrap_or("unknown").to_string();
+
+        let idx = if let Ok(mut mixer) = self.mixer.lock() {
+            let idx = mixer.add_sample(sample);
+            idx
+        } else {
+            return Err("Failed to lock mixer".to_string());
+        };
+
+        self.instrument_names.push(name);
+        Ok(idx)
+    }
+
+    /// Get the list of loaded instrument names.
+    pub fn instrument_names(&self) -> &[String] {
+        &self.instrument_names
+    }
+
+    /// Get loaded instrument count.
+    pub fn instrument_count(&self) -> usize {
+        self.instrument_names.len()
     }
 
     /// Open a test modal (for demonstration purposes)
