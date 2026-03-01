@@ -214,6 +214,14 @@ impl Editor {
         self.cursor_row = self.pattern.num_rows().saturating_sub(1);
     }
 
+    /// Move cursor to the next track (channel), wrapping around to 0.
+    pub fn next_track(&mut self) {
+        let max_ch = self.pattern.num_channels();
+        self.cursor_channel = (self.cursor_channel + 1) % max_ch;
+        // Reset sub-column to Note when jumping tracks
+        self.sub_column = SubColumn::Note;
+    }
+
     // --- Mode Transitions ---
 
     /// Enter Insert mode.
@@ -815,6 +823,37 @@ mod tests {
         editor.enter_note(Pitch::C);
         // Should stay at last row since move_down can't go past it
         assert_eq!(editor.cursor_row(), 1);
+    }
+
+    // --- Next Track (Tab) Tests ---
+
+    #[test]
+    fn test_next_track() {
+        let mut editor = test_editor(); // 4 channels
+        assert_eq!(editor.cursor_channel(), 0);
+        editor.next_track();
+        assert_eq!(editor.cursor_channel(), 1);
+        editor.next_track();
+        assert_eq!(editor.cursor_channel(), 2);
+        editor.next_track();
+        assert_eq!(editor.cursor_channel(), 3);
+    }
+
+    #[test]
+    fn test_next_track_wraps() {
+        let mut editor = test_editor(); // 4 channels
+        editor.cursor_channel = 3;
+        editor.next_track();
+        assert_eq!(editor.cursor_channel(), 0);
+    }
+
+    #[test]
+    fn test_next_track_resets_sub_column() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.sub_column = SubColumn::Volume;
+        editor.next_track();
+        assert_eq!(editor.sub_column(), SubColumn::Note);
     }
 
     #[test]

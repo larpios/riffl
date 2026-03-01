@@ -57,7 +57,7 @@ This phase builds proper transport controls (play, stop, pause, BPM adjustment, 
   - Pan law: equal-power panning (-3dB center)
   - *Completed: Added `ChannelMix` struct with per-channel left/right gains and audibility state. Added `update_tracks()` method to sync mixer state from Track metadata. Equal-power panning implemented via `pan_gains()` using cosine/sine pan law (-3dB at center, preserving L²+R²=1.0). `tick()` now syncs track state and filters muted/non-soloed channels (won't trigger voices on inaudible channels). `render()` applies per-track volume × pan gains to each voice's output, and advances muted voices without mixing audio to keep them in sync. App's `update()` now syncs track state every frame during playback for real-time mute/solo responsiveness. 12 new tests cover: pan gains (center, left, right, equal-power property), muted channel silence, solo filtering, track volume scaling, pan stereo isolation, update_tracks sync, muted voice position advancement, and multi-track independent mixing. All 312 tests pass.*
 
-- [ ] Update the pattern editor UI for multi-track display:
+- [x] Update the pattern editor UI for multi-track display:
   - Show track headers above each channel column with track number and instrument name
   - Tab key moves cursor between tracks (channels)
   - Add keybindings for track operations:
@@ -65,6 +65,7 @@ This phase builds proper transport controls (play, stop, pause, BPM adjustment, 
     - `S` (in normal mode): toggle solo on current track
   - Visual indicators for muted (dimmed text) and soloed (highlighted header) tracks
   - Horizontal scrolling if pattern has more tracks than fit on screen
+  - *Completed: Track headers now show track names (truncated to 7 chars) with [M]/[S] indicators. Soloed track headers get yellow highlight background, muted headers are dimmed. Tab key navigates between tracks (wraps around), resetting sub-column to Note. Shift+M toggles mute, Shift+S toggles solo on current track. Muted/inaudible track cells render with dimmed text. Horizontal scrolling implemented — calculates visible channels based on terminal width (17 chars per channel + 6 for row numbers) and auto-scrolls to keep cursor channel centered. Footer updated with Tab:track, M:mute, S:solo hints. 7 new tests added (4 keybinding, 3 editor). All 309 non-hardware tests pass.*
 
 - [ ] Run `cargo test` and `cargo build` to verify everything compiles and passes
 
