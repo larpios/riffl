@@ -39,6 +39,7 @@ pub enum Action {
     Confirm,
     Cancel,
     OpenModal,
+    OpenFileBrowser,
     TogglePlay,
 
     /// No action (unmapped key)
@@ -88,6 +89,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         KeyCode::Char('q') => Action::Quit,
         KeyCode::Char(' ') => Action::TogglePlay,
         KeyCode::Char('m') => Action::OpenModal,
+        KeyCode::Char('o') | KeyCode::F(5) => Action::OpenFileBrowser,
         KeyCode::Enter => Action::Confirm,
         KeyCode::Esc => Action::Cancel,
 
@@ -340,6 +342,18 @@ mod tests {
         assert!(!is_navigation_action(Action::EnterInsertMode));
         assert!(!is_navigation_action(Action::EnterNote('c')));
         assert!(!is_navigation_action(Action::None));
+    }
+
+    #[test]
+    fn test_normal_mode_open_file_browser_o() {
+        let o = KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(o, EditorMode::Normal), Action::OpenFileBrowser);
+    }
+
+    #[test]
+    fn test_normal_mode_open_file_browser_f5() {
+        let f5 = KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(f5, EditorMode::Normal), Action::OpenFileBrowser);
     }
 
     #[test]
