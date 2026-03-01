@@ -150,6 +150,20 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         }
         Action::SetOctave(oct) => app.editor.set_octave(oct),
 
+        // Clipboard
+        Action::Copy => app.editor.copy(),
+        Action::Paste => app.editor.paste(),
+        Action::Cut => app.editor.cut(),
+
+        // Transpose
+        Action::TransposeUp => app.editor.transpose_selection(1),
+        Action::TransposeDown => app.editor.transpose_selection(-1),
+        Action::TransposeOctaveUp => app.editor.transpose_selection(12),
+        Action::TransposeOctaveDown => app.editor.transpose_selection(-12),
+
+        // Interpolation
+        Action::Interpolate => app.editor.interpolate(),
+
         // Editing
         Action::DeleteCell => app.editor.delete_cell(),
         Action::InsertRow => app.editor.insert_row(),

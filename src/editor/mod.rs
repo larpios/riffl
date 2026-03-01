@@ -7,6 +7,49 @@ use crate::pattern::note::{Note, NoteEvent, Pitch};
 use crate::pattern::pattern::Pattern;
 use crate::pattern::row::Cell;
 
+/// Clipboard for copy/paste operations.
+///
+/// Stores a rectangular grid of cells copied from the pattern.
+/// A single cell copy is a 1×1 grid.
+#[derive(Debug, Clone)]
+pub struct Clipboard {
+    /// 2D grid of cells: rows × columns.
+    cells: Vec<Vec<Cell>>,
+    /// Number of rows in the clipboard.
+    num_rows: usize,
+    /// Number of columns (channels) in the clipboard.
+    num_cols: usize,
+}
+
+impl Clipboard {
+    /// Create a clipboard from a rectangular grid of cells.
+    pub fn new(cells: Vec<Vec<Cell>>) -> Self {
+        let num_rows = cells.len();
+        let num_cols = cells.first().map_or(0, |r| r.len());
+        Self { cells, num_rows, num_cols }
+    }
+
+    /// Create a clipboard holding a single cell.
+    pub fn single(cell: Cell) -> Self {
+        Self::new(vec![vec![cell]])
+    }
+
+    /// Check if the clipboard is empty.
+    pub fn is_empty(&self) -> bool {
+        self.num_rows == 0 || self.num_cols == 0
+    }
+
+    /// Get the dimensions of the clipboard content.
+    pub fn dimensions(&self) -> (usize, usize) {
+        (self.num_rows, self.num_cols)
+    }
+
+    /// Get a reference to the cell grid.
+    pub fn cells(&self) -> &Vec<Vec<Cell>> {
+        &self.cells
+    }
+}
+
 /// The sub-column within a channel that the cursor is on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SubColumn {
@@ -95,6 +138,8 @@ pub struct Editor {
     history: Vec<HistoryEntry>,
     /// Visual mode anchor (row, channel) — starting position of selection.
     visual_anchor: Option<(usize, usize)>,
+    /// Clipboard for copy/paste operations.
+    clipboard: Option<Clipboard>,
 }
 
 impl Editor {
@@ -110,6 +155,7 @@ impl Editor {
             current_instrument: 0,
             history: Vec::new(),
             visual_anchor: None,
+            clipboard: None,
         }
     }
 
@@ -361,6 +407,171 @@ impl Editor {
         let max_ch = self.pattern.num_channels().saturating_sub(1);
         self.cursor_row = self.cursor_row.min(max_row);
         self.cursor_channel = self.cursor_channel.min(max_ch);
+    }
+
+    // --- Clipboard Operations ---
+
+    /// Copy the current cell (Normal mode) or visual selection (Visual mode) to the clipboard.
+    pub fn copy(&mut self) {
+        if self.mode == EditorMode::Visual {
+            if let Some(((r0, c0), (r1, c1))) = self.visual_selection() {
+                let mut rows = Vec::new();
+                for r in r0..=r1 {
+                    let mut row = Vec::new();
+                    for c in c0..=c1 {
+                        let cell = self.pattern.get_cell(r, c)
+                            .copied()
+                            .unwrap_or_else(Cell::empty);
+                        row.push(cell);
+                    }
+                    rows.push(row);
+                }
+                self.clipboard = Some(Clipboard::new(rows));
+            }
+        } else {
+            // Copy single cell at cursor
+            let cell = self.pattern.get_cell(self.cursor_row, self.cursor_channel)
+                .copied()
+                .unwrap_or_else(Cell::empty);
+            self.clipboard = Some(Clipboard::single(cell));
+        }
+    }
+
+    /// Paste clipboard contents at the current cursor position.
+    pub fn paste(&mut self) {
+        let clipboard = match &self.clipboard {
+            Some(cb) if !cb.is_empty() => cb.clone(),
+            _ => return,
+        };
+        self.save_history();
+        let (num_rows, num_cols) = clipboard.dimensions();
+        for dr in 0..num_rows {
+            for dc in 0..num_cols {
+                let target_row = self.cursor_row + dr;
+                let target_ch = self.cursor_channel + dc;
+                if target_row < self.pattern.num_rows() && target_ch < self.pattern.num_channels() {
+                    self.pattern.set_cell(target_row, target_ch, clipboard.cells()[dr][dc]);
+                }
+            }
+        }
+    }
+
+    /// Cut: copy the selection to clipboard and clear the source cells.
+    /// In Visual mode, copies and clears the selection. Otherwise copies and clears the current cell.
+    pub fn cut(&mut self) {
+        self.copy();
+        self.save_history();
+        if self.mode == EditorMode::Visual {
+            if let Some(((r0, c0), (r1, c1))) = self.visual_selection() {
+                for r in r0..=r1 {
+                    for c in c0..=c1 {
+                        self.pattern.clear_cell(r, c);
+                    }
+                }
+            }
+        } else {
+            self.pattern.clear_cell(self.cursor_row, self.cursor_channel);
+        }
+    }
+
+    /// Transpose notes in the visual selection by a number of semitones.
+    /// Only affects cells that contain NoteEvent::On events.
+    /// If any note would go out of range, it is left unchanged.
+    pub fn transpose_selection(&mut self, semitones: i32) {
+        let selection = if self.mode == EditorMode::Visual {
+            self.visual_selection()
+        } else {
+            // Single cell at cursor
+            Some(((self.cursor_row, self.cursor_channel), (self.cursor_row, self.cursor_channel)))
+        };
+
+        let ((r0, c0), (r1, c1)) = match selection {
+            Some(s) => s,
+            None => return,
+        };
+
+        self.save_history();
+        for r in r0..=r1 {
+            for c in c0..=c1 {
+                if let Some(cell) = self.pattern.get_cell(r, c).copied() {
+                    if let Some(NoteEvent::On(note)) = cell.note {
+                        if let Some(transposed) = note.transpose(semitones) {
+                            let new_cell = Cell {
+                                note: Some(NoteEvent::On(transposed)),
+                                ..cell
+                            };
+                            self.pattern.set_cell(r, c, new_cell);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Interpolate volume values in the visual selection.
+    ///
+    /// For each channel column in the selection, finds the first and last cells
+    /// that have volume values, then fills intermediate cells with linearly
+    /// interpolated volume values.
+    pub fn interpolate(&mut self) {
+        let selection = if self.mode == EditorMode::Visual {
+            self.visual_selection()
+        } else {
+            return; // Interpolation only makes sense with a selection
+        };
+
+        let ((r0, c0), (r1, c1)) = match selection {
+            Some(s) if s.0 .0 != s.1 .0 => s, // need at least 2 rows
+            _ => return,
+        };
+
+        self.save_history();
+
+        for c in c0..=c1 {
+            // Find first and last volume values in this column
+            let mut first_vol: Option<(usize, u8)> = None;
+            let mut last_vol: Option<(usize, u8)> = None;
+
+            for r in r0..=r1 {
+                if let Some(cell) = self.pattern.get_cell(r, c) {
+                    if let Some(vol) = cell.volume {
+                        if first_vol.is_none() {
+                            first_vol = Some((r, vol));
+                        }
+                        last_vol = Some((r, vol));
+                    }
+                }
+            }
+
+            // Need both endpoints to interpolate
+            let (start_row, start_val) = match first_vol {
+                Some(v) => v,
+                None => continue,
+            };
+            let (end_row, end_val) = match last_vol {
+                Some(v) if v.0 > start_row => v,
+                _ => continue,
+            };
+
+            let span = (end_row - start_row) as f64;
+            for r in start_row..=end_row {
+                let t = (r - start_row) as f64 / span;
+                let interpolated = start_val as f64 + t * (end_val as f64 - start_val as f64);
+                let vol = interpolated.round() as u8;
+                if let Some(cell) = self.pattern.get_cell(r, c).copied() {
+                    let new_cell = Cell {
+                        volume: Some(vol),
+                        ..cell
+                    };
+                    self.pattern.set_cell(r, c, new_cell);
+                }
+            }
+        }
+    }
+
+    /// Get a reference to the clipboard.
+    pub fn clipboard(&self) -> Option<&Clipboard> {
+        self.clipboard.as_ref()
     }
 }
 
@@ -879,5 +1090,390 @@ mod tests {
         // Should be able to undo the delete
         assert!(editor.undo());
         assert!(!editor.pattern().get_cell(0, 0).unwrap().is_empty());
+    }
+
+    // --- Clipboard Tests ---
+
+    #[test]
+    fn test_clipboard_single_cell() {
+        let cell = Cell::with_note(NoteEvent::On(Note::simple(Pitch::C, 4)));
+        let cb = Clipboard::single(cell);
+        assert_eq!(cb.dimensions(), (1, 1));
+        assert!(!cb.is_empty());
+    }
+
+    #[test]
+    fn test_clipboard_rectangular() {
+        let cells = vec![
+            vec![Cell::empty(), Cell::empty()],
+            vec![Cell::empty(), Cell::empty()],
+            vec![Cell::empty(), Cell::empty()],
+        ];
+        let cb = Clipboard::new(cells);
+        assert_eq!(cb.dimensions(), (3, 2));
+    }
+
+    #[test]
+    fn test_copy_single_cell_normal_mode() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.enter_note(Pitch::C);
+        editor.cursor_row = 0;
+        editor.enter_normal_mode();
+        editor.copy();
+        let cb = editor.clipboard().unwrap();
+        assert_eq!(cb.dimensions(), (1, 1));
+        assert!(cb.cells()[0][0].note.is_some());
+    }
+
+    #[test]
+    fn test_copy_visual_selection() {
+        let mut editor = test_editor();
+        // Set some notes
+        editor.enter_insert_mode();
+        editor.enter_note(Pitch::C); // row 0 → moves to row 1
+        editor.enter_note(Pitch::E); // row 1 → moves to row 2
+        editor.enter_normal_mode();
+        // Select rows 0-1, channel 0
+        editor.cursor_row = 0;
+        editor.enter_visual_mode();
+        editor.cursor_row = 1;
+        editor.copy();
+        let cb = editor.clipboard().unwrap();
+        assert_eq!(cb.dimensions(), (2, 1));
+        // First cell should have C-4
+        match cb.cells()[0][0].note {
+            Some(NoteEvent::On(note)) => assert_eq!(note.pitch, Pitch::C),
+            _ => panic!("Expected C note"),
+        }
+        // Second cell should have E-4
+        match cb.cells()[1][0].note {
+            Some(NoteEvent::On(note)) => assert_eq!(note.pitch, Pitch::E),
+            _ => panic!("Expected E note"),
+        }
+    }
+
+    #[test]
+    fn test_paste_single_cell() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.enter_note(Pitch::C);
+        editor.cursor_row = 0;
+        editor.enter_normal_mode();
+        editor.copy();
+        // Paste at row 5
+        editor.cursor_row = 5;
+        editor.paste();
+        match editor.pattern().get_cell(5, 0).unwrap().note {
+            Some(NoteEvent::On(note)) => assert_eq!(note.pitch, Pitch::C),
+            _ => panic!("Expected C note at paste location"),
+        }
+    }
+
+    #[test]
+    fn test_paste_rectangular() {
+        let mut editor = Editor::new(Pattern::new(16, 4));
+        // Place notes at (0,0) and (1,1)
+        editor.enter_insert_mode();
+        editor.enter_note(Pitch::C); // (0,0)
+        editor.cursor_row = 1;
+        editor.cursor_channel = 1;
+        editor.enter_note(Pitch::E); // (1,1)
+        editor.enter_normal_mode();
+        // Select from (0,0) to (1,1)
+        editor.cursor_row = 0;
+        editor.cursor_channel = 0;
+        editor.enter_visual_mode();
+        editor.cursor_row = 1;
+        editor.cursor_channel = 1;
+        editor.copy();
+        // Paste at (4,2)
+        editor.enter_normal_mode();
+        editor.cursor_row = 4;
+        editor.cursor_channel = 2;
+        editor.paste();
+        // Verify pasted content
+        match editor.pattern().get_cell(4, 2).unwrap().note {
+            Some(NoteEvent::On(note)) => assert_eq!(note.pitch, Pitch::C),
+            _ => panic!("Expected C at (4,2)"),
+        }
+        match editor.pattern().get_cell(5, 3).unwrap().note {
+            Some(NoteEvent::On(note)) => assert_eq!(note.pitch, Pitch::E),
+            _ => panic!("Expected E at (5,3)"),
+        }
+    }
+
+    #[test]
+    fn test_paste_clips_to_pattern_bounds() {
+        let mut editor = Editor::new(Pattern::new(4, 2));
+        editor.enter_insert_mode();
+        editor.enter_note(Pitch::C);
+        editor.cursor_row = 0;
+        editor.enter_normal_mode();
+        editor.copy();
+        // Paste at last row — should work
+        editor.cursor_row = 3;
+        editor.paste();
+        assert!(editor.pattern().get_cell(3, 0).unwrap().note.is_some());
+    }
+
+    #[test]
+    fn test_paste_without_clipboard_is_noop() {
+        let mut editor = test_editor();
+        let original = editor.pattern().clone();
+        editor.paste();
+        // Pattern should be unchanged
+        for r in 0..original.num_rows() {
+            for c in 0..original.num_channels() {
+                assert_eq!(
+                    editor.pattern().get_cell(r, c).unwrap().is_empty(),
+                    original.get_cell(r, c).unwrap().is_empty()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_cut_normal_mode() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.enter_note(Pitch::C);
+        editor.cursor_row = 0;
+        editor.enter_normal_mode();
+        editor.cut();
+        // Cell should be cleared
+        assert!(editor.pattern().get_cell(0, 0).unwrap().is_empty());
+        // Clipboard should have the note
+        let cb = editor.clipboard().unwrap();
+        assert!(cb.cells()[0][0].note.is_some());
+    }
+
+    #[test]
+    fn test_cut_visual_mode() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.enter_note(Pitch::C);
+        editor.enter_note(Pitch::E);
+        editor.enter_normal_mode();
+        editor.cursor_row = 0;
+        editor.enter_visual_mode();
+        editor.cursor_row = 1;
+        editor.cut();
+        // Both cells should be cleared
+        assert!(editor.pattern().get_cell(0, 0).unwrap().is_empty());
+        assert!(editor.pattern().get_cell(1, 0).unwrap().is_empty());
+        // Clipboard should have both notes
+        let cb = editor.clipboard().unwrap();
+        assert_eq!(cb.dimensions(), (2, 1));
+    }
+
+    #[test]
+    fn test_cut_is_undoable() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.enter_note(Pitch::C);
+        editor.cursor_row = 0;
+        editor.enter_normal_mode();
+        editor.cut();
+        assert!(editor.pattern().get_cell(0, 0).unwrap().is_empty());
+        editor.undo(); // undo the clear
+        assert!(!editor.pattern().get_cell(0, 0).unwrap().is_empty());
+    }
+
+    // --- Transpose Tests ---
+
+    #[test]
+    fn test_transpose_single_cell_up() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.enter_note(Pitch::C);
+        editor.cursor_row = 0;
+        editor.enter_normal_mode();
+        editor.transpose_selection(1);
+        match editor.pattern().get_cell(0, 0).unwrap().note {
+            Some(NoteEvent::On(note)) => {
+                assert_eq!(note.pitch, Pitch::CSharp);
+                assert_eq!(note.octave, 4);
+            }
+            _ => panic!("Expected transposed note"),
+        }
+    }
+
+    #[test]
+    fn test_transpose_visual_selection() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.enter_note(Pitch::C);
+        editor.enter_note(Pitch::E);
+        editor.enter_normal_mode();
+        editor.cursor_row = 0;
+        editor.enter_visual_mode();
+        editor.cursor_row = 1;
+        editor.transpose_selection(12); // up one octave
+        match editor.pattern().get_cell(0, 0).unwrap().note {
+            Some(NoteEvent::On(note)) => {
+                assert_eq!(note.pitch, Pitch::C);
+                assert_eq!(note.octave, 5);
+            }
+            _ => panic!("Expected C-5"),
+        }
+        match editor.pattern().get_cell(1, 0).unwrap().note {
+            Some(NoteEvent::On(note)) => {
+                assert_eq!(note.pitch, Pitch::E);
+                assert_eq!(note.octave, 5);
+            }
+            _ => panic!("Expected E-5"),
+        }
+    }
+
+    #[test]
+    fn test_transpose_skips_empty_cells() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.enter_note(Pitch::C);
+        editor.enter_normal_mode();
+        // Select rows 0-3 (row 0 has note, rest empty)
+        editor.cursor_row = 0;
+        editor.enter_visual_mode();
+        editor.cursor_row = 3;
+        editor.transpose_selection(1);
+        // Row 0 should be transposed
+        assert!(editor.pattern().get_cell(0, 0).unwrap().note.is_some());
+        // Row 1-3 should still be empty
+        assert!(editor.pattern().get_cell(1, 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_transpose_out_of_range_leaves_note_unchanged() {
+        let mut editor = Editor::new(Pattern::new(4, 1));
+        editor.enter_insert_mode();
+        // Enter B-9 (highest possible)
+        editor.set_octave(9);
+        editor.enter_note(Pitch::B);
+        editor.cursor_row = 0;
+        editor.enter_normal_mode();
+        editor.transpose_selection(1); // can't go higher
+        match editor.pattern().get_cell(0, 0).unwrap().note {
+            Some(NoteEvent::On(note)) => {
+                assert_eq!(note.pitch, Pitch::B);
+                assert_eq!(note.octave, 9); // unchanged
+            }
+            _ => panic!("Expected unchanged note"),
+        }
+    }
+
+    #[test]
+    fn test_transpose_is_undoable() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.enter_note(Pitch::C);
+        editor.cursor_row = 0;
+        editor.enter_normal_mode();
+        editor.transpose_selection(1);
+        editor.undo();
+        match editor.pattern().get_cell(0, 0).unwrap().note {
+            Some(NoteEvent::On(note)) => assert_eq!(note.pitch, Pitch::C),
+            _ => panic!("Expected original C"),
+        }
+    }
+
+    // --- Interpolation Tests ---
+
+    #[test]
+    fn test_interpolate_volume_ramp() {
+        let mut editor = Editor::new(Pattern::new(8, 1));
+        // Set volume at row 0 = 0, row 4 = 100
+        editor.pattern_mut().set_cell(0, 0, Cell {
+            volume: Some(0),
+            ..Cell::empty()
+        });
+        editor.pattern_mut().set_cell(4, 0, Cell {
+            volume: Some(100),
+            ..Cell::empty()
+        });
+        // Select rows 0-4
+        editor.cursor_row = 0;
+        editor.enter_visual_mode();
+        editor.cursor_row = 4;
+        editor.interpolate();
+        // Check interpolated values
+        assert_eq!(editor.pattern().get_cell(0, 0).unwrap().volume, Some(0));
+        assert_eq!(editor.pattern().get_cell(1, 0).unwrap().volume, Some(25));
+        assert_eq!(editor.pattern().get_cell(2, 0).unwrap().volume, Some(50));
+        assert_eq!(editor.pattern().get_cell(3, 0).unwrap().volume, Some(75));
+        assert_eq!(editor.pattern().get_cell(4, 0).unwrap().volume, Some(100));
+    }
+
+    #[test]
+    fn test_interpolate_requires_visual_mode() {
+        let mut editor = Editor::new(Pattern::new(8, 1));
+        editor.pattern_mut().set_cell(0, 0, Cell {
+            volume: Some(0),
+            ..Cell::empty()
+        });
+        editor.pattern_mut().set_cell(4, 0, Cell {
+            volume: Some(100),
+            ..Cell::empty()
+        });
+        // Normal mode — interpolate should be a no-op
+        editor.interpolate();
+        assert!(editor.pattern().get_cell(2, 0).unwrap().volume.is_none());
+    }
+
+    #[test]
+    fn test_interpolate_needs_two_endpoints() {
+        let mut editor = Editor::new(Pattern::new(8, 1));
+        // Only one volume value
+        editor.pattern_mut().set_cell(0, 0, Cell {
+            volume: Some(50),
+            ..Cell::empty()
+        });
+        editor.cursor_row = 0;
+        editor.enter_visual_mode();
+        editor.cursor_row = 4;
+        editor.interpolate();
+        // Middle rows should still have no volume
+        assert!(editor.pattern().get_cell(2, 0).unwrap().volume.is_none());
+    }
+
+    #[test]
+    fn test_interpolate_is_undoable() {
+        let mut editor = Editor::new(Pattern::new(8, 1));
+        editor.pattern_mut().set_cell(0, 0, Cell {
+            volume: Some(0),
+            ..Cell::empty()
+        });
+        editor.pattern_mut().set_cell(4, 0, Cell {
+            volume: Some(100),
+            ..Cell::empty()
+        });
+        editor.cursor_row = 0;
+        editor.enter_visual_mode();
+        editor.cursor_row = 4;
+        editor.interpolate();
+        assert_eq!(editor.pattern().get_cell(2, 0).unwrap().volume, Some(50));
+        editor.undo();
+        assert!(editor.pattern().get_cell(2, 0).unwrap().volume.is_none());
+    }
+
+    #[test]
+    fn test_interpolate_descending_ramp() {
+        let mut editor = Editor::new(Pattern::new(4, 1));
+        editor.pattern_mut().set_cell(0, 0, Cell {
+            volume: Some(120),
+            ..Cell::empty()
+        });
+        editor.pattern_mut().set_cell(3, 0, Cell {
+            volume: Some(0),
+            ..Cell::empty()
+        });
+        editor.cursor_row = 0;
+        editor.enter_visual_mode();
+        editor.cursor_row = 3;
+        editor.interpolate();
+        assert_eq!(editor.pattern().get_cell(0, 0).unwrap().volume, Some(120));
+        assert_eq!(editor.pattern().get_cell(1, 0).unwrap().volume, Some(80));
+        assert_eq!(editor.pattern().get_cell(2, 0).unwrap().volume, Some(40));
+        assert_eq!(editor.pattern().get_cell(3, 0).unwrap().volume, Some(0));
     }
 }
