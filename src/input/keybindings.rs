@@ -80,6 +80,7 @@ pub enum Action {
     ToggleSplitView,
     ExecuteScript,
     OpenTemplates,
+    ToggleLiveMode,
 
     // Application
     Quit,
@@ -122,6 +123,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             KeyCode::Char('e') => Action::OpenExportDialog,
             KeyCode::Char('\\') => Action::ToggleSplitView,
             KeyCode::Char('t') => Action::OpenTemplates,
+            KeyCode::Char('l') => Action::ToggleLiveMode,
             KeyCode::Enter => Action::ExecuteScript,
             _ => Action::None,
         };
@@ -213,6 +215,7 @@ fn map_insert_mode(key: KeyEvent) -> Action {
         return match key.code {
             KeyCode::Char('\\') => Action::ToggleSplitView,
             KeyCode::Char('t') => Action::OpenTemplates,
+            KeyCode::Char('l') => Action::ToggleLiveMode,
             KeyCode::Enter => Action::ExecuteScript,
             _ => Action::None,
         };
@@ -779,5 +782,19 @@ mod tests {
     fn test_insert_mode_ctrl_t_opens_templates() {
         let ctrl_t = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL);
         assert_eq!(map_key_to_action(ctrl_t, EditorMode::Insert), Action::OpenTemplates);
+    }
+
+    // --- Live Mode Keybinding Tests ---
+
+    #[test]
+    fn test_normal_mode_ctrl_l_toggles_live_mode() {
+        let ctrl_l = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::CONTROL);
+        assert_eq!(map_key_to_action(ctrl_l, EditorMode::Normal), Action::ToggleLiveMode);
+    }
+
+    #[test]
+    fn test_insert_mode_ctrl_l_toggles_live_mode() {
+        let ctrl_l = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::CONTROL);
+        assert_eq!(map_key_to_action(ctrl_l, EditorMode::Insert), Action::ToggleLiveMode);
     }
 }
