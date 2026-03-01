@@ -12,6 +12,7 @@ use crate::audio::{AudioEngine, Mixer, Sample, load_sample};
 use crate::editor::{Editor, EditorMode};
 use crate::pattern::note::Pitch;
 use crate::pattern::{Note, Pattern};
+use crate::transport::{Transport, TransportState};
 use crate::ui::file_browser::FileBrowser;
 use crate::ui::modal::Modal;
 use crate::ui::theme::Theme;
@@ -45,17 +46,11 @@ pub struct App {
     /// Shared mixer for audio rendering (shared with audio callback thread)
     mixer: Arc<Mutex<Mixer>>,
 
-    /// Whether audio is currently playing
-    pub is_playing: bool,
+    /// Transport system for playback control (play/pause/stop, BPM, looping)
+    pub transport: Transport,
 
-    /// Current playback row position
-    pub current_row: usize,
-
-    /// Tempo in beats per minute
-    pub bpm: f64,
-
-    /// Timestamp of the last row advance (for BPM timing)
-    last_row_time: Instant,
+    /// Timestamp of the last update call (for delta time calculation)
+    last_update: Instant,
 }
 
 impl App {
@@ -85,6 +80,10 @@ impl App {
             output_sample_rate,
         )));
 
+        // Create transport and sync with pattern size
+        let mut transport = Transport::new();
+        transport.set_num_rows(pattern.num_rows());
+
         let editor = Editor::new(pattern);
 
         // Initialize file browser at current working directory
@@ -101,10 +100,8 @@ impl App {
             theme: Theme::default(),
             audio_engine,
             mixer,
-            is_playing: false,
-            current_row: 0,
-            bpm: 120.0,
-            last_row_time: Instant::now(),
+            transport,
+            last_update: Instant::now(),
         }
     }
 
@@ -148,18 +145,31 @@ impl App {
 
     /// Update application state, advancing playback row based on BPM timing
     pub fn update(&mut self) -> Result<()> {
-        if self.is_playing {
-            let seconds_per_row = 15.0 / self.bpm;
-            let elapsed = self.last_row_time.elapsed().as_secs_f64();
+        let now = Instant::now();
+        let delta = now.duration_since(self.last_update).as_secs_f64();
+        self.last_update = now;
 
-            if elapsed >= seconds_per_row {
-                self.last_row_time = Instant::now();
-                self.current_row = (self.current_row + 1) % self.editor.pattern().num_rows();
-                if let Ok(mut mixer) = self.mixer.lock() {
-                    mixer.tick(self.current_row, self.editor.pattern());
-                }
+        // Keep transport in sync with pattern size
+        self.transport.set_num_rows(self.editor.pattern().num_rows());
+
+        let was_playing = self.transport.is_playing();
+
+        if let Some(row) = self.transport.advance(delta) {
+            if let Ok(mut mixer) = self.mixer.lock() {
+                mixer.tick(row, self.editor.pattern());
             }
         }
+
+        // Handle auto-stop (loop disabled, reached end)
+        if was_playing && self.transport.is_stopped() {
+            if let Some(ref mut engine) = self.audio_engine {
+                let _ = engine.pause();
+            }
+            if let Ok(mut mixer) = self.mixer.lock() {
+                mixer.stop_all();
+            }
+        }
+
         Ok(())
     }
 
@@ -175,8 +185,8 @@ impl App {
 
     /// Handle application quit with audio cleanup
     pub fn quit(&mut self) {
-        if self.is_playing {
-            self.is_playing = false;
+        if !self.transport.is_stopped() {
+            self.transport.stop();
             if let Ok(mut mixer) = self.mixer.lock() {
                 mixer.stop_all();
             }
@@ -188,27 +198,60 @@ impl App {
         self.running = false;
     }
 
-    /// Toggle audio playback on/off
+    /// Toggle audio playback between play and pause
     pub fn toggle_play(&mut self) {
-        if self.is_playing {
-            self.is_playing = false;
-            if let Some(ref mut engine) = self.audio_engine {
-                let _ = engine.pause();
+        match self.transport.state() {
+            TransportState::Stopped => {
+                self.transport.play();
+                // Trigger first row
+                if let Ok(mut mixer) = self.mixer.lock() {
+                    mixer.tick(self.transport.current_row(), self.editor.pattern());
+                }
+                if let Some(ref mut engine) = self.audio_engine {
+                    let _ = engine.start();
+                }
             }
-            if let Ok(mut mixer) = self.mixer.lock() {
-                mixer.stop_all();
+            TransportState::Playing => {
+                self.transport.pause();
+                if let Some(ref mut engine) = self.audio_engine {
+                    let _ = engine.pause();
+                }
+                if let Ok(mut mixer) = self.mixer.lock() {
+                    mixer.stop_all();
+                }
             }
-        } else {
-            self.is_playing = true;
-            self.current_row = 0;
-            self.last_row_time = Instant::now();
-            if let Ok(mut mixer) = self.mixer.lock() {
-                mixer.tick(self.current_row, self.editor.pattern());
-            }
-            if let Some(ref mut engine) = self.audio_engine {
-                let _ = engine.start();
+            TransportState::Paused => {
+                self.transport.play();
+                // Resume — trigger current row
+                if let Ok(mut mixer) = self.mixer.lock() {
+                    mixer.tick(self.transport.current_row(), self.editor.pattern());
+                }
+                if let Some(ref mut engine) = self.audio_engine {
+                    let _ = engine.start();
+                }
             }
         }
+    }
+
+    /// Stop playback and reset position to row 0
+    pub fn stop(&mut self) {
+        self.transport.stop();
+        if let Some(ref mut engine) = self.audio_engine {
+            let _ = engine.pause();
+        }
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.stop_all();
+        }
+    }
+
+    /// Adjust BPM by a delta value
+    pub fn adjust_bpm(&mut self, delta: f64) {
+        self.transport.adjust_bpm(delta);
+    }
+
+    /// Toggle loop mode on/off
+    pub fn toggle_loop(&mut self) {
+        self.transport.toggle_loop();
     }
 
     /// Open a modal dialog by adding it to the modal stack

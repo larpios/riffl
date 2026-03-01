@@ -24,7 +24,7 @@ This phase builds proper transport controls (play, stop, pause, BPM adjustment, 
 - [x] Run `cargo test` for transport and fix any failures
   - *Completed: All 267 tests pass (0 failures), including all 15 transport-specific tests. No fixes needed. Warnings present (unused imports, dead code) but no errors.*
 
-- [ ] Integrate the transport into App, replacing the ad-hoc playback state:
+- [x] Integrate the transport into App, replacing the ad-hoc playback state:
   - Replace `is_playing`, `current_row`, `bpm` fields in `App` with a `Transport` instance
   - Update the main event loop to call `transport.advance(delta_time)` each tick
   - When transport advances to a new row, trigger the mixer to process that row
@@ -33,6 +33,7 @@ This phase builds proper transport controls (play, stop, pause, BPM adjustment, 
     - Escape (during playback): stop and return cursor to row 0
     - `+`/`-` or `F1`/`F2`: adjust BPM up/down by 1 (hold shift for ±10)
     - `L`: toggle loop mode
+  - *Completed: Replaced `is_playing`, `current_row`, `bpm`, `last_row_time` fields with `Transport` instance and `last_update: Instant` for delta-time calculation. `update()` now calls `transport.advance(delta)` and handles auto-stop when loop is disabled. Added `toggle_play()` with proper Stopped→Playing, Playing→Paused, Paused→Playing transitions. Added `stop()`, `adjust_bpm()`, `toggle_loop()` methods. New Action variants: `Stop`, `BpmUp`, `BpmDown`, `BpmUpLarge`, `BpmDownLarge`, `ToggleLoop`. Keybindings: `=`/`+`/F2 for BPM +1, `-`/F1 for BPM -1, Shift+F1/F2 for ±10, Shift+L for loop toggle. Escape during playback stops transport. Updated UI header to show PLAYING/PAUSED/STOPPED state with distinct colors and [LOOP] indicator. All 273 tests pass.*
 
 - [ ] Update the UI to display transport information:
   - Header bar shows: BPM value, play/pause/stop state icon, current row/total rows, loop indicator
