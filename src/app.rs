@@ -6,12 +6,15 @@
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use std::path::PathBuf;
+
 use anyhow::Result;
 
 use crate::audio::{AudioEngine, Mixer, Sample, load_sample};
 use crate::editor::{Editor, EditorMode};
 use crate::pattern::note::Pitch;
 use crate::pattern::{Note, Pattern};
+use crate::project;
 use crate::song::Song;
 use crate::transport::{Transport, TransportState};
 use crate::ui::arrangement::ArrangementView;
@@ -55,6 +58,9 @@ pub struct App {
 
     /// Names of loaded instruments (indexed by instrument number)
     instrument_names: Vec<String>,
+
+    /// Path to the current project file (None if unsaved)
+    pub project_path: Option<PathBuf>,
 
     /// Currently active top-level view
     pub current_view: AppView,
@@ -125,6 +131,7 @@ impl App {
             modal_stack: Vec::new(),
             file_browser,
             instrument_names: vec!["sine440".to_string()],
+            project_path: None,
             current_view: AppView::PatternEditor,
             theme: Theme::default(),
             audio_engine,
@@ -381,6 +388,64 @@ impl App {
     /// Switch to a different top-level view.
     pub fn set_view(&mut self, view: AppView) {
         self.current_view = view;
+    }
+
+    /// Save the current project to disk.
+    ///
+    /// If a project path is set, saves to that path. Otherwise saves to
+    /// "untitled.trs" in the current directory.
+    pub fn save_project(&mut self) {
+        let path = self.project_path.clone()
+            .unwrap_or_else(|| PathBuf::from("untitled.trs"));
+
+        match project::save_project(&path, &self.song) {
+            Ok(()) => {
+                self.project_path = Some(path.clone());
+                self.open_modal(Modal::info(
+                    "Project Saved".to_string(),
+                    format!("Saved to: {}", path.display()),
+                ));
+            }
+            Err(e) => {
+                self.open_modal(Modal::error(
+                    "Save Failed".to_string(),
+                    format!("{}", e),
+                ));
+            }
+        }
+    }
+
+    /// Load a project from disk.
+    ///
+    /// If a project path is set, loads from that path. Otherwise uses the
+    /// file browser. This replaces the current song data.
+    pub fn load_project(&mut self, path: &std::path::Path) {
+        match project::load_project(path) {
+            Ok(song) => {
+                // Update the editor with the first pattern from the loaded song
+                let pattern = if !song.patterns.is_empty() {
+                    song.patterns[0].clone()
+                } else {
+                    Pattern::default()
+                };
+                self.editor = Editor::new(pattern);
+                self.song = song;
+                self.project_path = Some(path.to_path_buf());
+                self.arrangement_view = ArrangementView::new();
+                self.transport.stop();
+
+                self.open_modal(Modal::info(
+                    "Project Loaded".to_string(),
+                    format!("Loaded: {}", path.display()),
+                ));
+            }
+            Err(e) => {
+                self.open_modal(Modal::error(
+                    "Load Failed".to_string(),
+                    format!("{}", e),
+                ));
+            }
+        }
     }
 
     /// Open a test modal (for demonstration purposes)

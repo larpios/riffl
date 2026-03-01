@@ -53,20 +53,23 @@ This phase adds the ability to create multiple patterns, arrange them into a son
   - Update `src/ui/mod.rs` to dispatch to the correct renderer based on active view
   > ✅ Implemented: `AppView` enum in `src/app.rs`, `SwitchView` action in keybindings, F1/F2/F3 mapped to views (replaced old BPM F1/F2 bindings; `=`/`-` still work for BPM). Render dispatch in `src/ui/mod.rs` routes to pattern editor, arrangement, or instrument list view. Footer shows active view indicator. New `src/ui/instrument_list.rs` renderer. 10 new tests (8 in app, 2 in instrument_list). All 425 tests pass.
 
-- [ ] Implement project save/load using serde and JSON (add `serde`, `serde_json` to Cargo.toml):
+- [x] Implement project save/load using serde and JSON (add `serde`, `serde_json` to Cargo.toml):
   - Derive `Serialize`/`Deserialize` on all data model structs: `Song`, `Pattern`, `Note`, `Pitch`, `Cell`, `Row`, `Track`, `Instrument`
   - `save_project(path: &Path, song: &Song) -> Result<()>` — serialize song to JSON and write to `.trs` file
   - `load_project(path: &Path) -> Result<Song>` — read and deserialize from `.trs` file
   - Sample data is NOT embedded — store file paths as references. Samples are loaded from their original paths on project load.
   - Put save/load functions in `src/project.rs`
   - Keybindings: `Ctrl+S` saves, `Ctrl+O` opens a file picker modal to load
+  > ✅ Implemented: Added `serde` 1.0 (with derive feature) and `serde_json` 1.0 to Cargo.toml. Derived `Serialize`/`Deserialize` on all data model structs: `Pitch`, `Note`, `NoteOff`, `NoteEvent`, `Effect`, `Cell`, `Track`, `Pattern`, `Instrument`, `Song`. Also added `PartialEq` to `Track`, `Pattern`, `Instrument`, `Song` for round-trip equality testing. Created `src/project.rs` with `save_project()` and `load_project()` functions using pretty-printed JSON. Added `SaveProject`/`LoadProject` action variants to keybindings with Ctrl+S/Ctrl+O mappings (normal mode). App gains `project_path` field, `save_project()` and `load_project()` methods with modal feedback. 10 new tests in project module. All 435 tests pass.
 
-- [ ] Write tests for project save/load:
+- [x] Write tests for project save/load:
   - Test round-trip: create a Song with patterns and notes, save to temp file, load back, assert equality
   - Test that all note/pattern data survives serialization
   - Test error handling for corrupt/missing files
+  > ✅ 10 tests in `src/project.rs`: round-trip default song, round-trip with notes/instruments/arrangement, data integrity (min/max values, note-off, partial cells), missing file error, corrupt JSON error, empty file error, incomplete JSON error, file creation, overwrite behavior, track metadata round-trip. All pass.
 
-- [ ] Run `cargo test` and `cargo build` to verify everything compiles
+- [x] Run `cargo test` and `cargo build` to verify everything compiles
+  > ✅ All 435 tests pass. `cargo build` succeeds (only pre-existing warnings).
 
 - [ ] Update the transport to support song-level playback:
   - When playing a song, advance through the arrangement sequence (pattern after pattern)
