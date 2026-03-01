@@ -6,12 +6,13 @@
 
 use super::note::{Note, NoteEvent};
 use super::row::{Cell, Row, new_row};
+use super::track::{Track, any_track_soloed};
 
 /// Default number of rows in a pattern.
 pub const DEFAULT_ROWS: usize = 64;
 
 /// Default number of channels in a pattern.
-pub const DEFAULT_CHANNELS: usize = 4;
+pub const DEFAULT_CHANNELS: usize = 8;
 
 /// A tracker pattern containing a grid of cells.
 ///
@@ -24,6 +25,8 @@ pub struct Pattern {
     rows: Vec<Row>,
     /// Number of channels per row.
     channels: usize,
+    /// Track metadata for each channel.
+    tracks: Vec<Track>,
 }
 
 impl Pattern {
@@ -32,7 +35,8 @@ impl Pattern {
         assert!(num_rows > 0, "Pattern must have at least 1 row");
         assert!(channels > 0, "Pattern must have at least 1 channel");
         let rows = (0..num_rows).map(|_| new_row(channels)).collect();
-        Self { rows, channels }
+        let tracks = (1..=channels).map(Track::with_number).collect();
+        Self { rows, channels, tracks }
     }
 
     /// Get the number of rows in this pattern.
@@ -112,10 +116,42 @@ impl Pattern {
     pub fn get_row(&self, row: usize) -> Option<&Row> {
         self.rows.get(row)
     }
+
+    /// Get a reference to all tracks.
+    pub fn tracks(&self) -> &[Track] {
+        &self.tracks
+    }
+
+    /// Get a mutable reference to all tracks.
+    pub fn tracks_mut(&mut self) -> &mut [Track] {
+        &mut self.tracks
+    }
+
+    /// Get a reference to a specific track.
+    pub fn get_track(&self, channel: usize) -> Option<&Track> {
+        self.tracks.get(channel)
+    }
+
+    /// Get a mutable reference to a specific track.
+    pub fn get_track_mut(&mut self, channel: usize) -> Option<&mut Track> {
+        self.tracks.get_mut(channel)
+    }
+
+    /// Check if any track is soloed.
+    pub fn any_track_soloed(&self) -> bool {
+        any_track_soloed(&self.tracks)
+    }
+
+    /// Check if a specific channel is audible (considering mute/solo state).
+    pub fn is_channel_audible(&self, channel: usize) -> bool {
+        self.tracks.get(channel)
+            .map(|t| t.is_audible(self.any_track_soloed()))
+            .unwrap_or(false)
+    }
 }
 
 impl Default for Pattern {
-    /// Create a default pattern (64 rows, 4 channels).
+    /// Create a default pattern (64 rows, 8 channels).
     fn default() -> Self {
         Self::new(DEFAULT_ROWS, DEFAULT_CHANNELS)
     }
@@ -131,7 +167,8 @@ mod tests {
     fn test_pattern_default() {
         let pat = Pattern::default();
         assert_eq!(pat.num_rows(), 64);
-        assert_eq!(pat.num_channels(), 4);
+        assert_eq!(pat.num_channels(), 8);
+        assert_eq!(pat.tracks().len(), 8);
     }
 
     #[test]
@@ -403,5 +440,97 @@ mod tests {
         assert_eq!(retrieved.instrument, Some(3));
         assert_eq!(retrieved.volume, Some(0x7F));
         assert_eq!(retrieved.effect, Some(Effect::new(0xC, 0x40)));
+    }
+
+    // --- Track integration tests ---
+
+    #[test]
+    fn test_pattern_tracks_created_with_channels() {
+        let pat = Pattern::new(16, 4);
+        assert_eq!(pat.tracks().len(), 4);
+        assert_eq!(pat.tracks()[0].name, "Track 1");
+        assert_eq!(pat.tracks()[3].name, "Track 4");
+    }
+
+    #[test]
+    fn test_pattern_8_channel_support() {
+        let pat = Pattern::new(16, 8);
+        assert_eq!(pat.num_channels(), 8);
+        assert_eq!(pat.tracks().len(), 8);
+        for i in 0..8 {
+            assert!(pat.get_cell(0, i).is_some());
+            assert!(pat.get_track(i).is_some());
+        }
+        assert!(pat.get_cell(0, 8).is_none());
+        assert!(pat.get_track(8).is_none());
+    }
+
+    #[test]
+    fn test_pattern_get_track() {
+        let pat = Pattern::new(16, 4);
+        assert!(pat.get_track(0).is_some());
+        assert!(pat.get_track(3).is_some());
+        assert!(pat.get_track(4).is_none());
+    }
+
+    #[test]
+    fn test_pattern_get_track_mut() {
+        let mut pat = Pattern::new(16, 4);
+        if let Some(track) = pat.get_track_mut(0) {
+            track.name = "Kick".to_string();
+            track.set_volume(0.8);
+        }
+        assert_eq!(pat.get_track(0).unwrap().name, "Kick");
+        assert_eq!(pat.get_track(0).unwrap().volume, 0.8);
+    }
+
+    #[test]
+    fn test_pattern_mute_solo_logic() {
+        let mut pat = Pattern::new(16, 4);
+
+        // All channels initially audible
+        assert!(!pat.any_track_soloed());
+        for i in 0..4 {
+            assert!(pat.is_channel_audible(i));
+        }
+
+        // Mute channel 1
+        pat.get_track_mut(1).unwrap().toggle_mute();
+        assert!(pat.is_channel_audible(0));
+        assert!(!pat.is_channel_audible(1));
+        assert!(pat.is_channel_audible(2));
+
+        // Solo channel 2
+        pat.get_track_mut(2).unwrap().toggle_solo();
+        assert!(pat.any_track_soloed());
+        assert!(!pat.is_channel_audible(0)); // not soloed
+        assert!(!pat.is_channel_audible(1)); // muted
+        assert!(pat.is_channel_audible(2));  // soloed
+        assert!(!pat.is_channel_audible(3)); // not soloed
+    }
+
+    #[test]
+    fn test_pattern_tracks_mut() {
+        let mut pat = Pattern::new(16, 4);
+        let tracks = pat.tracks_mut();
+        tracks[0].name = "Modified".to_string();
+        assert_eq!(pat.tracks()[0].name, "Modified");
+    }
+
+    #[test]
+    fn test_is_channel_audible_out_of_bounds() {
+        let pat = Pattern::new(16, 4);
+        assert!(!pat.is_channel_audible(4));
+        assert!(!pat.is_channel_audible(100));
+    }
+
+    #[test]
+    fn test_pattern_large_track_count() {
+        let pat = Pattern::new(64, 16);
+        assert_eq!(pat.tracks().len(), 16);
+        assert_eq!(pat.tracks()[15].name, "Track 16");
+        for i in 0..16 {
+            assert!(pat.is_channel_audible(i));
+        }
     }
 }

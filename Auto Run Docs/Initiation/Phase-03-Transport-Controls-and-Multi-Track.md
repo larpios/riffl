@@ -42,11 +42,12 @@ This phase builds proper transport controls (play, stop, pause, BPM adjustment, 
   - When stopped, cursor and playback position are independent
   - *Completed: Added Unicode transport icons (▶ ⏸ ⏹) to header status line. Pattern view auto-scrolls to follow playback row during Playing state, and follows editor cursor when Stopped/Paused. Playback row gets full-width green background bar (Black text on Green bg) distinct from cursor highlight (LightGreen bg when overlapping). Channel separators and trailing spaces also get green bg for seamless playback bar. When paused, playback position remains highlighted so user can see where playback will resume. 3 new scroll tests added. All 276 tests pass, build succeeds.*
 
-- [ ] Extend the pattern data model for multi-track support:
+- [x] Extend the pattern data model for multi-track support:
   - Each `Pattern` already has channels — ensure it supports at least 8 channels
   - Add `Track` metadata struct in `src/pattern/track.rs`: `name: String`, `volume: f32` (0.0-1.0), `pan: f32` (-1.0 to 1.0), `muted: bool`, `solo: bool`, `instrument_index: Option<usize>`
   - Add `tracks: Vec<Track>` to `Pattern` or a new `Song` struct that holds patterns + track metadata
   - Solo logic: if any track is soloed, only soloed tracks produce audio
+  - *Completed: Created `src/pattern/track.rs` with `Track` struct containing all specified fields (name, volume 0.0-1.0, pan -1.0 to 1.0, muted, solo, instrument_index), value clamping on set_volume/set_pan, toggle_mute/toggle_solo methods, and `is_audible(any_soloed)` implementing solo logic (muted always silent; if any track soloed, only soloed tracks audible). Added `any_track_soloed()` helper. Updated `DEFAULT_CHANNELS` from 4 to 8. Added `tracks: Vec<Track>` to `Pattern` struct, auto-created in `Pattern::new()` with numbered names. Added pattern-level accessors: `tracks()`, `tracks_mut()`, `get_track()`, `get_track_mut()`, `any_track_soloed()`, `is_channel_audible()`. 17 unit tests in track.rs + 7 integration tests in pattern.rs. All 300 tests pass.*
 
 - [ ] Update the mixer to handle multi-track audio:
   - Process each channel/track independently
