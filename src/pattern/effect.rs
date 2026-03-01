@@ -349,4 +349,113 @@ mod tests {
     fn test_max_effects_per_cell() {
         assert_eq!(MAX_EFFECTS_PER_CELL, 2);
     }
+
+    // --- Serde Encoding/Decoding Tests ---
+
+    #[test]
+    fn test_effect_serde_roundtrip() {
+        let effects = vec![
+            Effect::new(0x0, 0x37),
+            Effect::new(0xA, 0x04),
+            Effect::new(0xC, 0x40),
+            Effect::new(0xF, 0xFF),
+            Effect::new(0x7, 0x00), // unknown command
+        ];
+        for eff in &effects {
+            let json = serde_json::to_string(eff).unwrap();
+            let decoded: Effect = serde_json::from_str(&json).unwrap();
+            assert_eq!(*eff, decoded, "Serde roundtrip failed for {}", eff);
+        }
+    }
+
+    #[test]
+    fn test_effect_type_serde_roundtrip() {
+        let types = [
+            EffectType::Arpeggio,
+            EffectType::PitchSlideUp,
+            EffectType::PitchSlideDown,
+            EffectType::PortamentoToNote,
+            EffectType::Vibrato,
+            EffectType::VolumeSlide,
+            EffectType::PositionJump,
+            EffectType::SetVolume,
+            EffectType::PatternBreak,
+            EffectType::SetSpeed,
+        ];
+        for &et in &types {
+            let json = serde_json::to_string(&et).unwrap();
+            let decoded: EffectType = serde_json::from_str(&json).unwrap();
+            assert_eq!(et, decoded, "Serde roundtrip failed for {:?}", et);
+        }
+    }
+
+    #[test]
+    fn test_effect_serde_json_structure() {
+        let eff = Effect::new(0xA, 0x04);
+        let json = serde_json::to_string(&eff).unwrap();
+        // Should contain command and param fields
+        assert!(json.contains("\"command\""));
+        assert!(json.contains("\"param\""));
+        // Verify actual values
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["command"], 10); // 0xA = 10
+        assert_eq!(value["param"], 4);   // 0x04 = 4
+    }
+
+    // --- Additional Hex Display Edge Cases ---
+
+    #[test]
+    fn test_effect_display_mid_range_params() {
+        // Verify hex formatting for common effect values
+        assert_eq!(format!("{}", Effect::new(0x4, 0x37)), "437"); // Vibrato speed=3 depth=7
+        assert_eq!(format!("{}", Effect::new(0xA, 0x80)), "A80"); // Volume slide up 8
+        assert_eq!(format!("{}", Effect::new(0xC, 0x7F)), "C7F"); // Set volume to 127
+        assert_eq!(format!("{}", Effect::new(0xF, 0x03)), "F03"); // Set speed to 3
+    }
+
+    #[test]
+    fn test_effect_display_unknown_commands() {
+        // Unknown command types should still display correctly as hex
+        assert_eq!(format!("{}", Effect::new(0x5, 0x00)), "500");
+        assert_eq!(format!("{}", Effect::new(0x6, 0xAB)), "6AB");
+        assert_eq!(format!("{}", Effect::new(0x8, 0xFF)), "8FF");
+        assert_eq!(format!("{}", Effect::new(0xE, 0x12)), "E12");
+    }
+
+    // --- Effect Construction and Field Access ---
+
+    #[test]
+    fn test_effect_from_type_all_variants() {
+        let cases: Vec<(EffectType, u8, u8)> = vec![
+            (EffectType::Arpeggio, 0x37, 0x0),
+            (EffectType::PitchSlideUp, 0x10, 0x1),
+            (EffectType::PitchSlideDown, 0x20, 0x2),
+            (EffectType::PortamentoToNote, 0x08, 0x3),
+            (EffectType::Vibrato, 0x46, 0x4),
+            (EffectType::VolumeSlide, 0x04, 0xA),
+            (EffectType::PositionJump, 0x02, 0xB),
+            (EffectType::SetVolume, 0x40, 0xC),
+            (EffectType::PatternBreak, 0x00, 0xD),
+            (EffectType::SetSpeed, 0x06, 0xF),
+        ];
+        for (effect_type, param, expected_cmd) in cases {
+            let eff = Effect::from_type(effect_type, param);
+            assert_eq!(eff.command, expected_cmd, "Wrong command for {:?}", effect_type);
+            assert_eq!(eff.param, param, "Wrong param for {:?}", effect_type);
+            assert_eq!(eff.effect_type(), Some(effect_type));
+        }
+    }
+
+    #[test]
+    fn test_effect_param_nibble_extraction_all_combos() {
+        // Spot-check representative nibble pairs
+        for x in [0u8, 3, 7, 0xF] {
+            for y in [0u8, 5, 0xA, 0xF] {
+                let param = (x << 4) | y;
+                let eff = Effect::new(0, param);
+                assert_eq!(eff.param_x(), x, "param_x wrong for 0x{:02X}", param);
+                assert_eq!(eff.param_y(), y, "param_y wrong for 0x{:02X}", param);
+            }
+        }
+    }
 }
