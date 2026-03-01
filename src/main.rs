@@ -1,98 +1,115 @@
+mod app;
 mod audio;
+mod input;
+mod ui;
 
-use audio::AudioEngine;
-use std::f32::consts::PI;
-use std::sync::{Arc, Mutex};
+use std::io;
+use std::panic;
 use std::time::Duration;
 
-fn main() {
-    println!("Audio Engine - Test Tone Demo");
-    println!("==============================");
-    println!();
+use anyhow::Result;
+use crossterm::{
+    event::{self, Event, KeyEvent, KeyEventKind},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use ratatui::{
+    backend::CrosstermBackend,
+    Terminal,
+};
 
-    // Create the audio engine with default device and configuration
-    let mut engine = match AudioEngine::new() {
-        Ok(e) => {
-            println!("✓ AudioEngine initialized successfully");
-            println!("  Sample rate: {}Hz", e.sample_rate());
-            println!("  Device: {}", e.device().name().unwrap_or_else(|_| "Unknown".to_string()));
-            println!("  Latency: {:.2}ms (theoretical)", e.latency_ms());
-            e
-        }
-        Err(e) => {
-            eprintln!("✗ Failed to initialize AudioEngine: {:?}", e);
-            eprintln!("  Make sure you have an audio output device available.");
-            return;
-        }
-    };
+use app::App;
+use input::keybindings::{map_key_to_action, Action};
 
-    println!();
-    println!("Generating 440Hz sine wave (A4 note)...");
-    println!();
+/// Tick rate for the event loop (250ms = 4 FPS)
+const TICK_RATE: Duration = Duration::from_millis(250);
 
-    // Create a callback that generates a 440Hz sine wave
-    let frequency = 440.0; // A4 note
-    let sample_rate = engine.sample_rate() as f32;
-    let amplitude = 0.3; // Reduced amplitude to avoid clipping
-
-    // Phase accumulator for continuous sine wave generation
-    // We need to track phase across callback invocations to avoid discontinuities
-    let phase = Arc::new(Mutex::new(0.0f32));
-    let phase_clone = phase.clone();
-
-    let callback = Arc::new(Mutex::new(move |data: &mut [f32]| {
-        let mut current_phase = phase_clone.lock().unwrap();
-
-        // Calculate phase increment per sample
-        let phase_increment = 2.0 * PI * frequency / sample_rate;
-
-        // Generate sine wave samples
-        for sample in data.iter_mut() {
-            *sample = amplitude * (*current_phase).sin();
-            *current_phase += phase_increment;
-
-            // Keep phase in range [0, 2*PI) to avoid floating point precision issues
-            if *current_phase >= 2.0 * PI {
-                *current_phase -= 2.0 * PI;
-            }
-        }
+fn main() -> Result<()> {
+    // Set up panic hook to restore terminal before panicking
+    let original_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |panic_info| {
+        let _ = disable_raw_mode();
+        let _ = execute!(io::stdout(), LeaveAlternateScreen);
+        original_hook(panic_info);
     }));
 
-    // Register the callback with the engine
-    match engine.set_callback(callback) {
-        Ok(_) => println!("✓ Audio callback registered"),
-        Err(e) => {
-            eprintln!("✗ Failed to set callback: {:?}", e);
-            return;
+    // Initialize terminal
+    let mut terminal = init_terminal()?;
+
+    // Create and initialize app
+    let mut app = App::new();
+    app.init()?;
+
+    // Run the application
+    let result = run_app(&mut terminal, &mut app);
+
+    // Restore terminal
+    restore_terminal()?;
+
+    // Propagate any errors from the app
+    result
+}
+
+fn init_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let terminal = Terminal::new(backend)?;
+    Ok(terminal)
+}
+
+fn restore_terminal() -> Result<()> {
+    disable_raw_mode()?;
+    execute!(io::stdout(), LeaveAlternateScreen)?;
+    Ok(())
+}
+
+fn run_app<B: ratatui::backend::Backend>(
+    terminal: &mut Terminal<B>,
+    app: &mut App,
+) -> Result<()> {
+    while app.should_run() {
+        terminal.draw(|frame| ui::render(frame, app))?;
+
+        if event::poll(TICK_RATE)? {
+            match event::read()? {
+                Event::Key(key) => {
+                    if key.kind == KeyEventKind::Press {
+                        handle_key_event(app, key);
+                    }
+                }
+                Event::Resize(_width, _height) => {}
+                _ => {}
+            }
         }
+
+        app.update()?;
     }
 
-    // Start playback
-    match engine.start() {
-        Ok(_) => {
-            println!("✓ Playback started");
-            println!();
-            println!("Playing 440Hz test tone for 5 seconds...");
-            println!("(You should hear a continuous tone)");
+    Ok(())
+}
+
+fn handle_key_event(app: &mut App, key: KeyEvent) {
+    let action = map_key_to_action(key);
+
+    match action {
+        Action::MoveLeft => app.move_left(),
+        Action::MoveDown => app.move_down(),
+        Action::MoveUp => app.move_up(),
+        Action::MoveRight => app.move_right(),
+        Action::Quit => app.quit(),
+        Action::OpenModal => {
+            app.open_test_modal();
         }
-        Err(e) => {
-            eprintln!("✗ Failed to start playback: {:?}", e);
-            return;
+        Action::Cancel => {
+            app.close_modal();
         }
+        Action::Confirm => {
+            if app.has_modal() {
+                app.close_modal();
+            }
+        }
+        Action::None => {}
     }
-
-    // Play for 5 seconds
-    std::thread::sleep(Duration::from_secs(5));
-
-    // Stop playback
-    println!();
-    println!("Stopping playback...");
-    engine.stop();
-
-    // Give the audio system time to cleanly shutdown
-    std::thread::sleep(Duration::from_millis(100));
-
-    println!("✓ Playback stopped cleanly");
-    println!();
-    println!("Demo complete!");
 }

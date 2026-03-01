@@ -1,12 +1,15 @@
-//! Audio module providing low-latency audio playback using cpal
+//! Audio playback and sample management
+//!
+//! This module handles audio output, sample loading, and playback control.
 
 pub mod device;
 pub mod engine;
 pub mod error;
+pub mod sample;
 pub mod stream;
 
-// Re-export main public API
-pub use device::{AudioDevice, DeviceInfo, SupportedConfig, default_device, enumerate_devices, get_device_by_index};
+pub use device::{AudioDevice, DeviceInfo};
 pub use engine::AudioEngine;
 pub use error::{AudioError, AudioResult};
-pub use stream::{AudioCallback, AudioStream, StreamBuilder, StreamConfig};
+pub use sample::Sample;
+pub use stream::{AudioCallback, AudioStream, StreamConfig};
