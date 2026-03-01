@@ -21,7 +21,8 @@ This phase builds proper transport controls (play, stop, pause, BPM adjustment, 
   - Test BPM range clamping
   - *Completed: All 15 inline tests in `src/transport.rs` already cover these requirements comprehensively — state transitions (4 tests), BPM timing accuracy (2 tests), row wrapping with/without loop (2 tests), BPM range clamping (2 tests), plus additional edge cases (advance when not playing, toggle loop, set_num_rows clamping, stop resets position, initial state). All 15 tests pass.*
 
-- [ ] Run `cargo test` for transport and fix any failures
+- [x] Run `cargo test` for transport and fix any failures
+  - *Completed: All 267 tests pass (0 failures), including all 15 transport-specific tests. No fixes needed. Warnings present (unused imports, dead code) but no errors.*
 
 - [ ] Integrate the transport into App, replacing the ad-hoc playback state:
   - Replace `is_playing`, `current_row`, `bpm` fields in `App` with a `Transport` instance
