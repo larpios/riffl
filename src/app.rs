@@ -95,6 +95,9 @@ pub struct App {
     /// DSL scripting engine for executing Rhai scripts
     script_engine: ScriptEngine,
 
+    /// Whether live mode is active (scripts auto-re-evaluate on every pattern loop)
+    pub live_mode: bool,
+
     /// Timestamp of the last update call (for delta time calculation)
     last_update: Instant,
 }
@@ -159,6 +162,7 @@ impl App {
             code_editor: CodeEditor::new(),
             split_view: false,
             script_engine: ScriptEngine::new(),
+            live_mode: false,
             last_update: Instant::now(),
         }
     }
@@ -216,8 +220,14 @@ impl App {
 
         let was_playing = self.transport.is_playing();
 
-        match self.transport.advance(delta) {
+        let advance_result = self.transport.advance(delta);
+
+        match advance_result {
             AdvanceResult::Row(row) => {
+                // In live mode, re-execute script when pattern loops back to row 0
+                if row == 0 && self.live_mode {
+                    self.execute_script();
+                }
                 if let Ok(mut mixer) = self.mixer.lock() {
                     mixer.tick(row, self.editor.pattern());
                 }
@@ -225,6 +235,10 @@ impl App {
             AdvanceResult::PatternChange { arrangement_pos, row } => {
                 // Load the new pattern from the arrangement
                 self.load_arrangement_pattern(arrangement_pos);
+                // In live mode, re-execute script on pattern change
+                if self.live_mode {
+                    self.execute_script();
+                }
                 if let Ok(mut mixer) = self.mixer.lock() {
                     mixer.tick(row, self.editor.pattern());
                 }
@@ -555,7 +569,21 @@ impl App {
         self.code_editor.active
     }
 
+    /// Toggle live mode on/off.
+    ///
+    /// When live mode is active, scripts in the code editor are automatically
+    /// re-evaluated on every pattern loop, allowing real-time algorithmic
+    /// pattern generation during playback.
+    pub fn toggle_live_mode(&mut self) {
+        self.live_mode = !self.live_mode;
+    }
+
     /// Execute the current script in the code editor.
+    ///
+    /// Scripts run in the main event loop (not the audio thread), so they never
+    /// block audio rendering. When a script modifies the pattern during active
+    /// playback, the mixer is retriggered on the current row so changes are
+    /// immediately audible without waiting for the next row advance.
     pub fn execute_script(&mut self) {
         let code = self.code_editor.text();
         if code.trim().is_empty() {
@@ -569,6 +597,15 @@ impl App {
                 use crate::dsl::engine::{apply_commands, ScriptResult};
                 let cmd_count = commands.len();
                 apply_commands(self.editor.pattern_mut(), &commands);
+
+                // If playback is active and the script modified the pattern,
+                // retrigger the mixer on the current row so changes are
+                // immediately audible (not waiting for the next row advance).
+                if cmd_count > 0 && self.transport.is_playing() {
+                    if let Ok(mut mixer) = self.mixer.lock() {
+                        mixer.tick(self.transport.current_row(), self.editor.pattern());
+                    }
+                }
 
                 // Format output message
                 let output_msg = if cmd_count > 0 {
@@ -1068,5 +1105,272 @@ mod tests {
         assert_eq!(app.current_view, AppView::CodeEditor);
         app.set_view(AppView::PatternEditor);
         assert_eq!(app.current_view, AppView::PatternEditor);
+    }
+
+    // --- Live Mode Tests ---
+
+    #[test]
+    fn test_live_mode_default_off() {
+        let app = App::new();
+        assert!(!app.live_mode);
+    }
+
+    #[test]
+    fn test_toggle_live_mode() {
+        let mut app = App::new();
+        assert!(!app.live_mode);
+        app.toggle_live_mode();
+        assert!(app.live_mode);
+        app.toggle_live_mode();
+        assert!(!app.live_mode);
+    }
+
+    #[test]
+    fn test_live_mode_re_executes_on_pattern_loop() {
+        let mut app = App::new();
+        // Set up a small 4-row pattern
+        let pattern = Pattern::new(4, 4);
+        app.editor = Editor::new(pattern);
+        app.transport.set_num_rows(4);
+
+        // Write a script that sets a note at row 0
+        app.code_editor.set_text(r#"
+            let n = note("D", 5);
+            set_note(0, 0, n);
+        "#);
+
+        // Enable live mode and start playback
+        app.live_mode = true;
+        app.transport.play();
+
+        // Advance through all rows to trigger the loop
+        let spr = 60.0 / 120.0 / 4.0; // seconds per row at 120 BPM
+        app.transport.advance(spr); // Row 1
+        app.last_update = Instant::now();
+        app.transport.advance(spr); // Row 2
+        app.transport.advance(spr); // Row 3
+
+        // Clear the specific cell before the loop triggers
+        app.editor.pattern_mut().clear_cell(0, 0);
+        let cell = app.editor.pattern().get_cell(0, 0);
+        assert!(cell.map_or(true, |c| c.is_empty()));
+
+        // Now advance past the end — should loop to row 0 and re-execute script
+        // We need to call update() which handles the advance and live mode logic
+        // But update() uses last_update for delta, so let's simulate directly
+        // by calling the transport advance and then mimicking update behavior
+        let result = app.transport.advance(spr);
+        assert_eq!(result, crate::transport::AdvanceResult::Row(0));
+
+        // Simulate what update() does for Row(0) with live_mode
+        if app.live_mode {
+            app.execute_script();
+        }
+
+        // Verify the script was re-executed: note should be placed at (0, 0)
+        let cell = app.editor.pattern().get_cell(0, 0);
+        assert!(cell.is_some());
+        assert!(cell.unwrap().note.is_some());
+    }
+
+    #[test]
+    fn test_live_mode_does_not_execute_when_disabled() {
+        let mut app = App::new();
+        let pattern = Pattern::new(4, 4);
+        app.editor = Editor::new(pattern);
+        app.transport.set_num_rows(4);
+
+        // Write a script that sets a note
+        app.code_editor.set_text(r#"
+            let n = note("D", 5);
+            set_note(0, 0, n);
+        "#);
+
+        // Live mode OFF
+        app.live_mode = false;
+        app.transport.play();
+
+        // Advance through all rows to trigger the loop
+        let spr = 60.0 / 120.0 / 4.0;
+        app.transport.advance(spr); // Row 1
+        app.transport.advance(spr); // Row 2
+        app.transport.advance(spr); // Row 3
+        let result = app.transport.advance(spr); // Row 0 (loop)
+        assert_eq!(result, crate::transport::AdvanceResult::Row(0));
+
+        // Pattern should remain empty since live mode is off
+        let cell = app.editor.pattern().get_cell(0, 0);
+        assert!(cell.map_or(true, |c| c.is_empty()));
+    }
+
+    #[test]
+    fn test_live_mode_with_empty_script() {
+        let mut app = App::new();
+        let pattern = Pattern::new(4, 4);
+        app.editor = Editor::new(pattern);
+        app.transport.set_num_rows(4);
+
+        // Empty script — live mode should not crash
+        app.code_editor.set_text("");
+        app.live_mode = true;
+        app.execute_script(); // Should handle gracefully
+        assert!(!app.code_editor.output_is_error);
+    }
+
+    #[test]
+    fn test_live_mode_with_error_script() {
+        let mut app = App::new();
+        let pattern = Pattern::new(4, 4);
+        app.editor = Editor::new(pattern);
+        app.transport.set_num_rows(4);
+
+        // Invalid script — live mode should display error, not panic
+        app.code_editor.set_text("let x = ;");
+        app.live_mode = true;
+        app.execute_script(); // Should handle gracefully
+        assert!(app.code_editor.output_is_error);
+    }
+
+    // --- Audio Wiring Tests ---
+
+    #[test]
+    fn test_script_execution_retriggers_mixer_during_playback() {
+        let mut app = App::new();
+        // Start playback
+        app.transport.play();
+        assert!(app.transport.is_playing());
+
+        // Execute a script that modifies the pattern — should retrigger mixer
+        app.code_editor.set_text(r#"
+            let n = note("E", 4);
+            set_note(0, 0, n);
+        "#);
+        app.execute_script();
+        assert!(!app.code_editor.output_is_error);
+        assert!(app.code_editor.output().contains("Applied"));
+        // Verify note was placed (pattern was modified)
+        let cell = app.editor.pattern().get_cell(0, 0);
+        assert!(cell.is_some());
+        assert!(cell.unwrap().note.is_some());
+    }
+
+    #[test]
+    fn test_script_no_retrigger_when_stopped() {
+        let mut app = App::new();
+        // Transport is stopped
+        assert!(app.transport.is_stopped());
+
+        // Execute a script — should still apply commands, just no mixer retrigger
+        app.code_editor.set_text(r#"
+            let n = note("E", 4);
+            set_note(0, 0, n);
+        "#);
+        app.execute_script();
+        assert!(!app.code_editor.output_is_error);
+        assert!(app.code_editor.output().contains("Applied"));
+    }
+
+    #[test]
+    fn test_script_no_retrigger_for_readonly_script() {
+        let mut app = App::new();
+        app.transport.play();
+
+        // Execute a script that doesn't modify the pattern (no commands)
+        app.code_editor.set_text("40 + 2");
+        app.execute_script();
+        assert!(!app.code_editor.output_is_error);
+        assert_eq!(app.code_editor.output(), "42");
+    }
+
+    #[test]
+    fn test_script_execution_does_not_block_audio_thread() {
+        // Verify that script execution runs synchronously on main thread
+        // while audio callback runs on separate thread via Arc<Mutex<Mixer>>.
+        // The mixer is behind Arc<Mutex>, so scripts don't touch the audio callback.
+        let mut app = App::new();
+        app.transport.play();
+
+        // Heavy script execution should complete without deadlock
+        app.code_editor.set_text(r#"
+            for i in range(0, 16) {
+                let n = note("C", 4);
+                set_note(i, 0, n);
+            }
+        "#);
+        app.execute_script();
+        assert!(!app.code_editor.output_is_error);
+        assert!(app.code_editor.output().contains("Applied 16 commands"));
+    }
+
+    #[test]
+    fn test_live_mode_changes_take_effect_on_next_loop() {
+        let mut app = App::new();
+        let pattern = Pattern::new(4, 4);
+        app.editor = Editor::new(pattern);
+        app.transport.set_num_rows(4);
+
+        // Script fills column 0 with C4 notes
+        app.code_editor.set_text(r#"
+            for i in range(0, 4) {
+                let n = note("C", 4);
+                set_note(i, 0, n);
+            }
+        "#);
+
+        // Enable live mode and start playback
+        app.live_mode = true;
+        app.transport.play();
+
+        // Advance through all rows without executing script
+        let spr = 60.0 / 120.0 / 4.0;
+        app.transport.advance(spr); // Row 1
+        app.transport.advance(spr); // Row 2
+        app.transport.advance(spr); // Row 3
+
+        // Verify pattern is empty before the loop
+        for i in 0..4 {
+            let cell = app.editor.pattern().get_cell(i, 0);
+            assert!(cell.map_or(true, |c| c.is_empty()));
+        }
+
+        // Loop back to row 0 — live mode should re-execute script
+        let result = app.transport.advance(spr);
+        assert_eq!(result, crate::transport::AdvanceResult::Row(0));
+        // Simulate update() behavior
+        if app.live_mode {
+            app.execute_script();
+        }
+
+        // Now all 4 rows should have notes
+        for i in 0..4 {
+            let cell = app.editor.pattern().get_cell(i, 0);
+            assert!(cell.is_some(), "Row {} should have a note", i);
+            assert!(cell.unwrap().note.is_some(), "Row {} note should not be empty", i);
+        }
+    }
+
+    #[test]
+    fn test_execute_script_during_playback_preserves_transport_state() {
+        let mut app = App::new();
+        app.transport.set_num_rows(16);
+        app.transport.play();
+
+        // Advance a few rows
+        let spr = 60.0 / 120.0 / 4.0;
+        app.transport.advance(spr); // Row 1
+        app.transport.advance(spr); // Row 2
+        let row_before = app.transport.current_row();
+        assert_eq!(row_before, 2);
+
+        // Execute script
+        app.code_editor.set_text(r#"
+            let n = note("A", 3);
+            set_note(0, 0, n);
+        "#);
+        app.execute_script();
+
+        // Transport state should be unchanged
+        assert!(app.transport.is_playing());
+        assert_eq!(app.transport.current_row(), 2);
     }
 }

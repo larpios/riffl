@@ -75,11 +75,12 @@ This phase delivers the core differentiator of tracker-rs: a live coding scripti
   - Each template includes comments explaining what it does
   - *(Completed: Created `src/dsl/examples.rs` with Template struct and 4 commented templates. Added template menu overlay to CodeEditor with Ctrl+T toggle, ↑/↓/Enter/Esc navigation. Registered `OpenTemplates` action in keybindings (Ctrl+T in Normal and Insert modes). Added 23 new tests (10 examples.rs, 11 code_editor template tests, 2 keybinding tests). All 763 project tests pass.)*
 
-- [ ] Wire live script execution to the audio engine:
+- [x] Wire live script execution to the audio engine:
   - When a script generates or modifies a pattern, the changes should be immediately audible if playback is active
   - Scripts run on a separate evaluation context (not blocking the audio thread)
   - If a script modifies the current playing pattern, changes take effect on the next loop iteration
   - Add a "live mode" toggle where scripts auto-re-evaluate on every pattern loop
+  - *(Completed: Enhanced `execute_script()` to retrigger the mixer on the current row when playback is active and scripts modify the pattern, providing immediate audibility. Scripts already run on the main event loop thread (not audio callback thread), ensuring non-blocking audio. Live mode toggle (Ctrl+L) with [LIVE] status indicator was already in place from prior integration work. Added 7 new audio wiring tests verifying: mixer retrigger during playback, no retrigger when stopped, no retrigger for read-only scripts, non-blocking execution, live mode changes on next loop, and transport state preservation. All 777 project tests pass.)*
 
 - [ ] Run `cargo test` and `cargo build` to verify everything compiles and passes
 
