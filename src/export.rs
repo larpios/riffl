@@ -457,4 +457,179 @@ mod tests {
 
         std::fs::remove_file(&path).ok();
     }
+
+    // === Additional audio export tests (Phase-05 task 7) ===
+
+    #[test]
+    fn test_export_wav_valid_file_readable_by_hound() {
+        // Verify WAV is structurally valid: hound can open and iterate all samples
+        let path = temp_wav_path("test_export_valid_structure.wav");
+        let sample = make_test_sample(44100, 1.0);
+
+        let mut song = Song::new("Valid", 120.0);
+        song.patterns[0].set_note(0, 0, Note::new(Pitch::C, 4, 100, 0));
+        song.patterns[0].set_note(8, 0, Note::new(Pitch::E, 4, 100, 0));
+        song.patterns[0].set_note(16, 0, Note::new(Pitch::G, 4, 100, 0));
+
+        let config = ExportConfig::default();
+        export_wav(&path, &song, &[sample], &config, |_| {}).unwrap();
+
+        // Reading all samples should not error (proves file integrity)
+        let mut reader = hound::WavReader::open(&path).unwrap();
+        let sample_count: usize = reader.samples::<i16>().map(|s| s.unwrap()).count();
+        assert!(sample_count > 0, "WAV should contain samples");
+
+        // Sample count should be even (stereo interleaved)
+        assert_eq!(sample_count % 2, 0, "Stereo WAV must have even sample count");
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_export_wav_metadata_all_fields_correct() {
+        // Comprehensive metadata check: sample rate, channels, bits, format, and duration
+        let path = temp_wav_path("test_export_metadata_full.wav");
+        let sample = make_test_sample(48000, 2.0);
+
+        let mut song = Song::new("MetaCheck", 140.0);
+        song.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+
+        let config = ExportConfig {
+            sample_rate: 48000,
+            bit_depth: BitDepth::Bits24,
+        };
+
+        export_wav(&path, &song, &[sample], &config, |_| {}).unwrap();
+
+        let reader = hound::WavReader::open(&path).unwrap();
+        let spec = reader.spec();
+
+        // All metadata fields
+        assert_eq!(spec.channels, 2, "Should be stereo");
+        assert_eq!(spec.sample_rate, 48000, "Sample rate should match config");
+        assert_eq!(spec.bits_per_sample, 24, "Bit depth should match config");
+        assert_eq!(spec.sample_format, SampleFormat::Int, "Format should be integer");
+
+        // Duration at 140 BPM: 64 rows * (60 / 140 / 4) = 64 * ~0.10714 ≈ 6.857s
+        let num_frames = reader.len() / spec.channels as u32;
+        let duration = num_frames as f64 / spec.sample_rate as f64;
+        let expected = 64.0 * (60.0 / 140.0 / 4.0);
+        assert!(
+            (duration - expected).abs() < 0.1,
+            "Expected ~{:.2}s duration at 140 BPM, got {:.2}s",
+            expected,
+            duration
+        );
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_export_wav_silence_all_channels_empty() {
+        // Verify silence across multiple patterns with no notes triggers zero output
+        let path = temp_wav_path("test_export_silence_multi_pat.wav");
+        let sample = make_test_sample(44100, 1.0);
+
+        let mut song = Song::new("MultiSilence", 120.0);
+        // Add a second empty pattern
+        song.add_pattern(Pattern::new(32, 8));
+        song.arrangement = vec![0, 1];
+
+        let config = ExportConfig::default();
+        export_wav(&path, &song, &[sample], &config, |_| {}).unwrap();
+
+        let mut reader = hound::WavReader::open(&path).unwrap();
+        let all_zero = reader.samples::<i16>().all(|s| s.unwrap() == 0);
+        assert!(all_zero, "Empty multi-pattern song should produce only zero samples");
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_export_wav_notes_produce_varying_audio() {
+        // Verify that different notes on different channels produce non-zero, distinct audio
+        let path = temp_wav_path("test_export_varying_audio.wav");
+        let sample = make_test_sample(44100, 1.0);
+
+        let mut song = Song::new("Varying", 120.0);
+        // Put notes on multiple channels at different rows
+        song.patterns[0].set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
+        song.patterns[0].set_note(0, 1, Note::new(Pitch::E, 4, 100, 0));
+        song.patterns[0].set_note(16, 0, Note::new(Pitch::G, 4, 80, 0));
+        song.patterns[0].set_note(32, 2, Note::new(Pitch::A, 4, 127, 0));
+
+        let config = ExportConfig::default();
+        export_wav(&path, &song, &[sample], &config, |_| {}).unwrap();
+
+        let mut reader = hound::WavReader::open(&path).unwrap();
+        let samples: Vec<i16> = reader.samples::<i16>().map(|s| s.unwrap()).collect();
+
+        let max_abs = samples.iter().map(|s| s.abs()).max().unwrap_or(0);
+        assert!(max_abs > 100, "Multi-note song should produce significant audio, got max_abs={}", max_abs);
+
+        // Verify audio isn't all the same value (not just DC offset)
+        let unique_values: std::collections::HashSet<i16> = samples.iter().copied().collect();
+        assert!(unique_values.len() > 10, "Audio should have variety, got only {} unique values", unique_values.len());
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_export_wav_different_bpm_changes_duration() {
+        // Verify that different BPM values produce different file durations
+        let sample = make_test_sample(44100, 2.0);
+        let config = ExportConfig::default();
+
+        let path_slow = temp_wav_path("test_export_bpm_slow.wav");
+        let mut song_slow = Song::new("Slow", 60.0); // 60 BPM
+        song_slow.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+        export_wav(&path_slow, &song_slow, &[sample.clone()], &config, |_| {}).unwrap();
+
+        let path_fast = temp_wav_path("test_export_bpm_fast.wav");
+        let mut song_fast = Song::new("Fast", 240.0); // 240 BPM
+        song_fast.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+        export_wav(&path_fast, &song_fast, &[sample], &config, |_| {}).unwrap();
+
+        let reader_slow = hound::WavReader::open(&path_slow).unwrap();
+        let reader_fast = hound::WavReader::open(&path_fast).unwrap();
+
+        let frames_slow = reader_slow.len() / 2;
+        let frames_fast = reader_fast.len() / 2;
+
+        // 60 BPM should produce 4x more audio than 240 BPM for the same rows
+        let ratio = frames_slow as f64 / frames_fast as f64;
+        assert!(
+            (ratio - 4.0).abs() < 0.1,
+            "60 BPM should be 4x longer than 240 BPM, got ratio {:.2}",
+            ratio
+        );
+
+        std::fs::remove_file(&path_slow).ok();
+        std::fs::remove_file(&path_fast).ok();
+    }
+
+    #[test]
+    fn test_export_wav_empty_arrangement() {
+        // Song with empty arrangement should produce a valid but empty WAV
+        let path = temp_wav_path("test_export_empty_arr.wav");
+        let sample = make_test_sample(44100, 1.0);
+
+        let mut song = Song::new("Empty", 120.0);
+        song.arrangement = vec![]; // No patterns in arrangement
+
+        let config = ExportConfig::default();
+        let mut final_progress = 0.0f32;
+        export_wav(&path, &song, &[sample], &config, |p| {
+            final_progress = p;
+        })
+        .unwrap();
+
+        assert!(path.exists(), "WAV file should be created even with empty arrangement");
+        assert!(
+            (final_progress - 1.0).abs() < 0.01,
+            "Progress should reach 1.0 for empty arrangement"
+        );
+
+        std::fs::remove_file(&path).ok();
+    }
 }
