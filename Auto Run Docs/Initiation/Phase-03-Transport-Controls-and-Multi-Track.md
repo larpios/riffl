@@ -14,11 +14,12 @@ This phase builds proper transport controls (play, stop, pause, BPM adjustment, 
   - Register `mod transport;` in `src/main.rs`
   - *Completed: Created `src/transport.rs` with `TransportState` enum (Stopped/Playing/Paused), `Transport` struct with all specified fields and methods, BPM clamping (20-999), accumulator-based row timing at 4 rows/beat, loop/no-loop end-of-pattern behavior, and registered module in `src/main.rs`. 15 unit tests included inline and all pass.*
 
-- [ ] Write tests for the transport system:
+- [x] Write tests for the transport system:
   - Test state transitions (Stopped → Playing → Paused → Playing → Stopped)
   - Test BPM timing accuracy: at 120 BPM, rows advance at correct intervals
   - Test row wrapping at pattern boundary when looping
   - Test BPM range clamping
+  - *Completed: All 15 inline tests in `src/transport.rs` already cover these requirements comprehensively — state transitions (4 tests), BPM timing accuracy (2 tests), row wrapping with/without loop (2 tests), BPM range clamping (2 tests), plus additional edge cases (advance when not playing, toggle loop, set_num_rows clamping, stop resets position, initial state). All 15 tests pass.*
 
 - [ ] Run `cargo test` for transport and fix any failures
 
