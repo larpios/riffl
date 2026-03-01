@@ -24,7 +24,7 @@ This phase adds real sample loading from disk (WAV, FLAC, OGG via symphonia) and
 - [x] Run `cargo test` for the sample loader and fix any failures
   - ✅ All 161 tests pass (116 lib + 161 bin, including 9 loader-specific tests). No failures to fix. Warnings are non-blocking (unused imports).
 
-- [ ] Build the pattern editor state machine in `src/editor/mod.rs`:
+- [x] Build the pattern editor state machine in `src/editor/mod.rs`:
   - `EditorMode` enum: `Normal` (navigation), `Insert` (note entry), `Visual` (selection)
   - `Editor` struct wrapping a `Pattern` with cursor position (row, channel, sub-column), current mode, and edit history
   - Navigation methods: `move_up`, `move_down`, `move_left`, `move_right`, `page_up`, `page_down`, `home`, `end`
@@ -33,6 +33,7 @@ This phase adds real sample loading from disk (WAV, FLAC, OGG via symphonia) and
   - Row operations: insert row (pushes rows down), delete row (pulls rows up)
   - Mode transitions: `i` enters Insert mode, `Escape` returns to Normal mode, `v` enters Visual mode
   - Register the `editor` module in `src/main.rs`
+  - ✅ Completed: `EditorMode` enum (Normal/Insert/Visual), `Editor` struct with cursor (row, channel, sub_column), `SubColumn` enum, undo history (max 100), all navigation methods, note entry (A-G → pitch, 0-9 → octave), delete/insert/delete_row, mode transitions, visual selection, `char_to_pitch()`, `clamp_cursor()`. 49 tests covering modes, navigation, sub-column movement in Insert mode, note entry, undo, visual selection, row ops, edge cases. Registered in `src/main.rs` and `src/lib.rs`. All 211 tests pass.
 
 - [ ] Integrate the editor into App and update keybindings:
   - Replace the bare cursor/pattern fields in `App` with an `Editor` instance

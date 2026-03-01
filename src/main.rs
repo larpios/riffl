@@ -1,5 +1,6 @@
 mod app;
 mod audio;
+mod editor;
 mod input;
 mod pattern;
 mod ui;
