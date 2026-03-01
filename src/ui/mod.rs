@@ -18,6 +18,7 @@ use crate::transport::{PlaybackMode, TransportState};
 
 // Submodules
 pub mod arrangement;
+pub mod export_dialog;
 pub mod file_browser;
 pub mod instrument_list;
 pub mod layout;
@@ -69,6 +70,11 @@ pub fn render(frame: &mut Frame, app: &App) {
     // Render file browser on top if active
     if app.has_file_browser() {
         render_file_browser(frame, full_area, app);
+    }
+
+    // Render export dialog on top if active
+    if app.export_dialog.active {
+        export_dialog::render_export_dialog(frame, full_area, &app.export_dialog, &app.theme);
     }
 
     // Render modal on top if one is active

@@ -73,6 +73,9 @@ pub enum Action {
     SaveProject,
     LoadProject,
 
+    // Export
+    OpenExportDialog,
+
     // Application
     Quit,
     Confirm,
@@ -111,6 +114,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             KeyCode::Char('x') => Action::Cut,
             KeyCode::Char('s') => Action::SaveProject,
             KeyCode::Char('o') => Action::LoadProject,
+            KeyCode::Char('e') => Action::OpenExportDialog,
             _ => Action::None,
         };
     }
@@ -702,5 +706,13 @@ mod tests {
     fn test_normal_mode_jump_prev_pattern() {
         let lb = KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE);
         assert_eq!(map_key_to_action(lb, EditorMode::Normal), Action::JumpPrevPattern);
+    }
+
+    // --- Export Dialog Tests ---
+
+    #[test]
+    fn test_normal_mode_ctrl_e_opens_export() {
+        let ctrl_e = KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL);
+        assert_eq!(map_key_to_action(ctrl_e, EditorMode::Normal), Action::OpenExportDialog);
     }
 }

@@ -61,11 +61,12 @@ This phase implements tracker effect commands (volume slides, pitch slides, arpe
   - Register `mod export;` in `src/main.rs`
   <!-- Created src/export.rs with export_wav() function, ExportConfig struct (sample_rate, BitDepth), and song_duration() helper. Uses hound crate (v3.5) for WAV writing. Offline rendering processes each arrangement pattern row-by-row through the Mixer, supporting 44100/48000 Hz sample rates and 16-bit/24-bit integer output. Progress callback receives f32 percentage (0.0-1.0). Added 12 tests covering: valid WAV creation, correct duration, silence output, non-zero audio with notes, 48kHz export, 24-bit export, config defaults, bit depth conversion, song duration calculation, multi-pattern duration, monotonic progress, and multi-arrangement export. Registered `mod export;` in src/main.rs. All 570 tests pass (0 failures). -->
 
-- [ ] Add an export UI flow:
+- [x] Add an export UI flow:
   - Keybinding: `Ctrl+E` opens export dialog modal
   - Modal shows: output path (default: `<project_name>.wav`), sample rate selection, bit depth selection
   - Confirm starts export, showing a progress indicator
   - On completion, display success message with file path and duration
+  <!-- Created src/ui/export_dialog.rs with ExportDialog state machine (Configure/Exporting/Done/Failed phases), field navigation (SampleRate/BitDepth/Confirm), and full rendering. Added Ctrl+E keybinding (Action::OpenExportDialog) in keybindings.rs. App.open_export_dialog() derives default path from project name. App.execute_export() runs offline rendering synchronously, showing success with file path, duration, sample rate, and bit depth, or error message on failure. Export dialog input handling supports j/k navigation, l/h/Space toggle, Enter to confirm, Esc to cancel. 23 new tests added (16 export_dialog unit tests + 6 app integration tests + 1 keybinding test). All 593 tests pass (0 failures). -->
 
 - [ ] Write tests for audio export:
   - Test that exporting a simple pattern produces a valid WAV file
