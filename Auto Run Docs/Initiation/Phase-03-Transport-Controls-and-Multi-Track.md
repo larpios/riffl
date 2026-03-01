@@ -35,11 +35,12 @@ This phase builds proper transport controls (play, stop, pause, BPM adjustment, 
     - `L`: toggle loop mode
   - *Completed: Replaced `is_playing`, `current_row`, `bpm`, `last_row_time` fields with `Transport` instance and `last_update: Instant` for delta-time calculation. `update()` now calls `transport.advance(delta)` and handles auto-stop when loop is disabled. Added `toggle_play()` with proper Stopped→Playing, Playing→Paused, Paused→Playing transitions. Added `stop()`, `adjust_bpm()`, `toggle_loop()` methods. New Action variants: `Stop`, `BpmUp`, `BpmDown`, `BpmUpLarge`, `BpmDownLarge`, `ToggleLoop`. Keybindings: `=`/`+`/F2 for BPM +1, `-`/F1 for BPM -1, Shift+F1/F2 for ±10, Shift+L for loop toggle. Escape during playback stops transport. Updated UI header to show PLAYING/PAUSED/STOPPED state with distinct colors and [LOOP] indicator. All 273 tests pass.*
 
-- [ ] Update the UI to display transport information:
+- [x] Update the UI to display transport information:
   - Header bar shows: BPM value, play/pause/stop state icon, current row/total rows, loop indicator
   - During playback, the pattern view auto-scrolls to keep the current playback row visible
   - Playback row highlighted with a distinct color (e.g., bright green bar) separate from cursor highlight
   - When stopped, cursor and playback position are independent
+  - *Completed: Added Unicode transport icons (▶ ⏸ ⏹) to header status line. Pattern view auto-scrolls to follow playback row during Playing state, and follows editor cursor when Stopped/Paused. Playback row gets full-width green background bar (Black text on Green bg) distinct from cursor highlight (LightGreen bg when overlapping). Channel separators and trailing spaces also get green bg for seamless playback bar. When paused, playback position remains highlighted so user can see where playback will resume. 3 new scroll tests added. All 276 tests pass, build succeeds.*
 
 - [ ] Extend the pattern data model for multi-track support:
   - Each `Pattern` already has channels — ensure it supports at least 8 channels
