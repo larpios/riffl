@@ -3,8 +3,13 @@
 /// This module contains the core App struct that manages the application state,
 /// handles updates, and coordinates between different subsystems.
 
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
+
 use anyhow::Result;
 
+use crate::audio::{AudioEngine, Mixer, Sample};
+use crate::pattern::{Note, Pattern, Pitch};
 use crate::ui::modal::Modal;
 use crate::ui::theme::Theme;
 
@@ -27,25 +32,60 @@ pub struct App {
     pub cursor_y: u16,
 
     /// Stack of active modal dialogs (top modal is last in Vec)
-    ///
-    /// Modals are stacked so that multiple modals can be opened on top of
-    /// each other. The last modal in the Vec is the currently active one.
-    /// When a modal is closed, it's popped from the stack.
     modal_stack: Vec<Modal>,
 
     /// The application's color theme
-    ///
-    /// This theme is used throughout the UI to maintain consistent styling
-    /// and color choices. It supports both 256-color and truecolor terminals.
     pub theme: Theme,
+
+    /// Audio engine (None if no audio device is available)
+    audio_engine: Option<AudioEngine>,
+
+    /// Shared mixer for audio rendering (shared with audio callback thread)
+    mixer: Arc<Mutex<Mixer>>,
+
+    /// The current pattern being played/edited
+    pub pattern: Pattern,
+
+    /// Whether audio is currently playing
+    pub is_playing: bool,
+
+    /// Current playback row position
+    pub current_row: usize,
+
+    /// Tempo in beats per minute
+    pub bpm: f64,
+
+    /// Timestamp of the last row advance (for BPM timing)
+    last_row_time: Instant,
 }
 
 impl App {
-    /// Create a new App instance with default state
-    ///
-    /// # Returns
-    /// A new App instance ready to be initialized
+    /// Create a new App instance with demo pattern and audio engine
     pub fn new() -> Self {
+        // Try to create audio engine to get output sample rate
+        let audio_engine = AudioEngine::new().ok();
+        let output_sample_rate = audio_engine
+            .as_ref()
+            .map(|e| e.sample_rate())
+            .unwrap_or(44100);
+
+        // Generate a demo sine wave sample at 440Hz, 0.25s duration
+        let demo_sample = Self::generate_sine_sample(440.0, 0.25, 44100);
+
+        // Create a demo pattern: C4, E4, G4, C5 across 16 rows
+        let mut pattern = Pattern::new(16, 4);
+        pattern.set_note(0, 0, Note::simple(Pitch::C, 4));
+        pattern.set_note(4, 0, Note::simple(Pitch::E, 4));
+        pattern.set_note(8, 0, Note::simple(Pitch::G, 4));
+        pattern.set_note(12, 0, Note::simple(Pitch::C, 5));
+
+        // Create mixer with engine's output sample rate
+        let mixer = Arc::new(Mutex::new(Mixer::new(
+            vec![demo_sample],
+            pattern.num_channels(),
+            output_sample_rate,
+        )));
+
         Self {
             should_quit: false,
             running: false,
@@ -53,38 +93,67 @@ impl App {
             cursor_y: 0,
             modal_stack: Vec::new(),
             theme: Theme::default(),
+            audio_engine,
+            mixer,
+            pattern,
+            is_playing: false,
+            current_row: 0,
+            bpm: 120.0,
+            last_row_time: Instant::now(),
         }
     }
 
-    /// Initialize the application
-    ///
-    /// This method sets up the initial application state and prepares
-    /// it for the event loop. Call this after creating a new App instance
-    /// but before starting the event loop.
-    ///
-    /// # Returns
-    /// Ok(()) if initialization succeeds
-    ///
-    /// # Errors
-    /// Returns an error if initialization fails
+    /// Generate a sine wave sample at the given frequency and duration
+    fn generate_sine_sample(freq: f32, duration_secs: f32, sample_rate: u32) -> Sample {
+        let num_samples = (sample_rate as f32 * duration_secs) as usize;
+        let mut data = Vec::with_capacity(num_samples);
+        for i in 0..num_samples {
+            let t = i as f32 / sample_rate as f32;
+            data.push((2.0 * std::f32::consts::PI * freq * t).sin());
+        }
+        Sample::new(data, sample_rate, 1, Some("sine440".to_string()))
+    }
+
+    /// Initialize the application and set up the audio callback
     pub fn init(&mut self) -> Result<()> {
         self.running = true;
+
+        // Set up audio callback that renders from the shared mixer
+        if let Some(ref mut engine) = self.audio_engine {
+            let mixer = self.mixer.clone();
+            let callback = Arc::new(Mutex::new(move |data: &mut [f32]| {
+                if let Ok(mut m) = mixer.lock() {
+                    m.render(data);
+                } else {
+                    for sample in data.iter_mut() {
+                        *sample = 0.0;
+                    }
+                }
+            }));
+
+            if engine.set_callback(callback).is_err() {
+                self.audio_engine = None;
+            }
+        }
+
         Ok(())
     }
 
-    /// Update application state
-    ///
-    /// This method is called each tick of the event loop to update
-    /// application state. Can be used for time-based updates, animations,
-    /// or other periodic tasks.
-    ///
-    /// # Returns
-    /// Ok(()) if update succeeds
-    ///
-    /// # Errors
-    /// Returns an error if update fails
+    /// Update application state, advancing playback row based on BPM timing
     pub fn update(&mut self) -> Result<()> {
-        // Update logic will be expanded in future phases
+        if self.is_playing {
+            // seconds_per_row = 60 / (bpm * rows_per_beat), with 4 rows per beat
+            let seconds_per_row = 15.0 / self.bpm;
+            let elapsed = self.last_row_time.elapsed().as_secs_f64();
+
+            if elapsed >= seconds_per_row {
+                self.last_row_time = Instant::now();
+                self.current_row = (self.current_row + 1) % self.pattern.num_rows();
+                if let Ok(mut mixer) = self.mixer.lock() {
+                    mixer.tick(self.current_row, &self.pattern);
+                }
+            }
+        }
         Ok(())
     }
 
@@ -96,14 +165,44 @@ impl App {
         self.running && !self.should_quit
     }
 
-    /// Handle application quit
-    ///
-    /// This method initiates a graceful shutdown of the application.
-    /// It sets the quit flag which will cause the event loop to exit
-    /// and trigger cleanup procedures.
+    /// Handle application quit with audio cleanup
     pub fn quit(&mut self) {
+        // Stop audio before quitting
+        if self.is_playing {
+            self.is_playing = false;
+            if let Ok(mut mixer) = self.mixer.lock() {
+                mixer.stop_all();
+            }
+        }
+        if let Some(ref mut engine) = self.audio_engine {
+            engine.stop();
+        }
         self.should_quit = true;
         self.running = false;
+    }
+
+    /// Toggle audio playback on/off
+    pub fn toggle_play(&mut self) {
+        if self.is_playing {
+            self.is_playing = false;
+            if let Some(ref mut engine) = self.audio_engine {
+                let _ = engine.pause();
+            }
+            if let Ok(mut mixer) = self.mixer.lock() {
+                mixer.stop_all();
+            }
+        } else {
+            self.is_playing = true;
+            self.current_row = 0;
+            self.last_row_time = Instant::now();
+            // Tick the first row to trigger initial notes
+            if let Ok(mut mixer) = self.mixer.lock() {
+                mixer.tick(self.current_row, &self.pattern);
+            }
+            if let Some(ref mut engine) = self.audio_engine {
+                let _ = engine.start();
+            }
+        }
     }
 
     /// Move cursor left (vim: h)

@@ -38,6 +38,9 @@ pub enum Action {
     /// Open a test modal (for testing modal system)
     OpenModal,
 
+    /// Toggle audio playback (space)
+    TogglePlay,
+
     /// No action (unmapped key)
     None,
 }
@@ -101,6 +104,9 @@ pub fn map_key_to_action(key: KeyEvent) -> Action {
 
         // Modal test key
         KeyCode::Char('m') => Action::OpenModal,
+
+        // Toggle audio playback
+        KeyCode::Char(' ') => Action::TogglePlay,
 
         // Unmapped key
         _ => Action::None,
@@ -222,22 +228,28 @@ mod tests {
         assert!(!is_navigation_action(Action::Quit));
         assert!(!is_navigation_action(Action::Confirm));
         assert!(!is_navigation_action(Action::Cancel));
+        assert!(!is_navigation_action(Action::TogglePlay));
         assert!(!is_navigation_action(Action::None));
     }
 
     #[test]
     fn test_is_modal_dismiss_action() {
-        // These actions should dismiss modals
         assert!(is_modal_dismiss_action(Action::Cancel));
         assert!(is_modal_dismiss_action(Action::Confirm));
 
-        // These actions should not dismiss modals
         assert!(!is_modal_dismiss_action(Action::Quit));
         assert!(!is_modal_dismiss_action(Action::MoveLeft));
         assert!(!is_modal_dismiss_action(Action::MoveDown));
         assert!(!is_modal_dismiss_action(Action::MoveUp));
         assert!(!is_modal_dismiss_action(Action::MoveRight));
         assert!(!is_modal_dismiss_action(Action::OpenModal));
+        assert!(!is_modal_dismiss_action(Action::TogglePlay));
         assert!(!is_modal_dismiss_action(Action::None));
+    }
+
+    #[test]
+    fn test_spacebar_toggles_play() {
+        let space = KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(space), Action::TogglePlay);
     }
 }

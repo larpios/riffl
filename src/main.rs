@@ -22,8 +22,8 @@ use ratatui::{
 use app::App;
 use input::keybindings::{map_key_to_action, Action};
 
-/// Tick rate for the event loop (250ms = 4 FPS)
-const TICK_RATE: Duration = Duration::from_millis(250);
+/// Tick rate for the event loop (16ms ≈ 60 FPS for smooth BPM timing)
+const TICK_RATE: Duration = Duration::from_millis(16);
 
 fn main() -> Result<()> {
     // Set up panic hook to restore terminal before panicking
@@ -111,6 +111,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                 app.close_modal();
             }
         }
+        Action::TogglePlay => app.toggle_play(),
         Action::None => {}
     }
 }

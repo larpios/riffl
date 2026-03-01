@@ -42,7 +42,7 @@ This phase integrates the existing audio engine code from the unmerged `auto-cla
   - Register in `src/audio/mod.rs`
   > ✅ Completed: Created `src/audio/mixer.rs` with `Mixer` struct holding `Vec<Sample>`, per-channel `Voice` state, and `output_sample_rate`. `tick(row_index, pattern)` processes note events — `NoteEvent::On` triggers sample playback with pitch-adjusted playback rate (frequency ratio × sample rate ratio) and velocity-to-gain mapping (0-127 → 0.0-1.0); `NoteEvent::Off` stops the channel voice; empty cells continue existing voices. `render(output)` fills a stereo interleaved f32 buffer by mixing all active voices with per-voice gain, with output clamping to [-1.0, 1.0]. Also provides `active_voice_count()` and `stop_all()`. Supports both mono and stereo samples. Registered in `audio/mod.rs` with `pub use mixer::Mixer`. 16 new unit tests covering: creation, note triggering, note-off, empty row continuation, out-of-bounds rows, invalid instruments, silence rendering, audio output, velocity scaling, multiple voices, clamping, stop-all, sample boundary deactivation, zero velocity, stereo samples, empty sample handling. All 143 project tests pass.
 
-- [ ] Integrate audio engine into the App struct and create a demo playback path:
+- [x] Integrate audio engine into the App struct and create a demo playback path:
   - Add `AudioEngine` (wrapped in an Option for graceful fallback if no audio device) to `App` in `src/app.rs`
   - Add transport state fields to `App`: `is_playing: bool`, `current_row: usize`, `bpm: f64` (default 120.0), `tick_counter` for timing
   - Add a demo `Pattern` with a few hardcoded notes (e.g., C4, E4, G4, C5 in a simple 16-row sequence) to `App::new()`
@@ -50,6 +50,7 @@ This phase integrates the existing audio engine code from the unmerged `auto-cla
   - Wire spacebar in keybindings to toggle `is_playing`
   - In the main event loop (`src/main.rs`), when `is_playing` is true, advance `current_row` based on BPM timing and feed the pattern row to the mixer to produce audio through the engine
   - The goal: press space → hear a simple melodic pattern loop
+  > ✅ Completed: Integrated audio engine into App struct with `Option<AudioEngine>` for graceful fallback, `Arc<Mutex<Mixer>>` shared between main thread and audio callback thread, transport state (`is_playing`, `current_row`, `bpm` at 120.0, `last_row_time` via `Instant`). Demo pattern: 16-row × 4-channel with C4/E4/G4/C5 arpeggio on channel 0 at rows 0/4/8/12. Demo sample: programmatically generated 440Hz sine wave, 0.25s, 44100Hz mono. Added `TogglePlay` action mapped to spacebar in keybindings. Audio callback calls `mixer.render()` on the audio thread; `app.update()` advances rows via BPM timing (seconds_per_row = 15.0/bpm, i.e., 125ms at 120 BPM) and calls `mixer.tick()`. Event loop tick rate changed from 250ms to 16ms (~60fps) for smooth timing. `toggle_play()` starts from row 0, ticks first row, starts engine; on stop, pauses engine and stops all voices. `quit()` cleans up audio. All 144 tests pass including new `test_spacebar_toggles_play`.
 
 - [ ] Update the TUI to show tracker-relevant information instead of the demo 10x10 grid:
   - Replace the placeholder grid in `src/ui/mod.rs` with a pattern grid renderer that displays the demo pattern's notes (rows × channels)
