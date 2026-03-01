@@ -67,7 +67,8 @@ This phase builds proper transport controls (play, stop, pause, BPM adjustment, 
   - Horizontal scrolling if pattern has more tracks than fit on screen
   - *Completed: Track headers now show track names (truncated to 7 chars) with [M]/[S] indicators. Soloed track headers get yellow highlight background, muted headers are dimmed. Tab key navigates between tracks (wraps around), resetting sub-column to Note. Shift+M toggles mute, Shift+S toggles solo on current track. Muted/inaudible track cells render with dimmed text. Horizontal scrolling implemented — calculates visible channels based on terminal width (17 chars per channel + 6 for row numbers) and auto-scrolls to keep cursor channel centered. Footer updated with Tab:track, M:mute, S:solo hints. 7 new tests added (4 keybinding, 3 editor). All 309 non-hardware tests pass.*
 
-- [ ] Run `cargo test` and `cargo build` to verify everything compiles and passes
+- [x] Run `cargo test` and `cargo build` to verify everything compiles and passes
+  - *Completed: `cargo test` passes all 322 tests (0 failures, 3 doc-tests ignored). `cargo build` succeeds. 42 warnings present (unused imports, dead code) but no compilation errors.*
 
 - [ ] Manual verification with `cargo run`:
   - Create a pattern with notes in multiple tracks
