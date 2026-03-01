@@ -49,12 +49,13 @@ This phase builds proper transport controls (play, stop, pause, BPM adjustment, 
   - Solo logic: if any track is soloed, only soloed tracks produce audio
   - *Completed: Created `src/pattern/track.rs` with `Track` struct containing all specified fields (name, volume 0.0-1.0, pan -1.0 to 1.0, muted, solo, instrument_index), value clamping on set_volume/set_pan, toggle_mute/toggle_solo methods, and `is_audible(any_soloed)` implementing solo logic (muted always silent; if any track soloed, only soloed tracks audible). Added `any_track_soloed()` helper. Updated `DEFAULT_CHANNELS` from 4 to 8. Added `tracks: Vec<Track>` to `Pattern` struct, auto-created in `Pattern::new()` with numbered names. Added pattern-level accessors: `tracks()`, `tracks_mut()`, `get_track()`, `get_track_mut()`, `any_track_soloed()`, `is_channel_audible()`. 17 unit tests in track.rs + 7 integration tests in pattern.rs. All 300 tests pass.*
 
-- [ ] Update the mixer to handle multi-track audio:
+- [x] Update the mixer to handle multi-track audio:
   - Process each channel/track independently
   - Apply per-track volume and pan
   - Implement mute/solo filtering
   - Mix all track outputs into the final stereo buffer
   - Pan law: equal-power panning (-3dB center)
+  - *Completed: Added `ChannelMix` struct with per-channel left/right gains and audibility state. Added `update_tracks()` method to sync mixer state from Track metadata. Equal-power panning implemented via `pan_gains()` using cosine/sine pan law (-3dB at center, preserving L²+R²=1.0). `tick()` now syncs track state and filters muted/non-soloed channels (won't trigger voices on inaudible channels). `render()` applies per-track volume × pan gains to each voice's output, and advances muted voices without mixing audio to keep them in sync. App's `update()` now syncs track state every frame during playback for real-time mute/solo responsiveness. 12 new tests cover: pan gains (center, left, right, equal-power property), muted channel silence, solo filtering, track volume scaling, pan stereo isolation, update_tracks sync, muted voice position advancement, and multi-track independent mixing. All 312 tests pass.*
 
 - [ ] Update the pattern editor UI for multi-track display:
   - Show track headers above each channel column with track number and instrument name
