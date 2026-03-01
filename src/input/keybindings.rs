@@ -28,6 +28,20 @@ pub enum Action {
     EnterNote(char),
     SetOctave(u8),
 
+    // Clipboard
+    Copy,
+    Paste,
+    Cut,
+
+    // Transpose
+    TransposeUp,
+    TransposeDown,
+    TransposeOctaveUp,
+    TransposeOctaveDown,
+
+    // Interpolation
+    Interpolate,
+
     // Editing (Normal mode)
     DeleteCell,
     InsertRow,
@@ -69,7 +83,26 @@ pub fn map_key_to_action(key: KeyEvent, mode: EditorMode) -> Action {
 }
 
 fn map_normal_mode(key: KeyEvent) -> Action {
-    // Handle Shift-modified bindings first
+    // Handle Ctrl+Shift modified bindings (transpose by octave)
+    if key.modifiers == KeyModifiers::CONTROL | KeyModifiers::SHIFT {
+        return match key.code {
+            KeyCode::Up => Action::TransposeOctaveUp,
+            KeyCode::Down => Action::TransposeOctaveDown,
+            _ => Action::None,
+        };
+    }
+
+    // Handle Ctrl-modified bindings
+    if key.modifiers == KeyModifiers::CONTROL {
+        return match key.code {
+            KeyCode::Char('c') => Action::Copy,
+            KeyCode::Char('v') => Action::Paste,
+            KeyCode::Char('x') => Action::Cut,
+            _ => Action::None,
+        };
+    }
+
+    // Handle Shift-modified bindings
     if key.modifiers == KeyModifiers::SHIFT {
         return match key.code {
             // Toggle loop mode (Shift+L = 'L')
@@ -82,6 +115,9 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             KeyCode::F(2) => Action::BpmUpLarge,
             // '+' key (Shift+'=' on US keyboards) for BPM up
             KeyCode::Char('+') => Action::BpmUp,
+            // Transpose by semitone
+            KeyCode::Up => Action::TransposeUp,
+            KeyCode::Down => Action::TransposeDown,
             _ => Action::None,
         };
     }
@@ -114,6 +150,10 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         // Mode transitions
         KeyCode::Char('i') => Action::EnterInsertMode,
         KeyCode::Char('v') => Action::EnterVisualMode,
+
+        // Clipboard
+        KeyCode::Char('y') => Action::Copy,
+        KeyCode::Char('p') => Action::Paste,
 
         // Editing
         KeyCode::Char('x') | KeyCode::Delete => Action::DeleteCell,
@@ -174,6 +214,34 @@ fn map_insert_mode(key: KeyEvent) -> Action {
 }
 
 fn map_visual_mode(key: KeyEvent) -> Action {
+    // Handle Ctrl+Shift modified bindings (transpose by octave)
+    if key.modifiers == KeyModifiers::CONTROL | KeyModifiers::SHIFT {
+        return match key.code {
+            KeyCode::Up => Action::TransposeOctaveUp,
+            KeyCode::Down => Action::TransposeOctaveDown,
+            _ => Action::None,
+        };
+    }
+
+    // Handle Ctrl-modified bindings
+    if key.modifiers == KeyModifiers::CONTROL {
+        return match key.code {
+            KeyCode::Char('c') => Action::Copy,
+            KeyCode::Char('v') => Action::Paste,
+            KeyCode::Char('x') => Action::Cut,
+            _ => Action::None,
+        };
+    }
+
+    // Handle Shift-modified bindings (transpose by semitone)
+    if key.modifiers == KeyModifiers::SHIFT {
+        return match key.code {
+            KeyCode::Up => Action::TransposeUp,
+            KeyCode::Down => Action::TransposeDown,
+            _ => Action::None,
+        };
+    }
+
     if key.modifiers != KeyModifiers::NONE {
         return Action::None;
     }
@@ -189,6 +257,14 @@ fn map_visual_mode(key: KeyEvent) -> Action {
         KeyCode::Char('l') | KeyCode::Right => Action::MoveRight,
         KeyCode::PageUp => Action::PageUp,
         KeyCode::PageDown => Action::PageDown,
+
+        // Clipboard operations
+        KeyCode::Char('y') => Action::Copy,
+        KeyCode::Char('p') => Action::Paste,
+        KeyCode::Char('d') => Action::Cut,
+
+        // Interpolate
+        KeyCode::Char('i') => Action::Interpolate,
 
         // Delete selection
         KeyCode::Char('x') | KeyCode::Delete => Action::DeleteCell,
@@ -477,5 +553,113 @@ mod tests {
         assert!(!is_modal_dismiss_action(Action::MoveLeft));
         assert!(!is_modal_dismiss_action(Action::TogglePlay));
         assert!(!is_modal_dismiss_action(Action::None));
+    }
+
+    // --- Clipboard Keybinding Tests ---
+
+    #[test]
+    fn test_normal_mode_copy_y() {
+        let y = KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(y, EditorMode::Normal), Action::Copy);
+    }
+
+    #[test]
+    fn test_normal_mode_paste_p() {
+        let p = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(p, EditorMode::Normal), Action::Paste);
+    }
+
+    #[test]
+    fn test_normal_mode_copy_ctrl_c() {
+        let ctrl_c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+        assert_eq!(map_key_to_action(ctrl_c, EditorMode::Normal), Action::Copy);
+    }
+
+    #[test]
+    fn test_normal_mode_paste_ctrl_v() {
+        let ctrl_v = KeyEvent::new(KeyCode::Char('v'), KeyModifiers::CONTROL);
+        assert_eq!(map_key_to_action(ctrl_v, EditorMode::Normal), Action::Paste);
+    }
+
+    #[test]
+    fn test_normal_mode_cut_ctrl_x() {
+        let ctrl_x = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL);
+        assert_eq!(map_key_to_action(ctrl_x, EditorMode::Normal), Action::Cut);
+    }
+
+    // --- Transpose Keybinding Tests ---
+
+    #[test]
+    fn test_normal_mode_transpose_up_shift_up() {
+        let shift_up = KeyEvent::new(KeyCode::Up, KeyModifiers::SHIFT);
+        assert_eq!(map_key_to_action(shift_up, EditorMode::Normal), Action::TransposeUp);
+    }
+
+    #[test]
+    fn test_normal_mode_transpose_down_shift_down() {
+        let shift_down = KeyEvent::new(KeyCode::Down, KeyModifiers::SHIFT);
+        assert_eq!(map_key_to_action(shift_down, EditorMode::Normal), Action::TransposeDown);
+    }
+
+    #[test]
+    fn test_normal_mode_transpose_octave_up() {
+        let ctrl_shift_up = KeyEvent::new(KeyCode::Up, KeyModifiers::CONTROL | KeyModifiers::SHIFT);
+        assert_eq!(map_key_to_action(ctrl_shift_up, EditorMode::Normal), Action::TransposeOctaveUp);
+    }
+
+    #[test]
+    fn test_normal_mode_transpose_octave_down() {
+        let ctrl_shift_down = KeyEvent::new(KeyCode::Down, KeyModifiers::CONTROL | KeyModifiers::SHIFT);
+        assert_eq!(map_key_to_action(ctrl_shift_down, EditorMode::Normal), Action::TransposeOctaveDown);
+    }
+
+    // --- Visual Mode Clipboard/Transpose Tests ---
+
+    #[test]
+    fn test_visual_mode_copy_y() {
+        let y = KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(y, EditorMode::Visual), Action::Copy);
+    }
+
+    #[test]
+    fn test_visual_mode_paste_p() {
+        let p = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(p, EditorMode::Visual), Action::Paste);
+    }
+
+    #[test]
+    fn test_visual_mode_cut_d() {
+        let d = KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(d, EditorMode::Visual), Action::Cut);
+    }
+
+    #[test]
+    fn test_visual_mode_interpolate_i() {
+        let i = KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(i, EditorMode::Visual), Action::Interpolate);
+    }
+
+    #[test]
+    fn test_visual_mode_transpose_up() {
+        let shift_up = KeyEvent::new(KeyCode::Up, KeyModifiers::SHIFT);
+        assert_eq!(map_key_to_action(shift_up, EditorMode::Visual), Action::TransposeUp);
+    }
+
+    #[test]
+    fn test_visual_mode_transpose_down() {
+        let shift_down = KeyEvent::new(KeyCode::Down, KeyModifiers::SHIFT);
+        assert_eq!(map_key_to_action(shift_down, EditorMode::Visual), Action::TransposeDown);
+    }
+
+    #[test]
+    fn test_visual_mode_ctrl_c_copy() {
+        let ctrl_c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+        assert_eq!(map_key_to_action(ctrl_c, EditorMode::Visual), Action::Copy);
+    }
+
+    #[test]
+    fn test_visual_mode_ctrl_x_cut() {
+        let ctrl_x = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL);
+        assert_eq!(map_key_to_action(ctrl_x, EditorMode::Visual), Action::Cut);
     }
 }
