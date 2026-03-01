@@ -136,7 +136,7 @@ pub fn create_grid_layout(area: Rect, rows: usize, cols: usize) -> Vec<Rect> {
         .split(area);
 
     // For each row, create column constraints
-    for row_chunk in row_chunks {
+    for row_chunk in row_chunks.iter() {
         let col_constraints: Vec<Constraint> = (0..cols)
             .map(|_| Constraint::Percentage(100 / cols as u16))
             .collect();
@@ -144,9 +144,9 @@ pub fn create_grid_layout(area: Rect, rows: usize, cols: usize) -> Vec<Rect> {
         let col_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints(col_constraints)
-            .split(row_chunk);
+            .split(*row_chunk);
 
-        cells.extend(col_chunks);
+        cells.extend(col_chunks.iter());
     }
 
     cells
