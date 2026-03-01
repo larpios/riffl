@@ -5,3 +5,6 @@ edition = "2021"
 
 [dependencies]
 cpal = "0.15"
+ratatui = "0.28"
+crossterm = "0.28"
+anyhow = "1.0"
