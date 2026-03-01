@@ -117,6 +117,12 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    // If export dialog is open, handle export dialog input
+    if app.has_export_dialog() {
+        handle_export_dialog_key(app, key);
+        return;
+    }
+
     // If file browser is open, handle file browser input
     if app.has_file_browser() {
         handle_file_browser_key(app, key);
@@ -224,6 +230,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             }
         }
 
+        // Export
+        Action::OpenExportDialog => app.open_export_dialog(),
+
         // Application
         Action::Quit => app.quit(),
         Action::OpenModal => app.open_test_modal(),
@@ -279,6 +288,67 @@ fn handle_file_browser_key(app: &mut App, key: KeyEvent) {
                     );
                 }
             }
+        }
+        _ => {}
+    }
+}
+
+fn handle_export_dialog_key(app: &mut App, key: KeyEvent) {
+    use crossterm::event::{KeyCode, KeyModifiers};
+    use crate::ui::export_dialog::ExportPhase;
+
+    // In Done/Failed phases, any dismiss key closes the dialog
+    match app.export_dialog.phase {
+        ExportPhase::Done | ExportPhase::Failed => {
+            if key.modifiers == KeyModifiers::NONE || key.modifiers == KeyModifiers::CONTROL {
+                match key.code {
+                    KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => {
+                        app.export_dialog.close();
+                    }
+                    _ => {}
+                }
+            }
+            return;
+        }
+        ExportPhase::Exporting => {
+            // No input during export
+            return;
+        }
+        ExportPhase::Configure => {}
+    }
+
+    if key.modifiers != KeyModifiers::NONE {
+        return;
+    }
+
+    match key.code {
+        KeyCode::Esc => {
+            app.export_dialog.close();
+        }
+        KeyCode::Char('j') | KeyCode::Down => {
+            app.export_dialog.next_field();
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            app.export_dialog.prev_field();
+        }
+        KeyCode::Char('l') | KeyCode::Right | KeyCode::Char('h') | KeyCode::Left | KeyCode::Char(' ') => {
+            app.export_dialog.toggle_value();
+        }
+        KeyCode::Enter => {
+            use crate::ui::export_dialog::ExportField;
+            match app.export_dialog.focused_field {
+                ExportField::Confirm => {
+                    app.execute_export();
+                }
+                _ => {
+                    // Enter on a field toggles it, then moves to next
+                    app.export_dialog.toggle_value();
+                    app.export_dialog.next_field();
+                }
+            }
+        }
+        KeyCode::Tab => {
+            app.export_dialog.next_field();
         }
         _ => {}
     }

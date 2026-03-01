@@ -12,12 +12,14 @@ use anyhow::Result;
 
 use crate::audio::{AudioEngine, Mixer, Sample, load_sample};
 use crate::editor::{Editor, EditorMode};
+use crate::export;
 use crate::pattern::note::Pitch;
 use crate::pattern::{Note, Pattern};
 use crate::project;
 use crate::song::Song;
 use crate::transport::{AdvanceResult, PlaybackMode, Transport, TransportState};
 use crate::ui::arrangement::ArrangementView;
+use crate::ui::export_dialog::ExportDialog;
 use crate::ui::file_browser::FileBrowser;
 use crate::ui::modal::Modal;
 use crate::ui::theme::Theme;
@@ -55,6 +57,9 @@ pub struct App {
 
     /// File browser for loading audio samples
     pub file_browser: FileBrowser,
+
+    /// Export dialog for rendering to WAV
+    pub export_dialog: ExportDialog,
 
     /// Names of loaded instruments (indexed by instrument number)
     instrument_names: Vec<String>,
@@ -130,6 +135,7 @@ impl App {
             arrangement_view: ArrangementView::new(),
             modal_stack: Vec::new(),
             file_browser,
+            export_dialog: ExportDialog::new(),
             instrument_names: vec!["sine440".to_string()],
             project_path: None,
             current_view: AppView::PatternEditor,
@@ -439,6 +445,60 @@ impl App {
         Ok(idx)
     }
 
+    /// Open the export dialog.
+    pub fn open_export_dialog(&mut self) {
+        let name = self.project_path
+            .as_ref()
+            .and_then(|p| p.file_stem())
+            .and_then(|s| s.to_str())
+            .unwrap_or("untitled");
+        let default_path = format!("{}.wav", name);
+        self.export_dialog.open(&default_path);
+    }
+
+    /// Check if the export dialog is open.
+    pub fn has_export_dialog(&self) -> bool {
+        self.export_dialog.active
+    }
+
+    /// Execute the WAV export using current dialog settings.
+    pub fn execute_export(&mut self) {
+        let config = self.export_dialog.to_config();
+        let path = PathBuf::from(&self.export_dialog.output_path);
+
+        self.export_dialog.start_export();
+
+        // Clone samples from the mixer for offline rendering
+        let samples: Vec<Sample> = if let Ok(mixer) = self.mixer.lock() {
+            mixer.samples().to_vec()
+        } else {
+            self.export_dialog.finish_error("Failed to lock mixer".to_string());
+            return;
+        };
+
+        // Run export synchronously (offline rendering)
+        let duration = export::song_duration(&self.song);
+        match export::export_wav(&path, &self.song, &samples, &config, |progress| {
+            // Progress is 0.0-1.0, but we can't update the dialog in a closure
+            // because &mut self is already borrowed. Progress is best-effort here.
+            let _ = progress;
+        }) {
+            Ok(()) => {
+                let message = format!(
+                    "Exported successfully!\n\nFile: {}\nDuration: {:.1}s\nSample rate: {} Hz\nBit depth: {}-bit",
+                    path.display(),
+                    duration,
+                    config.sample_rate,
+                    config.bit_depth.bits_per_sample(),
+                );
+                self.export_dialog.finish_success(message);
+            }
+            Err(e) => {
+                self.export_dialog.finish_error(format!("{}", e));
+            }
+        }
+    }
+
     /// Get the list of loaded instrument names.
     pub fn instrument_names(&self) -> &[String] {
         &self.instrument_names
@@ -701,5 +761,97 @@ mod tests {
         // Starting playback in Song mode should load the arrangement pattern
         app.toggle_play();
         assert!(app.transport.is_playing());
+    }
+
+    // --- Export Dialog Tests ---
+
+    #[test]
+    fn test_open_export_dialog_default_path() {
+        let mut app = App::new();
+        assert!(!app.has_export_dialog());
+
+        app.open_export_dialog();
+        assert!(app.has_export_dialog());
+        assert_eq!(app.export_dialog.output_path, "untitled.wav");
+    }
+
+    #[test]
+    fn test_open_export_dialog_with_project_path() {
+        let mut app = App::new();
+        app.project_path = Some(PathBuf::from("my_song.trs"));
+
+        app.open_export_dialog();
+        assert!(app.has_export_dialog());
+        assert_eq!(app.export_dialog.output_path, "my_song.wav");
+    }
+
+    #[test]
+    fn test_export_dialog_close() {
+        let mut app = App::new();
+        app.open_export_dialog();
+        assert!(app.has_export_dialog());
+
+        app.export_dialog.close();
+        assert!(!app.has_export_dialog());
+    }
+
+    #[test]
+    fn test_execute_export_creates_file() {
+        let mut app = App::new();
+        let dir = std::env::temp_dir().join("tracker_rs_tests");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test_app_export.wav");
+
+        app.open_export_dialog();
+        app.export_dialog.output_path = path.display().to_string();
+        app.execute_export();
+
+        use crate::ui::export_dialog::ExportPhase;
+        assert_eq!(app.export_dialog.phase, ExportPhase::Done);
+        assert_eq!(app.export_dialog.progress, 100);
+        assert!(path.exists());
+
+        // Verify it's a valid WAV
+        let reader = hound::WavReader::open(&path).unwrap();
+        assert_eq!(reader.spec().channels, 2);
+        assert_eq!(reader.spec().sample_rate, 44100);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_execute_export_with_custom_settings() {
+        let mut app = App::new();
+        let dir = std::env::temp_dir().join("tracker_rs_tests");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test_app_export_48k.wav");
+
+        app.open_export_dialog();
+        app.export_dialog.output_path = path.display().to_string();
+        app.export_dialog.sample_rate = 48000;
+        app.export_dialog.bit_depth = crate::export::BitDepth::Bits24;
+        app.execute_export();
+
+        use crate::ui::export_dialog::ExportPhase;
+        assert_eq!(app.export_dialog.phase, ExportPhase::Done);
+
+        let reader = hound::WavReader::open(&path).unwrap();
+        assert_eq!(reader.spec().sample_rate, 48000);
+        assert_eq!(reader.spec().bits_per_sample, 24);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_execute_export_invalid_path_fails() {
+        let mut app = App::new();
+        app.open_export_dialog();
+        // Use an invalid directory path
+        app.export_dialog.output_path = "/nonexistent/path/to/file.wav".to_string();
+        app.execute_export();
+
+        use crate::ui::export_dialog::ExportPhase;
+        assert_eq!(app.export_dialog.phase, ExportPhase::Failed);
+        assert!(!app.export_dialog.result_message.is_empty());
     }
 }

@@ -337,6 +337,11 @@ impl Mixer {
         self.samples.get(index).and_then(|s| s.name())
     }
 
+    /// Get a reference to the loaded samples.
+    pub fn samples(&self) -> &[Sample] {
+        &self.samples
+    }
+
     /// Stop all voices immediately and reset effect state.
     pub fn stop_all(&mut self) {
         for voice in &mut self.voices {
