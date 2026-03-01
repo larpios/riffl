@@ -51,12 +51,13 @@ This phase adds real sample loading from disk (WAV, FLAC, OGG via symphonia) and
   - Channel headers with channel numbers
   - ✅ Completed: Insert mode uses LightMagenta highlight on the active sub-column (Note/Instrument/Volume/Effect) with dark background on inactive sub-columns, clearly distinguishing from Normal mode's yellow highlight. Visual mode selection highlighted in blue. New `format_cell_parts()` splits cell into sub-column strings for per-column styling. Added `insert_cursor_style()`, `insert_inactive_style()`, and `visual_selection_style()` to Theme. 5 new tests for `format_cell_parts`, 3 new theme tests. All 232 tests pass.
 
-- [ ] Add a basic sample browser / file picker using a modal:
+- [x] Add a basic sample browser / file picker using a modal:
   - When user presses a designated key (e.g., `F5` or `o`), open a file browser modal
   - The modal lists `.wav`, `.flac`, `.ogg` files in the current directory (or a configurable samples directory)
   - Navigate the file list with j/k, select with Enter
   - Loading a sample adds it to the instrument list and assigns it to the current instrument slot
   - Display loaded instruments in a sidebar or status area
+  - ✅ Completed: `FileBrowser` struct in `src/ui/file_browser.rs` with directory scanning, sorted file listing, j/k navigation, Enter to load, Esc to cancel. `o` and `F5` keybindings in Normal mode open the browser. `Mixer::add_sample()` enables runtime sample loading. File browser renders as centered overlay (70×60%) with scrollable file list and selection highlight. On load, sample is decoded via `load_sample()` and added to mixer; success/error shown via modal. Footer shows `o:load` hint and `Inst:N` count. 14 new tests (9 file_browser, 3 mixer, 2 keybinding). All 246 tests pass (169 lib + 246 bin, 0 failures).
 
 - [ ] Wire sample playback into the pattern engine:
   - Update the mixer to look up loaded samples (not just the demo sine wave) by instrument index

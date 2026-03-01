@@ -113,6 +113,12 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    // If file browser is open, handle file browser input
+    if app.has_file_browser() {
+        handle_file_browser_key(app, key);
+        return;
+    }
+
     let action = map_key_to_action(key, app.editor_mode());
 
     match action {
@@ -147,6 +153,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::Quit => app.quit(),
         Action::TogglePlay => app.toggle_play(),
         Action::OpenModal => app.open_test_modal(),
+        Action::OpenFileBrowser => app.open_file_browser(),
         Action::Cancel => { app.close_modal(); }
         Action::Confirm => {
             if app.has_modal() {
@@ -154,5 +161,51 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             }
         }
         Action::None => {}
+    }
+}
+
+fn handle_file_browser_key(app: &mut App, key: KeyEvent) {
+    use crossterm::event::{KeyCode, KeyModifiers};
+
+    if key.modifiers != KeyModifiers::NONE {
+        return;
+    }
+
+    match key.code {
+        KeyCode::Esc => {
+            app.close_file_browser();
+        }
+        KeyCode::Char('j') | KeyCode::Down => {
+            app.file_browser.move_down();
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            app.file_browser.move_up();
+        }
+        KeyCode::Enter => {
+            match app.load_selected_sample() {
+                Ok(idx) => {
+                    let name = app.instrument_names().get(idx)
+                        .cloned()
+                        .unwrap_or_else(|| "unknown".to_string());
+                    app.close_file_browser();
+                    app.open_modal(
+                        ui::modal::Modal::info(
+                            "Sample Loaded".to_string(),
+                            format!("Loaded '{}' as instrument {:02X}", name, idx),
+                        )
+                    );
+                }
+                Err(msg) => {
+                    app.close_file_browser();
+                    app.open_modal(
+                        ui::modal::Modal::error(
+                            "Load Failed".to_string(),
+                            msg,
+                        )
+                    );
+                }
+            }
+        }
+        _ => {}
     }
 }

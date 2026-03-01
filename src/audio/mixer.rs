@@ -202,6 +202,23 @@ impl Mixer {
             .count()
     }
 
+    /// Add a sample to the instrument list and return its instrument index.
+    pub fn add_sample(&mut self, sample: Sample) -> usize {
+        let idx = self.samples.len();
+        self.samples.push(sample);
+        idx
+    }
+
+    /// Get the number of loaded samples.
+    pub fn sample_count(&self) -> usize {
+        self.samples.len()
+    }
+
+    /// Get the name of a loaded sample by index.
+    pub fn sample_name(&self, index: usize) -> Option<&str> {
+        self.samples.get(index).and_then(|s| s.name())
+    }
+
     /// Stop all voices immediately.
     pub fn stop_all(&mut self) {
         for voice in &mut self.voices {
@@ -519,5 +536,45 @@ mod tests {
         mixer.render(&mut output);
 
         assert_eq!(mixer.active_voice_count(), 0, "Empty sample should deactivate voice");
+    }
+
+    #[test]
+    fn test_mixer_add_sample() {
+        let sample1 = make_test_sample(44100, 0.25);
+        let mut mixer = Mixer::new(vec![sample1], 4, 44100);
+        assert_eq!(mixer.sample_count(), 1);
+
+        let sample2 = make_test_sample(44100, 0.5);
+        let idx = mixer.add_sample(sample2);
+        assert_eq!(idx, 1);
+        assert_eq!(mixer.sample_count(), 2);
+    }
+
+    #[test]
+    fn test_mixer_sample_name() {
+        let sample = make_test_sample(44100, 0.25);
+        let mixer = Mixer::new(vec![sample], 4, 44100);
+        assert_eq!(mixer.sample_name(0), Some("sine440"));
+        assert_eq!(mixer.sample_name(1), None);
+    }
+
+    #[test]
+    fn test_mixer_add_sample_playback() {
+        let sample1 = make_test_sample(44100, 0.25);
+        let sample2 = Sample::new(vec![0.8; 4410], 44100, 1, Some("loud".to_string()));
+        let mut mixer = Mixer::new(vec![sample1], 4, 44100);
+        let idx = mixer.add_sample(sample2);
+
+        let mut pattern = Pattern::new(16, 4);
+        // Use the newly added sample (instrument 1)
+        pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, idx as u8));
+
+        mixer.tick(0, &pattern);
+        assert_eq!(mixer.active_voice_count(), 1);
+
+        let mut output = vec![0.0f32; 64];
+        mixer.render(&mut output);
+        let has_audio = output.iter().any(|&s| s != 0.0);
+        assert!(has_audio, "Added sample should produce audio");
     }
 }
