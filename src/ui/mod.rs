@@ -101,6 +101,31 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     frame.render_widget(header_text, area);
 }
 
+/// Width of a single channel column (including separator): "│ C#4 01 40 C20 " = 2 + 14 + 1 = 17
+const CHANNEL_COL_WIDTH: u16 = 17;
+
+/// Width of the row number column: "  XX  " = 6
+const ROW_NUM_WIDTH: u16 = 6;
+
+/// Calculate the horizontal channel scroll offset to keep the cursor channel visible.
+fn calculate_channel_scroll(cursor_channel: usize, available_width: u16, num_channels: usize) -> usize {
+    let channel_space = available_width.saturating_sub(ROW_NUM_WIDTH);
+    let visible_channels = (channel_space / CHANNEL_COL_WIDTH) as usize;
+    if visible_channels == 0 {
+        return 0;
+    }
+    if visible_channels >= num_channels {
+        return 0;
+    }
+    if cursor_channel < visible_channels / 2 {
+        0
+    } else if cursor_channel + visible_channels / 2 >= num_channels {
+        num_channels.saturating_sub(visible_channels)
+    } else {
+        cursor_channel.saturating_sub(visible_channels / 2)
+    }
+}
+
 /// Render the main content area with the tracker pattern grid
 fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let theme = &app.theme;
@@ -119,6 +144,15 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let inner = content_block.inner(area);
     let visible_rows = inner.height as usize;
 
+    // Calculate horizontal channel scrolling
+    let ch_scroll = calculate_channel_scroll(cursor_channel, inner.width, pattern.num_channels());
+    let channel_space = inner.width.saturating_sub(ROW_NUM_WIDTH);
+    let visible_channels = ((channel_space / CHANNEL_COL_WIDTH) as usize).min(pattern.num_channels());
+    let ch_end = (ch_scroll + visible_channels).min(pattern.num_channels());
+
+    // Pre-compute track audibility for muted/solo display
+    let any_soloed = pattern.any_track_soloed();
+
     // During playback, auto-scroll to keep the playback row visible.
     // When stopped, follow the editor cursor instead.
     let scroll_target = if app.transport.is_playing() {
@@ -135,14 +169,46 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
     let mut lines: Vec<Line> = Vec::new();
 
-    // Channel header row
+    // Channel header row with track names, mute/solo indicators
     let mut header_spans = Vec::new();
     header_spans.push(Span::styled("  ROW ", Style::default().fg(theme.text_secondary)));
-    for ch in 0..pattern.num_channels() {
-        header_spans.push(Span::styled(
-            format!("│ CH{:<11}", ch),
-            Style::default().fg(theme.primary).add_modifier(Modifier::BOLD),
-        ));
+    for ch in ch_scroll..ch_end {
+        let track = pattern.get_track(ch);
+        let is_muted = track.map_or(false, |t| t.muted);
+        let is_soloed = track.map_or(false, |t| t.solo);
+
+        // Build header label: "CH0 Name [M][S]"
+        let track_name = track.map_or_else(
+            || format!("CH{}", ch),
+            |t| {
+                // Truncate name to fit
+                if t.name.len() > 7 {
+                    t.name[..7].to_string()
+                } else {
+                    t.name.clone()
+                }
+            },
+        );
+
+        let mut label = format!("{:<8}", track_name);
+        if is_muted {
+            label.push_str("[M]");
+        } else if is_soloed {
+            label.push_str("[S]");
+        } else {
+            label.push_str("   ");
+        }
+        // Pad/truncate to fit column width (14 chars content + separator)
+        let display = format!("│ {:<14}", label);
+
+        let header_style = if is_soloed {
+            Style::default().fg(Color::Black).bg(theme.warning_color()).add_modifier(Modifier::BOLD)
+        } else if is_muted {
+            Style::default().fg(theme.text_dimmed)
+        } else {
+            Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)
+        };
+        header_spans.push(Span::styled(display, header_style));
     }
     lines.push(Line::from(header_spans));
 
@@ -169,12 +235,15 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
         row_spans.push(Span::styled(format!("  {:02X}  ", row_idx), row_num_style));
 
-        // Cells for each channel
+        // Cells for each visible channel
         let mode = app.editor.mode();
         let sub_column = app.editor.sub_column();
         let visual_sel = app.editor.visual_selection();
 
-        for ch in 0..pattern.num_channels() {
+        for ch in ch_scroll..ch_end {
+            let is_track_muted = pattern.get_track(ch).map_or(false, |t| t.muted);
+            let is_track_inaudible = !pattern.is_channel_audible(ch);
+
             let separator_style = if is_playback_row {
                 Style::default().fg(Color::Black).bg(Color::Green)
             } else {
@@ -233,6 +302,9 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                         .fg(Color::Black)
                         .bg(Color::Green)
                         .add_modifier(Modifier::BOLD)
+                } else if is_track_muted || (any_soloed && is_track_inaudible) {
+                    // Muted or inaudible tracks: dimmed text
+                    Style::default().fg(theme.text_dimmed)
                 } else if cell.map_or(true, |c| c.is_empty()) {
                     Style::default().fg(theme.text_dimmed)
                 } else {
@@ -454,14 +526,14 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 Span::raw(":insert "),
                 Span::styled("v", key_style),
                 Span::raw(":visual "),
-                Span::styled("o", key_style),
-                Span::raw(":load "),
+                Span::styled("Tab", key_style),
+                Span::raw(":track "),
+                Span::styled("M", key_style),
+                Span::raw(":mute "),
+                Span::styled("S", key_style),
+                Span::raw(":solo "),
                 Span::styled("space", key_style),
                 Span::raw(":play "),
-                Span::styled("+/-", key_style),
-                Span::raw(":bpm "),
-                Span::styled("L", key_style),
-                Span::raw(":loop "),
                 Span::styled("q", key_style),
                 Span::raw(":quit"),
             ]);
@@ -647,6 +719,35 @@ mod tests {
         // When playback is at the start, offset should be 0
         assert_eq!(calculate_scroll_offset(0, 20, 64), 0);
         assert_eq!(calculate_scroll_offset(5, 20, 64), 0);
+    }
+
+    // --- Channel scroll tests ---
+
+    #[test]
+    fn test_channel_scroll_all_fit() {
+        // 4 channels, wide terminal — no scrolling needed
+        assert_eq!(calculate_channel_scroll(0, 200, 4), 0);
+        assert_eq!(calculate_channel_scroll(3, 200, 4), 0);
+    }
+
+    #[test]
+    fn test_channel_scroll_narrow_terminal() {
+        // 8 channels, only room for 4 (6 + 4*17 = 74 needed, width=74)
+        let width = ROW_NUM_WIDTH + CHANNEL_COL_WIDTH * 4; // 74
+        assert_eq!(calculate_channel_scroll(0, width, 8), 0);
+        assert_eq!(calculate_channel_scroll(1, width, 8), 0);
+        // Cursor at ch 6 should scroll
+        assert_eq!(calculate_channel_scroll(6, width, 8), 4);
+        // Cursor at ch 7 (last) should show last 4
+        assert_eq!(calculate_channel_scroll(7, width, 8), 4);
+    }
+
+    #[test]
+    fn test_channel_scroll_center_cursor() {
+        // 8 channels, room for 4
+        let width = ROW_NUM_WIDTH + CHANNEL_COL_WIDTH * 4;
+        // Cursor at ch 4 should center: 4 - 2 = 2
+        assert_eq!(calculate_channel_scroll(4, width, 8), 2);
     }
 
     #[test]

@@ -260,6 +260,22 @@ impl App {
         self.transport.toggle_loop();
     }
 
+    /// Toggle mute on the current track (channel under cursor)
+    pub fn toggle_mute_current_track(&mut self) {
+        let ch = self.editor.cursor_channel();
+        if let Some(track) = self.editor.pattern_mut().get_track_mut(ch) {
+            track.toggle_mute();
+        }
+    }
+
+    /// Toggle solo on the current track (channel under cursor)
+    pub fn toggle_solo_current_track(&mut self) {
+        let ch = self.editor.cursor_channel();
+        if let Some(track) = self.editor.pattern_mut().get_track_mut(ch) {
+            track.toggle_solo();
+        }
+    }
+
     /// Open a modal dialog by adding it to the modal stack
     pub fn open_modal(&mut self, modal: Modal) {
         self.modal_stack.push(modal);
