@@ -36,13 +36,14 @@ This phase adds the ability to create multiple patterns, arrange them into a son
   - Interpolate: fill selected column with linear interpolation between first and last values (useful for volume/effect ramps)
   > ✅ Implemented: Clipboard struct in `src/editor/mod.rs`, 9 new Action variants in keybindings, transpose via `Note::transpose()` and `Pitch::from_semitone()`. All 392 tests pass (70 new tests added across editor, keybindings, and note modules).
 
-- [ ] Build an arrangement view UI in `src/ui/arrangement.rs`:
+- [x] Build an arrangement view UI in `src/ui/arrangement.rs`:
   - A separate view (toggled with `F2` or a tab system) showing the song's pattern sequence vertically
   - Each row shows: position number, pattern index, first few notes as preview
   - Navigation: j/k moves between arrangement positions
   - Operations: Enter to jump to/edit that pattern, `a` to append a pattern, `d` to remove, `n` to create new empty pattern
   - Visual indicator of current playback position during song playback
   - Register in `src/ui/mod.rs`
+  > ✅ Implemented: `ArrangementView` struct with cursor navigation, pattern append/remove/create operations, `render_arrangement()` function with scroll, playback position highlighting, and pattern note preview. Song and ArrangementView added to App. 23 new tests (415 total pass).
 
 - [ ] Add a view/tab switching system to the App:
   - `AppView` enum: `PatternEditor`, `Arrangement`, `InstrumentList`
