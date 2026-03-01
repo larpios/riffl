@@ -34,12 +34,13 @@ This phase integrates the existing audio engine code from the unmerged `auto-cla
 - [x] Run `cargo test` and fix any compilation errors or test failures in the pattern module
   > ✅ Completed: All 127 tests pass (91 lib + 127 bin), no compilation errors. Warnings are pre-existing unused imports from earlier phases.
 
-- [ ] Create a simple audio mixer/sequencer in `src/audio/mixer.rs` that connects patterns to the audio engine:
+- [x] Create a simple audio mixer/sequencer in `src/audio/mixer.rs` that connects patterns to the audio engine:
   - `Mixer` struct holding a reference to loaded samples (Vec<Sample>) and current playback state
   - `tick(row_index, pattern) -> Vec<f32>` method that reads the current row from a pattern, looks up samples by instrument index, and mixes their audio data into a stereo output buffer
   - Basic sample playback: when a note triggers, start reading from the sample's audio data at the appropriate position
   - Simple volume scaling based on note velocity (0-127 mapped to 0.0-1.0)
   - Register in `src/audio/mod.rs`
+  > ✅ Completed: Created `src/audio/mixer.rs` with `Mixer` struct holding `Vec<Sample>`, per-channel `Voice` state, and `output_sample_rate`. `tick(row_index, pattern)` processes note events — `NoteEvent::On` triggers sample playback with pitch-adjusted playback rate (frequency ratio × sample rate ratio) and velocity-to-gain mapping (0-127 → 0.0-1.0); `NoteEvent::Off` stops the channel voice; empty cells continue existing voices. `render(output)` fills a stereo interleaved f32 buffer by mixing all active voices with per-voice gain, with output clamping to [-1.0, 1.0]. Also provides `active_voice_count()` and `stop_all()`. Supports both mono and stereo samples. Registered in `audio/mod.rs` with `pub use mixer::Mixer`. 16 new unit tests covering: creation, note triggering, note-off, empty row continuation, out-of-bounds rows, invalid instruments, silence rendering, audio output, velocity scaling, multiple voices, clamping, stop-all, sample boundary deactivation, zero velocity, stereo samples, empty sample handling. All 143 project tests pass.
 
 - [ ] Integrate audio engine into the App struct and create a demo playback path:
   - Add `AudioEngine` (wrapped in an Option for graceful fallback if no audio device) to `App` in `src/app.rs`
