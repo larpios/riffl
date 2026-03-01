@@ -4,6 +4,8 @@
 /// metadata such as name, volume, pan, mute/solo state, and
 /// an optional instrument assignment.
 
+use serde::{Serialize, Deserialize};
+
 /// Default track volume (full volume).
 pub const DEFAULT_VOLUME: f32 = 1.0;
 
@@ -16,7 +18,7 @@ pub const DEFAULT_PAN: f32 = 0.0;
 /// and an optional instrument assignment. The actual note data lives in
 /// the pattern grid; tracks hold the metadata that controls how each
 /// channel is mixed into the final output.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Track {
     /// Display name for this track (e.g., "Kick", "Bass", "Lead").
     pub name: String,

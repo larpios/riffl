@@ -66,6 +66,10 @@ pub enum Action {
     // View switching
     SwitchView(AppView),
 
+    // Project
+    SaveProject,
+    LoadProject,
+
     // Application
     Quit,
     Confirm,
@@ -102,6 +106,8 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             KeyCode::Char('c') => Action::Copy,
             KeyCode::Char('v') => Action::Paste,
             KeyCode::Char('x') => Action::Cut,
+            KeyCode::Char('s') => Action::SaveProject,
+            KeyCode::Char('o') => Action::LoadProject,
             _ => Action::None,
         };
     }

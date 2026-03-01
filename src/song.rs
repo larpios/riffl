@@ -4,10 +4,12 @@
 /// an arrangement (ordered sequence of pattern indices), global track
 /// metadata, and instrument definitions.
 
+use serde::{Serialize, Deserialize};
+
 use crate::pattern::{Note, Pattern, Pitch, Track};
 
 /// An instrument definition linking a name to a sample.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Instrument {
     /// Display name for this instrument.
     pub name: String,
@@ -42,6 +44,7 @@ impl Default for Instrument {
 /// The song is the top-level data structure for a tracker project.
 /// Patterns are stored in a pool (up to 256) and referenced by index
 /// in the arrangement sequence.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Song {
     /// Song title.
     pub name: String,
