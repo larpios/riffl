@@ -12,7 +12,9 @@ use crate::audio::{AudioEngine, Mixer, Sample, load_sample};
 use crate::editor::{Editor, EditorMode};
 use crate::pattern::note::Pitch;
 use crate::pattern::{Note, Pattern};
+use crate::song::Song;
 use crate::transport::{Transport, TransportState};
+use crate::ui::arrangement::ArrangementView;
 use crate::ui::file_browser::FileBrowser;
 use crate::ui::modal::Modal;
 use crate::ui::theme::Theme;
@@ -27,6 +29,12 @@ pub struct App {
 
     /// The pattern editor (owns the pattern, cursor, mode, undo history)
     pub editor: Editor,
+
+    /// Song data model (pattern pool, arrangement, instruments)
+    pub song: Song,
+
+    /// Arrangement view state (cursor, scroll)
+    pub arrangement_view: ArrangementView,
 
     /// Stack of active modal dialogs (top modal is last in Vec)
     modal_stack: Vec<Modal>,
@@ -84,7 +92,11 @@ impl App {
         let mut transport = Transport::new();
         transport.set_num_rows(pattern.num_rows());
 
-        let editor = Editor::new(pattern);
+        let editor = Editor::new(pattern.clone());
+
+        // Create a song with the demo pattern in its pool
+        let mut song = Song::new("Untitled", 125.0);
+        song.patterns[0] = pattern;
 
         // Initialize file browser at current working directory
         let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
@@ -94,6 +106,8 @@ impl App {
             should_quit: false,
             running: false,
             editor,
+            song,
+            arrangement_view: ArrangementView::new(),
             modal_stack: Vec::new(),
             file_browser,
             instrument_names: vec!["sine440".to_string()],

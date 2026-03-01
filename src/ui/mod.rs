@@ -17,6 +17,7 @@ use crate::pattern::note::NoteEvent;
 use crate::transport::TransportState;
 
 // Submodules
+pub mod arrangement;
 pub mod file_browser;
 pub mod layout;
 pub mod modal;
