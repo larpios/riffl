@@ -59,11 +59,12 @@ This phase adds real sample loading from disk (WAV, FLAC, OGG via symphonia) and
   - Display loaded instruments in a sidebar or status area
   - ✅ Completed: `FileBrowser` struct in `src/ui/file_browser.rs` with directory scanning, sorted file listing, j/k navigation, Enter to load, Esc to cancel. `o` and `F5` keybindings in Normal mode open the browser. `Mixer::add_sample()` enables runtime sample loading. File browser renders as centered overlay (70×60%) with scrollable file list and selection highlight. On load, sample is decoded via `load_sample()` and added to mixer; success/error shown via modal. Footer shows `o:load` hint and `Inst:N` count. 14 new tests (9 file_browser, 3 mixer, 2 keybinding). All 246 tests pass (169 lib + 246 bin, 0 failures).
 
-- [ ] Wire sample playback into the pattern engine:
+- [x] Wire sample playback into the pattern engine:
   - Update the mixer to look up loaded samples (not just the demo sine wave) by instrument index
   - When a note triggers during playback, calculate the playback rate based on the note's pitch relative to the sample's base pitch (C-4 = original rate)
   - Higher notes play faster, lower notes play slower (standard tracker pitch mapping)
   - Support note-off to stop a playing sample
+  - ✅ Completed: Added `base_note` field to `Sample` (default C-4 = MIDI 48) with `with_base_note()` builder and `base_frequency()` method. Mixer now uses `sample.base_frequency()` instead of hardcoded 440Hz for pitch calculation. Demo sine sample tagged with base_note A-4 (57). 6 new tests: C-4 original rate, higher-note-plays-faster, custom base_note, instrument lookup by index, note-off stops sample, sample base_frequency. All 252 tests pass (0 failures).
 
 - [ ] Run `cargo test` and `cargo build` to verify all code compiles and tests pass
 
