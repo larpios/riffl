@@ -3,6 +3,7 @@
 //! This module handles audio output, sample loading, and playback control.
 
 pub mod device;
+pub mod effect_processor;
 pub mod engine;
 pub mod error;
 pub mod loader;
@@ -11,6 +12,7 @@ pub mod sample;
 pub mod stream;
 
 pub use device::{AudioDevice, DeviceInfo};
+pub use effect_processor::{EffectProcessor, TransportCommand};
 pub use engine::AudioEngine;
 pub use error::{AudioError, AudioResult};
 pub use loader::load_sample;
