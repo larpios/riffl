@@ -82,7 +82,8 @@ This phase delivers the core differentiator of tracker-rs: a live coding scripti
   - Add a "live mode" toggle where scripts auto-re-evaluate on every pattern loop
   - *(Completed: Enhanced `execute_script()` to retrigger the mixer on the current row when playback is active and scripts modify the pattern, providing immediate audibility. Scripts already run on the main event loop thread (not audio callback thread), ensuring non-blocking audio. Live mode toggle (Ctrl+L) with [LIVE] status indicator was already in place from prior integration work. Added 7 new audio wiring tests verifying: mixer retrigger during playback, no retrigger when stopped, no retrigger for read-only scripts, non-blocking execution, live mode changes on next loop, and transport state preservation. All 777 project tests pass.)*
 
-- [ ] Run `cargo test` and `cargo build` to verify everything compiles and passes
+- [x] Run `cargo test` and `cargo build` to verify everything compiles and passes
+  - *(Completed: `cargo test` — 777 tests passed, 0 failed, 3 doc-tests ignored. `cargo build` — successful compilation with only warnings (unused imports/dead code, no errors). All DSL, UI, audio, and integration tests pass.)*
 
 - [ ] Manual verification with `cargo run`:
   - Open the code editor panel with F4 or Ctrl+\
