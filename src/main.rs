@@ -1,6 +1,7 @@
 mod app;
 mod audio;
 mod input;
+mod pattern;
 mod ui;
 
 use std::io;
