@@ -3,6 +3,7 @@ mod audio;
 mod editor;
 mod input;
 mod pattern;
+mod song;
 mod transport;
 mod ui;
 
