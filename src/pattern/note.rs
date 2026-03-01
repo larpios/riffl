@@ -74,6 +74,17 @@ impl Pitch {
         }
     }
 
+    /// Create a Pitch from a semitone index (0-11).
+    ///
+    /// Returns None if the index is out of range.
+    pub fn from_semitone(semitone: u8) -> Option<Self> {
+        if (semitone as usize) < Self::ALL.len() {
+            Some(Self::ALL[semitone as usize])
+        } else {
+            None
+        }
+    }
+
     /// MIDI note number offset (0-11) for this pitch.
     pub fn semitone(&self) -> u8 {
         match self {
@@ -175,6 +186,21 @@ impl Note {
         let a4_midi = 4 * 12 + 9; // = 57
         let semitone_diff = self.midi_note() as i32 - a4_midi as i32;
         440.0 * 2.0_f64.powf(semitone_diff as f64 / 12.0)
+    }
+
+    /// Transpose this note by the given number of semitones.
+    ///
+    /// Returns None if the result would be out of the valid range (C-0 to B-9).
+    pub fn transpose(&self, semitones: i32) -> Option<Self> {
+        let midi = self.midi_note() as i32 + semitones;
+        if midi < 0 || midi > 119 {
+            return None;
+        }
+        let midi = midi as u8;
+        let octave = midi / 12;
+        let semitone = midi % 12;
+        let pitch = Pitch::from_semitone(semitone)?;
+        Some(Note::new(pitch, octave, self.velocity, self.instrument))
     }
 
     /// Tracker-style display string (e.g., "C#4", "A-5").
@@ -464,5 +490,90 @@ mod tests {
         let c4 = Note::simple(Pitch::C, 4);
         // Middle C is approximately 261.63 Hz
         assert!((c4.frequency() - 261.63).abs() < 0.1);
+    }
+
+    // --- Pitch::from_semitone tests ---
+
+    #[test]
+    fn test_pitch_from_semitone_all() {
+        for (i, pitch) in Pitch::ALL.iter().enumerate() {
+            assert_eq!(Pitch::from_semitone(i as u8), Some(*pitch));
+        }
+    }
+
+    #[test]
+    fn test_pitch_from_semitone_out_of_range() {
+        assert_eq!(Pitch::from_semitone(12), None);
+        assert_eq!(Pitch::from_semitone(255), None);
+    }
+
+    // --- Note::transpose tests ---
+
+    #[test]
+    fn test_note_transpose_up_semitone() {
+        let c4 = Note::simple(Pitch::C, 4);
+        let result = c4.transpose(1).unwrap();
+        assert_eq!(result.pitch, Pitch::CSharp);
+        assert_eq!(result.octave, 4);
+    }
+
+    #[test]
+    fn test_note_transpose_down_semitone() {
+        let d4 = Note::simple(Pitch::D, 4);
+        let result = d4.transpose(-1).unwrap();
+        assert_eq!(result.pitch, Pitch::CSharp);
+        assert_eq!(result.octave, 4);
+    }
+
+    #[test]
+    fn test_note_transpose_up_octave() {
+        let c4 = Note::simple(Pitch::C, 4);
+        let result = c4.transpose(12).unwrap();
+        assert_eq!(result.pitch, Pitch::C);
+        assert_eq!(result.octave, 5);
+    }
+
+    #[test]
+    fn test_note_transpose_down_octave() {
+        let c4 = Note::simple(Pitch::C, 4);
+        let result = c4.transpose(-12).unwrap();
+        assert_eq!(result.pitch, Pitch::C);
+        assert_eq!(result.octave, 3);
+    }
+
+    #[test]
+    fn test_note_transpose_wraps_pitch_across_octave() {
+        let b4 = Note::simple(Pitch::B, 4);
+        let result = b4.transpose(1).unwrap();
+        assert_eq!(result.pitch, Pitch::C);
+        assert_eq!(result.octave, 5);
+    }
+
+    #[test]
+    fn test_note_transpose_below_minimum_returns_none() {
+        let c0 = Note::simple(Pitch::C, 0);
+        assert!(c0.transpose(-1).is_none());
+    }
+
+    #[test]
+    fn test_note_transpose_above_maximum_returns_none() {
+        let b9 = Note::simple(Pitch::B, 9);
+        assert!(b9.transpose(1).is_none());
+    }
+
+    #[test]
+    fn test_note_transpose_preserves_velocity_and_instrument() {
+        let note = Note::new(Pitch::C, 4, 80, 5);
+        let result = note.transpose(7).unwrap();
+        assert_eq!(result.velocity, 80);
+        assert_eq!(result.instrument, 5);
+    }
+
+    #[test]
+    fn test_note_transpose_zero_is_identity() {
+        let note = Note::simple(Pitch::E, 4);
+        let result = note.transpose(0).unwrap();
+        assert_eq!(result.pitch, Pitch::E);
+        assert_eq!(result.octave, 4);
     }
 }

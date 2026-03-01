@@ -27,13 +27,14 @@ This phase adds the ability to create multiple patterns, arrange them into a son
 - [x] Run `cargo test` for the song module and fix any failures
   > ✅ All 21 song tests pass. No failures to fix.
 
-- [ ] Implement clipboard and pattern operations in the editor:
+- [x] Implement clipboard and pattern operations in the editor:
   - Add a `Clipboard` struct to hold copied cell data (single cell, row, column, or rectangular selection)
   - Copy operation (`y` or `Ctrl+C`): copy current cell, or selection if in Visual mode
   - Paste operation (`p` or `Ctrl+V`): paste clipboard contents at cursor position
   - Cut operation (`d` in visual mode or `Ctrl+X`): copy + clear
   - Transpose selection: `Shift+Up/Down` transposes selected notes by 1 semitone, `Ctrl+Shift+Up/Down` by 1 octave
   - Interpolate: fill selected column with linear interpolation between first and last values (useful for volume/effect ramps)
+  > ✅ Implemented: Clipboard struct in `src/editor/mod.rs`, 9 new Action variants in keybindings, transpose via `Note::transpose()` and `Pitch::from_semitone()`. All 392 tests pass (70 new tests added across editor, keybindings, and note modules).
 
 - [ ] Build an arrangement view UI in `src/ui/arrangement.rs`:
   - A separate view (toggled with `F2` or a tab system) showing the song's pattern sequence vertically
