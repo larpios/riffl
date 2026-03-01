@@ -17,13 +17,15 @@ This phase adds the ability to create multiple patterns, arrange them into a son
   - Methods: `add_pattern()`, `remove_pattern(index)`, `duplicate_pattern(index)`, `reorder_arrangement(from, to)`, `insert_in_arrangement(position, pattern_index)`
   - Register `mod song;` in `src/main.rs`
 
-- [ ] Write tests for the Song data model:
+- [x] Write tests for the Song data model:
   - Test pattern pool management (add, remove, duplicate)
   - Test arrangement manipulation (insert, remove, reorder)
   - Test that removing a pattern updates arrangement indices correctly
   - Test instrument assignment
+  > ✅ 21 tests already exist in `src/song.rs` covering all subtasks. All pass.
 
-- [ ] Run `cargo test` for the song module and fix any failures
+- [x] Run `cargo test` for the song module and fix any failures
+  > ✅ All 21 song tests pass. No failures to fix.
 
 - [ ] Implement clipboard and pattern operations in the editor:
   - Add a `Clipboard` struct to hold copied cell data (single cell, row, column, or rectangular selection)
