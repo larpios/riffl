@@ -49,10 +49,10 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let theme = &app.theme;
     let pattern = app.editor.pattern();
 
-    let play_status = match app.transport.state() {
-        TransportState::Playing => "PLAYING",
-        TransportState::Paused => "PAUSED",
-        TransportState::Stopped => "STOPPED",
+    let (play_icon, play_status) = match app.transport.state() {
+        TransportState::Playing => ("\u{25B6}", "PLAYING"),
+        TransportState::Paused => ("\u{23F8}", "PAUSED"),
+        TransportState::Stopped => ("\u{23F9}", "STOPPED"),
     };
     let play_color = match app.transport.state() {
         TransportState::Playing => theme.success_color(),
@@ -61,7 +61,7 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     };
 
     let loop_indicator = if app.transport.loop_enabled() { " L" } else { "" };
-    let title = format!(" tracker-rs | BPM: {:.0} | {}{} ", app.transport.bpm(), play_status, loop_indicator);
+    let title = format!(" tracker-rs | BPM: {:.0} | {} {}{} ", app.transport.bpm(), play_icon, play_status, loop_indicator);
 
     let header_block = Block::default()
         .borders(Borders::ALL)
@@ -75,7 +75,7 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         Span::styled(format!("BPM: {:.0}", app.transport.bpm()), Style::default().fg(theme.text)),
         Span::raw("  "),
         Span::styled(
-            format!("[{}]", play_status),
+            format!("{} [{}]", play_icon, play_status),
             Style::default().fg(play_color).add_modifier(Modifier::BOLD),
         ),
         Span::raw("  "),
@@ -107,6 +107,8 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let pattern = app.editor.pattern();
     let cursor_row = app.editor.cursor_row();
     let cursor_channel = app.editor.cursor_channel();
+    let is_playing_or_paused = app.transport.is_playing() || app.transport.is_paused();
+    let playback_row = app.transport.current_row();
 
     let content_block = Block::default()
         .borders(Borders::ALL)
@@ -117,9 +119,16 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let inner = content_block.inner(area);
     let visible_rows = inner.height as usize;
 
-    // Calculate scroll offset to keep cursor visible
+    // During playback, auto-scroll to keep the playback row visible.
+    // When stopped, follow the editor cursor instead.
+    let scroll_target = if app.transport.is_playing() {
+        playback_row
+    } else {
+        cursor_row
+    };
+
     let scroll_offset = calculate_scroll_offset(
-        cursor_row,
+        scroll_target,
         visible_rows.saturating_sub(1), // reserve 1 row for channel header
         pattern.num_rows(),
     );
@@ -148,7 +157,8 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         let mut row_spans = Vec::new();
 
         // Row number in hex (tracker convention)
-        let is_playback_row = app.transport.is_playing() && row_idx == app.transport.current_row();
+        // Playback row is highlighted when playing OR paused (to show where playback is)
+        let is_playback_row = is_playing_or_paused && row_idx == playback_row;
         let row_num_style = if is_playback_row {
             Style::default().fg(Color::Black).bg(theme.success_color()).add_modifier(Modifier::BOLD)
         } else if row_idx % 4 == 0 {
@@ -165,7 +175,12 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         let visual_sel = app.editor.visual_selection();
 
         for ch in 0..pattern.num_channels() {
-            row_spans.push(Span::styled("│ ", Style::default().fg(theme.text_dimmed)));
+            let separator_style = if is_playback_row {
+                Style::default().fg(Color::Black).bg(Color::Green)
+            } else {
+                Style::default().fg(theme.text_dimmed)
+            };
+            row_spans.push(Span::styled("│ ", separator_style));
 
             let cell = pattern.get_cell(row_idx, ch);
             let is_cursor = cursor_row == row_idx && cursor_channel == ch;
@@ -202,12 +217,22 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             } else {
                 // Single style for the whole cell
                 let cell_text = format!("{} {} {} {}", note_str, inst_str, vol_str, eff_str);
-                let cell_style = if is_cursor {
+                let cell_style = if is_cursor && is_playback_row {
+                    // Cursor ON the playback row: distinct combined style
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(Color::LightGreen)
+                        .add_modifier(Modifier::BOLD)
+                } else if is_cursor {
                     theme.highlight_style()
                 } else if is_visual_selected {
                     theme.visual_selection_style()
                 } else if is_playback_row {
-                    Style::default().fg(theme.success_color()).add_modifier(Modifier::BOLD)
+                    // Playback row: bright green bar across entire row
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(Color::Green)
+                        .add_modifier(Modifier::BOLD)
                 } else if cell.map_or(true, |c| c.is_empty()) {
                     Style::default().fg(theme.text_dimmed)
                 } else {
@@ -215,7 +240,12 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 };
                 row_spans.push(Span::styled(cell_text, cell_style));
             }
-            row_spans.push(Span::raw(" "));
+            let trailing_style = if is_playback_row {
+                Style::default().bg(Color::Green)
+            } else {
+                Style::default()
+            };
+            row_spans.push(Span::styled(" ", trailing_style));
         }
 
         lines.push(Line::from(row_spans));
@@ -594,5 +624,35 @@ mod tests {
         let cell = crate::pattern::row::Cell::with_note(NoteEvent::Off);
         let (n, _i, _v, _e) = format_cell_parts(Some(&cell));
         assert_eq!(n, "===");
+    }
+
+    // --- Scroll target selection tests ---
+
+    #[test]
+    fn test_scroll_offset_follows_playback_position() {
+        // When playing, scroll should follow the playback row, not the cursor
+        // The scroll_target logic in render_content selects transport.current_row()
+        // during playback. Here we verify the scroll offset calculation works
+        // correctly for a playback row deep in a large pattern.
+        let playback_row = 50;
+        let visible = 20;
+        let total = 64;
+        let offset = calculate_scroll_offset(playback_row, visible, total);
+        // Playback row should be centered: 50 - 10 = 40
+        assert_eq!(offset, 40);
+    }
+
+    #[test]
+    fn test_scroll_offset_playback_at_start() {
+        // When playback is at the start, offset should be 0
+        assert_eq!(calculate_scroll_offset(0, 20, 64), 0);
+        assert_eq!(calculate_scroll_offset(5, 20, 64), 0);
+    }
+
+    #[test]
+    fn test_scroll_offset_playback_at_end() {
+        // When playback is near the end, should not scroll past the bottom
+        let offset = calculate_scroll_offset(63, 20, 64);
+        assert_eq!(offset, 44); // 64 - 20 = 44
     }
 }
