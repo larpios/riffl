@@ -6,6 +6,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use crate::app::AppView;
 use crate::editor::EditorMode;
 
 /// Actions that can be triggered by keybindings
@@ -62,6 +63,9 @@ pub enum Action {
     ToggleSolo,
     NextTrack,
 
+    // View switching
+    SwitchView(AppView),
+
     // Application
     Quit,
     Confirm,
@@ -110,9 +114,6 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             // Track operations (Shift+M = 'M', Shift+S = 'S')
             KeyCode::Char('M') => Action::ToggleMute,
             KeyCode::Char('S') => Action::ToggleSolo,
-            // BPM adjustment: Shift+F1/F2 for ±10
-            KeyCode::F(1) => Action::BpmDownLarge,
-            KeyCode::F(2) => Action::BpmUpLarge,
             // '+' key (Shift+'=' on US keyboards) for BPM up
             KeyCode::Char('+') => Action::BpmUp,
             // Transpose by semitone
@@ -163,8 +164,11 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         KeyCode::Char(' ') => Action::TogglePlay,
         KeyCode::Char('=') => Action::BpmUp,
         KeyCode::Char('-') => Action::BpmDown,
-        KeyCode::F(1) => Action::BpmDown,
-        KeyCode::F(2) => Action::BpmUp,
+
+        // View switching
+        KeyCode::F(1) => Action::SwitchView(AppView::PatternEditor),
+        KeyCode::F(2) => Action::SwitchView(AppView::Arrangement),
+        KeyCode::F(3) => Action::SwitchView(AppView::InstrumentList),
 
         // Application
         KeyCode::Char('q') => Action::Quit,
@@ -389,11 +393,14 @@ mod tests {
     }
 
     #[test]
-    fn test_normal_mode_bpm_f1_f2() {
+    fn test_normal_mode_view_switching_f1_f2_f3() {
+        use crate::app::AppView;
         let f1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
         let f2 = KeyEvent::new(KeyCode::F(2), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(f1, EditorMode::Normal), Action::BpmDown);
-        assert_eq!(map_key_to_action(f2, EditorMode::Normal), Action::BpmUp);
+        let f3 = KeyEvent::new(KeyCode::F(3), KeyModifiers::NONE);
+        assert_eq!(map_key_to_action(f1, EditorMode::Normal), Action::SwitchView(AppView::PatternEditor));
+        assert_eq!(map_key_to_action(f2, EditorMode::Normal), Action::SwitchView(AppView::Arrangement));
+        assert_eq!(map_key_to_action(f3, EditorMode::Normal), Action::SwitchView(AppView::InstrumentList));
     }
 
     #[test]
@@ -403,11 +410,12 @@ mod tests {
     }
 
     #[test]
-    fn test_normal_mode_bpm_large_shift_f1_f2() {
+    fn test_normal_mode_shift_f1_f2_unmapped() {
+        // Shift+F1/F2 are no longer BPM large; F1/F2 now switch views
         let sf1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::SHIFT);
         let sf2 = KeyEvent::new(KeyCode::F(2), KeyModifiers::SHIFT);
-        assert_eq!(map_key_to_action(sf1, EditorMode::Normal), Action::BpmDownLarge);
-        assert_eq!(map_key_to_action(sf2, EditorMode::Normal), Action::BpmUpLarge);
+        assert_eq!(map_key_to_action(sf1, EditorMode::Normal), Action::None);
+        assert_eq!(map_key_to_action(sf2, EditorMode::Normal), Action::None);
     }
 
     #[test]

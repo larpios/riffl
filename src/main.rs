@@ -184,6 +184,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::ToggleSolo => app.toggle_solo_current_track(),
         Action::NextTrack => app.editor.next_track(),
 
+        // View switching
+        Action::SwitchView(view) => app.set_view(view),
+
         // Application
         Action::Quit => app.quit(),
         Action::OpenModal => app.open_test_modal(),
