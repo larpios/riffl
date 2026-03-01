@@ -3,12 +3,13 @@
 /// Provides pitch, octave, velocity, and instrument data for each note event.
 
 use std::fmt;
+use serde::{Serialize, Deserialize};
 
 /// Musical pitch with sharps and flats.
 ///
 /// Covers all 12 semitones of the chromatic scale using sharp notation.
 /// Flats are accepted when parsing but stored as their enharmonic sharp equivalent.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Pitch {
     C,
     CSharp,
@@ -111,7 +112,7 @@ impl fmt::Display for Pitch {
 }
 
 /// A musical note with pitch, octave, velocity, and instrument.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Note {
     /// The pitch of the note (C through B with sharps).
     pub pitch: Pitch,
@@ -220,7 +221,7 @@ impl fmt::Display for Note {
 /// In tracker notation, this is typically shown as "===" or "OFF".
 /// When encountered during playback, it stops the currently playing note
 /// on that channel.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NoteOff;
 
 impl fmt::Display for NoteOff {
@@ -230,7 +231,7 @@ impl fmt::Display for NoteOff {
 }
 
 /// A note event that can be either a note-on or note-off.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NoteEvent {
     /// A note-on event with pitch, octave, velocity, and instrument.
     On(Note),

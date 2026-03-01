@@ -5,6 +5,7 @@
 /// volume, and effect data.
 
 use std::fmt;
+use serde::{Serialize, Deserialize};
 
 use super::note::NoteEvent;
 
@@ -12,7 +13,7 @@ use super::note::NoteEvent;
 ///
 /// Effect commands modify playback behavior (e.g., pitch slides, vibrato,
 /// volume changes). Each effect has a type byte and a parameter byte.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Effect {
     /// Effect type identifier.
     pub command: u8,
@@ -42,7 +43,7 @@ impl fmt::Display for Effect {
 /// - An effect command
 ///
 /// All fields are optional; an empty cell has all fields as None.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Cell {
     /// The note event (note-on, note-off, or empty).
     pub note: Option<NoteEvent>,

@@ -4,6 +4,8 @@
 /// channels (parallel voices). The default size is 64 rows x 4 channels,
 /// matching classic tracker conventions.
 
+use serde::{Serialize, Deserialize};
+
 use super::note::{Note, NoteEvent};
 use super::row::{Cell, Row, new_row};
 use super::track::{Track, any_track_soloed};
@@ -19,7 +21,7 @@ pub const DEFAULT_CHANNELS: usize = 8;
 /// Patterns are the fundamental unit of composition in a tracker.
 /// Each pattern contains a fixed number of rows and channels.
 /// Rows represent time steps; channels represent parallel voices.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Pattern {
     /// The pattern data: rows × channels.
     rows: Vec<Row>,

@@ -3,6 +3,7 @@ mod audio;
 mod editor;
 mod input;
 mod pattern;
+mod project;
 mod song;
 mod transport;
 mod ui;
@@ -186,6 +187,24 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
 
         // View switching
         Action::SwitchView(view) => app.set_view(view),
+
+        // Project save/load
+        Action::SaveProject => app.save_project(),
+        Action::LoadProject => {
+            if let Some(path) = app.project_path.clone() {
+                app.load_project(&path);
+            } else {
+                let path = std::path::PathBuf::from("untitled.trs");
+                if path.exists() {
+                    app.load_project(&path);
+                } else {
+                    app.open_modal(ui::modal::Modal::info(
+                        "No Project".to_string(),
+                        "No project file found. Save first with Ctrl+S.".to_string(),
+                    ));
+                }
+            }
+        }
 
         // Application
         Action::Quit => app.quit(),
