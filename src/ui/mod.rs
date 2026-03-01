@@ -35,34 +35,48 @@ pub fn render(frame: &mut Frame, app: &App) {
 
     render_header(frame, header_area, app);
 
-    // Dispatch to the correct view renderer based on the active view
-    match app.current_view {
-        AppView::PatternEditor => render_content(frame, content_area, app),
-        AppView::Arrangement => {
-            let playback_pos = if app.transport.is_playing()
-                && app.transport.playback_mode() == PlaybackMode::Song
-            {
-                Some(app.transport.arrangement_position())
-            } else {
-                None
-            };
-            arrangement::render_arrangement(
-                frame,
-                content_area,
-                &app.song,
-                &app.arrangement_view,
-                playback_pos,
-                &app.theme,
-            );
-        }
-        AppView::InstrumentList => {
-            instrument_list::render_instrument_list(
-                frame,
-                content_area,
-                &app.song,
-                app.instrument_names(),
-                &app.theme,
-            );
+    // Handle split view: pattern left, code editor right
+    if app.split_view && app.current_view == AppView::PatternEditor {
+        let (left, right) = layout::create_split_layout(
+            content_area,
+            ratatui::layout::Direction::Horizontal,
+            50,
+        );
+        render_content(frame, left, app);
+        code_editor::render_code_editor(frame, right, &app.code_editor, &app.theme);
+    } else {
+        // Dispatch to the correct view renderer based on the active view
+        match app.current_view {
+            AppView::PatternEditor => render_content(frame, content_area, app),
+            AppView::Arrangement => {
+                let playback_pos = if app.transport.is_playing()
+                    && app.transport.playback_mode() == PlaybackMode::Song
+                {
+                    Some(app.transport.arrangement_position())
+                } else {
+                    None
+                };
+                arrangement::render_arrangement(
+                    frame,
+                    content_area,
+                    &app.song,
+                    &app.arrangement_view,
+                    playback_pos,
+                    &app.theme,
+                );
+            }
+            AppView::InstrumentList => {
+                instrument_list::render_instrument_list(
+                    frame,
+                    content_area,
+                    &app.song,
+                    app.instrument_names(),
+                    &app.theme,
+                );
+            }
+            AppView::CodeEditor => {
+                code_editor::render_code_editor(frame, content_area, &app.code_editor, &app.theme);
+            }
         }
     }
 
@@ -673,10 +687,15 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     }
 
     // View indicator
-    let view_label = match app.current_view {
-        AppView::PatternEditor => "F1:PAT",
-        AppView::Arrangement => "F2:ARR",
-        AppView::InstrumentList => "F3:INS",
+    let view_label = if app.split_view {
+        "SPLIT"
+    } else {
+        match app.current_view {
+            AppView::PatternEditor => "F1:PAT",
+            AppView::Arrangement => "F2:ARR",
+            AppView::InstrumentList => "F3:INS",
+            AppView::CodeEditor => "F4:CODE",
+        }
     };
     footer_spans.extend([
         Span::raw(" | "),

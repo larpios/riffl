@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 
 use crate::audio::{AudioEngine, Mixer, Sample, load_sample};
+use crate::dsl::engine::ScriptEngine;
 use crate::editor::{Editor, EditorMode};
 use crate::export;
 use crate::pattern::note::Pitch;
@@ -19,6 +20,7 @@ use crate::project;
 use crate::song::Song;
 use crate::transport::{AdvanceResult, PlaybackMode, Transport, TransportState};
 use crate::ui::arrangement::ArrangementView;
+use crate::ui::code_editor::CodeEditor;
 use crate::ui::export_dialog::ExportDialog;
 use crate::ui::file_browser::FileBrowser;
 use crate::ui::modal::Modal;
@@ -33,6 +35,8 @@ pub enum AppView {
     Arrangement,
     /// Instrument list — F3
     InstrumentList,
+    /// Code editor (full-screen) — F4
+    CodeEditor,
 }
 
 /// Application state
@@ -81,6 +85,15 @@ pub struct App {
 
     /// Transport system for playback control (play/pause/stop, BPM, looping)
     pub transport: Transport,
+
+    /// Code editor for writing Rhai DSL scripts
+    pub code_editor: CodeEditor,
+
+    /// Whether the split view is active (pattern left, code editor right)
+    pub split_view: bool,
+
+    /// DSL scripting engine for executing Rhai scripts
+    script_engine: ScriptEngine,
 
     /// Timestamp of the last update call (for delta time calculation)
     last_update: Instant,
@@ -143,6 +156,9 @@ impl App {
             audio_engine,
             mixer,
             transport,
+            code_editor: CodeEditor::new(),
+            split_view: false,
+            script_engine: ScriptEngine::new(),
             last_update: Instant::now(),
         }
     }
@@ -512,6 +528,67 @@ impl App {
     /// Switch to a different top-level view.
     pub fn set_view(&mut self, view: AppView) {
         self.current_view = view;
+        // When switching to CodeEditor view, activate the code editor
+        if view == AppView::CodeEditor {
+            self.code_editor.active = true;
+        } else {
+            self.code_editor.active = false;
+        }
+    }
+
+    /// Toggle split view mode (pattern left, code editor right).
+    pub fn toggle_split_view(&mut self) {
+        self.split_view = !self.split_view;
+        if self.split_view {
+            self.code_editor.active = true;
+            // Ensure we're in pattern editor view for the split
+            if self.current_view == AppView::CodeEditor {
+                self.current_view = AppView::PatternEditor;
+            }
+        } else {
+            self.code_editor.active = false;
+        }
+    }
+
+    /// Check if the code editor is active (either full-screen or split).
+    pub fn is_code_editor_active(&self) -> bool {
+        self.code_editor.active
+    }
+
+    /// Execute the current script in the code editor.
+    pub fn execute_script(&mut self) {
+        let code = self.code_editor.text();
+        if code.trim().is_empty() {
+            self.code_editor.set_output("(empty script)".to_string(), false);
+            return;
+        }
+
+        match self.script_engine.eval_with_pattern(&code, self.editor.pattern()) {
+            Ok((result, commands)) => {
+                // Apply pattern commands to the editor's pattern
+                use crate::dsl::engine::{apply_commands, ScriptResult};
+                let cmd_count = commands.len();
+                apply_commands(self.editor.pattern_mut(), &commands);
+
+                // Format output message
+                let output_msg = if cmd_count > 0 {
+                    match result {
+                        ScriptResult::Value(v) => format!("Applied {} commands. Result: {}", cmd_count, v),
+                        _ => format!("Applied {} commands to pattern.", cmd_count),
+                    }
+                } else {
+                    match result {
+                        ScriptResult::Value(v) => v,
+                        ScriptResult::Unit => "(ok)".to_string(),
+                        ScriptResult::PatternResult(_) => "(pattern result)".to_string(),
+                    }
+                };
+                self.code_editor.set_output(output_msg, false);
+            }
+            Err(err) => {
+                self.code_editor.set_output(err, true);
+            }
+        }
     }
 
     /// Save the current project to disk.
@@ -633,8 +710,10 @@ mod tests {
         assert_eq!(AppView::PatternEditor, AppView::PatternEditor);
         assert_eq!(AppView::Arrangement, AppView::Arrangement);
         assert_eq!(AppView::InstrumentList, AppView::InstrumentList);
+        assert_eq!(AppView::CodeEditor, AppView::CodeEditor);
         assert_ne!(AppView::PatternEditor, AppView::Arrangement);
         assert_ne!(AppView::Arrangement, AppView::InstrumentList);
+        assert_ne!(AppView::InstrumentList, AppView::CodeEditor);
     }
 
     #[test]
@@ -853,5 +932,141 @@ mod tests {
         use crate::ui::export_dialog::ExportPhase;
         assert_eq!(app.export_dialog.phase, ExportPhase::Failed);
         assert!(!app.export_dialog.result_message.is_empty());
+    }
+
+    // --- Code Editor and Split View Tests ---
+
+    #[test]
+    fn test_set_view_code_editor_activates_editor() {
+        let mut app = App::new();
+        assert!(!app.code_editor.active);
+        app.set_view(AppView::CodeEditor);
+        assert_eq!(app.current_view, AppView::CodeEditor);
+        assert!(app.code_editor.active);
+    }
+
+    #[test]
+    fn test_set_view_pattern_deactivates_code_editor() {
+        let mut app = App::new();
+        app.set_view(AppView::CodeEditor);
+        assert!(app.code_editor.active);
+        app.set_view(AppView::PatternEditor);
+        assert!(!app.code_editor.active);
+    }
+
+    #[test]
+    fn test_toggle_split_view_on() {
+        let mut app = App::new();
+        assert!(!app.split_view);
+        assert!(!app.code_editor.active);
+        app.toggle_split_view();
+        assert!(app.split_view);
+        assert!(app.code_editor.active);
+    }
+
+    #[test]
+    fn test_toggle_split_view_off() {
+        let mut app = App::new();
+        app.toggle_split_view();
+        assert!(app.split_view);
+        app.toggle_split_view();
+        assert!(!app.split_view);
+        assert!(!app.code_editor.active);
+    }
+
+    #[test]
+    fn test_split_view_from_code_editor_switches_to_pattern() {
+        let mut app = App::new();
+        app.set_view(AppView::CodeEditor);
+        app.toggle_split_view();
+        assert!(app.split_view);
+        // Should switch to PatternEditor for the split
+        assert_eq!(app.current_view, AppView::PatternEditor);
+    }
+
+    #[test]
+    fn test_is_code_editor_active() {
+        let mut app = App::new();
+        assert!(!app.is_code_editor_active());
+
+        app.set_view(AppView::CodeEditor);
+        assert!(app.is_code_editor_active());
+
+        app.set_view(AppView::PatternEditor);
+        assert!(!app.is_code_editor_active());
+
+        app.toggle_split_view();
+        assert!(app.is_code_editor_active());
+    }
+
+    #[test]
+    fn test_execute_script_empty() {
+        let mut app = App::new();
+        app.execute_script();
+        assert_eq!(app.code_editor.output(), "(empty script)");
+        assert!(!app.code_editor.output_is_error);
+    }
+
+    #[test]
+    fn test_execute_script_simple_expression() {
+        let mut app = App::new();
+        app.code_editor.set_text("40 + 2");
+        app.execute_script();
+        assert_eq!(app.code_editor.output(), "42");
+        assert!(!app.code_editor.output_is_error);
+    }
+
+    #[test]
+    fn test_execute_script_error() {
+        let mut app = App::new();
+        app.code_editor.set_text("let x = ;");
+        app.execute_script();
+        assert!(app.code_editor.output_is_error);
+        assert!(!app.code_editor.output().is_empty());
+    }
+
+    #[test]
+    fn test_execute_script_set_note() {
+        let mut app = App::new();
+        app.code_editor.set_text(r#"
+            let n = note("C", 4);
+            set_note(0, 0, n);
+        "#);
+        app.execute_script();
+        assert!(!app.code_editor.output_is_error);
+        assert!(app.code_editor.output().contains("Applied"));
+        // Verify note was placed
+        let cell = app.editor.pattern().get_cell(0, 0);
+        assert!(cell.is_some());
+        let cell = cell.unwrap();
+        assert!(cell.note.is_some());
+    }
+
+    #[test]
+    fn test_execute_script_clear_pattern() {
+        let mut app = App::new();
+        // First set some notes
+        app.editor.pattern_mut().set_note(0, 0, Note::simple(Pitch::C, 4));
+        // Then clear via script
+        app.code_editor.set_text("clear_pattern();");
+        app.execute_script();
+        assert!(!app.code_editor.output_is_error);
+        // Verify pattern was cleared
+        let cell = app.editor.pattern().get_cell(0, 0);
+        assert!(cell.map_or(true, |c| c.is_empty()));
+    }
+
+    #[test]
+    fn test_view_cycle_includes_code_editor() {
+        let mut app = App::new();
+        assert_eq!(app.current_view, AppView::PatternEditor);
+        app.set_view(AppView::Arrangement);
+        assert_eq!(app.current_view, AppView::Arrangement);
+        app.set_view(AppView::InstrumentList);
+        assert_eq!(app.current_view, AppView::InstrumentList);
+        app.set_view(AppView::CodeEditor);
+        assert_eq!(app.current_view, AppView::CodeEditor);
+        app.set_view(AppView::PatternEditor);
+        assert_eq!(app.current_view, AppView::PatternEditor);
     }
 }

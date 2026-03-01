@@ -55,13 +55,14 @@ This phase delivers the core differentiator of tracker-rs: a live coding scripti
   - Register in `src/ui/mod.rs`
   - *(Completed: Created CodeEditor struct with full text editing, syntax highlighting for keywords/strings/numbers/comments, cursor navigation, vertical scrolling, and output/error display panel. Registered as `pub mod code_editor` in ui/mod.rs. Added 38 tests covering text editing, cursor navigation, syntax highlighting, and edge cases. All 723 project tests pass.)*
 
-- [ ] Integrate the code editor as a split view:
+- [x] Integrate the code editor as a split view:
   - Add `CodeEditor` view to `AppView` enum (accessible via `F4`)
   - Add a split-screen mode: `Ctrl+\` toggles between full pattern view and 50/50 split (pattern left, code right)
   - When in code editor, the pattern view still shows and updates live
   - `Ctrl+Enter` executes the current script
   - Script output (generated pattern data) is applied to the current pattern or a preview pattern
   - Error messages from script execution displayed in the output area with line numbers
+  - *(Completed: Added AppView::CodeEditor (F4), split view toggle (Ctrl+\), full code editor key handling with text editing/navigation, Ctrl+Enter script execution via DSL engine with pattern command application, error display in output panel. Added 17 new tests (12 app tests + 5 keybinding tests). All 740 project tests pass.)*
 
 - [ ] Create a set of example scripts that ship as built-in templates:
   - Store as string constants in `src/dsl/examples.rs`
