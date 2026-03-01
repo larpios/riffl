@@ -30,7 +30,7 @@ This phase implements tracker effect commands (volume slides, pitch slides, arpe
 - [x] Run `cargo test` for effects and fix any failures
   <!-- All 492 tests pass (0 failures, 0 filtered). Compiler warnings present (unused imports) but no test failures. -->
 
-- [ ] Implement effect processing in the mixer/playback engine:
+- [x] Implement effect processing in the mixer/playback engine:
   - Create `src/audio/effect_processor.rs` with per-channel effect state
   - Track running state per channel: current pitch offset, volume, vibrato phase, portamento target
   - Process effects each row tick:
@@ -43,6 +43,7 @@ This phase implements tracker effect commands (volume slides, pitch slides, arpe
     - Set BPM: update transport tempo
     - Position jump / pattern break: signal transport to change position
   - Register in `src/audio/mod.rs`
+  <!-- Created src/audio/effect_processor.rs with EffectProcessor (per-channel ChannelEffectState), TransportCommand enum, and full integration with mixer. Mixer.tick() now returns Vec<TransportCommand> for BPM/position changes. Mixer.render() applies effect pitch modulation and volume overrides per-frame. 45 new tests added to effect_processor.rs covering all effect types, transport commands, arpeggio cycling, vibrato modulation, pitch slides, volume slides, portamento, and frame advancement. All 537 tests pass (0 failures). -->
 
 - [ ] Update the pattern editor UI to display and edit effects:
   - Each cell now shows: `C#4 01 64 A04` (note, instrument, volume, effect)
