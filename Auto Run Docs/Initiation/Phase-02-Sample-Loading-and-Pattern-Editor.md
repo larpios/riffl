@@ -35,12 +35,13 @@ This phase adds real sample loading from disk (WAV, FLAC, OGG via symphonia) and
   - Register the `editor` module in `src/main.rs`
   - ✅ Completed: `EditorMode` enum (Normal/Insert/Visual), `Editor` struct with cursor (row, channel, sub_column), `SubColumn` enum, undo history (max 100), all navigation methods, note entry (A-G → pitch, 0-9 → octave), delete/insert/delete_row, mode transitions, visual selection, `char_to_pitch()`, `clamp_cursor()`. 49 tests covering modes, navigation, sub-column movement in Insert mode, note entry, undo, visual selection, row ops, edge cases. Registered in `src/main.rs` and `src/lib.rs`. All 211 tests pass.
 
-- [ ] Integrate the editor into App and update keybindings:
+- [x] Integrate the editor into App and update keybindings:
   - Replace the bare cursor/pattern fields in `App` with an `Editor` instance
   - Update `src/input/keybindings.rs` to handle editor modes:
     - Normal mode: hjkl navigation, `i` for insert, `v` for visual, `x` or `Delete` to clear cell, space for play/pause
     - Insert mode: A-G for note entry, 0-9 for octave, Escape to return to normal
   - Update `Action` enum with new actions: `EnterInsertMode`, `EnterNormalMode`, `EnterNote(char)`, `SetOctave(u8)`, `DeleteCell`, `InsertRow`, `DeleteRow`, `PageUp`, `PageDown`
+  - ✅ Completed: Replaced `cursor_x`/`cursor_y`/`pattern` in App with `Editor` instance. `map_key_to_action()` now takes `EditorMode` parameter for mode-aware dispatch (Normal/Insert/Visual). Action enum expanded with all new variants. `handle_key_event` in main.rs routes through editor methods. UI footer shows mode indicator (NORMAL/INSERT/VISUAL) with mode-specific keybinding hints. All 224 tests pass (166 lib + 224 bin, 0 failures).
 
 - [ ] Update the pattern grid UI rendering to reflect editor state:
   - Show the current editor mode in the footer (NORMAL / INSERT / VISUAL)

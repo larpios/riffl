@@ -21,6 +21,7 @@ use ratatui::{
 };
 
 use app::App;
+use editor::Editor;
 use input::keybindings::{map_key_to_action, Action};
 
 /// Tick rate for the event loop (16ms ≈ 60 FPS for smooth BPM timing)
@@ -100,26 +101,58 @@ fn run_app<B: ratatui::backend::Backend>(
 }
 
 fn handle_key_event(app: &mut App, key: KeyEvent) {
-    let action = map_key_to_action(key);
+    // If a modal is open, handle modal-specific input first
+    if app.has_modal() {
+        let action = map_key_to_action(key, app.editor_mode());
+        match action {
+            Action::Cancel | Action::Confirm | Action::EnterNormalMode => {
+                app.close_modal();
+            }
+            _ => {}
+        }
+        return;
+    }
+
+    let action = map_key_to_action(key, app.editor_mode());
 
     match action {
-        Action::MoveLeft => app.move_left(),
-        Action::MoveDown => app.move_down(),
-        Action::MoveUp => app.move_up(),
-        Action::MoveRight => app.move_right(),
+        // Navigation — delegate to editor
+        Action::MoveLeft => app.editor.move_left(),
+        Action::MoveDown => app.editor.move_down(),
+        Action::MoveUp => app.editor.move_up(),
+        Action::MoveRight => app.editor.move_right(),
+        Action::PageUp => app.editor.page_up(),
+        Action::PageDown => app.editor.page_down(),
+
+        // Mode transitions
+        Action::EnterInsertMode => app.editor.enter_insert_mode(),
+        Action::EnterNormalMode => app.editor.enter_normal_mode(),
+        Action::EnterVisualMode => app.editor.enter_visual_mode(),
+
+        // Note entry (Insert mode)
+        Action::EnterNote(c) => {
+            if let Some(pitch) = Editor::char_to_pitch(c) {
+                app.editor.enter_note(pitch);
+            }
+        }
+        Action::SetOctave(oct) => app.editor.set_octave(oct),
+
+        // Editing
+        Action::DeleteCell => app.editor.delete_cell(),
+        Action::InsertRow => app.editor.insert_row(),
+        Action::DeleteRow => app.editor.delete_row(),
+        Action::Undo => { app.editor.undo(); }
+
+        // Application
         Action::Quit => app.quit(),
-        Action::OpenModal => {
-            app.open_test_modal();
-        }
-        Action::Cancel => {
-            app.close_modal();
-        }
+        Action::TogglePlay => app.toggle_play(),
+        Action::OpenModal => app.open_test_modal(),
+        Action::Cancel => { app.close_modal(); }
         Action::Confirm => {
             if app.has_modal() {
                 app.close_modal();
             }
         }
-        Action::TogglePlay => app.toggle_play(),
         Action::None => {}
     }
 }
