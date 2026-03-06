@@ -8,6 +8,8 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use hound::{SampleFormat, WavSpec, WavWriter};
 
+use std::sync::Arc;
+
 use crate::audio::mixer::Mixer;
 use crate::audio::sample::Sample;
 use crate::song::Song;
@@ -70,7 +72,7 @@ const ROWS_PER_BEAT: f64 = 4.0;
 pub fn export_wav<F>(
     path: &Path,
     song: &Song,
-    samples: &[Sample],
+    samples: &[Arc<Sample>],
     config: &ExportConfig,
     mut progress: F,
 ) -> Result<()>
@@ -222,7 +224,7 @@ mod tests {
         let config = ExportConfig::default();
         let mut progress_values = Vec::new();
 
-        export_wav(&path, &song, &[sample], &config, |p| {
+        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |p| {
             progress_values.push(p);
         })
         .unwrap();
@@ -259,7 +261,7 @@ mod tests {
             bit_depth: BitDepth::Bits16,
         };
 
-        export_wav(&path, &song, &[sample], &config, |_| {}).unwrap();
+        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
 
         let reader = hound::WavReader::open(&path).unwrap();
         let spec = reader.spec();
@@ -286,7 +288,7 @@ mod tests {
         let song = Song::new("Silent", 120.0);
 
         let config = ExportConfig::default();
-        export_wav(&path, &song, &[sample], &config, |_| {}).unwrap();
+        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
 
         let mut reader = hound::WavReader::open(&path).unwrap();
         let max_abs: i16 = reader
@@ -310,7 +312,7 @@ mod tests {
         song.patterns[0].set_note(4, 1, Note::new(Pitch::C, 4, 100, 0));
 
         let config = ExportConfig::default();
-        export_wav(&path, &song, &[sample], &config, |_| {}).unwrap();
+        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
 
         let mut reader = hound::WavReader::open(&path).unwrap();
         let max_abs: i16 = reader
@@ -337,7 +339,7 @@ mod tests {
             bit_depth: BitDepth::Bits16,
         };
 
-        export_wav(&path, &song, &[sample], &config, |_| {}).unwrap();
+        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
 
         let reader = hound::WavReader::open(&path).unwrap();
         assert_eq!(reader.spec().sample_rate, 48000);
@@ -358,7 +360,7 @@ mod tests {
             bit_depth: BitDepth::Bits24,
         };
 
-        export_wav(&path, &song, &[sample], &config, |_| {}).unwrap();
+        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
 
         let reader = hound::WavReader::open(&path).unwrap();
         assert_eq!(reader.spec().bits_per_sample, 24);
@@ -409,7 +411,7 @@ mod tests {
         let config = ExportConfig::default();
         let mut progress_values = Vec::new();
 
-        export_wav(&path, &song, &[sample], &config, |p| {
+        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |p| {
             progress_values.push(p);
         })
         .unwrap();
@@ -442,7 +444,7 @@ mod tests {
         song.arrangement = vec![0, 1];
 
         let config = ExportConfig::default();
-        export_wav(&path, &song, &[sample], &config, |_| {}).unwrap();
+        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
 
         let reader = hound::WavReader::open(&path).unwrap();
         let num_frames = reader.len() / 2; // stereo
@@ -472,7 +474,7 @@ mod tests {
         song.patterns[0].set_note(16, 0, Note::new(Pitch::G, 4, 100, 0));
 
         let config = ExportConfig::default();
-        export_wav(&path, &song, &[sample], &config, |_| {}).unwrap();
+        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
 
         // Reading all samples should not error (proves file integrity)
         let mut reader = hound::WavReader::open(&path).unwrap();
@@ -499,7 +501,7 @@ mod tests {
             bit_depth: BitDepth::Bits24,
         };
 
-        export_wav(&path, &song, &[sample], &config, |_| {}).unwrap();
+        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
 
         let reader = hound::WavReader::open(&path).unwrap();
         let spec = reader.spec();
@@ -536,7 +538,7 @@ mod tests {
         song.arrangement = vec![0, 1];
 
         let config = ExportConfig::default();
-        export_wav(&path, &song, &[sample], &config, |_| {}).unwrap();
+        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
 
         let mut reader = hound::WavReader::open(&path).unwrap();
         let all_zero = reader.samples::<i16>().all(|s| s.unwrap() == 0);
@@ -559,7 +561,7 @@ mod tests {
         song.patterns[0].set_note(32, 2, Note::new(Pitch::A, 4, 127, 0));
 
         let config = ExportConfig::default();
-        export_wav(&path, &song, &[sample], &config, |_| {}).unwrap();
+        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
 
         let mut reader = hound::WavReader::open(&path).unwrap();
         let samples: Vec<i16> = reader.samples::<i16>().map(|s| s.unwrap()).collect();
@@ -583,12 +585,12 @@ mod tests {
         let path_slow = temp_wav_path("test_export_bpm_slow.wav");
         let mut song_slow = Song::new("Slow", 60.0); // 60 BPM
         song_slow.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
-        export_wav(&path_slow, &song_slow, &[sample.clone()], &config, |_| {}).unwrap();
+        export_wav(&path_slow, &song_slow, &[std::sync::Arc::new(sample.clone())], &config, |_| {}).unwrap();
 
         let path_fast = temp_wav_path("test_export_bpm_fast.wav");
         let mut song_fast = Song::new("Fast", 240.0); // 240 BPM
         song_fast.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
-        export_wav(&path_fast, &song_fast, &[sample], &config, |_| {}).unwrap();
+        export_wav(&path_fast, &song_fast, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
 
         let reader_slow = hound::WavReader::open(&path_slow).unwrap();
         let reader_fast = hound::WavReader::open(&path_fast).unwrap();
@@ -619,7 +621,7 @@ mod tests {
 
         let config = ExportConfig::default();
         let mut final_progress = 0.0f32;
-        export_wav(&path, &song, &[sample], &config, |p| {
+        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |p| {
             final_progress = p;
         })
         .unwrap();
