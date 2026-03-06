@@ -123,7 +123,7 @@ impl App {
 
         // Create mixer with engine's output sample rate
         let mixer = Arc::new(Mutex::new(Mixer::new(
-            vec![demo_sample],
+            vec![Arc::new(demo_sample)],
             pattern.num_channels(),
             output_sample_rate,
         )));
@@ -475,7 +475,7 @@ impl App {
         let name = sample.name().unwrap_or("unknown").to_string();
 
         let idx = if let Ok(mut mixer) = self.mixer.lock() {
-            mixer.add_sample(sample)
+            mixer.add_sample(Arc::new(sample))
         } else {
             return Err("Failed to lock mixer".to_string());
         };
@@ -508,8 +508,8 @@ impl App {
 
         self.export_dialog.start_export();
 
-        // Clone samples from the mixer for offline rendering
-        let samples: Vec<Sample> = if let Ok(mixer) = self.mixer.lock() {
+        // Clone sample references from the mixer for offline rendering
+        let samples: Vec<Arc<Sample>> = if let Ok(mixer) = self.mixer.lock() {
             mixer.samples().to_vec()
         } else {
             self.export_dialog
