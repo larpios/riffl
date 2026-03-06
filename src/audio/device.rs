@@ -101,7 +101,7 @@ pub fn enumerate_devices() -> AudioResult<Vec<DeviceInfo>> {
 
     for device in output_devices {
         if let Ok(name) = device.name() {
-            let is_default = default_name.as_ref().map_or(false, |dn| dn == &name);
+            let is_default = default_name.as_ref() == Some(&name);
             devices.push(DeviceInfo { name, is_default });
         }
     }
@@ -121,13 +121,12 @@ pub fn enumerate_devices() -> AudioResult<Vec<DeviceInfo>> {
 pub fn get_device_by_index(index: usize) -> AudioResult<AudioDevice> {
     let host = cpal::default_host();
 
-    let output_devices = host
+    let mut output_devices = host
         .output_devices()
         .map_err(|_| AudioError::DeviceNotFound)?;
 
     let device = output_devices
-        .skip(index)
-        .next()
+        .nth(index)
         .ok_or(AudioError::DeviceNotFound)?;
 
     AudioDevice::new(device)
