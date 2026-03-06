@@ -2,7 +2,6 @@
 ///
 /// Displays the song's pattern sequence vertically, allowing navigation
 /// and manipulation of the arrangement (pattern order).
-
 use ratatui::{
     layout::Alignment,
     style::{Color, Modifier, Style},
@@ -165,12 +164,10 @@ pub fn render_arrangement(
     let mut lines: Vec<Line> = Vec::new();
 
     // Header line
-    lines.push(Line::from(vec![
-        Span::styled(
-            format!("  {:>3}  {:>3}  {:>4}  {}", "Pos", "Pat", "Rows", "Preview"),
-            Style::default().fg(theme.text_secondary),
-        ),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        format!("  {:>3}  {:>3}  {:>4}  {}", "Pos", "Pat", "Rows", "Preview"),
+        Style::default().fg(theme.text_secondary),
+    )]));
 
     let data_rows = visible_rows.saturating_sub(1); // reserve header
     for display_idx in 0..data_rows {
@@ -240,8 +237,8 @@ fn calculate_scroll(cursor: usize, visible_rows: usize, total: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pattern::Pattern;
     use crate::pattern::note::{Note, Pitch};
+    use crate::pattern::Pattern;
 
     fn test_song() -> Song {
         let mut song = Song::new("Test", 120.0);

@@ -3,7 +3,6 @@
 /// This module provides a modal dialog system for displaying centered popups,
 /// confirmation dialogs, and other modal interactions. Modals are rendered
 /// on top of the main content and can be dismissed by user input.
-
 use ratatui::{
     layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
@@ -296,8 +295,7 @@ mod tests {
 
     #[test]
     fn test_modal_with_size() {
-        let modal = Modal::info("Test".to_string(), "Test".to_string())
-            .with_size(80, 60);
+        let modal = Modal::info("Test".to_string(), "Test".to_string()).with_size(80, 60);
 
         assert_eq!(modal.width_percent, 80);
         assert_eq!(modal.height_percent, 60);
@@ -305,8 +303,7 @@ mod tests {
 
     #[test]
     fn test_modal_with_size_clamps() {
-        let modal = Modal::info("Test".to_string(), "Test".to_string())
-            .with_size(150, 150);
+        let modal = Modal::info("Test".to_string(), "Test".to_string()).with_size(150, 150);
 
         assert_eq!(modal.width_percent, 100);
         assert_eq!(modal.height_percent, 100);
@@ -315,10 +312,22 @@ mod tests {
     #[test]
     fn test_border_colors() {
         let theme = Theme::default();
-        assert_eq!(Modal::info("".to_string(), "".to_string()).border_color(&theme), Color::Cyan);
-        assert_eq!(Modal::warning("".to_string(), "".to_string()).border_color(&theme), Color::Yellow);
-        assert_eq!(Modal::error("".to_string(), "".to_string()).border_color(&theme), Color::Red);
-        assert_eq!(Modal::confirmation("".to_string(), "".to_string()).border_color(&theme), Color::Green);
+        assert_eq!(
+            Modal::info("".to_string(), "".to_string()).border_color(&theme),
+            Color::Cyan
+        );
+        assert_eq!(
+            Modal::warning("".to_string(), "".to_string()).border_color(&theme),
+            Color::Yellow
+        );
+        assert_eq!(
+            Modal::error("".to_string(), "".to_string()).border_color(&theme),
+            Color::Red
+        );
+        assert_eq!(
+            Modal::confirmation("".to_string(), "".to_string()).border_color(&theme),
+            Color::Green
+        );
     }
 
     #[test]
