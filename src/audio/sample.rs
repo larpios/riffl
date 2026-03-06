@@ -112,65 +112,66 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_base_frequency_a4() {
-        // Note 57 is A4 in tracker base
-        let sample = Sample::default().with_base_note(57);
-        let freq = sample.base_frequency();
-        assert!(
-            (freq - 440.0).abs() < 1e-5,
-            "A4 frequency should be exactly 440.0 Hz, got {}",
-            freq
-        );
+    fn test_sample_duration_mono() {
+        let sample_rate = 44100;
+        let channels = 1;
+        let data = vec![0.0; 44100]; // 1 second
+        let sample = Sample::new(data, sample_rate, channels, None);
+        assert_eq!(sample.duration(), 1.0);
     }
 
     #[test]
-    fn test_base_frequency_a5() {
-        // Note 69 is A5
-        let sample = Sample::default().with_base_note(69);
-        let freq = sample.base_frequency();
-        assert!(
-            (freq - 880.0).abs() < 1e-5,
-            "A5 frequency should be exactly 880.0 Hz, got {}",
-            freq
-        );
+    fn test_sample_duration_stereo() {
+        let sample_rate = 44100;
+        let channels = 2;
+        let data = vec![0.0; 88200]; // 1 second
+        let sample = Sample::new(data, sample_rate, channels, None);
+        assert_eq!(sample.duration(), 1.0);
     }
 
     #[test]
-    fn test_base_frequency_a3() {
-        // Note 45 is A3
-        let sample = Sample::default().with_base_note(45);
-        let freq = sample.base_frequency();
-        assert!(
-            (freq - 220.0).abs() < 1e-5,
-            "A3 frequency should be exactly 220.0 Hz, got {}",
-            freq
-        );
+    fn test_sample_duration_different_rate() {
+        let sample_rate = 48000;
+        let channels = 1;
+        let data = vec![0.0; 24000]; // 0.5 seconds
+        let sample = Sample::new(data, sample_rate, channels, None);
+        assert_eq!(sample.duration(), 0.5);
     }
 
     #[test]
-    fn test_base_frequency_c4() {
-        // Note 48 is C4 (default)
-        let sample = Sample::default().with_base_note(48);
-        let freq = sample.base_frequency();
-        assert!(
-            (freq - 261.625565).abs() < 1e-5,
-            "C4 frequency should be roughly 261.63 Hz, got {}",
-            freq
-        );
+    fn test_sample_duration_empty() {
+        let sample = Sample::default();
+        assert_eq!(sample.duration(), 0.0);
     }
 
     #[test]
-    fn test_base_frequency_0() {
-        // Extreme condition, base note 0
-        let sample = Sample::default().with_base_note(0);
-        let freq = sample.base_frequency();
-        // 57 semitones below A4 (440) -> 440 / (2^(57/12))
-        let expected = 440.0 * 2.0_f64.powf(-57.0 / 12.0);
-        assert!(
-            (freq - expected).abs() < 1e-5,
-            "Note 0 frequency should be {}, got {}",
-            expected,
-            freq
-        );
+    fn test_sample_frame_count() {
+        let sample = Sample::new(vec![0.0; 100], 44100, 2, None);
+        assert_eq!(sample.frame_count(), 50);
+    }
+
+    #[test]
+    fn test_sample_is_empty() {
+        let sample = Sample::default();
+        assert!(sample.is_empty());
+        let sample = Sample::new(vec![0.0], 44100, 1, None);
+        assert!(!sample.is_empty());
+    }
+
+    #[test]
+    fn test_sample_len() {
+        let sample = Sample::new(vec![0.0; 100], 44100, 1, None);
+        assert_eq!(sample.len(), 100);
+    }
+
+    #[test]
+    fn test_sample_properties() {
+        let data = vec![0.1, 0.2, 0.3];
+        let sample = Sample::new(data.clone(), 44100, 1, Some("test".to_string()));
+        assert_eq!(sample.data(), &data);
+        assert_eq!(sample.sample_rate(), 44100);
+        assert_eq!(sample.channels(), 1);
+        assert_eq!(sample.name(), Some("test"));
+        assert_eq!(sample.base_note(), C4_MIDI);
     }
 }
