@@ -485,7 +485,7 @@ pub fn render_code_editor(frame: &mut Frame, area: Rect, editor: &CodeEditor, th
 fn output_height(total: u16) -> u16 {
     // At least 3, at most 25% of total height
     let quarter = total / 4;
-    quarter.clamp(3, 8)
+    quarter.max(3).min(8)
 }
 
 /// Render the text editor portion with line numbers and syntax highlighting.
