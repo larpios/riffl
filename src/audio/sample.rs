@@ -113,48 +113,49 @@ mod tests {
 
     #[test]
     fn test_base_frequency_a4() {
-        // Note 57 is A4 in tracker base
-        let sample = Sample::default().with_base_note(57);
+        // A4 in tracker base (C4=48): C4_MIDI + 9 semitones
+        let sample = Sample::default().with_base_note(C4_MIDI + 9);
         let freq = sample.base_frequency();
         assert!(
             (freq - 440.0).abs() < 1e-5,
-            "A4 frequency should be exactly 440.0 Hz, got {}",
+            "A4 frequency should be approximately 440.0 Hz (within 1e-5), got {}",
             freq
         );
     }
 
     #[test]
     fn test_base_frequency_a5() {
-        // Note 69 is A5
-        let sample = Sample::default().with_base_note(69);
+        // A5 in tracker base (C4=48): C4_MIDI + 9 semitones + 1 octave
+        let sample = Sample::default().with_base_note(C4_MIDI + 21);
         let freq = sample.base_frequency();
         assert!(
             (freq - 880.0).abs() < 1e-5,
-            "A5 frequency should be exactly 880.0 Hz, got {}",
+            "A5 frequency should be approximately 880.0 Hz (within 1e-5), got {}",
             freq
         );
     }
 
     #[test]
     fn test_base_frequency_a3() {
-        // Note 45 is A3
-        let sample = Sample::default().with_base_note(45);
+        // A3 in tracker base (C4=48): (C4_MIDI - 12) + 9 semitones = C4_MIDI - 3
+        let sample = Sample::default().with_base_note(C4_MIDI - 3);
         let freq = sample.base_frequency();
         assert!(
             (freq - 220.0).abs() < 1e-5,
-            "A3 frequency should be exactly 220.0 Hz, got {}",
+            "A3 frequency should be approximately 220.0 Hz (within 1e-5), got {}",
             freq
         );
     }
 
     #[test]
     fn test_base_frequency_c4() {
-        // Note 48 is C4 (default)
-        let sample = Sample::default().with_base_note(48);
+        // Note 48 is C4 (default base note for Sample::default)
+        let sample = Sample::default();
+        assert_eq!(sample.base_note(), C4_MIDI, "Sample::default() should have base note C4_MIDI");
         let freq = sample.base_frequency();
         assert!(
             (freq - 261.625565).abs() < 1e-5,
-            "C4 frequency should be roughly 261.63 Hz, got {}",
+            "C4 frequency should be approximately 261.63 Hz (within 1e-5), got {}",
             freq
         );
     }
@@ -164,11 +165,11 @@ mod tests {
         // Extreme condition, base note 0
         let sample = Sample::default().with_base_note(0);
         let freq = sample.base_frequency();
-        // 57 semitones below A4 (440) -> 440 / (2^(57/12))
-        let expected = 440.0 * 2.0_f64.powf(-57.0 / 12.0);
+        // (C4_MIDI + 9) semitones below A4 (440) -> 440 / (2^((C4_MIDI+9)/12))
+        let expected = 440.0 * 2.0_f64.powf(-((C4_MIDI as f64 + 9.0) / 12.0));
         assert!(
             (freq - expected).abs() < 1e-5,
-            "Note 0 frequency should be {}, got {}",
+            "Note 0 frequency should be approximately {} (within 1e-5), got {}",
             expected,
             freq
         );
