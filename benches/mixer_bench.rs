@@ -10,7 +10,11 @@ fn bench_mixer_new(c: &mut Criterion) {
     c.bench_function("Mixer::new clone", |b| {
         b.iter(|| {
             // Under old implementation, sample.clone() is O(N) allocation
-            let mixer = Mixer::new(black_box(vec![std::sync::Arc::new(sample.clone())]), 4, 44100);
+            let mixer = Mixer::new(
+                black_box(vec![std::sync::Arc::new(sample.clone())]),
+                4,
+                44100,
+            );
             black_box(mixer);
         });
     });

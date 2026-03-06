@@ -1,11 +1,10 @@
+use serde::{Deserialize, Serialize};
 /// Effect command types and processing for the tracker.
 ///
 /// Effects modify playback behavior on a per-row basis. Each effect has a
 /// command type (identifying what the effect does) and a parameter byte
 /// controlling its intensity or target value.
-
 use std::fmt;
-use serde::{Serialize, Deserialize};
 
 /// Standard tracker effect command types.
 ///
@@ -245,14 +244,29 @@ mod tests {
     #[test]
     fn test_effect_type_from_command() {
         assert_eq!(EffectType::from_command(0x0), Some(EffectType::Arpeggio));
-        assert_eq!(EffectType::from_command(0x1), Some(EffectType::PitchSlideUp));
-        assert_eq!(EffectType::from_command(0x2), Some(EffectType::PitchSlideDown));
-        assert_eq!(EffectType::from_command(0x3), Some(EffectType::PortamentoToNote));
+        assert_eq!(
+            EffectType::from_command(0x1),
+            Some(EffectType::PitchSlideUp)
+        );
+        assert_eq!(
+            EffectType::from_command(0x2),
+            Some(EffectType::PitchSlideDown)
+        );
+        assert_eq!(
+            EffectType::from_command(0x3),
+            Some(EffectType::PortamentoToNote)
+        );
         assert_eq!(EffectType::from_command(0x4), Some(EffectType::Vibrato));
         assert_eq!(EffectType::from_command(0xA), Some(EffectType::VolumeSlide));
-        assert_eq!(EffectType::from_command(0xB), Some(EffectType::PositionJump));
+        assert_eq!(
+            EffectType::from_command(0xB),
+            Some(EffectType::PositionJump)
+        );
         assert_eq!(EffectType::from_command(0xC), Some(EffectType::SetVolume));
-        assert_eq!(EffectType::from_command(0xD), Some(EffectType::PatternBreak));
+        assert_eq!(
+            EffectType::from_command(0xD),
+            Some(EffectType::PatternBreak)
+        );
         assert_eq!(EffectType::from_command(0xF), Some(EffectType::SetSpeed));
     }
 
@@ -283,7 +297,12 @@ mod tests {
         for &effect_type in &types {
             let cmd = effect_type.to_command();
             let decoded = EffectType::from_command(cmd);
-            assert_eq!(decoded, Some(effect_type), "Roundtrip failed for {:?}", effect_type);
+            assert_eq!(
+                decoded,
+                Some(effect_type),
+                "Roundtrip failed for {:?}",
+                effect_type
+            );
         }
     }
 
@@ -399,7 +418,7 @@ mod tests {
         // Verify actual values
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(value["command"], 10); // 0xA = 10
-        assert_eq!(value["param"], 4);   // 0x04 = 4
+        assert_eq!(value["param"], 4); // 0x04 = 4
     }
 
     // --- Additional Hex Display Edge Cases ---
@@ -440,7 +459,11 @@ mod tests {
         ];
         for (effect_type, param, expected_cmd) in cases {
             let eff = Effect::from_type(effect_type, param);
-            assert_eq!(eff.command, expected_cmd, "Wrong command for {:?}", effect_type);
+            assert_eq!(
+                eff.command, expected_cmd,
+                "Wrong command for {:?}",
+                effect_type
+            );
             assert_eq!(eff.param, param, "Wrong param for {:?}", effect_type);
             assert_eq!(eff.effect_type(), Some(effect_type));
         }
