@@ -1,9 +1,10 @@
+//! Row and cell types for the tracker pattern grid.
+//!
+//! A row represents a single time step across all channels. Each channel
+//! position in the row contains a Cell with optional note, instrument,
+//! volume, and effect data.
+
 use serde::{Deserialize, Serialize};
-/// Row and cell types for the tracker pattern grid.
-///
-/// A row represents a single time step across all channels. Each channel
-/// position in the row contains a Cell with optional note, instrument,
-/// volume, and effect data.
 use std::fmt;
 
 pub use super::effect::{Effect, MAX_EFFECTS_PER_CELL};
