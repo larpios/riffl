@@ -58,15 +58,10 @@ fn build_pattern_table(editor: &Editor) -> Table<'static> {
 
         // Add cells for each channel
         for channel_idx in 0..num_channels {
-            let note_text = if let Some(note_opt) = pattern.get_note(row_idx, channel_idx) {
-                if let Some(note) = note_opt {
-                    format_note(note)
-                } else {
-                    "---".to_string()
-                }
-            } else {
-                "---".to_string()
-            };
+            let note_text = pattern
+                .get_note(row_idx, channel_idx)
+                .map(cell_text)
+                .unwrap_or_else(|| "---".to_string());
 
             // Apply cursor highlighting to the cell at cursor position
             let cell_style = if row_idx == cursor_row && channel_idx == cursor_col {
@@ -87,7 +82,7 @@ fn build_pattern_table(editor: &Editor) -> Table<'static> {
     // Calculate column widths
     let mut widths = vec![Constraint::Length(5)]; // Row number column
     for _ in 0..num_channels {
-        widths.push(Constraint::Length(8)); // Note columns
+        widths.push(Constraint::Length(12)); // Note columns (wide enough for "B9 vFF i99")
     }
 
     // Build and return the table
@@ -122,10 +117,19 @@ fn format_note(note: &Note) -> String {
     format!("{}{}{}", base, vel, inst)
 }
 
+/// Return the display text for a cell given the optional note stored there
+fn cell_text(note_opt: &Option<Note>) -> String {
+    match note_opt {
+        Some(note) => format_note(note),
+        None => "---".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pattern::{Pitch, Note};
+    use crate::editor::Editor;
+    use crate::pattern::{Note, Pitch};
 
     #[test]
     fn test_format_note_basic() {
@@ -162,67 +166,86 @@ mod tests {
     }
 
     #[test]
-    fn test_build_pattern_table() {
-        let editor = Editor::new(8, 4);
-        let table = build_pattern_table(&editor);
-
-        // Table should be created successfully (no panics)
-        // The actual rendering is tested through manual verification
-        drop(table);
+    fn test_format_note_max_length() {
+        // Max-length note "B9 vFF i99" = 10 chars, fits within column width 12
+        let note = Note::with_all(Pitch::B, 9, 0xFF, 99);
+        let text = format_note(&note);
+        assert_eq!(text, "B9 vFF i99");
+        assert!(text.len() <= 12, "note text must fit in 12-char column");
     }
 
     #[test]
-    fn test_build_pattern_table_with_notes() {
+    fn test_cell_text_empty() {
+        assert_eq!(cell_text(&None), "---");
+    }
+
+    #[test]
+    fn test_cell_text_with_note() {
+        let note = Note::new(Pitch::C, 4);
+        assert_eq!(cell_text(&Some(note)), "C4");
+
+        let note_full = Note::with_all(Pitch::G, 3, 64, 2);
+        assert_eq!(cell_text(&Some(note_full)), "G3 v40 i02");
+    }
+
+    #[test]
+    fn test_build_pattern_table_dimensions() {
+        // Verify the editor dimensions that drive the table construction
+        let editor = Editor::new(8, 4);
+        assert_eq!(editor.pattern().num_rows(), 8);
+        assert_eq!(editor.pattern().num_channels(), 4);
+        let _table = build_pattern_table(&editor); // must not panic
+    }
+
+    #[test]
+    fn test_build_pattern_table_note_content() {
         let mut editor = Editor::new(4, 2);
-
-        // Add some notes
         editor.pattern_mut().set_note(0, 0, Some(Note::new(Pitch::C, 4)));
-        editor.pattern_mut().set_note(1, 1, Some(Note::new(Pitch::A, 5)));
 
-        let table = build_pattern_table(&editor);
+        // Verify note cell renders correctly
+        let note_opt = editor.pattern().get_note(0, 0).unwrap();
+        assert_eq!(cell_text(note_opt), "C4");
 
-        // Table should be created successfully with the notes
-        drop(table);
+        // Verify empty cell renders as "---"
+        let empty_opt = editor.pattern().get_note(0, 1).unwrap();
+        assert_eq!(cell_text(empty_opt), "---");
+    }
+
+    #[test]
+    fn test_build_pattern_table_cursor_position() {
+        let mut editor = Editor::new(8, 4);
+
+        // Default cursor is at (0, 0)
+        assert_eq!(editor.current_row(), 0);
+        assert_eq!(editor.current_col(), 0);
+        let _table = build_pattern_table(&editor);
+
+        // After moving, the editor reports the updated position used by the table
+        editor.move_down();
+        editor.move_right();
+        assert_eq!(editor.current_row(), 1);
+        assert_eq!(editor.current_col(), 1);
+        let _table = build_pattern_table(&editor);
+
+        // Move cursor to a different position and rebuild
+        editor.move_down();
+        editor.move_down();
+        editor.move_right();
+        editor.move_right();
+        assert_eq!(editor.current_row(), 3);
+        assert_eq!(editor.current_col(), 3);
+        let _table = build_pattern_table(&editor);
     }
 
     #[test]
     fn test_build_pattern_table_small_pattern() {
         let editor = Editor::new(1, 1);
-        let table = build_pattern_table(&editor);
-
-        // Should handle minimal patterns without panic
-        drop(table);
+        let _table = build_pattern_table(&editor); // must not panic for minimal pattern
     }
 
     #[test]
     fn test_build_pattern_table_large_pattern() {
         let editor = Editor::new(64, 8);
-        let table = build_pattern_table(&editor);
-
-        // Should handle larger patterns without panic
-        drop(table);
-    }
-
-    #[test]
-    fn test_cursor_highlighting() {
-        let mut editor = Editor::new(8, 4);
-
-        // Test cursor at default position (0, 0)
-        let table = build_pattern_table(&editor);
-        drop(table);
-
-        // Move cursor and rebuild table
-        editor.move_down();
-        editor.move_right();
-        let table = build_pattern_table(&editor);
-        drop(table);
-
-        // Move cursor to different positions
-        editor.move_down();
-        editor.move_down();
-        editor.move_right();
-        editor.move_right();
-        let table = build_pattern_table(&editor);
-        drop(table);
+        let _table = build_pattern_table(&editor); // must not panic for large pattern
     }
 }
