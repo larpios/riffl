@@ -65,7 +65,7 @@ impl ScriptEngine {
         let cmds_clone = commands.clone();
         engine.register_fn("set_note", move |row: INT, channel: INT, note: rhai::Map| {
             if let Some(cmd) = map_to_set_note_command(row, channel, &note) {
-                cmds_clone.lock().unwrap().push(cmd);
+                cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).push(cmd);
             }
         });
 
@@ -73,7 +73,7 @@ impl ScriptEngine {
         let cmds_clone = commands.clone();
         engine.register_fn("clear_cell", move |row: INT, channel: INT| {
             if row >= 0 && channel >= 0 {
-                cmds_clone.lock().unwrap().push(PatternCommand::ClearCell {
+                cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).push(PatternCommand::ClearCell {
                     row: row as usize,
                     channel: channel as usize,
                 });
@@ -83,7 +83,7 @@ impl ScriptEngine {
         // Register clear_pattern()
         let cmds_clone = commands.clone();
         engine.register_fn("clear_pattern", move || {
-            cmds_clone.lock().unwrap().push(PatternCommand::ClearPattern);
+            cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).push(PatternCommand::ClearPattern);
         });
 
         // Register fill_column(channel, notes_array)
@@ -98,7 +98,7 @@ impl ScriptEngine {
                 .filter_map(|d| dynamic_to_note(d))
                 .collect();
             let new_cmds = pattern_api::fill_column(&pat_clone, channel as usize, &parsed_notes);
-            cmds_clone.lock().unwrap().extend(new_cmds);
+            cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).extend(new_cmds);
         });
 
         // Register generate_beat(channel, rhythm_array, note)
@@ -114,7 +114,7 @@ impl ScriptEngine {
                 .collect();
             if let Some(n) = map_to_note(&note) {
                 let new_cmds = pattern_api::generate_beat(&pat_clone, channel as usize, &bools, n);
-                cmds_clone.lock().unwrap().extend(new_cmds);
+                cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).extend(new_cmds);
             }
         });
 
@@ -123,7 +123,7 @@ impl ScriptEngine {
         let pat_clone = pattern.clone();
         engine.register_fn("transpose", move |semitones: INT| {
             let new_cmds = pattern_api::transpose(&pat_clone, semitones as i32);
-            cmds_clone.lock().unwrap().extend(new_cmds);
+            cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).extend(new_cmds);
         });
 
         // Register reverse()
@@ -131,7 +131,7 @@ impl ScriptEngine {
         let pat_clone = pattern.clone();
         engine.register_fn("reverse", move || {
             let new_cmds = pattern_api::reverse(&pat_clone);
-            cmds_clone.lock().unwrap().extend(new_cmds);
+            cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).extend(new_cmds);
         });
 
         // Register rotate(offset)
@@ -139,7 +139,7 @@ impl ScriptEngine {
         let pat_clone = pattern.clone();
         engine.register_fn("rotate", move |offset: INT| {
             let new_cmds = pattern_api::rotate(&pat_clone, offset as i32);
-            cmds_clone.lock().unwrap().extend(new_cmds);
+            cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).extend(new_cmds);
         });
 
         // Register humanize(velocity_variance)
@@ -148,7 +148,7 @@ impl ScriptEngine {
         engine.register_fn("humanize", move |velocity_variance: INT| {
             let variance = (velocity_variance.max(0).min(127)) as u8;
             let new_cmds = pattern_api::humanize(&pat_clone, variance);
-            cmds_clone.lock().unwrap().extend(new_cmds);
+            cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).extend(new_cmds);
         });
 
         let mut scope = Scope::new();
@@ -157,7 +157,7 @@ impl ScriptEngine {
 
         match engine.eval_with_scope::<Dynamic>(&mut scope, code) {
             Ok(result) => {
-                let cmds = commands.lock().unwrap().clone();
+                let cmds = commands.lock().unwrap_or_else(|e| e.into_inner()).clone();
                 let script_result: ScriptResult = if result.is_unit() {
                     ScriptResult::Unit
                 } else {
@@ -1536,5 +1536,26 @@ mod tests {
         "#;
         let (_, commands) = engine.eval_with_pattern(code, &pattern).unwrap();
         assert!(commands.is_empty(), "Negative channel should be ignored");
+    }
+
+    #[test]
+    fn test_mutex_poisoning_recovery() {
+        use std::sync::{Arc, Mutex};
+        let mutex = Arc::new(Mutex::new(Vec::<PatternCommand>::new()));
+
+        // Poison the mutex by panicking while holding the lock in a thread
+        let m_clone = mutex.clone();
+        let _ = std::thread::spawn(move || {
+            let _lock = m_clone.lock().unwrap();
+            panic!("Poisoning the mutex!");
+        })
+        .join();
+
+        assert!(mutex.is_poisoned());
+
+        // Now attempt to lock it using our recovery strategy
+        let mut lock = mutex.lock().unwrap_or_else(|e| e.into_inner());
+        lock.push(PatternCommand::ClearPattern);
+        assert_eq!(lock.len(), 1);
     }
 }
