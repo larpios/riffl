@@ -10,7 +10,11 @@ fn bench_mixer_new(c: &mut Criterion) {
 
     c.bench_function("Mixer::new with Arc<Sample>", |b| {
         b.iter(|| {
-            let mixer = Mixer::new(black_box(vec![std::sync::Arc::clone(&sample_arc)]), 4, 44100);
+            let mixer = Mixer::new(
+                black_box(vec![std::sync::Arc::clone(&sample_arc)]),
+                4,
+                44100,
+            );
             black_box(mixer);
         });
     });

@@ -475,7 +475,7 @@ impl App {
         let name = sample.name().unwrap_or("unknown").to_string();
 
         let idx = if let Ok(mut mixer) = self.mixer.lock() {
-            mixer.add_sample(sample)
+            mixer.add_sample(Arc::new(sample))
         } else {
             return Err("Failed to lock mixer".to_string());
         };
