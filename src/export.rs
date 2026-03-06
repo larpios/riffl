@@ -94,11 +94,7 @@ where
     let total_rows: usize = song
         .arrangement
         .iter()
-        .map(|&pat_idx| {
-            song.patterns
-                .get(pat_idx)
-                .map_or(0, |p| p.num_rows())
-        })
+        .map(|&pat_idx| song.patterns.get(pat_idx).map_or(0, |p| p.num_rows()))
         .sum();
 
     if total_rows == 0 {
@@ -177,11 +173,7 @@ pub fn song_duration(song: &Song) -> f64 {
     let total_rows: usize = song
         .arrangement
         .iter()
-        .map(|&pat_idx| {
-            song.patterns
-                .get(pat_idx)
-                .map_or(0, |p| p.num_rows())
-        })
+        .map(|&pat_idx| song.patterns.get(pat_idx).map_or(0, |p| p.num_rows()))
         .sum();
     total_rows as f64 * seconds_per_row
 }
@@ -202,8 +194,8 @@ mod tests {
             let t = i as f32 / sample_rate as f32;
             data.push((2.0 * std::f32::consts::PI * freq * t).sin());
         }
-        Sample::new(data, sample_rate, 1, Some("sine440".to_string()))
-            .with_base_note(57) // A-4
+        Sample::new(data, sample_rate, 1, Some("sine440".to_string())).with_base_note(57)
+        // A-4
     }
 
     fn temp_wav_path(name: &str) -> std::path::PathBuf {
@@ -241,7 +233,11 @@ mod tests {
         // Progress should reach 1.0
         assert!(!progress_values.is_empty());
         let last = *progress_values.last().unwrap();
-        assert!((last - 1.0).abs() < 0.01, "Final progress should be ~1.0, got {}", last);
+        assert!(
+            (last - 1.0).abs() < 0.01,
+            "Final progress should be ~1.0, got {}",
+            last
+        );
 
         std::fs::remove_file(&path).ok();
     }
@@ -261,7 +257,14 @@ mod tests {
             bit_depth: BitDepth::Bits16,
         };
 
-        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
+        export_wav(
+            &path,
+            &song,
+            &[std::sync::Arc::new(sample)],
+            &config,
+            |_| {},
+        )
+        .unwrap();
 
         let reader = hound::WavReader::open(&path).unwrap();
         let spec = reader.spec();
@@ -288,7 +291,14 @@ mod tests {
         let song = Song::new("Silent", 120.0);
 
         let config = ExportConfig::default();
-        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
+        export_wav(
+            &path,
+            &song,
+            &[std::sync::Arc::new(sample)],
+            &config,
+            |_| {},
+        )
+        .unwrap();
 
         let mut reader = hound::WavReader::open(&path).unwrap();
         let max_abs: i16 = reader
@@ -312,7 +322,14 @@ mod tests {
         song.patterns[0].set_note(4, 1, Note::new(Pitch::C, 4, 100, 0));
 
         let config = ExportConfig::default();
-        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
+        export_wav(
+            &path,
+            &song,
+            &[std::sync::Arc::new(sample)],
+            &config,
+            |_| {},
+        )
+        .unwrap();
 
         let mut reader = hound::WavReader::open(&path).unwrap();
         let max_abs: i16 = reader
@@ -321,7 +338,11 @@ mod tests {
             .max()
             .unwrap_or(0);
 
-        assert!(max_abs > 0, "Song with notes should produce non-zero audio, got max_abs={}", max_abs);
+        assert!(
+            max_abs > 0,
+            "Song with notes should produce non-zero audio, got max_abs={}",
+            max_abs
+        );
 
         std::fs::remove_file(&path).ok();
     }
@@ -339,7 +360,14 @@ mod tests {
             bit_depth: BitDepth::Bits16,
         };
 
-        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
+        export_wav(
+            &path,
+            &song,
+            &[std::sync::Arc::new(sample)],
+            &config,
+            |_| {},
+        )
+        .unwrap();
 
         let reader = hound::WavReader::open(&path).unwrap();
         assert_eq!(reader.spec().sample_rate, 48000);
@@ -360,7 +388,14 @@ mod tests {
             bit_depth: BitDepth::Bits24,
         };
 
-        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
+        export_wav(
+            &path,
+            &song,
+            &[std::sync::Arc::new(sample)],
+            &config,
+            |_| {},
+        )
+        .unwrap();
 
         let reader = hound::WavReader::open(&path).unwrap();
         assert_eq!(reader.spec().bits_per_sample, 24);
@@ -395,7 +430,7 @@ mod tests {
         let mut song = Song::new("Multi", 120.0);
         song.add_pattern(Pattern::new(32, 8)); // Pattern 1: 32 rows
         song.arrangement = vec![0, 1]; // 64 + 32 = 96 rows
-        // Duration = 96 * 0.125 = 12.0s
+                                       // Duration = 96 * 0.125 = 12.0s
         let dur = song_duration(&song);
         assert!((dur - 12.0).abs() < 0.001, "Expected 12.0s, got {}", dur);
     }
@@ -444,7 +479,14 @@ mod tests {
         song.arrangement = vec![0, 1];
 
         let config = ExportConfig::default();
-        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
+        export_wav(
+            &path,
+            &song,
+            &[std::sync::Arc::new(sample)],
+            &config,
+            |_| {},
+        )
+        .unwrap();
 
         let reader = hound::WavReader::open(&path).unwrap();
         let num_frames = reader.len() / 2; // stereo
@@ -474,7 +516,14 @@ mod tests {
         song.patterns[0].set_note(16, 0, Note::new(Pitch::G, 4, 100, 0));
 
         let config = ExportConfig::default();
-        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
+        export_wav(
+            &path,
+            &song,
+            &[std::sync::Arc::new(sample)],
+            &config,
+            |_| {},
+        )
+        .unwrap();
 
         // Reading all samples should not error (proves file integrity)
         let mut reader = hound::WavReader::open(&path).unwrap();
@@ -482,7 +531,11 @@ mod tests {
         assert!(sample_count > 0, "WAV should contain samples");
 
         // Sample count should be even (stereo interleaved)
-        assert_eq!(sample_count % 2, 0, "Stereo WAV must have even sample count");
+        assert_eq!(
+            sample_count % 2,
+            0,
+            "Stereo WAV must have even sample count"
+        );
 
         std::fs::remove_file(&path).ok();
     }
@@ -501,7 +554,14 @@ mod tests {
             bit_depth: BitDepth::Bits24,
         };
 
-        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
+        export_wav(
+            &path,
+            &song,
+            &[std::sync::Arc::new(sample)],
+            &config,
+            |_| {},
+        )
+        .unwrap();
 
         let reader = hound::WavReader::open(&path).unwrap();
         let spec = reader.spec();
@@ -510,7 +570,11 @@ mod tests {
         assert_eq!(spec.channels, 2, "Should be stereo");
         assert_eq!(spec.sample_rate, 48000, "Sample rate should match config");
         assert_eq!(spec.bits_per_sample, 24, "Bit depth should match config");
-        assert_eq!(spec.sample_format, SampleFormat::Int, "Format should be integer");
+        assert_eq!(
+            spec.sample_format,
+            SampleFormat::Int,
+            "Format should be integer"
+        );
 
         // Duration at 140 BPM: 64 rows * (60 / 140 / 4) = 64 * ~0.10714 ≈ 6.857s
         let num_frames = reader.len() / spec.channels as u32;
@@ -538,11 +602,21 @@ mod tests {
         song.arrangement = vec![0, 1];
 
         let config = ExportConfig::default();
-        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
+        export_wav(
+            &path,
+            &song,
+            &[std::sync::Arc::new(sample)],
+            &config,
+            |_| {},
+        )
+        .unwrap();
 
         let mut reader = hound::WavReader::open(&path).unwrap();
         let all_zero = reader.samples::<i16>().all(|s| s.unwrap() == 0);
-        assert!(all_zero, "Empty multi-pattern song should produce only zero samples");
+        assert!(
+            all_zero,
+            "Empty multi-pattern song should produce only zero samples"
+        );
 
         std::fs::remove_file(&path).ok();
     }
@@ -561,17 +635,32 @@ mod tests {
         song.patterns[0].set_note(32, 2, Note::new(Pitch::A, 4, 127, 0));
 
         let config = ExportConfig::default();
-        export_wav(&path, &song, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
+        export_wav(
+            &path,
+            &song,
+            &[std::sync::Arc::new(sample)],
+            &config,
+            |_| {},
+        )
+        .unwrap();
 
         let mut reader = hound::WavReader::open(&path).unwrap();
         let samples: Vec<i16> = reader.samples::<i16>().map(|s| s.unwrap()).collect();
 
         let max_abs = samples.iter().map(|s| s.abs()).max().unwrap_or(0);
-        assert!(max_abs > 100, "Multi-note song should produce significant audio, got max_abs={}", max_abs);
+        assert!(
+            max_abs > 100,
+            "Multi-note song should produce significant audio, got max_abs={}",
+            max_abs
+        );
 
         // Verify audio isn't all the same value (not just DC offset)
         let unique_values: std::collections::HashSet<i16> = samples.iter().copied().collect();
-        assert!(unique_values.len() > 10, "Audio should have variety, got only {} unique values", unique_values.len());
+        assert!(
+            unique_values.len() > 10,
+            "Audio should have variety, got only {} unique values",
+            unique_values.len()
+        );
 
         std::fs::remove_file(&path).ok();
     }
@@ -585,12 +674,26 @@ mod tests {
         let path_slow = temp_wav_path("test_export_bpm_slow.wav");
         let mut song_slow = Song::new("Slow", 60.0); // 60 BPM
         song_slow.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
-        export_wav(&path_slow, &song_slow, &[std::sync::Arc::new(sample.clone())], &config, |_| {}).unwrap();
+        export_wav(
+            &path_slow,
+            &song_slow,
+            &[std::sync::Arc::new(sample.clone())],
+            &config,
+            |_| {},
+        )
+        .unwrap();
 
         let path_fast = temp_wav_path("test_export_bpm_fast.wav");
         let mut song_fast = Song::new("Fast", 240.0); // 240 BPM
         song_fast.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
-        export_wav(&path_fast, &song_fast, &[std::sync::Arc::new(sample)], &config, |_| {}).unwrap();
+        export_wav(
+            &path_fast,
+            &song_fast,
+            &[std::sync::Arc::new(sample)],
+            &config,
+            |_| {},
+        )
+        .unwrap();
 
         let reader_slow = hound::WavReader::open(&path_slow).unwrap();
         let reader_fast = hound::WavReader::open(&path_fast).unwrap();
@@ -626,7 +729,10 @@ mod tests {
         })
         .unwrap();
 
-        assert!(path.exists(), "WAV file should be created even with empty arrangement");
+        assert!(
+            path.exists(),
+            "WAV file should be created even with empty arrangement"
+        );
         assert!(
             (final_progress - 1.0).abs() < 0.01,
             "Progress should reach 1.0 for empty arrangement"

@@ -12,9 +12,9 @@ use ratatui::{
     Frame,
 };
 
-use crate::export::{BitDepth, ExportConfig};
 use super::layout::create_centered_rect;
 use super::theme::Theme;
+use crate::export::{BitDepth, ExportConfig};
 
 /// Which field the user is currently editing in the export dialog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,7 +115,11 @@ impl ExportDialog {
     pub fn toggle_value(&mut self) {
         match self.focused_field {
             ExportField::SampleRate => {
-                self.sample_rate = if self.sample_rate == 44100 { 48000 } else { 44100 };
+                self.sample_rate = if self.sample_rate == 44100 {
+                    48000
+                } else {
+                    44100
+                };
             }
             ExportField::BitDepth => {
                 self.bit_depth = match self.bit_depth {
@@ -169,7 +173,12 @@ impl Default for ExportDialog {
 }
 
 /// Render the export dialog overlay.
-pub fn render_export_dialog(frame: &mut Frame, area: ratatui::layout::Rect, dialog: &ExportDialog, theme: &Theme) {
+pub fn render_export_dialog(
+    frame: &mut Frame,
+    area: ratatui::layout::Rect,
+    dialog: &ExportDialog,
+    theme: &Theme,
+) {
     let dialog_area = create_centered_rect(area, 55, 50);
     frame.render_widget(Clear, dialog_area);
 
@@ -224,7 +233,10 @@ pub fn render_export_dialog(frame: &mut Frame, area: ratatui::layout::Rect, dial
 
 fn render_configure_phase(lines: &mut Vec<Line>, dialog: &ExportDialog, theme: &Theme) {
     let key_style = Style::default().fg(theme.success_color());
-    let focused_style = Style::default().fg(Color::Black).bg(theme.info_color()).add_modifier(Modifier::BOLD);
+    let focused_style = Style::default()
+        .fg(Color::Black)
+        .bg(theme.info_color())
+        .add_modifier(Modifier::BOLD);
     let normal_style = Style::default().fg(theme.text);
     let label_style = Style::default().fg(theme.text_secondary);
 
@@ -233,14 +245,23 @@ fn render_configure_phase(lines: &mut Vec<Line>, dialog: &ExportDialog, theme: &
     // Output path
     lines.push(Line::from(vec![
         Span::styled("  Output: ", label_style),
-        Span::styled(dialog.output_path.clone(), Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            dialog.output_path.clone(),
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD),
+        ),
     ]));
 
     lines.push(Line::from(""));
 
     // Sample rate field
     let sr_label = format!("  {} Hz", dialog.sample_rate);
-    let sr_style = if dialog.focused_field == ExportField::SampleRate { focused_style } else { normal_style };
+    let sr_style = if dialog.focused_field == ExportField::SampleRate {
+        focused_style
+    } else {
+        normal_style
+    };
     lines.push(Line::from(vec![
         Span::styled("  Sample Rate:  ", label_style),
         Span::styled(sr_label, sr_style),
@@ -248,7 +269,11 @@ fn render_configure_phase(lines: &mut Vec<Line>, dialog: &ExportDialog, theme: &
 
     // Bit depth field
     let bd_label = format!("  {}-bit", dialog.bit_depth.bits_per_sample());
-    let bd_style = if dialog.focused_field == ExportField::BitDepth { focused_style } else { normal_style };
+    let bd_style = if dialog.focused_field == ExportField::BitDepth {
+        focused_style
+    } else {
+        normal_style
+    };
     lines.push(Line::from(vec![
         Span::styled("  Bit Depth:    ", label_style),
         Span::styled(bd_label, bd_style),
@@ -258,7 +283,10 @@ fn render_configure_phase(lines: &mut Vec<Line>, dialog: &ExportDialog, theme: &
 
     // Confirm button
     let confirm_style = if dialog.focused_field == ExportField::Confirm {
-        Style::default().fg(Color::Black).bg(theme.success_color()).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Black)
+            .bg(theme.success_color())
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(theme.success_color())
     };
@@ -289,8 +317,14 @@ fn render_exporting_phase(lines: &mut Vec<Line>, dialog: &ExportDialog, theme: &
     lines.push(Line::from(""));
 
     lines.push(Line::from(vec![
-        Span::styled("  Exporting to: ", Style::default().fg(theme.text_secondary)),
-        Span::styled(dialog.output_path.clone(), Style::default().fg(theme.primary)),
+        Span::styled(
+            "  Exporting to: ",
+            Style::default().fg(theme.text_secondary),
+        ),
+        Span::styled(
+            dialog.output_path.clone(),
+            Style::default().fg(theme.primary),
+        ),
     ]));
 
     lines.push(Line::from(""));
@@ -307,7 +341,9 @@ fn render_exporting_phase(lines: &mut Vec<Line>, dialog: &ExportDialog, theme: &
     );
     lines.push(Line::from(Span::styled(
         bar,
-        Style::default().fg(theme.warning_color()).add_modifier(Modifier::BOLD),
+        Style::default()
+            .fg(theme.warning_color())
+            .add_modifier(Modifier::BOLD),
     )));
 
     lines.push(Line::from(""));
@@ -346,7 +382,9 @@ fn render_failed_phase(lines: &mut Vec<Line>, dialog: &ExportDialog, theme: &The
 
     lines.push(Line::from(Span::styled(
         "  Export failed:",
-        Style::default().fg(theme.error_color()).add_modifier(Modifier::BOLD),
+        Style::default()
+            .fg(theme.error_color())
+            .add_modifier(Modifier::BOLD),
     )));
 
     lines.push(Line::from(""));

@@ -134,9 +134,9 @@ impl ChannelEffectState {
 
         let phase = self.row_frame_counter / third;
         match phase % 3 {
-            0 => 0.0,                      // Base note
-            1 => self.arpeggio_x as f64,   // +x semitones
-            _ => self.arpeggio_y as f64,   // +y semitones
+            0 => 0.0,                    // Base note
+            1 => self.arpeggio_x as f64, // +x semitones
+            _ => self.arpeggio_y as f64, // +y semitones
         }
     }
 
@@ -205,7 +205,9 @@ impl EffectProcessor {
     /// Create a new effect processor for the given number of channels.
     pub fn new(num_channels: usize, sample_rate: u32) -> Self {
         Self {
-            channels: (0..num_channels).map(|_| ChannelEffectState::default()).collect(),
+            channels: (0..num_channels)
+                .map(|_| ChannelEffectState::default())
+                .collect(),
             sample_rate,
         }
     }
@@ -342,20 +344,21 @@ impl EffectProcessor {
 
     /// Get the combined pitch ratio for a channel (all pitch effects combined).
     pub fn pitch_ratio(&self, channel: usize) -> f64 {
-        self.channels.get(channel)
+        self.channels
+            .get(channel)
             .map(|s| s.combined_pitch_ratio())
             .unwrap_or(1.0)
     }
 
     /// Get the portamento frequency for a channel, if portamento is active.
     pub fn portamento_frequency(&self, channel: usize) -> Option<f64> {
-        self.channels.get(channel)
-            .and_then(|s| s.portamento_freq)
+        self.channels.get(channel).and_then(|s| s.portamento_freq)
     }
 
     /// Get the effective volume override for a channel (from Cxx or Axy effects).
     pub fn volume_override(&self, channel: usize) -> Option<f32> {
-        self.channels.get(channel)
+        self.channels
+            .get(channel)
             .and_then(|s| s.effective_volume())
     }
 
@@ -686,7 +689,12 @@ mod tests {
         proc.process_row(0, &effects, None);
         let ratio2 = proc.pitch_ratio(0);
 
-        assert!(ratio2 > ratio1, "Pitch slide should accumulate: {} > {}", ratio2, ratio1);
+        assert!(
+            ratio2 > ratio1,
+            "Pitch slide should accumulate: {} > {}",
+            ratio2,
+            ratio1
+        );
     }
 
     #[test]
@@ -712,7 +720,12 @@ mod tests {
         proc.process_row(0, &[Effect::from_type(EffectType::VolumeSlide, 0x40)], None);
         let vol_after = proc.volume_override(0).unwrap();
 
-        assert!(vol_after > vol_before, "Volume should increase: {} > {}", vol_after, vol_before);
+        assert!(
+            vol_after > vol_before,
+            "Volume should increase: {} > {}",
+            vol_after,
+            vol_before
+        );
     }
 
     #[test]
@@ -724,7 +737,12 @@ mod tests {
         proc.process_row(0, &[Effect::from_type(EffectType::VolumeSlide, 0x04)], None);
         let vol_after = proc.volume_override(0).unwrap();
 
-        assert!(vol_after < vol_before, "Volume should decrease: {} < {}", vol_after, vol_before);
+        assert!(
+            vol_after < vol_before,
+            "Volume should decrease: {} < {}",
+            vol_after,
+            vol_before
+        );
     }
 
     #[test]
@@ -763,7 +781,10 @@ mod tests {
         let effects = vec![Effect::from_type(EffectType::SetSpeed, 0x06)]; // Speed, not BPM
         let cmds = proc.process_row(0, &effects, None);
 
-        assert!(cmds.is_empty(), "Speed values < 0x20 should not generate BPM command");
+        assert!(
+            cmds.is_empty(),
+            "Speed values < 0x20 should not generate BPM command"
+        );
     }
 
     #[test]
@@ -835,7 +856,11 @@ mod tests {
 
         // Apply some effects
         proc.process_row(0, &[Effect::from_type(EffectType::SetVolume, 0x20)], None);
-        proc.process_row(1, &[Effect::from_type(EffectType::PitchSlideUp, 0x10)], None);
+        proc.process_row(
+            1,
+            &[Effect::from_type(EffectType::PitchSlideUp, 0x10)],
+            None,
+        );
 
         proc.reset_all();
 
@@ -897,7 +922,11 @@ mod tests {
         let mut proc = EffectProcessor::new(4, 48000);
 
         proc.process_row(0, &[Effect::from_type(EffectType::SetVolume, 0x20)], None);
-        proc.process_row(1, &[Effect::from_type(EffectType::PitchSlideUp, 0x10)], None);
+        proc.process_row(
+            1,
+            &[Effect::from_type(EffectType::PitchSlideUp, 0x10)],
+            None,
+        );
 
         // Channel 0: volume changed, pitch unchanged
         assert!(proc.volume_override(0).is_some());
