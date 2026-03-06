@@ -2,7 +2,6 @@
 ///
 /// Provides a text editor widget with line numbers, basic syntax highlighting,
 /// cursor navigation, and a script output/error display area.
-
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -17,8 +16,8 @@ use super::theme::Theme;
 
 /// Rhai keywords for syntax highlighting.
 const KEYWORDS: &[&str] = &[
-    "let", "if", "else", "for", "in", "while", "loop", "fn", "return", "true", "false",
-    "break", "continue", "throw", "try", "catch",
+    "let", "if", "else", "for", "in", "while", "loop", "fn", "return", "true", "false", "break",
+    "continue", "throw", "try", "catch",
 ];
 
 /// The code editor state, managing text buffer, cursor, and output.
@@ -352,7 +351,10 @@ fn highlight_line(line: &str) -> Vec<HighlightSpan> {
         // Comment: // to end of line
         if i + 1 < len && chars[i] == '/' && chars[i + 1] == '/' {
             let text: String = chars[i..].iter().collect();
-            spans.push(HighlightSpan { text, kind: TokenKind::Comment });
+            spans.push(HighlightSpan {
+                text,
+                kind: TokenKind::Comment,
+            });
             break;
         }
 
@@ -370,13 +372,18 @@ fn highlight_line(line: &str) -> Vec<HighlightSpan> {
                 i += 1; // closing quote
             }
             let text: String = chars[start..i].iter().collect();
-            spans.push(HighlightSpan { text, kind: TokenKind::String });
+            spans.push(HighlightSpan {
+                text,
+                kind: TokenKind::String,
+            });
             continue;
         }
 
         // Number literal
         if chars[i].is_ascii_digit()
-            || (chars[i] == '-' && i + 1 < len && chars[i + 1].is_ascii_digit()
+            || (chars[i] == '-'
+                && i + 1 < len
+                && chars[i + 1].is_ascii_digit()
                 && (i == 0 || !chars[i - 1].is_alphanumeric()))
         {
             let start = i;
@@ -387,7 +394,10 @@ fn highlight_line(line: &str) -> Vec<HighlightSpan> {
                 i += 1;
             }
             let text: String = chars[start..i].iter().collect();
-            spans.push(HighlightSpan { text, kind: TokenKind::Number });
+            spans.push(HighlightSpan {
+                text,
+                kind: TokenKind::Number,
+            });
             continue;
         }
 
@@ -419,7 +429,10 @@ fn highlight_line(line: &str) -> Vec<HighlightSpan> {
         }
         if i > start {
             let text: String = chars[start..i].iter().collect();
-            spans.push(HighlightSpan { text, kind: TokenKind::Normal });
+            spans.push(HighlightSpan {
+                text,
+                kind: TokenKind::Normal,
+            });
         }
     }
 
@@ -429,10 +442,14 @@ fn highlight_line(line: &str) -> Vec<HighlightSpan> {
 /// Map a token kind to a ratatui Style.
 fn token_style(kind: TokenKind, theme: &Theme) -> Style {
     match kind {
-        TokenKind::Keyword => Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD),
+        TokenKind::Keyword => Style::default()
+            .fg(Color::Magenta)
+            .add_modifier(Modifier::BOLD),
         TokenKind::String => Style::default().fg(Color::Green),
         TokenKind::Number => Style::default().fg(Color::LightYellow),
-        TokenKind::Comment => Style::default().fg(theme.text_dimmed).add_modifier(Modifier::ITALIC),
+        TokenKind::Comment => Style::default()
+            .fg(theme.text_dimmed)
+            .add_modifier(Modifier::ITALIC),
         TokenKind::Normal => Style::default().fg(theme.text),
     }
 }
@@ -529,7 +546,9 @@ fn render_editor_panel(frame: &mut Frame, area: Rect, editor: &CodeEditor, theme
         let line_num = line_idx + 1;
         let gutter_text = format!("{:>width$} ", line_num, width = gutter_width as usize - 1);
         let gutter_style = if line_idx == editor.cursor_row {
-            Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(theme.text_dimmed)
         };
@@ -565,9 +584,7 @@ fn render_editor_panel(frame: &mut Frame, area: Rect, editor: &CodeEditor, theme
             if editor.cursor_col >= source_line.len() {
                 spans.push(Span::styled(
                     " ",
-                    Style::default()
-                        .fg(Color::Black)
-                        .bg(Color::LightYellow),
+                    Style::default().fg(Color::Black).bg(Color::LightYellow),
                 ));
             }
         } else {
@@ -860,7 +877,10 @@ mod tests {
     #[test]
     fn test_page_up_down() {
         let mut ed = CodeEditor::new();
-        let text = (0..50).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        let text = (0..50)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         ed.set_text(&text);
         ed.cursor_row = 25;
 
@@ -882,7 +902,10 @@ mod tests {
     #[test]
     fn test_scroll_offset_follows_cursor() {
         let mut ed = CodeEditor::new();
-        let text = (0..50).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        let text = (0..50)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         ed.set_text(&text);
         ed.cursor_row = 0;
         ed.scroll_offset = 0;
@@ -917,25 +940,33 @@ mod tests {
     #[test]
     fn test_highlight_keyword() {
         let spans = highlight_line("let x = 5;");
-        assert!(spans.iter().any(|s| s.kind == TokenKind::Keyword && s.text == "let"));
+        assert!(spans
+            .iter()
+            .any(|s| s.kind == TokenKind::Keyword && s.text == "let"));
     }
 
     #[test]
     fn test_highlight_string() {
         let spans = highlight_line("let s = \"hello\";");
-        assert!(spans.iter().any(|s| s.kind == TokenKind::String && s.text == "\"hello\""));
+        assert!(spans
+            .iter()
+            .any(|s| s.kind == TokenKind::String && s.text == "\"hello\""));
     }
 
     #[test]
     fn test_highlight_number() {
         let spans = highlight_line("let x = 42;");
-        assert!(spans.iter().any(|s| s.kind == TokenKind::Number && s.text == "42"));
+        assert!(spans
+            .iter()
+            .any(|s| s.kind == TokenKind::Number && s.text == "42"));
     }
 
     #[test]
     fn test_highlight_comment() {
         let spans = highlight_line("let x = 5; // a comment");
-        assert!(spans.iter().any(|s| s.kind == TokenKind::Comment && s.text.contains("// a comment")));
+        assert!(spans
+            .iter()
+            .any(|s| s.kind == TokenKind::Comment && s.text.contains("// a comment")));
     }
 
     #[test]
@@ -949,7 +980,9 @@ mod tests {
         for kw in KEYWORDS {
             let spans = highlight_line(kw);
             assert!(
-                spans.iter().any(|s| s.kind == TokenKind::Keyword && s.text == *kw),
+                spans
+                    .iter()
+                    .any(|s| s.kind == TokenKind::Keyword && s.text == *kw),
                 "keyword '{}' not highlighted",
                 kw
             );
@@ -959,7 +992,9 @@ mod tests {
     #[test]
     fn test_highlight_float_number() {
         let spans = highlight_line("3.14");
-        assert!(spans.iter().any(|s| s.kind == TokenKind::Number && s.text == "3.14"));
+        assert!(spans
+            .iter()
+            .any(|s| s.kind == TokenKind::Number && s.text == "3.14"));
     }
 
     #[test]
@@ -978,7 +1013,10 @@ mod tests {
     #[test]
     fn test_highlight_multiple_keywords() {
         let spans = highlight_line("if true { return false; }");
-        let kw_count = spans.iter().filter(|s| s.kind == TokenKind::Keyword).count();
+        let kw_count = spans
+            .iter()
+            .filter(|s| s.kind == TokenKind::Keyword)
+            .count();
         // if, true, return, false = 4 keywords
         assert_eq!(kw_count, 4);
     }
@@ -1049,7 +1087,10 @@ mod tests {
     #[test]
     fn test_ensure_visible_with_height() {
         let mut ed = CodeEditor::new();
-        let text = (0..100).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        let text = (0..100)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         ed.set_text(&text);
         ed.cursor_row = 50;
         ed.scroll_offset = 0;
@@ -1154,7 +1195,10 @@ mod tests {
         ed.load_selected_template();
         assert!(!ed.show_templates);
         let text = ed.text();
-        assert!(text.contains("pentatonic"), "Expected Random Melody template");
+        assert!(
+            text.contains("pentatonic"),
+            "Expected Random Melody template"
+        );
     }
 
     #[test]
@@ -1179,7 +1223,10 @@ mod tests {
         ed.load_selected_template();
         assert!(!ed.show_templates);
         let text = ed.text();
-        assert!(text.contains("Probability"), "Expected Probability Beat template");
+        assert!(
+            text.contains("Probability"),
+            "Expected Probability Beat template"
+        );
     }
 
     #[test]
