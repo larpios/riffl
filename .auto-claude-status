@@ -1,0 +1,25 @@
+{
+  "active": true,
+  "spec": "002-audio-engine-with-cpal",
+  "state": "building",
+  "subtasks": {
+    "completed": 13,
+    "total": 19,
+    "in_progress": 1,
+    "failed": 0
+  },
+  "phase": {
+    "current": "High-Level Audio Engine API",
+    "id": null,
+    "total": 5
+  },
+  "workers": {
+    "active": 0,
+    "max": 1
+  },
+  "session": {
+    "number": 15,
+    "started_at": "2026-03-01T03:09:30.743819"
+  },
+  "last_update": "2026-03-01T03:44:26.703409"
+}
