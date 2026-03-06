@@ -2,4 +2,7 @@
 
 # Auto Claude data directory
 .auto-claude/
+.auto-claude-security.json
+.auto-claude-status
+.claude_settings.json
 Auto\ Run\ Docs/
