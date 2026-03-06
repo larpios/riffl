@@ -668,7 +668,7 @@ mod tests {
     #[test]
     fn test_export_wav_different_bpm_changes_duration() {
         // Verify that different BPM values produce different file durations
-        let sample = make_test_sample(44100, 2.0);
+        let sample = std::sync::Arc::new(make_test_sample(44100, 2.0));
         let config = ExportConfig::default();
 
         let path_slow = temp_wav_path("test_export_bpm_slow.wav");
@@ -677,7 +677,7 @@ mod tests {
         export_wav(
             &path_slow,
             &song_slow,
-            &[std::sync::Arc::new(sample.clone())],
+            &[std::sync::Arc::clone(&sample)],
             &config,
             |_| {},
         )
@@ -689,7 +689,7 @@ mod tests {
         export_wav(
             &path_fast,
             &song_fast,
-            &[std::sync::Arc::new(sample)],
+            &[std::sync::Arc::clone(&sample)],
             &config,
             |_| {},
         )

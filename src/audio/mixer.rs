@@ -8,6 +8,7 @@ use crate::audio::sample::Sample;
 use crate::pattern::note::NoteEvent;
 use crate::pattern::pattern::Pattern;
 use crate::pattern::track::Track;
+use std::sync::Arc;
 
 /// State for a single voice playing a sample.
 #[derive(Debug, Clone)]
@@ -69,8 +70,6 @@ impl Default for ChannelMix {
 /// Multi-track support: the mixer stores per-channel mixing state (volume,
 /// pan, mute/solo) synced from track metadata. Equal-power panning is used
 /// with -3dB center.
-use std::sync::Arc;
-
 pub struct Mixer {
     /// Loaded audio samples available for playback.
     samples: Vec<Arc<Sample>>,
@@ -498,9 +497,9 @@ mod tests {
 
     #[test]
     fn test_mixer_render_velocity_scaling() {
-        let sample = make_test_sample(44100, 0.25);
-        let mut mixer_loud = Mixer::new(vec![Arc::new(sample.clone())], 4, 44100);
-        let mut mixer_quiet = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let sample = Arc::new(make_test_sample(44100, 0.25));
+        let mut mixer_loud = Mixer::new(vec![Arc::clone(&sample)], 4, 44100);
+        let mut mixer_quiet = Mixer::new(vec![Arc::clone(&sample)], 4, 44100);
 
         let mut pattern_loud = Pattern::new(16, 4);
         pattern_loud.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
@@ -696,10 +695,10 @@ mod tests {
     fn test_mixer_higher_note_plays_faster() {
         // Higher notes should consume the sample faster (higher playback rate)
         let data: Vec<f32> = (0..4410).map(|i| i as f32 / 4410.0).collect();
-        let sample = Sample::new(data, 44100, 1, None);
+        let sample = Arc::new(Sample::new(data, 44100, 1, None));
 
-        let mut mixer_low = Mixer::new(vec![Arc::new(sample.clone())], 4, 44100);
-        let mut mixer_high = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer_low = Mixer::new(vec![Arc::clone(&sample)], 4, 44100);
+        let mut mixer_high = Mixer::new(vec![Arc::clone(&sample)], 4, 44100);
 
         let mut pattern_low = Pattern::new(16, 4);
         pattern_low.set_note(0, 0, Note::new(Pitch::C, 3, 100, 0)); // C-3: one octave below base
@@ -1026,16 +1025,16 @@ mod tests {
 
     #[test]
     fn test_mixer_track_volume_applied() {
-        let sample = Sample::new(vec![1.0; 4410], 44100, 1, Some("test".to_string()));
+        let sample = Arc::new(Sample::new(vec![1.0; 4410], 44100, 1, Some("test".to_string())));
 
         // Full volume
-        let mut mixer_full = Mixer::new(vec![Arc::new(sample.clone())], 4, 44100);
+        let mut mixer_full = Mixer::new(vec![Arc::clone(&sample)], 4, 44100);
         let mut pattern_full = Pattern::new(16, 4);
         pattern_full.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
         mixer_full.tick(0, &pattern_full);
 
         // Half volume
-        let mut mixer_half = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer_half = Mixer::new(vec![Arc::clone(&sample)], 4, 44100);
         let mut pattern_half = Pattern::new(16, 4);
         pattern_half.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
         pattern_half.get_track_mut(0).unwrap().set_volume(0.5);
