@@ -24,6 +24,12 @@ pub struct ScriptEngine {
     engine: Engine,
 }
 
+impl Default for ScriptEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ScriptEngine {
     /// Create a new ScriptEngine with all music functions registered.
     pub fn new() -> Self {
@@ -98,7 +104,7 @@ impl ScriptEngine {
             if channel < 0 {
                 return;
             }
-            let parsed_notes: Vec<Note> = notes.iter().filter_map(|d| dynamic_to_note(d)).collect();
+            let parsed_notes: Vec<Note> = notes.iter().filter_map(dynamic_to_note).collect();
             let new_cmds = pattern_api::fill_column(&pat_clone, channel as usize, &parsed_notes);
             cmds_clone.lock().unwrap().extend(new_cmds);
         });
@@ -152,7 +158,7 @@ impl ScriptEngine {
         let cmds_clone = commands.clone();
         let pat_clone = pattern.clone();
         engine.register_fn("humanize", move |velocity_variance: INT| {
-            let variance = (velocity_variance.max(0).min(127)) as u8;
+            let variance = velocity_variance.clamp(0, 127) as u8;
             let new_cmds = pattern_api::humanize(&pat_clone, variance);
             cmds_clone.lock().unwrap().extend(new_cmds);
         });
@@ -216,11 +222,11 @@ pub fn apply_commands(pattern: &mut Pattern, commands: &[PatternCommand]) {
 fn register_music_functions(engine: &mut Engine) {
     // note(pitch_str, octave) -> note map
     engine.register_fn("note", |pitch_str: &str, octave: INT| -> Dynamic {
-        let pitch = match Pitch::from_str(pitch_str) {
+        let pitch = match Pitch::parse_str(pitch_str) {
             Some(p) => p,
             None => return Dynamic::UNIT,
         };
-        if octave < 0 || octave > 9 {
+        if !(0..=9).contains(&octave) {
             return Dynamic::UNIT;
         }
         note_to_dynamic(Note::simple(pitch, octave as u8))
@@ -228,11 +234,11 @@ fn register_music_functions(engine: &mut Engine) {
 
     // scale(root, mode, octave) -> array of note maps
     engine.register_fn("scale", |root: &str, mode: &str, octave: INT| -> Array {
-        let pitch = match Pitch::from_str(root) {
+        let pitch = match Pitch::parse_str(root) {
             Some(p) => p,
             None => return Array::new(),
         };
-        if octave < 0 || octave > 9 {
+        if !(0..=9).contains(&octave) {
             return Array::new();
         }
         let intervals = match mode.to_lowercase().as_str() {
@@ -248,17 +254,17 @@ fn register_music_functions(engine: &mut Engine) {
         intervals
             .iter()
             .filter_map(|&interval| base_note.transpose(interval))
-            .map(|n| note_to_dynamic(n))
+            .map(note_to_dynamic)
             .collect()
     });
 
     // chord(root, quality, octave) -> array of note maps
     engine.register_fn("chord", |root: &str, quality: &str, octave: INT| -> Array {
-        let pitch = match Pitch::from_str(root) {
+        let pitch = match Pitch::parse_str(root) {
             Some(p) => p,
             None => return Array::new(),
         };
-        if octave < 0 || octave > 9 {
+        if !(0..=9).contains(&octave) {
             return Array::new();
         }
         let intervals = match quality.to_lowercase().as_str() {
@@ -274,7 +280,7 @@ fn register_music_functions(engine: &mut Engine) {
         intervals
             .iter()
             .filter_map(|&interval| base_note.transpose(interval))
-            .map(|n| note_to_dynamic(n))
+            .map(note_to_dynamic)
             .collect()
     });
 
@@ -297,7 +303,7 @@ fn register_music_functions(engine: &mut Engine) {
         let pulses = (pulses as usize).min(steps);
         generate_euclidean(pulses, steps)
             .into_iter()
-            .map(|b| Dynamic::from(b))
+            .map(Dynamic::from)
             .collect()
     });
 
@@ -373,7 +379,7 @@ fn dynamic_to_note(d: &Dynamic) -> Option<Note> {
 /// Convert a Rhai Map to a Note.
 fn map_to_note(note: &rhai::Map) -> Option<Note> {
     let pitch_str = note.get("pitch")?.clone().into_string().ok()?;
-    let pitch = Pitch::from_str(&pitch_str)?;
+    let pitch = Pitch::parse_str(&pitch_str)?;
     let octave = note.get("octave")?.as_int().ok()? as u8;
     let velocity = note
         .get("velocity")
@@ -395,7 +401,7 @@ fn map_to_set_note_command(row: INT, channel: INT, note: &rhai::Map) -> Option<P
         return None;
     }
     let pitch_str = note.get("pitch")?.clone().into_string().ok()?;
-    let pitch = Pitch::from_str(&pitch_str)?;
+    let pitch = Pitch::parse_str(&pitch_str)?;
     let octave = note.get("octave")?.as_int().ok()? as u8;
     let velocity = note
         .get("velocity")
@@ -469,14 +475,10 @@ fn generate_euclidean(pulses: usize, steps: usize) -> Vec<bool> {
         }
 
         // Add any leftover front groups
-        for i in distribute_count..split_pos {
-            new_groups.push(groups[i].clone());
-        }
+        new_groups.extend_from_slice(&groups[distribute_count..split_pos]);
 
         // Add any leftover remainder groups
-        for i in (split_pos + distribute_count)..groups.len() {
-            new_groups.push(groups[i].clone());
-        }
+        new_groups.extend_from_slice(&groups[(split_pos + distribute_count)..]);
 
         groups = new_groups;
     }
