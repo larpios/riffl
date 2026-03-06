@@ -1,7 +1,6 @@
 /// Instrument list view UI.
 ///
 /// Displays the instruments defined in the song alongside loaded sample names.
-
 use ratatui::{
     layout::Alignment,
     style::Style,
@@ -31,13 +30,13 @@ pub fn render_instrument_list(
     let mut lines: Vec<Line> = Vec::new();
 
     // Header
-    lines.push(Line::from(vec![
-        Span::styled(
-            format!("  {:>3}  {:<20}  {:<16}  {:>6}  {}",
-                "Idx", "Name", "Sample", "Vol", "Base Note"),
-            Style::default().fg(theme.text_secondary),
+    lines.push(Line::from(vec![Span::styled(
+        format!(
+            "  {:>3}  {:<20}  {:<16}  {:>6}  {}",
+            "Idx", "Name", "Sample", "Vol", "Base Note"
         ),
-    ]));
+        Style::default().fg(theme.text_secondary),
+    )]));
 
     // Show song instruments
     if song.instruments.is_empty() && sample_names.is_empty() {
@@ -49,10 +48,15 @@ pub fn render_instrument_list(
     } else {
         // List instruments from the song model
         for (idx, inst) in song.instruments.iter().enumerate() {
-            let sample_name = inst.sample_index
+            let sample_name = inst
+                .sample_index
                 .and_then(|si| sample_names.get(si))
                 .map(|s| {
-                    if s.len() > 16 { s[..16].to_string() } else { s.clone() }
+                    if s.len() > 16 {
+                        s[..16].to_string()
+                    } else {
+                        s.clone()
+                    }
                 })
                 .unwrap_or_else(|| "---".to_string());
 
@@ -143,10 +147,12 @@ mod tests {
 
         let backend = ratatui::backend::TestBackend::new(80, 24);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
-        terminal.draw(|frame| {
-            let area = frame.area();
-            render_instrument_list(frame, area, &song, &names, &theme);
-        }).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                render_instrument_list(frame, area, &song, &names, &theme);
+            })
+            .unwrap();
     }
 
     #[test]
@@ -157,9 +163,11 @@ mod tests {
 
         let backend = ratatui::backend::TestBackend::new(80, 24);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
-        terminal.draw(|frame| {
-            let area = frame.area();
-            render_instrument_list(frame, area, &song, &names, &theme);
-        }).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                render_instrument_list(frame, area, &song, &names, &theme);
+            })
+            .unwrap();
     }
 }
