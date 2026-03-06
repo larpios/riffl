@@ -3,7 +3,6 @@
 /// This module provides utilities for creating constraint-based layouts that
 /// adapt to terminal size changes. It uses ratatui's Layout system to create
 /// flexible, responsive layouts for the application.
-
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     Frame,
@@ -26,7 +25,11 @@ use ratatui::{
 /// ```no_run
 /// let (header, content, footer) = create_main_layout(frame.area(), 3, 1);
 /// ```
-pub fn create_main_layout(area: Rect, header_height: u16, footer_height: u16) -> (Rect, Rect, Rect) {
+pub fn create_main_layout(
+    area: Rect,
+    header_height: u16,
+    footer_height: u16,
+) -> (Rect, Rect, Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -58,10 +61,7 @@ pub fn create_main_layout(area: Rect, header_height: u16, footer_height: u16) ->
 pub fn create_sidebar_layout(area: Rect, sidebar_width: u16) -> (Rect, Rect) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length(sidebar_width),
-            Constraint::Min(0),
-        ])
+        .constraints([Constraint::Length(sidebar_width), Constraint::Min(0)])
         .split(area);
 
     (chunks[0], chunks[1])
