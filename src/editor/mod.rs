@@ -2,7 +2,6 @@
 ///
 /// Provides a vim-inspired modal editor for the tracker pattern grid.
 /// Supports Normal (navigation), Insert (note entry), and Visual (selection) modes.
-
 use crate::pattern::effect::Effect;
 use crate::pattern::note::{Note, NoteEvent, Pitch};
 use crate::pattern::pattern::Pattern;
@@ -27,7 +26,11 @@ impl Clipboard {
     pub fn new(cells: Vec<Vec<Cell>>) -> Self {
         let num_rows = cells.len();
         let num_cols = cells.first().map_or(0, |r| r.len());
-        Self { cells, num_rows, num_cols }
+        Self {
+            cells,
+            num_rows,
+            num_cols,
+        }
     }
 
     /// Create a clipboard holding a single cell.
@@ -395,7 +398,10 @@ impl Editor {
         let digit = digit & 0x0F; // clamp to single nibble
         self.save_history();
 
-        if let Some(cell) = self.pattern.get_cell_mut(self.cursor_row, self.cursor_channel) {
+        if let Some(cell) = self
+            .pattern
+            .get_cell_mut(self.cursor_row, self.cursor_channel)
+        {
             let current = cell.first_effect().copied().unwrap_or(Effect::new(0, 0));
 
             let new_effect = match self.effect_digit_position {
@@ -429,7 +435,8 @@ impl Editor {
     /// Delete (clear) the current cell.
     pub fn delete_cell(&mut self) {
         self.save_history();
-        self.pattern.clear_cell(self.cursor_row, self.cursor_channel);
+        self.pattern
+            .clear_cell(self.cursor_row, self.cursor_channel);
     }
 
     /// Insert a new empty row at the cursor position, pushing rows down.
@@ -482,7 +489,9 @@ impl Editor {
                 for r in r0..=r1 {
                     let mut row = Vec::new();
                     for c in c0..=c1 {
-                        let cell = self.pattern.get_cell(r, c)
+                        let cell = self
+                            .pattern
+                            .get_cell(r, c)
                             .cloned()
                             .unwrap_or_else(Cell::empty);
                         row.push(cell);
@@ -493,7 +502,9 @@ impl Editor {
             }
         } else {
             // Copy single cell at cursor
-            let cell = self.pattern.get_cell(self.cursor_row, self.cursor_channel)
+            let cell = self
+                .pattern
+                .get_cell(self.cursor_row, self.cursor_channel)
                 .cloned()
                 .unwrap_or_else(Cell::empty);
             self.clipboard = Some(Clipboard::single(cell));
@@ -513,7 +524,8 @@ impl Editor {
                 let target_row = self.cursor_row + dr;
                 let target_ch = self.cursor_channel + dc;
                 if target_row < self.pattern.num_rows() && target_ch < self.pattern.num_channels() {
-                    self.pattern.set_cell(target_row, target_ch, clipboard.cells()[dr][dc].clone());
+                    self.pattern
+                        .set_cell(target_row, target_ch, clipboard.cells()[dr][dc].clone());
                 }
             }
         }
@@ -533,7 +545,8 @@ impl Editor {
                 }
             }
         } else {
-            self.pattern.clear_cell(self.cursor_row, self.cursor_channel);
+            self.pattern
+                .clear_cell(self.cursor_row, self.cursor_channel);
         }
     }
 
@@ -545,7 +558,10 @@ impl Editor {
             self.visual_selection()
         } else {
             // Single cell at cursor
-            Some(((self.cursor_row, self.cursor_channel), (self.cursor_row, self.cursor_channel)))
+            Some((
+                (self.cursor_row, self.cursor_channel),
+                (self.cursor_row, self.cursor_channel),
+            ))
         };
 
         let ((r0, c0), (r1, c1)) = match selection {
@@ -1446,14 +1462,22 @@ mod tests {
     fn test_interpolate_volume_ramp() {
         let mut editor = Editor::new(Pattern::new(8, 1));
         // Set volume at row 0 = 0, row 4 = 100
-        editor.pattern_mut().set_cell(0, 0, Cell {
-            volume: Some(0),
-            ..Cell::empty()
-        });
-        editor.pattern_mut().set_cell(4, 0, Cell {
-            volume: Some(100),
-            ..Cell::empty()
-        });
+        editor.pattern_mut().set_cell(
+            0,
+            0,
+            Cell {
+                volume: Some(0),
+                ..Cell::empty()
+            },
+        );
+        editor.pattern_mut().set_cell(
+            4,
+            0,
+            Cell {
+                volume: Some(100),
+                ..Cell::empty()
+            },
+        );
         // Select rows 0-4
         editor.cursor_row = 0;
         editor.enter_visual_mode();
@@ -1470,14 +1494,22 @@ mod tests {
     #[test]
     fn test_interpolate_requires_visual_mode() {
         let mut editor = Editor::new(Pattern::new(8, 1));
-        editor.pattern_mut().set_cell(0, 0, Cell {
-            volume: Some(0),
-            ..Cell::empty()
-        });
-        editor.pattern_mut().set_cell(4, 0, Cell {
-            volume: Some(100),
-            ..Cell::empty()
-        });
+        editor.pattern_mut().set_cell(
+            0,
+            0,
+            Cell {
+                volume: Some(0),
+                ..Cell::empty()
+            },
+        );
+        editor.pattern_mut().set_cell(
+            4,
+            0,
+            Cell {
+                volume: Some(100),
+                ..Cell::empty()
+            },
+        );
         // Normal mode — interpolate should be a no-op
         editor.interpolate();
         assert!(editor.pattern().get_cell(2, 0).unwrap().volume.is_none());
@@ -1487,10 +1519,14 @@ mod tests {
     fn test_interpolate_needs_two_endpoints() {
         let mut editor = Editor::new(Pattern::new(8, 1));
         // Only one volume value
-        editor.pattern_mut().set_cell(0, 0, Cell {
-            volume: Some(50),
-            ..Cell::empty()
-        });
+        editor.pattern_mut().set_cell(
+            0,
+            0,
+            Cell {
+                volume: Some(50),
+                ..Cell::empty()
+            },
+        );
         editor.cursor_row = 0;
         editor.enter_visual_mode();
         editor.cursor_row = 4;
@@ -1502,14 +1538,22 @@ mod tests {
     #[test]
     fn test_interpolate_is_undoable() {
         let mut editor = Editor::new(Pattern::new(8, 1));
-        editor.pattern_mut().set_cell(0, 0, Cell {
-            volume: Some(0),
-            ..Cell::empty()
-        });
-        editor.pattern_mut().set_cell(4, 0, Cell {
-            volume: Some(100),
-            ..Cell::empty()
-        });
+        editor.pattern_mut().set_cell(
+            0,
+            0,
+            Cell {
+                volume: Some(0),
+                ..Cell::empty()
+            },
+        );
+        editor.pattern_mut().set_cell(
+            4,
+            0,
+            Cell {
+                volume: Some(100),
+                ..Cell::empty()
+            },
+        );
         editor.cursor_row = 0;
         editor.enter_visual_mode();
         editor.cursor_row = 4;
@@ -1522,14 +1566,22 @@ mod tests {
     #[test]
     fn test_interpolate_descending_ramp() {
         let mut editor = Editor::new(Pattern::new(4, 1));
-        editor.pattern_mut().set_cell(0, 0, Cell {
-            volume: Some(120),
-            ..Cell::empty()
-        });
-        editor.pattern_mut().set_cell(3, 0, Cell {
-            volume: Some(0),
-            ..Cell::empty()
-        });
+        editor.pattern_mut().set_cell(
+            0,
+            0,
+            Cell {
+                volume: Some(120),
+                ..Cell::empty()
+            },
+        );
+        editor.pattern_mut().set_cell(
+            3,
+            0,
+            Cell {
+                volume: Some(0),
+                ..Cell::empty()
+            },
+        );
         editor.cursor_row = 0;
         editor.enter_visual_mode();
         editor.cursor_row = 3;
@@ -1784,10 +1836,20 @@ mod tests {
         assert_eq!(editor.cursor_row(), 2);
 
         // Verify both
-        let eff0 = editor.pattern().get_cell(0, 0).unwrap().first_effect().unwrap();
+        let eff0 = editor
+            .pattern()
+            .get_cell(0, 0)
+            .unwrap()
+            .first_effect()
+            .unwrap();
         assert_eq!(format!("{}", eff0), "A04");
 
-        let eff1 = editor.pattern().get_cell(1, 0).unwrap().first_effect().unwrap();
+        let eff1 = editor
+            .pattern()
+            .get_cell(1, 0)
+            .unwrap()
+            .first_effect()
+            .unwrap();
         assert_eq!(format!("{}", eff1), "C40");
     }
 }

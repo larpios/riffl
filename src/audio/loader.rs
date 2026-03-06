@@ -58,10 +58,7 @@ pub fn load_sample(path: &Path, target_sample_rate: u32) -> AudioResult<Sample> 
         .sample_rate
         .ok_or_else(|| AudioError::LoadError("unknown sample rate".into()))?;
 
-    let file_channels = codec_params
-        .channels
-        .map(|c| c.count() as u16)
-        .unwrap_or(1);
+    let file_channels = codec_params.channels.map(|c| c.count() as u16).unwrap_or(1);
 
     let mut decoder = symphonia::default::get_codecs()
         .make(&codec_params, &DecoderOptions::default())
@@ -104,10 +101,7 @@ pub fn load_sample(path: &Path, target_sample_rate: u32) -> AudioResult<Sample> 
 
     // Convert mono to stereo by duplicating channels
     let (data, channels) = if file_channels == 1 {
-        let stereo: Vec<f32> = all_samples
-            .iter()
-            .flat_map(|&s| [s, s])
-            .collect();
+        let stereo: Vec<f32> = all_samples.iter().flat_map(|&s| [s, s]).collect();
         (stereo, 2u16)
     } else {
         (all_samples, file_channels)
@@ -163,12 +157,7 @@ mod tests {
     use std::io::Write;
 
     /// Helper: write a minimal WAV file (PCM 16-bit) to a temp path and return it.
-    fn write_test_wav(
-        path: &Path,
-        sample_rate: u32,
-        channels: u16,
-        samples: &[i16],
-    ) {
+    fn write_test_wav(path: &Path, sample_rate: u32, channels: u16, samples: &[i16]) {
         let data_len = (samples.len() * 2) as u32;
         let file_size = 36 + data_len;
         let byte_rate = sample_rate * channels as u32 * 2;
@@ -188,7 +177,7 @@ mod tests {
         f.write_all(&byte_rate.to_le_bytes()).unwrap();
         f.write_all(&block_align.to_le_bytes()).unwrap();
         f.write_all(&16u16.to_le_bytes()).unwrap(); // bits per sample
-        // data chunk
+                                                    // data chunk
         f.write_all(b"data").unwrap();
         f.write_all(&data_len.to_le_bytes()).unwrap();
         for &s in samples {
@@ -341,7 +330,9 @@ mod tests {
             assert!(
                 (l - r).abs() < 1e-6,
                 "frame {} L={} R={} should match",
-                frame, l, r
+                frame,
+                l,
+                r
             );
         }
 
@@ -379,7 +370,10 @@ mod tests {
         let data = vec![1.0f32, 0.5, 0.0, -0.5];
         let result = resample_linear(&data, 2, 1, 2);
         // Going from 1 Hz to 2 Hz with 2 source frames should produce ~4 frames
-        assert!(result.len() >= 4, "should produce more frames when upsampling");
+        assert!(
+            result.len() >= 4,
+            "should produce more frames when upsampling"
+        );
         // All values should be in a reasonable range
         for &v in &result {
             assert!(v >= -1.0 && v <= 1.5, "resampled value {} out of range", v);
