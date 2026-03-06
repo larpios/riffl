@@ -1,9 +1,8 @@
+use serde::{Deserialize, Serialize};
 /// Musical note representation for the tracker pattern grid.
 ///
 /// Provides pitch, octave, velocity, and instrument data for each note event.
-
 use std::fmt;
-use serde::{Serialize, Deserialize};
 
 /// Musical pitch with sharps and flats.
 ///
@@ -28,9 +27,18 @@ pub enum Pitch {
 impl Pitch {
     /// All pitches in chromatic order.
     pub const ALL: [Pitch; 12] = [
-        Pitch::C, Pitch::CSharp, Pitch::D, Pitch::DSharp,
-        Pitch::E, Pitch::F, Pitch::FSharp, Pitch::G,
-        Pitch::GSharp, Pitch::A, Pitch::ASharp, Pitch::B,
+        Pitch::C,
+        Pitch::CSharp,
+        Pitch::D,
+        Pitch::DSharp,
+        Pitch::E,
+        Pitch::F,
+        Pitch::FSharp,
+        Pitch::G,
+        Pitch::GSharp,
+        Pitch::A,
+        Pitch::ASharp,
+        Pitch::B,
     ];
 
     /// Parse a pitch from a string slice (e.g., "C", "C#", "Db").
@@ -132,7 +140,12 @@ impl Note {
     pub fn new(pitch: Pitch, octave: u8, velocity: u8, instrument: u8) -> Self {
         assert!(octave <= 9, "Octave must be 0-9, got {}", octave);
         assert!(velocity <= 127, "Velocity must be 0-127, got {}", velocity);
-        Self { pitch, octave, velocity, instrument }
+        Self {
+            pitch,
+            octave,
+            velocity,
+            instrument,
+        }
     }
 
     /// Create a note with default velocity (100) and instrument (0).
@@ -446,7 +459,14 @@ mod tests {
         for pitch in &Pitch::ALL {
             let note = Note::simple(*pitch, 4);
             let display = note.display_str();
-            assert_eq!(display.len(), 3, "Display for {:?} was '{}' (len {})", pitch, display, display.len());
+            assert_eq!(
+                display.len(),
+                3,
+                "Display for {:?} was '{}' (len {})",
+                pitch,
+                display,
+                display.len()
+            );
         }
     }
 
