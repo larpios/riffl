@@ -45,7 +45,7 @@ impl Pitch {
     ///
     /// Accepts sharp (#) and flat (b) notation. Flats are converted to
     /// their enharmonic sharp equivalent.
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_str(s: &str) -> Option<Self> {
         match s {
             "C" => Some(Pitch::C),
             "C#" | "Db" => Some(Pitch::CSharp),
@@ -183,7 +183,7 @@ impl Note {
             return None;
         };
 
-        let pitch = Pitch::from_str(&pitch_str)?;
+        let pitch = Pitch::parse_str(&pitch_str)?;
         let octave = octave_char.to_digit(10)? as u8;
 
         Some(Note::simple(pitch, octave))
@@ -198,7 +198,7 @@ impl Note {
     pub fn frequency(&self) -> f64 {
         // A4 is MIDI note 57 (octave 4, semitone 9)
         let a4_midi = 4 * 12 + 9; // = 57
-        let semitone_diff = self.midi_note() as i32 - a4_midi as i32;
+        let semitone_diff = self.midi_note() as i32 - a4_midi;
         440.0 * 2.0_f64.powf(semitone_diff as f64 / 12.0)
     }
 
@@ -207,7 +207,7 @@ impl Note {
     /// Returns None if the result would be out of the valid range (C-0 to B-9).
     pub fn transpose(&self, semitones: i32) -> Option<Self> {
         let midi = self.midi_note() as i32 + semitones;
-        if midi < 0 || midi > 119 {
+        if !(0..=119).contains(&midi) {
             return None;
         }
         let midi = midi as u8;
@@ -267,13 +267,13 @@ mod tests {
 
     #[test]
     fn test_pitch_from_str() {
-        assert_eq!(Pitch::from_str("C"), Some(Pitch::C));
-        assert_eq!(Pitch::from_str("C#"), Some(Pitch::CSharp));
-        assert_eq!(Pitch::from_str("Db"), Some(Pitch::CSharp));
-        assert_eq!(Pitch::from_str("F#"), Some(Pitch::FSharp));
-        assert_eq!(Pitch::from_str("Bb"), Some(Pitch::ASharp));
-        assert_eq!(Pitch::from_str("X"), None);
-        assert_eq!(Pitch::from_str(""), None);
+        assert_eq!(Pitch::parse_str("C"), Some(Pitch::C));
+        assert_eq!(Pitch::parse_str("C#"), Some(Pitch::CSharp));
+        assert_eq!(Pitch::parse_str("Db"), Some(Pitch::CSharp));
+        assert_eq!(Pitch::parse_str("F#"), Some(Pitch::FSharp));
+        assert_eq!(Pitch::parse_str("Bb"), Some(Pitch::ASharp));
+        assert_eq!(Pitch::parse_str("X"), None);
+        assert_eq!(Pitch::parse_str(""), None);
     }
 
     #[test]
@@ -393,18 +393,18 @@ mod tests {
     #[test]
     fn test_pitch_from_str_all_flats() {
         // Verify all flat notation parses correctly
-        assert_eq!(Pitch::from_str("Db"), Some(Pitch::CSharp));
-        assert_eq!(Pitch::from_str("Eb"), Some(Pitch::DSharp));
-        assert_eq!(Pitch::from_str("Fb"), Some(Pitch::E));
-        assert_eq!(Pitch::from_str("Gb"), Some(Pitch::FSharp));
-        assert_eq!(Pitch::from_str("Ab"), Some(Pitch::GSharp));
-        assert_eq!(Pitch::from_str("Bb"), Some(Pitch::ASharp));
-        assert_eq!(Pitch::from_str("Cb"), Some(Pitch::B));
+        assert_eq!(Pitch::parse_str("Db"), Some(Pitch::CSharp));
+        assert_eq!(Pitch::parse_str("Eb"), Some(Pitch::DSharp));
+        assert_eq!(Pitch::parse_str("Fb"), Some(Pitch::E));
+        assert_eq!(Pitch::parse_str("Gb"), Some(Pitch::FSharp));
+        assert_eq!(Pitch::parse_str("Ab"), Some(Pitch::GSharp));
+        assert_eq!(Pitch::parse_str("Bb"), Some(Pitch::ASharp));
+        assert_eq!(Pitch::parse_str("Cb"), Some(Pitch::B));
     }
 
     #[test]
     fn test_pitch_from_str_enharmonic_sharps() {
-        assert_eq!(Pitch::from_str("E#"), Some(Pitch::F));
+        assert_eq!(Pitch::parse_str("E#"), Some(Pitch::F));
     }
 
     #[test]
