@@ -63,7 +63,10 @@ mod tests {
     fn test_unsupported_config_error() {
         let msg = "48kHz not supported";
         let err = AudioError::UnsupportedConfig(msg.to_string());
-        assert_eq!(err.to_string(), "unsupported configuration: 48kHz not supported");
+        assert_eq!(
+            err.to_string(),
+            "unsupported configuration: 48kHz not supported"
+        );
     }
 
     #[test]

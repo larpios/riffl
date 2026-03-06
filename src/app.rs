@@ -2,7 +2,6 @@
 ///
 /// This module contains the core App struct that manages the application state,
 /// handles updates, and coordinates between different subsystems.
-
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -10,7 +9,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 
-use crate::audio::{AudioEngine, Mixer, Sample, load_sample};
+use crate::audio::{load_sample, AudioEngine, Mixer, Sample};
 use crate::dsl::engine::ScriptEngine;
 use crate::editor::{Editor, EditorMode};
 use crate::export;
@@ -176,8 +175,8 @@ impl App {
             let t = i as f32 / sample_rate as f32;
             data.push((2.0 * std::f32::consts::PI * freq * t).sin());
         }
-        Sample::new(data, sample_rate, 1, Some("sine440".to_string()))
-            .with_base_note(57) // A-4 = MIDI 57 (440Hz)
+        Sample::new(data, sample_rate, 1, Some("sine440".to_string())).with_base_note(57)
+        // A-4 = MIDI 57 (440Hz)
     }
 
     /// Initialize the application and set up the audio callback
@@ -215,8 +214,10 @@ impl App {
         self.last_update = now;
 
         // Keep transport in sync with current pattern size and arrangement length
-        self.transport.set_num_rows(self.editor.pattern().num_rows());
-        self.transport.set_arrangement_length(self.song.arrangement.len());
+        self.transport
+            .set_num_rows(self.editor.pattern().num_rows());
+        self.transport
+            .set_arrangement_length(self.song.arrangement.len());
 
         let was_playing = self.transport.is_playing();
 
@@ -232,7 +233,10 @@ impl App {
                     mixer.tick(row, self.editor.pattern());
                 }
             }
-            AdvanceResult::PatternChange { arrangement_pos, row } => {
+            AdvanceResult::PatternChange {
+                arrangement_pos,
+                row,
+            } => {
                 // Load the new pattern from the arrangement
                 self.load_arrangement_pattern(arrangement_pos);
                 // In live mode, re-execute script on pattern change
@@ -312,7 +316,8 @@ impl App {
         match self.transport.state() {
             TransportState::Stopped => {
                 // Sync arrangement length before starting
-                self.transport.set_arrangement_length(self.song.arrangement.len());
+                self.transport
+                    .set_arrangement_length(self.song.arrangement.len());
                 // In Song mode, load the pattern at the current arrangement position
                 if self.transport.playback_mode() == PlaybackMode::Song {
                     self.load_arrangement_pattern(self.transport.arrangement_position());
@@ -376,7 +381,8 @@ impl App {
 
     /// Jump to the next pattern in the arrangement
     pub fn jump_next_pattern(&mut self) {
-        self.transport.set_arrangement_length(self.song.arrangement.len());
+        self.transport
+            .set_arrangement_length(self.song.arrangement.len());
         let current = self.transport.arrangement_position();
         let next = current + 1;
         if next < self.song.arrangement.len() {
@@ -387,7 +393,8 @@ impl App {
 
     /// Jump to the previous pattern in the arrangement
     pub fn jump_prev_pattern(&mut self) {
-        self.transport.set_arrangement_length(self.song.arrangement.len());
+        self.transport
+            .set_arrangement_length(self.song.arrangement.len());
         let current = self.transport.arrangement_position();
         if current > 0 {
             let prev = current - 1;
@@ -450,17 +457,20 @@ impl App {
     /// Load the currently selected file from the file browser.
     /// Returns Ok(instrument_index) on success, or an error message.
     pub fn load_selected_sample(&mut self) -> Result<usize, String> {
-        let path = self.file_browser.selected_path()
+        let path = self
+            .file_browser
+            .selected_path()
             .ok_or_else(|| "No file selected".to_string())?
             .to_path_buf();
 
-        let output_sample_rate = self.audio_engine
+        let output_sample_rate = self
+            .audio_engine
             .as_ref()
             .map(|e| e.sample_rate())
             .unwrap_or(44100);
 
-        let sample = load_sample(&path, output_sample_rate)
-            .map_err(|e| format!("Failed to load: {}", e))?;
+        let sample =
+            load_sample(&path, output_sample_rate).map_err(|e| format!("Failed to load: {}", e))?;
 
         let name = sample.name().unwrap_or("unknown").to_string();
 
@@ -477,7 +487,8 @@ impl App {
 
     /// Open the export dialog.
     pub fn open_export_dialog(&mut self) {
-        let name = self.project_path
+        let name = self
+            .project_path
             .as_ref()
             .and_then(|p| p.file_stem())
             .and_then(|s| s.to_str())
@@ -502,7 +513,8 @@ impl App {
         let samples: Vec<Sample> = if let Ok(mixer) = self.mixer.lock() {
             mixer.samples().to_vec()
         } else {
-            self.export_dialog.finish_error("Failed to lock mixer".to_string());
+            self.export_dialog
+                .finish_error("Failed to lock mixer".to_string());
             return;
         };
 
@@ -587,11 +599,15 @@ impl App {
     pub fn execute_script(&mut self) {
         let code = self.code_editor.text();
         if code.trim().is_empty() {
-            self.code_editor.set_output("(empty script)".to_string(), false);
+            self.code_editor
+                .set_output("(empty script)".to_string(), false);
             return;
         }
 
-        match self.script_engine.eval_with_pattern(&code, self.editor.pattern()) {
+        match self
+            .script_engine
+            .eval_with_pattern(&code, self.editor.pattern())
+        {
             Ok((result, commands)) => {
                 // Apply pattern commands to the editor's pattern
                 use crate::dsl::engine::{apply_commands, ScriptResult};
@@ -610,7 +626,9 @@ impl App {
                 // Format output message
                 let output_msg = if cmd_count > 0 {
                     match result {
-                        ScriptResult::Value(v) => format!("Applied {} commands. Result: {}", cmd_count, v),
+                        ScriptResult::Value(v) => {
+                            format!("Applied {} commands. Result: {}", cmd_count, v)
+                        }
                         _ => format!("Applied {} commands to pattern.", cmd_count),
                     }
                 } else {
@@ -633,7 +651,9 @@ impl App {
     /// If a project path is set, saves to that path. Otherwise saves to
     /// "untitled.trs" in the current directory.
     pub fn save_project(&mut self) {
-        let path = self.project_path.clone()
+        let path = self
+            .project_path
+            .clone()
             .unwrap_or_else(|| PathBuf::from("untitled.trs"));
 
         match project::save_project(&path, &self.song) {
@@ -645,10 +665,7 @@ impl App {
                 ));
             }
             Err(e) => {
-                self.open_modal(Modal::error(
-                    "Save Failed".to_string(),
-                    format!("{}", e),
-                ));
+                self.open_modal(Modal::error("Save Failed".to_string(), format!("{}", e)));
             }
         }
     }
@@ -678,10 +695,7 @@ impl App {
                 ));
             }
             Err(e) => {
-                self.open_modal(Modal::error(
-                    "Load Failed".to_string(),
-                    format!("{}", e),
-                ));
+                self.open_modal(Modal::error("Load Failed".to_string(), format!("{}", e)));
             }
         }
     }
@@ -1065,10 +1079,12 @@ mod tests {
     #[test]
     fn test_execute_script_set_note() {
         let mut app = App::new();
-        app.code_editor.set_text(r#"
+        app.code_editor.set_text(
+            r#"
             let n = note("C", 4);
             set_note(0, 0, n);
-        "#);
+        "#,
+        );
         app.execute_script();
         assert!(!app.code_editor.output_is_error);
         assert!(app.code_editor.output().contains("Applied"));
@@ -1083,7 +1099,9 @@ mod tests {
     fn test_execute_script_clear_pattern() {
         let mut app = App::new();
         // First set some notes
-        app.editor.pattern_mut().set_note(0, 0, Note::simple(Pitch::C, 4));
+        app.editor
+            .pattern_mut()
+            .set_note(0, 0, Note::simple(Pitch::C, 4));
         // Then clear via script
         app.code_editor.set_text("clear_pattern();");
         app.execute_script();
@@ -1134,10 +1152,12 @@ mod tests {
         app.transport.set_num_rows(4);
 
         // Write a script that sets a note at row 0
-        app.code_editor.set_text(r#"
+        app.code_editor.set_text(
+            r#"
             let n = note("D", 5);
             set_note(0, 0, n);
-        "#);
+        "#,
+        );
 
         // Enable live mode and start playback
         app.live_mode = true;
@@ -1181,10 +1201,12 @@ mod tests {
         app.transport.set_num_rows(4);
 
         // Write a script that sets a note
-        app.code_editor.set_text(r#"
+        app.code_editor.set_text(
+            r#"
             let n = note("D", 5);
             set_note(0, 0, n);
-        "#);
+        "#,
+        );
 
         // Live mode OFF
         app.live_mode = false;
@@ -1241,10 +1263,12 @@ mod tests {
         assert!(app.transport.is_playing());
 
         // Execute a script that modifies the pattern — should retrigger mixer
-        app.code_editor.set_text(r#"
+        app.code_editor.set_text(
+            r#"
             let n = note("E", 4);
             set_note(0, 0, n);
-        "#);
+        "#,
+        );
         app.execute_script();
         assert!(!app.code_editor.output_is_error);
         assert!(app.code_editor.output().contains("Applied"));
@@ -1261,10 +1285,12 @@ mod tests {
         assert!(app.transport.is_stopped());
 
         // Execute a script — should still apply commands, just no mixer retrigger
-        app.code_editor.set_text(r#"
+        app.code_editor.set_text(
+            r#"
             let n = note("E", 4);
             set_note(0, 0, n);
-        "#);
+        "#,
+        );
         app.execute_script();
         assert!(!app.code_editor.output_is_error);
         assert!(app.code_editor.output().contains("Applied"));
@@ -1291,12 +1317,14 @@ mod tests {
         app.transport.play();
 
         // Heavy script execution should complete without deadlock
-        app.code_editor.set_text(r#"
+        app.code_editor.set_text(
+            r#"
             for i in range(0, 16) {
                 let n = note("C", 4);
                 set_note(i, 0, n);
             }
-        "#);
+        "#,
+        );
         app.execute_script();
         assert!(!app.code_editor.output_is_error);
         assert!(app.code_editor.output().contains("Applied 16 commands"));
@@ -1310,12 +1338,14 @@ mod tests {
         app.transport.set_num_rows(4);
 
         // Script fills column 0 with C4 notes
-        app.code_editor.set_text(r#"
+        app.code_editor.set_text(
+            r#"
             for i in range(0, 4) {
                 let n = note("C", 4);
                 set_note(i, 0, n);
             }
-        "#);
+        "#,
+        );
 
         // Enable live mode and start playback
         app.live_mode = true;
@@ -1345,7 +1375,11 @@ mod tests {
         for i in 0..4 {
             let cell = app.editor.pattern().get_cell(i, 0);
             assert!(cell.is_some(), "Row {} should have a note", i);
-            assert!(cell.unwrap().note.is_some(), "Row {} note should not be empty", i);
+            assert!(
+                cell.unwrap().note.is_some(),
+                "Row {} note should not be empty",
+                i
+            );
         }
     }
 
@@ -1363,10 +1397,12 @@ mod tests {
         assert_eq!(row_before, 2);
 
         // Execute script
-        app.code_editor.set_text(r#"
+        app.code_editor.set_text(
+            r#"
             let n = note("A", 3);
             set_note(0, 0, n);
-        "#);
+        "#,
+        );
         app.execute_script();
 
         // Transport state should be unchanged
