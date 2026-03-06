@@ -158,7 +158,7 @@ impl Mixer {
             }
 
             // Skip muted/non-soloed channels: don't trigger new notes
-            let audible = self.channel_mix.get(ch).map_or(true, |m| m.audible);
+            let audible = self.channel_mix.get(ch).is_none_or(|m| m.audible);
 
             // Determine the note frequency for effect processing
             let note_frequency = match &cell.note {
@@ -167,7 +167,9 @@ impl Mixer {
             };
 
             // Process effects for this channel
-            let cmds = self.effect_processor.process_row(ch, &cell.effects, note_frequency);
+            let cmds = self
+                .effect_processor
+                .process_row(ch, &cell.effects, note_frequency);
             transport_commands.extend(cmds);
 
             match &cell.note {
@@ -187,18 +189,20 @@ impl Mixer {
                         let target_freq = note.frequency();
                         let sample_rate_ratio =
                             sample.sample_rate() as f64 / self.output_sample_rate as f64;
-                        let playback_rate =
-                            (target_freq / base_freq) * sample_rate_ratio;
+                        let playback_rate = (target_freq / base_freq) * sample_rate_ratio;
 
                         // Map velocity 0-127 to gain 0.0-1.0
                         let velocity_gain = note.velocity as f32 / 127.0;
 
-                        self.voices[ch] = Some(Voice::new(instrument, playback_rate, velocity_gain));
+                        self.voices[ch] =
+                            Some(Voice::new(instrument, playback_rate, velocity_gain));
                     }
                 }
                 Some(NoteEvent::Off) => {
                     self.voices[ch] = None;
-                    self.effect_processor.channel_state_mut(ch).map(|s| s.reset());
+                    if let Some(s) = self.effect_processor.channel_state_mut(ch) {
+                        s.reset();
+                    }
                 }
                 None => {
                     // No event — existing voice continues
@@ -236,7 +240,9 @@ impl Mixer {
                 // Still advance the voice position so it stays in sync,
                 // but don't mix any audio into the output.
                 voice.position += voice.playback_rate * num_frames as f64;
-                let sample_frames = self.samples.get(voice.sample_index)
+                let sample_frames = self
+                    .samples
+                    .get(voice.sample_index)
                     .map_or(0, |s| s.frame_count());
                 if voice.position as usize >= sample_frames {
                     voice.active = false;
@@ -377,8 +383,8 @@ mod tests {
             let t = i as f32 / sample_rate as f32;
             data.push((2.0 * std::f32::consts::PI * freq * t).sin());
         }
-        Sample::new(data, sample_rate, 1, Some("sine440".to_string()))
-            .with_base_note(57) // A-4
+        Sample::new(data, sample_rate, 1, Some("sine440".to_string())).with_base_note(57)
+        // A-4
     }
 
     #[test]
@@ -634,7 +640,7 @@ mod tests {
         // Stereo sample: L=0.5, R=-0.5 repeated
         let mut data = Vec::new();
         for _ in 0..100 {
-            data.push(0.5);  // Left
+            data.push(0.5); // Left
             data.push(-0.5); // Right
         }
         let sample = Sample::new(data, 44100, 2, Some("stereo".to_string()));
@@ -654,7 +660,11 @@ mod tests {
         let left = output[0];
         let right = output[1];
         assert!(left > 0.0, "Left channel should be positive, got {}", left);
-        assert!(right < 0.0, "Right channel should be negative, got {}", right);
+        assert!(
+            right < 0.0,
+            "Right channel should be negative, got {}",
+            right
+        );
     }
 
     #[test]
@@ -706,12 +716,15 @@ mod tests {
 
         // The high-pitched version should have progressed further through the ramp sample,
         // producing higher average values in the output (since the ramp goes 0→1)
-        let avg_low: f32 = output_low.iter().map(|s| s.abs()).sum::<f32>() / output_low.len() as f32;
-        let avg_high: f32 = output_high.iter().map(|s| s.abs()).sum::<f32>() / output_high.len() as f32;
+        let avg_low: f32 =
+            output_low.iter().map(|s| s.abs()).sum::<f32>() / output_low.len() as f32;
+        let avg_high: f32 =
+            output_high.iter().map(|s| s.abs()).sum::<f32>() / output_high.len() as f32;
         assert!(
             avg_high > avg_low,
             "Higher note should progress faster through sample (avg_high={} > avg_low={})",
-            avg_high, avg_low
+            avg_high,
+            avg_low
         );
     }
 
@@ -719,8 +732,7 @@ mod tests {
     fn test_mixer_custom_base_note() {
         // Sample with base_note set to A-4 (57): playing A-4 should be original rate
         let data: Vec<f32> = vec![0.8; 4410];
-        let sample = Sample::new(data, 44100, 1, Some("a4_sample".to_string()))
-            .with_base_note(57); // A-4
+        let sample = Sample::new(data, 44100, 1, Some("a4_sample".to_string())).with_base_note(57); // A-4
 
         let mut mixer = Mixer::new(vec![sample], 4, 44100);
         let mut pattern = Pattern::new(16, 4);
@@ -740,7 +752,8 @@ mod tests {
         assert!(
             (output[0] - expected_val).abs() < 0.01,
             "A-4 on A-4-based sample should play at original rate, got {} expected ~{}",
-            output[0], expected_val
+            output[0],
+            expected_val
         );
     }
 
@@ -765,10 +778,7 @@ mod tests {
         let mut output_b = vec![0.0f32; 64];
 
         // Render with only instrument 0
-        let mut mixer_a = Mixer::new(
-            vec![Sample::new(vec![0.3; 4410], 44100, 1, None)],
-            4, 44100,
-        );
+        let mut mixer_a = Mixer::new(vec![Sample::new(vec![0.3; 4410], 44100, 1, None)], 4, 44100);
         let mut pat_a = Pattern::new(16, 4);
         pat_a.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
         mixer_a.tick(0, &pat_a);
@@ -776,8 +786,12 @@ mod tests {
 
         // Render with only instrument 1 (louder)
         let mut mixer_b = Mixer::new(
-            vec![Sample::new(vec![0.0; 1], 44100, 1, None), Sample::new(vec![0.9; 4410], 44100, 1, None)],
-            4, 44100,
+            vec![
+                Sample::new(vec![0.0; 1], 44100, 1, None),
+                Sample::new(vec![0.9; 4410], 44100, 1, None),
+            ],
+            4,
+            44100,
         );
         let mut pat_b = Pattern::new(16, 4);
         pat_b.set_note(0, 0, Note::new(Pitch::C, 4, 127, 1));
@@ -790,7 +804,8 @@ mod tests {
         assert!(
             peak_b > peak_a,
             "Instrument 1 (0.9) should be louder than instrument 0 (0.3): {} vs {}",
-            peak_b, peak_a
+            peak_b,
+            peak_a
         );
     }
 
@@ -810,7 +825,10 @@ mod tests {
         // Render some audio to confirm it's playing
         let mut output = vec![0.0f32; 64];
         mixer.render(&mut output);
-        assert!(output.iter().any(|&s| s != 0.0), "Voice should be producing audio");
+        assert!(
+            output.iter().any(|&s| s != 0.0),
+            "Voice should be producing audio"
+        );
 
         // Note off
         mixer.tick(1, &pattern);
@@ -819,7 +837,10 @@ mod tests {
         // Render after note-off should be silent
         let mut output2 = vec![0.0f32; 64];
         mixer.render(&mut output2);
-        assert!(output2.iter().all(|&s| s == 0.0), "After note-off, output should be silent");
+        assert!(
+            output2.iter().all(|&s| s == 0.0),
+            "After note-off, output should be silent"
+        );
     }
 
     #[test]
@@ -847,7 +868,11 @@ mod tests {
         let mut output = vec![0.0f32; 512];
         mixer.render(&mut output);
 
-        assert_eq!(mixer.active_voice_count(), 0, "Empty sample should deactivate voice");
+        assert_eq!(
+            mixer.active_voice_count(),
+            0,
+            "Empty sample should deactivate voice"
+        );
     }
 
     #[test]
@@ -897,22 +922,46 @@ mod tests {
         let (left, right) = Mixer::pan_gains(0.0);
         // Center should be -3dB ≈ 0.707
         let expected = std::f32::consts::FRAC_1_SQRT_2;
-        assert!((left - expected).abs() < 0.001, "Center left gain: {}", left);
-        assert!((right - expected).abs() < 0.001, "Center right gain: {}", right);
+        assert!(
+            (left - expected).abs() < 0.001,
+            "Center left gain: {}",
+            left
+        );
+        assert!(
+            (right - expected).abs() < 0.001,
+            "Center right gain: {}",
+            right
+        );
     }
 
     #[test]
     fn test_pan_gains_full_left() {
         let (left, right) = Mixer::pan_gains(-1.0);
-        assert!((left - 1.0).abs() < 0.001, "Full left: left gain should be 1.0, got {}", left);
-        assert!(right.abs() < 0.001, "Full left: right gain should be 0.0, got {}", right);
+        assert!(
+            (left - 1.0).abs() < 0.001,
+            "Full left: left gain should be 1.0, got {}",
+            left
+        );
+        assert!(
+            right.abs() < 0.001,
+            "Full left: right gain should be 0.0, got {}",
+            right
+        );
     }
 
     #[test]
     fn test_pan_gains_full_right() {
         let (left, right) = Mixer::pan_gains(1.0);
-        assert!(left.abs() < 0.001, "Full right: left gain should be 0.0, got {}", left);
-        assert!((right - 1.0).abs() < 0.001, "Full right: right gain should be 1.0, got {}", right);
+        assert!(
+            left.abs() < 0.001,
+            "Full right: left gain should be 0.0, got {}",
+            left
+        );
+        assert!(
+            (right - 1.0).abs() < 0.001,
+            "Full right: right gain should be 1.0, got {}",
+            right
+        );
     }
 
     #[test]
@@ -924,7 +973,9 @@ mod tests {
             let power = l * l + r * r;
             assert!(
                 (power - 1.0).abs() < 0.001,
-                "Equal power property violated at pan={}: L²+R²={}", pan, power
+                "Equal power property violated at pan={}: L²+R²={}",
+                pan,
+                power
             );
         }
     }
@@ -945,7 +996,10 @@ mod tests {
 
         let mut output = vec![0.0f32; 64];
         mixer.render(&mut output);
-        assert!(output.iter().all(|&s| s == 0.0), "Muted channel should produce silence");
+        assert!(
+            output.iter().all(|&s| s == 0.0),
+            "Muted channel should produce silence"
+        );
     }
 
     #[test]
@@ -992,13 +1046,15 @@ mod tests {
         assert!(
             peak_full > peak_half,
             "Full volume ({}) should be louder than half volume ({})",
-            peak_full, peak_half
+            peak_full,
+            peak_half
         );
         // Half volume should be roughly half the peak (within pan law)
         let ratio = peak_half / peak_full;
         assert!(
             (ratio - 0.5).abs() < 0.1,
-            "Half volume ratio should be ~0.5, got {}", ratio
+            "Half volume ratio should be ~0.5, got {}",
+            ratio
         );
     }
 
@@ -1025,7 +1081,11 @@ mod tests {
             .fold(0.0, f32::max);
 
         assert!(left_peak > 0.0, "Left channel should have audio");
-        assert!(right_peak < 0.001, "Right channel should be silent with full-left pan, got {}", right_peak);
+        assert!(
+            right_peak < 0.001,
+            "Right channel should be silent with full-left pan, got {}",
+            right_peak
+        );
     }
 
     #[test]
@@ -1050,7 +1110,11 @@ mod tests {
             .fold(0.0, f32::max);
 
         assert!(right_peak > 0.0, "Right channel should have audio");
-        assert!(left_peak < 0.001, "Left channel should be silent with full-right pan, got {}", left_peak);
+        assert!(
+            left_peak < 0.001,
+            "Left channel should be silent with full-right pan, got {}",
+            left_peak
+        );
     }
 
     #[test]
@@ -1100,7 +1164,10 @@ mod tests {
         mixer.render(&mut output);
 
         // Output should be silent (muted)
-        assert!(output.iter().all(|&s| s == 0.0), "Muted render should be silent");
+        assert!(
+            output.iter().all(|&s| s == 0.0),
+            "Muted render should be silent"
+        );
     }
 
     #[test]
@@ -1125,6 +1192,11 @@ mod tests {
         let left = output[0];
         let right = output[1];
         // Left should be louder than right (channel 1 panned full left adds to left only)
-        assert!(left > right, "Left ({}) should exceed right ({}) due to left-panned track", left, right);
+        assert!(
+            left > right,
+            "Left ({}) should exceed right ({}) due to left-panned track",
+            left,
+            right
+        );
     }
 }

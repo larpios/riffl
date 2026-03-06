@@ -3,7 +3,6 @@
 /// This module provides keybinding infrastructure for the application,
 /// with support for vim-style navigation keys (h/j/k/l) and modal editing
 /// (Normal, Insert, Visual modes).
-
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::app::AppView;
@@ -320,14 +319,21 @@ fn map_visual_mode(key: KeyEvent) -> Action {
 pub fn is_navigation_action(action: Action) -> bool {
     matches!(
         action,
-        Action::MoveLeft | Action::MoveDown | Action::MoveUp | Action::MoveRight
-            | Action::PageUp | Action::PageDown
+        Action::MoveLeft
+            | Action::MoveDown
+            | Action::MoveUp
+            | Action::MoveRight
+            | Action::PageUp
+            | Action::PageDown
     )
 }
 
 /// Check if an action dismisses modal dialogs
 pub fn is_modal_dismiss_action(action: Action) -> bool {
-    matches!(action, Action::Cancel | Action::Confirm | Action::EnterNormalMode)
+    matches!(
+        action,
+        Action::Cancel | Action::Confirm | Action::EnterNormalMode
+    )
 }
 
 #[cfg(test)]
@@ -354,22 +360,37 @@ mod tests {
         let up = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
         let right = KeyEvent::new(KeyCode::Right, KeyModifiers::NONE);
 
-        assert_eq!(map_key_to_action(left, EditorMode::Normal), Action::MoveLeft);
-        assert_eq!(map_key_to_action(down, EditorMode::Normal), Action::MoveDown);
+        assert_eq!(
+            map_key_to_action(left, EditorMode::Normal),
+            Action::MoveLeft
+        );
+        assert_eq!(
+            map_key_to_action(down, EditorMode::Normal),
+            Action::MoveDown
+        );
         assert_eq!(map_key_to_action(up, EditorMode::Normal), Action::MoveUp);
-        assert_eq!(map_key_to_action(right, EditorMode::Normal), Action::MoveRight);
+        assert_eq!(
+            map_key_to_action(right, EditorMode::Normal),
+            Action::MoveRight
+        );
     }
 
     #[test]
     fn test_normal_mode_enter_insert() {
         let i = KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(i, EditorMode::Normal), Action::EnterInsertMode);
+        assert_eq!(
+            map_key_to_action(i, EditorMode::Normal),
+            Action::EnterInsertMode
+        );
     }
 
     #[test]
     fn test_normal_mode_enter_visual() {
         let v = KeyEvent::new(KeyCode::Char('v'), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(v, EditorMode::Normal), Action::EnterVisualMode);
+        assert_eq!(
+            map_key_to_action(v, EditorMode::Normal),
+            Action::EnterVisualMode
+        );
     }
 
     #[test]
@@ -377,7 +398,10 @@ mod tests {
         let x = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
         let del = KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE);
         assert_eq!(map_key_to_action(x, EditorMode::Normal), Action::DeleteCell);
-        assert_eq!(map_key_to_action(del, EditorMode::Normal), Action::DeleteCell);
+        assert_eq!(
+            map_key_to_action(del, EditorMode::Normal),
+            Action::DeleteCell
+        );
     }
 
     #[test]
@@ -393,14 +417,20 @@ mod tests {
         let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
 
         assert_eq!(map_key_to_action(q, EditorMode::Normal), Action::Quit);
-        assert_eq!(map_key_to_action(enter, EditorMode::Normal), Action::Confirm);
+        assert_eq!(
+            map_key_to_action(enter, EditorMode::Normal),
+            Action::Confirm
+        );
         assert_eq!(map_key_to_action(esc, EditorMode::Normal), Action::Cancel);
     }
 
     #[test]
     fn test_normal_mode_toggle_play() {
         let space = KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(space, EditorMode::Normal), Action::TogglePlay);
+        assert_eq!(
+            map_key_to_action(space, EditorMode::Normal),
+            Action::TogglePlay
+        );
     }
 
     #[test]
@@ -408,7 +438,10 @@ mod tests {
         let pgup = KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE);
         let pgdn = KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE);
         assert_eq!(map_key_to_action(pgup, EditorMode::Normal), Action::PageUp);
-        assert_eq!(map_key_to_action(pgdn, EditorMode::Normal), Action::PageDown);
+        assert_eq!(
+            map_key_to_action(pgdn, EditorMode::Normal),
+            Action::PageDown
+        );
     }
 
     #[test]
@@ -428,7 +461,10 @@ mod tests {
     #[test]
     fn test_normal_mode_bpm_down() {
         let minus = KeyEvent::new(KeyCode::Char('-'), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(minus, EditorMode::Normal), Action::BpmDown);
+        assert_eq!(
+            map_key_to_action(minus, EditorMode::Normal),
+            Action::BpmDown
+        );
     }
 
     #[test]
@@ -437,9 +473,18 @@ mod tests {
         let f1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
         let f2 = KeyEvent::new(KeyCode::F(2), KeyModifiers::NONE);
         let f3 = KeyEvent::new(KeyCode::F(3), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(f1, EditorMode::Normal), Action::SwitchView(AppView::PatternEditor));
-        assert_eq!(map_key_to_action(f2, EditorMode::Normal), Action::SwitchView(AppView::Arrangement));
-        assert_eq!(map_key_to_action(f3, EditorMode::Normal), Action::SwitchView(AppView::InstrumentList));
+        assert_eq!(
+            map_key_to_action(f1, EditorMode::Normal),
+            Action::SwitchView(AppView::PatternEditor)
+        );
+        assert_eq!(
+            map_key_to_action(f2, EditorMode::Normal),
+            Action::SwitchView(AppView::Arrangement)
+        );
+        assert_eq!(
+            map_key_to_action(f3, EditorMode::Normal),
+            Action::SwitchView(AppView::InstrumentList)
+        );
     }
 
     #[test]
@@ -460,7 +505,10 @@ mod tests {
     #[test]
     fn test_normal_mode_toggle_loop() {
         let shift_l = KeyEvent::new(KeyCode::Char('L'), KeyModifiers::SHIFT);
-        assert_eq!(map_key_to_action(shift_l, EditorMode::Normal), Action::ToggleLoop);
+        assert_eq!(
+            map_key_to_action(shift_l, EditorMode::Normal),
+            Action::ToggleLoop
+        );
     }
 
     // --- Insert Mode Tests ---
@@ -470,9 +518,18 @@ mod tests {
         let c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE);
         let g = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE);
         let a_upper = KeyEvent::new(KeyCode::Char('A'), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(c, EditorMode::Insert), Action::EnterNote('c'));
-        assert_eq!(map_key_to_action(g, EditorMode::Insert), Action::EnterNote('g'));
-        assert_eq!(map_key_to_action(a_upper, EditorMode::Insert), Action::EnterNote('A'));
+        assert_eq!(
+            map_key_to_action(c, EditorMode::Insert),
+            Action::EnterNote('c')
+        );
+        assert_eq!(
+            map_key_to_action(g, EditorMode::Insert),
+            Action::EnterNote('g')
+        );
+        assert_eq!(
+            map_key_to_action(a_upper, EditorMode::Insert),
+            Action::EnterNote('A')
+        );
     }
 
     #[test]
@@ -480,15 +537,27 @@ mod tests {
         let zero = KeyEvent::new(KeyCode::Char('0'), KeyModifiers::NONE);
         let five = KeyEvent::new(KeyCode::Char('5'), KeyModifiers::NONE);
         let nine = KeyEvent::new(KeyCode::Char('9'), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(zero, EditorMode::Insert), Action::SetOctave(0));
-        assert_eq!(map_key_to_action(five, EditorMode::Insert), Action::SetOctave(5));
-        assert_eq!(map_key_to_action(nine, EditorMode::Insert), Action::SetOctave(9));
+        assert_eq!(
+            map_key_to_action(zero, EditorMode::Insert),
+            Action::SetOctave(0)
+        );
+        assert_eq!(
+            map_key_to_action(five, EditorMode::Insert),
+            Action::SetOctave(5)
+        );
+        assert_eq!(
+            map_key_to_action(nine, EditorMode::Insert),
+            Action::SetOctave(9)
+        );
     }
 
     #[test]
     fn test_insert_mode_escape_to_normal() {
         let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(esc, EditorMode::Insert), Action::EnterNormalMode);
+        assert_eq!(
+            map_key_to_action(esc, EditorMode::Insert),
+            Action::EnterNormalMode
+        );
     }
 
     #[test]
@@ -496,21 +565,33 @@ mod tests {
         let up = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
         let down = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
         assert_eq!(map_key_to_action(up, EditorMode::Insert), Action::MoveUp);
-        assert_eq!(map_key_to_action(down, EditorMode::Insert), Action::MoveDown);
+        assert_eq!(
+            map_key_to_action(down, EditorMode::Insert),
+            Action::MoveDown
+        );
     }
 
     #[test]
     fn test_insert_mode_delete() {
         let del = KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE);
         let bs = KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(del, EditorMode::Insert), Action::DeleteCell);
-        assert_eq!(map_key_to_action(bs, EditorMode::Insert), Action::DeleteCell);
+        assert_eq!(
+            map_key_to_action(del, EditorMode::Insert),
+            Action::DeleteCell
+        );
+        assert_eq!(
+            map_key_to_action(bs, EditorMode::Insert),
+            Action::DeleteCell
+        );
     }
 
     #[test]
     fn test_insert_mode_toggle_play() {
         let space = KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(space, EditorMode::Insert), Action::TogglePlay);
+        assert_eq!(
+            map_key_to_action(space, EditorMode::Insert),
+            Action::TogglePlay
+        );
     }
 
     // --- Visual Mode Tests ---
@@ -518,7 +599,10 @@ mod tests {
     #[test]
     fn test_visual_mode_escape_to_normal() {
         let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(esc, EditorMode::Visual), Action::EnterNormalMode);
+        assert_eq!(
+            map_key_to_action(esc, EditorMode::Visual),
+            Action::EnterNormalMode
+        );
     }
 
     #[test]
@@ -555,13 +639,19 @@ mod tests {
     #[test]
     fn test_normal_mode_open_file_browser_o() {
         let o = KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(o, EditorMode::Normal), Action::OpenFileBrowser);
+        assert_eq!(
+            map_key_to_action(o, EditorMode::Normal),
+            Action::OpenFileBrowser
+        );
     }
 
     #[test]
     fn test_normal_mode_open_file_browser_f5() {
         let f5 = KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(f5, EditorMode::Normal), Action::OpenFileBrowser);
+        assert_eq!(
+            map_key_to_action(f5, EditorMode::Normal),
+            Action::OpenFileBrowser
+        );
     }
 
     // --- Track Operation Tests ---
@@ -569,25 +659,37 @@ mod tests {
     #[test]
     fn test_normal_mode_toggle_mute() {
         let shift_m = KeyEvent::new(KeyCode::Char('M'), KeyModifiers::SHIFT);
-        assert_eq!(map_key_to_action(shift_m, EditorMode::Normal), Action::ToggleMute);
+        assert_eq!(
+            map_key_to_action(shift_m, EditorMode::Normal),
+            Action::ToggleMute
+        );
     }
 
     #[test]
     fn test_normal_mode_toggle_solo() {
         let shift_s = KeyEvent::new(KeyCode::Char('S'), KeyModifiers::SHIFT);
-        assert_eq!(map_key_to_action(shift_s, EditorMode::Normal), Action::ToggleSolo);
+        assert_eq!(
+            map_key_to_action(shift_s, EditorMode::Normal),
+            Action::ToggleSolo
+        );
     }
 
     #[test]
     fn test_normal_mode_next_track() {
         let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(tab, EditorMode::Normal), Action::NextTrack);
+        assert_eq!(
+            map_key_to_action(tab, EditorMode::Normal),
+            Action::NextTrack
+        );
     }
 
     #[test]
     fn test_insert_mode_next_track() {
         let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(tab, EditorMode::Insert), Action::NextTrack);
+        assert_eq!(
+            map_key_to_action(tab, EditorMode::Insert),
+            Action::NextTrack
+        );
     }
 
     #[test]
@@ -639,25 +741,38 @@ mod tests {
     #[test]
     fn test_normal_mode_transpose_up_shift_up() {
         let shift_up = KeyEvent::new(KeyCode::Up, KeyModifiers::SHIFT);
-        assert_eq!(map_key_to_action(shift_up, EditorMode::Normal), Action::TransposeUp);
+        assert_eq!(
+            map_key_to_action(shift_up, EditorMode::Normal),
+            Action::TransposeUp
+        );
     }
 
     #[test]
     fn test_normal_mode_transpose_down_shift_down() {
         let shift_down = KeyEvent::new(KeyCode::Down, KeyModifiers::SHIFT);
-        assert_eq!(map_key_to_action(shift_down, EditorMode::Normal), Action::TransposeDown);
+        assert_eq!(
+            map_key_to_action(shift_down, EditorMode::Normal),
+            Action::TransposeDown
+        );
     }
 
     #[test]
     fn test_normal_mode_transpose_octave_up() {
         let ctrl_shift_up = KeyEvent::new(KeyCode::Up, KeyModifiers::CONTROL | KeyModifiers::SHIFT);
-        assert_eq!(map_key_to_action(ctrl_shift_up, EditorMode::Normal), Action::TransposeOctaveUp);
+        assert_eq!(
+            map_key_to_action(ctrl_shift_up, EditorMode::Normal),
+            Action::TransposeOctaveUp
+        );
     }
 
     #[test]
     fn test_normal_mode_transpose_octave_down() {
-        let ctrl_shift_down = KeyEvent::new(KeyCode::Down, KeyModifiers::CONTROL | KeyModifiers::SHIFT);
-        assert_eq!(map_key_to_action(ctrl_shift_down, EditorMode::Normal), Action::TransposeOctaveDown);
+        let ctrl_shift_down =
+            KeyEvent::new(KeyCode::Down, KeyModifiers::CONTROL | KeyModifiers::SHIFT);
+        assert_eq!(
+            map_key_to_action(ctrl_shift_down, EditorMode::Normal),
+            Action::TransposeOctaveDown
+        );
     }
 
     // --- Visual Mode Clipboard/Transpose Tests ---
@@ -683,19 +798,28 @@ mod tests {
     #[test]
     fn test_visual_mode_interpolate_i() {
         let i = KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(i, EditorMode::Visual), Action::Interpolate);
+        assert_eq!(
+            map_key_to_action(i, EditorMode::Visual),
+            Action::Interpolate
+        );
     }
 
     #[test]
     fn test_visual_mode_transpose_up() {
         let shift_up = KeyEvent::new(KeyCode::Up, KeyModifiers::SHIFT);
-        assert_eq!(map_key_to_action(shift_up, EditorMode::Visual), Action::TransposeUp);
+        assert_eq!(
+            map_key_to_action(shift_up, EditorMode::Visual),
+            Action::TransposeUp
+        );
     }
 
     #[test]
     fn test_visual_mode_transpose_down() {
         let shift_down = KeyEvent::new(KeyCode::Down, KeyModifiers::SHIFT);
-        assert_eq!(map_key_to_action(shift_down, EditorMode::Visual), Action::TransposeDown);
+        assert_eq!(
+            map_key_to_action(shift_down, EditorMode::Visual),
+            Action::TransposeDown
+        );
     }
 
     #[test]
@@ -715,19 +839,28 @@ mod tests {
     #[test]
     fn test_normal_mode_toggle_playback_mode() {
         let shift_p = KeyEvent::new(KeyCode::Char('P'), KeyModifiers::SHIFT);
-        assert_eq!(map_key_to_action(shift_p, EditorMode::Normal), Action::TogglePlaybackMode);
+        assert_eq!(
+            map_key_to_action(shift_p, EditorMode::Normal),
+            Action::TogglePlaybackMode
+        );
     }
 
     #[test]
     fn test_normal_mode_jump_next_pattern() {
         let rb = KeyEvent::new(KeyCode::Char(']'), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(rb, EditorMode::Normal), Action::JumpNextPattern);
+        assert_eq!(
+            map_key_to_action(rb, EditorMode::Normal),
+            Action::JumpNextPattern
+        );
     }
 
     #[test]
     fn test_normal_mode_jump_prev_pattern() {
         let lb = KeyEvent::new(KeyCode::Char('['), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(lb, EditorMode::Normal), Action::JumpPrevPattern);
+        assert_eq!(
+            map_key_to_action(lb, EditorMode::Normal),
+            Action::JumpPrevPattern
+        );
     }
 
     // --- Export Dialog Tests ---
@@ -735,7 +868,10 @@ mod tests {
     #[test]
     fn test_normal_mode_ctrl_e_opens_export() {
         let ctrl_e = KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL);
-        assert_eq!(map_key_to_action(ctrl_e, EditorMode::Normal), Action::OpenExportDialog);
+        assert_eq!(
+            map_key_to_action(ctrl_e, EditorMode::Normal),
+            Action::OpenExportDialog
+        );
     }
 
     // --- Code Editor Keybinding Tests ---
@@ -743,31 +879,46 @@ mod tests {
     #[test]
     fn test_normal_mode_f4_switches_to_code_editor() {
         let f4 = KeyEvent::new(KeyCode::F(4), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(f4, EditorMode::Normal), Action::SwitchView(AppView::CodeEditor));
+        assert_eq!(
+            map_key_to_action(f4, EditorMode::Normal),
+            Action::SwitchView(AppView::CodeEditor)
+        );
     }
 
     #[test]
     fn test_normal_mode_ctrl_backslash_toggles_split() {
         let ctrl_bs = KeyEvent::new(KeyCode::Char('\\'), KeyModifiers::CONTROL);
-        assert_eq!(map_key_to_action(ctrl_bs, EditorMode::Normal), Action::ToggleSplitView);
+        assert_eq!(
+            map_key_to_action(ctrl_bs, EditorMode::Normal),
+            Action::ToggleSplitView
+        );
     }
 
     #[test]
     fn test_normal_mode_ctrl_enter_executes_script() {
         let ctrl_enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL);
-        assert_eq!(map_key_to_action(ctrl_enter, EditorMode::Normal), Action::ExecuteScript);
+        assert_eq!(
+            map_key_to_action(ctrl_enter, EditorMode::Normal),
+            Action::ExecuteScript
+        );
     }
 
     #[test]
     fn test_insert_mode_ctrl_backslash_toggles_split() {
         let ctrl_bs = KeyEvent::new(KeyCode::Char('\\'), KeyModifiers::CONTROL);
-        assert_eq!(map_key_to_action(ctrl_bs, EditorMode::Insert), Action::ToggleSplitView);
+        assert_eq!(
+            map_key_to_action(ctrl_bs, EditorMode::Insert),
+            Action::ToggleSplitView
+        );
     }
 
     #[test]
     fn test_insert_mode_ctrl_enter_executes_script() {
         let ctrl_enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL);
-        assert_eq!(map_key_to_action(ctrl_enter, EditorMode::Insert), Action::ExecuteScript);
+        assert_eq!(
+            map_key_to_action(ctrl_enter, EditorMode::Insert),
+            Action::ExecuteScript
+        );
     }
 
     // --- Template Menu Keybinding Tests ---
@@ -775,13 +926,19 @@ mod tests {
     #[test]
     fn test_normal_mode_ctrl_t_opens_templates() {
         let ctrl_t = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL);
-        assert_eq!(map_key_to_action(ctrl_t, EditorMode::Normal), Action::OpenTemplates);
+        assert_eq!(
+            map_key_to_action(ctrl_t, EditorMode::Normal),
+            Action::OpenTemplates
+        );
     }
 
     #[test]
     fn test_insert_mode_ctrl_t_opens_templates() {
         let ctrl_t = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL);
-        assert_eq!(map_key_to_action(ctrl_t, EditorMode::Insert), Action::OpenTemplates);
+        assert_eq!(
+            map_key_to_action(ctrl_t, EditorMode::Insert),
+            Action::OpenTemplates
+        );
     }
 
     // --- Live Mode Keybinding Tests ---
@@ -789,12 +946,18 @@ mod tests {
     #[test]
     fn test_normal_mode_ctrl_l_toggles_live_mode() {
         let ctrl_l = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::CONTROL);
-        assert_eq!(map_key_to_action(ctrl_l, EditorMode::Normal), Action::ToggleLiveMode);
+        assert_eq!(
+            map_key_to_action(ctrl_l, EditorMode::Normal),
+            Action::ToggleLiveMode
+        );
     }
 
     #[test]
     fn test_insert_mode_ctrl_l_toggles_live_mode() {
         let ctrl_l = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::CONTROL);
-        assert_eq!(map_key_to_action(ctrl_l, EditorMode::Insert), Action::ToggleLiveMode);
+        assert_eq!(
+            map_key_to_action(ctrl_l, EditorMode::Insert),
+            Action::ToggleLiveMode
+        );
     }
 }

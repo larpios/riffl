@@ -2,7 +2,6 @@
 ///
 /// This module contains all UI-related code including layout management,
 /// theming, and modal dialogs.
-
 use ratatui::{
     layout::Alignment,
     style::{Color, Modifier, Style},
@@ -37,11 +36,8 @@ pub fn render(frame: &mut Frame, app: &App) {
 
     // Handle split view: pattern left, code editor right
     if app.split_view && app.current_view == AppView::PatternEditor {
-        let (left, right) = layout::create_split_layout(
-            content_area,
-            ratatui::layout::Direction::Horizontal,
-            50,
-        );
+        let (left, right) =
+            layout::create_split_layout(content_area, ratatui::layout::Direction::Horizontal, 50);
         render_content(frame, left, app);
         code_editor::render_code_editor(frame, right, &app.code_editor, &app.theme);
     } else {
@@ -118,8 +114,19 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         PlaybackMode::Pattern => "PAT",
         PlaybackMode::Song => "SONG",
     };
-    let loop_indicator = if app.transport.loop_enabled() { " L" } else { "" };
-    let title = format!(" tracker-rs | BPM: {:.0} | {} {}{} [{}] ", app.transport.bpm(), play_icon, play_status, loop_indicator, mode_indicator);
+    let loop_indicator = if app.transport.loop_enabled() {
+        " L"
+    } else {
+        ""
+    };
+    let title = format!(
+        " tracker-rs | BPM: {:.0} | {} {}{} [{}] ",
+        app.transport.bpm(),
+        play_icon,
+        play_status,
+        loop_indicator,
+        mode_indicator
+    );
 
     let header_block = Block::default()
         .borders(Borders::ALL)
@@ -128,9 +135,17 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .title_alignment(Alignment::Center);
 
     let mut status_spans = vec![
-        Span::styled("tracker-rs", Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "tracker-rs",
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw("  "),
-        Span::styled(format!("BPM: {:.0}", app.transport.bpm()), Style::default().fg(theme.text)),
+        Span::styled(
+            format!("BPM: {:.0}", app.transport.bpm()),
+            Style::default().fg(theme.text),
+        ),
         Span::raw("  "),
         Span::styled(
             format!("{} [{}]", play_icon, play_status),
@@ -155,7 +170,11 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         }
         PlaybackMode::Pattern => {
             status_spans.push(Span::styled(
-                format!("Row: {:02X}/{:02X}", app.transport.current_row(), pattern.num_rows()),
+                format!(
+                    "Row: {:02X}/{:02X}",
+                    app.transport.current_row(),
+                    pattern.num_rows()
+                ),
                 Style::default().fg(theme.text_secondary),
             ));
         }
@@ -176,7 +195,9 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         status_spans.push(Span::raw("  "));
         status_spans.push(Span::styled(
             "[LOOP]",
-            Style::default().fg(theme.info_color()).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(theme.info_color())
+                .add_modifier(Modifier::BOLD),
         ));
     }
 
@@ -184,7 +205,9 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         status_spans.push(Span::raw("  "));
         status_spans.push(Span::styled(
             "[LIVE]",
-            Style::default().fg(theme.error_color()).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(theme.error_color())
+                .add_modifier(Modifier::BOLD),
         ));
     }
 
@@ -203,7 +226,11 @@ const CHANNEL_COL_WIDTH: u16 = 17;
 const ROW_NUM_WIDTH: u16 = 6;
 
 /// Calculate the horizontal channel scroll offset to keep the cursor channel visible.
-fn calculate_channel_scroll(cursor_channel: usize, available_width: u16, num_channels: usize) -> usize {
+fn calculate_channel_scroll(
+    cursor_channel: usize,
+    available_width: u16,
+    num_channels: usize,
+) -> usize {
     let channel_space = available_width.saturating_sub(ROW_NUM_WIDTH);
     let visible_channels = (channel_space / CHANNEL_COL_WIDTH) as usize;
     if visible_channels == 0 {
@@ -242,7 +269,8 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     // Calculate horizontal channel scrolling
     let ch_scroll = calculate_channel_scroll(cursor_channel, inner.width, pattern.num_channels());
     let channel_space = inner.width.saturating_sub(ROW_NUM_WIDTH);
-    let visible_channels = ((channel_space / CHANNEL_COL_WIDTH) as usize).min(pattern.num_channels());
+    let visible_channels =
+        ((channel_space / CHANNEL_COL_WIDTH) as usize).min(pattern.num_channels());
     let ch_end = (ch_scroll + visible_channels).min(pattern.num_channels());
 
     // Pre-compute track audibility for muted/solo display
@@ -266,11 +294,14 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
     // Channel header row with track names, mute/solo indicators
     let mut header_spans = Vec::new();
-    header_spans.push(Span::styled("  ROW ", Style::default().fg(theme.text_secondary)));
+    header_spans.push(Span::styled(
+        "  ROW ",
+        Style::default().fg(theme.text_secondary),
+    ));
     for ch in ch_scroll..ch_end {
         let track = pattern.get_track(ch);
-        let is_muted = track.map_or(false, |t| t.muted);
-        let is_soloed = track.map_or(false, |t| t.solo);
+        let is_muted = track.is_some_and(|t| t.muted);
+        let is_soloed = track.is_some_and(|t| t.solo);
 
         // Build header label: "CH0 Name [M][S]"
         let track_name = track.map_or_else(
@@ -297,11 +328,16 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         let display = format!("│ {:<14}", label);
 
         let header_style = if is_soloed {
-            Style::default().fg(Color::Black).bg(theme.warning_color()).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Black)
+                .bg(theme.warning_color())
+                .add_modifier(Modifier::BOLD)
         } else if is_muted {
             Style::default().fg(theme.text_dimmed)
         } else {
-            Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD)
         };
         header_spans.push(Span::styled(display, header_style));
     }
@@ -321,8 +357,11 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         // Playback row is highlighted when playing OR paused (to show where playback is)
         let is_playback_row = is_playing_or_paused && row_idx == playback_row;
         let row_num_style = if is_playback_row {
-            Style::default().fg(Color::Black).bg(theme.success_color()).add_modifier(Modifier::BOLD)
-        } else if row_idx % 4 == 0 {
+            Style::default()
+                .fg(Color::Black)
+                .bg(theme.success_color())
+                .add_modifier(Modifier::BOLD)
+        } else if row_idx.is_multiple_of(4) {
             Style::default().fg(theme.primary)
         } else {
             Style::default().fg(theme.text_secondary)
@@ -336,7 +375,7 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         let visual_sel = app.editor.visual_selection();
 
         for ch in ch_scroll..ch_end {
-            let is_track_muted = pattern.get_track(ch).map_or(false, |t| t.muted);
+            let is_track_muted = pattern.get_track(ch).is_some_and(|t| t.muted);
             let is_track_inaudible = !pattern.is_channel_audible(ch);
 
             let separator_style = if is_playback_row {
@@ -351,7 +390,7 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
             // Check if this cell is inside a visual selection
             let is_visual_selected = if mode == EditorMode::Visual {
-                visual_sel.map_or(false, |((r0, c0), (r1, c1))| {
+                visual_sel.is_some_and(|((r0, c0), (r1, c1))| {
                     row_idx >= r0 && row_idx <= r1 && ch >= c0 && ch <= c1
                 })
             } else {
@@ -366,10 +405,10 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 let active = theme.insert_cursor_style();
                 let inactive = theme.insert_inactive_style();
                 let (ns, is, vs, es) = match sub_column {
-                    SubColumn::Note       => (active, inactive, inactive, inactive),
+                    SubColumn::Note => (active, inactive, inactive, inactive),
                     SubColumn::Instrument => (inactive, active, inactive, inactive),
-                    SubColumn::Volume     => (inactive, inactive, active, inactive),
-                    SubColumn::Effect     => (inactive, inactive, inactive, active),
+                    SubColumn::Volume => (inactive, inactive, active, inactive),
+                    SubColumn::Effect => (inactive, inactive, inactive, active),
                 };
                 row_spans.push(Span::styled(note_str, ns));
                 row_spans.push(Span::styled(" ", inactive));
@@ -400,7 +439,7 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 } else if is_track_muted || (any_soloed && is_track_inaudible) {
                     // Muted or inaudible tracks: dimmed text
                     Style::default().fg(theme.text_dimmed)
-                } else if cell.map_or(true, |c| c.is_empty()) {
+                } else if cell.is_none_or(|c| c.is_empty()) {
                     Style::default().fg(theme.text_dimmed)
                 } else {
                     Style::default().fg(theme.text)
@@ -533,9 +572,7 @@ fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
         let visible_rows = inner_area.height.saturating_sub(3) as usize; // reserve header + footer
         let selected = browser.selected_index();
         let total = browser.entries().len();
-        let scroll_offset = if visible_rows >= total {
-            0
-        } else if selected < visible_rows / 2 {
+        let scroll_offset = if visible_rows >= total || selected < visible_rows / 2 {
             0
         } else if selected + visible_rows / 2 >= total {
             total.saturating_sub(visible_rows)
@@ -552,10 +589,7 @@ fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
 
         for idx in scroll_offset..(scroll_offset + visible_rows).min(total) {
             let entry = &browser.entries()[idx];
-            let name = entry
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("???");
+            let name = entry.file_name().and_then(|n| n.to_str()).unwrap_or("???");
 
             let is_selected = idx == selected;
             let prefix = if is_selected { "▸ " } else { "  " };
@@ -643,10 +677,10 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     Span::raw(":normal "),
                 ]);
                 // Show the mnemonic of the current effect under the cursor
-                let cell = app.editor.pattern().get_cell(
-                    app.editor.cursor_row(),
-                    app.editor.cursor_channel(),
-                );
+                let cell = app
+                    .editor
+                    .pattern()
+                    .get_cell(app.editor.cursor_row(), app.editor.cursor_channel());
                 let mnemonic = cell
                     .and_then(|c| c.first_effect())
                     .map(|e| e.mnemonic())
@@ -709,7 +743,9 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         Span::raw(" | "),
         Span::styled(
             view_label,
-            Style::default().fg(theme.info_color()).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(theme.info_color())
+                .add_modifier(Modifier::BOLD),
         ),
         Span::raw(" | "),
         Span::styled(
@@ -723,8 +759,7 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         ),
     ]);
 
-    let footer = Paragraph::new(Line::from(footer_spans))
-        .style(theme.footer_style());
+    let footer = Paragraph::new(Line::from(footer_spans)).style(theme.footer_style());
 
     frame.render_widget(footer, area);
 }
@@ -777,8 +812,8 @@ mod tests {
 
     #[test]
     fn test_format_cell_full() {
-        use crate::pattern::note::{Note, Pitch};
         use crate::pattern::effect::Effect;
+        use crate::pattern::note::{Note, Pitch};
         let cell = crate::pattern::row::Cell {
             note: Some(NoteEvent::On(Note::new(Pitch::CSharp, 4, 100, 1))),
             instrument: Some(1),
@@ -822,8 +857,8 @@ mod tests {
 
     #[test]
     fn test_format_cell_parts_full() {
-        use crate::pattern::note::{Note, Pitch};
         use crate::pattern::effect::Effect;
+        use crate::pattern::note::{Note, Pitch};
         let cell = crate::pattern::row::Cell {
             note: Some(NoteEvent::On(Note::new(Pitch::CSharp, 4, 100, 1))),
             instrument: Some(1),

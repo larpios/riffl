@@ -1,10 +1,9 @@
+use super::engine::PatternCommand;
 /// Pattern manipulation functions for the DSL.
 ///
 /// These functions operate on Pattern data and are callable from scripts
 /// via the command system, providing algorithmic composition tools.
-
 use crate::pattern::{Note, NoteEvent, Pattern};
-use super::engine::PatternCommand;
 use rand::Rng;
 
 /// Place a note in the pattern at the given row and channel.
@@ -20,11 +19,7 @@ pub fn clear_pattern(_pattern: &Pattern) -> Vec<PatternCommand> {
 /// Fill a channel with a repeating note sequence.
 ///
 /// The `notes` array is cycled across all rows in the channel.
-pub fn fill_column(
-    pattern: &Pattern,
-    channel: usize,
-    notes: &[Note],
-) -> Vec<PatternCommand> {
+pub fn fill_column(pattern: &Pattern, channel: usize, notes: &[Note]) -> Vec<PatternCommand> {
     if notes.is_empty() {
         return Vec::new();
     }
@@ -53,11 +48,7 @@ pub fn generate_beat(
     for row in 0..pattern.num_rows() {
         let step = row % rhythm.len();
         if rhythm[step] {
-            commands.push(PatternCommand::SetNote {
-                row,
-                channel,
-                note,
-            });
+            commands.push(PatternCommand::SetNote { row, channel, note });
         }
     }
     commands
@@ -144,8 +135,7 @@ pub fn humanize(pattern: &Pattern, velocity_variance: u8) -> Vec<PatternCommand>
                 if let Some(NoteEvent::On(note)) = &cell.note {
                     let vel_delta =
                         rng.gen_range(-(velocity_variance as i16)..=(velocity_variance as i16));
-                    let new_vel =
-                        (note.velocity as i16 + vel_delta).clamp(0, 127) as u8;
+                    let new_vel = (note.velocity as i16 + vel_delta).clamp(0, 127) as u8;
                     let humanized = Note::new(note.pitch, note.octave, new_vel, note.instrument);
                     commands.push(PatternCommand::SetNote {
                         row,
@@ -192,10 +182,7 @@ mod tests {
     #[test]
     fn test_fill_column() {
         let pattern = Pattern::new(8, 2);
-        let notes = vec![
-            Note::simple(Pitch::C, 4),
-            Note::simple(Pitch::E, 4),
-        ];
+        let notes = vec![Note::simple(Pitch::C, 4), Note::simple(Pitch::E, 4)];
         let cmds = fill_column(&pattern, 0, &notes);
         assert_eq!(cmds.len(), 8);
 
@@ -338,8 +325,11 @@ mod tests {
         apply_commands(&mut pattern, &cmds);
         for row in 0..2 {
             if let Some(NoteEvent::On(n)) = &pattern.get_cell(row, 0).unwrap().note {
-                assert!(n.velocity >= 90 && n.velocity <= 110,
-                    "Velocity {} out of expected range", n.velocity);
+                assert!(
+                    n.velocity >= 90 && n.velocity <= 110,
+                    "Velocity {} out of expected range",
+                    n.velocity
+                );
             }
         }
     }
