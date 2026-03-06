@@ -1,8 +1,9 @@
+//! Rhai scripting engine for live coding pattern generation.
+//!
+//! Wraps a Rhai `Engine` with registered music-domain functions and types,
+//! allowing users to generate and manipulate patterns programmatically.
+
 use rand::Rng;
-/// Rhai scripting engine for live coding pattern generation.
-///
-/// Wraps a Rhai `Engine` with registered music-domain functions and types,
-/// allowing users to generate and manipulate patterns programmatically.
 use rhai::{Array, Dynamic, Engine, EvalAltResult, Scope, INT};
 
 use super::pattern_api;
@@ -66,10 +67,7 @@ impl ScriptEngine {
             "set_note",
             move |row: INT, channel: INT, note: rhai::Map| {
                 if let Some(cmd) = map_to_set_note_command(row, channel, &note) {
-                    cmds_clone
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .push(cmd);
+                    cmds_clone.lock().unwrap().push(cmd);
                 }
             },
         );
@@ -92,7 +90,7 @@ impl ScriptEngine {
         engine.register_fn("clear_pattern", move || {
             cmds_clone
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap()
                 .push(PatternCommand::ClearPattern);
         });
 
@@ -127,10 +125,7 @@ impl ScriptEngine {
                 if let Some(n) = map_to_note(&note) {
                     let new_cmds =
                         pattern_api::generate_beat(&pat_clone, channel as usize, &bools, n);
-                    cmds_clone
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .extend(new_cmds);
+                    cmds_clone.lock().unwrap().extend(new_cmds);
                 }
             },
         );
@@ -482,24 +477,26 @@ fn generate_euclidean(pulses: usize, steps: usize) -> Vec<bool> {
 
         // Distribute remainder groups by appending each to a front group
         let distribute_count = split_pos.min(remainder);
-        let mut new_groups = Vec::new();
+        let remainder_groups = groups.split_off(split_pos);
+        let front_groups = groups;
+        let mut new_groups =
+            Vec::with_capacity(front_groups.len() + remainder_groups.len() - distribute_count);
 
         // Take the pairs: front[i] ++ remainder[i]
-        for i in 0..distribute_count {
-            let mut combined = groups[i].clone();
-            combined.extend_from_slice(&groups[split_pos + i]);
+        let mut front_iter = front_groups.into_iter();
+        let mut remainder_iter = remainder_groups.into_iter();
+
+        for _ in 0..distribute_count {
+            let mut combined = front_iter.next().unwrap();
+            combined.extend(remainder_iter.next().unwrap());
             new_groups.push(combined);
         }
 
         // Add any leftover front groups
-        for i in distribute_count..split_pos {
-            new_groups.push(groups[i].clone());
-        }
+        new_groups.extend(front_iter);
 
         // Add any leftover remainder groups
-        for i in (split_pos + distribute_count)..groups.len() {
-            new_groups.push(groups[i].clone());
-        }
+        new_groups.extend(remainder_iter);
 
         groups = new_groups;
     }
