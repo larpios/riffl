@@ -2,7 +2,6 @@
 ///
 /// This module provides the core data structures for representing music
 /// in a tracker format: notes, cells, rows, effects, and patterns.
-
 pub mod effect;
 pub mod note;
 pub mod pattern;
