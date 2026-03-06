@@ -83,6 +83,7 @@ impl ScriptEngine {
             move |row: INT, channel: INT, note: rhai::Map| {
                 if let Some(cmd) = map_to_set_note_command(row, channel, &note) {
                     lock_unpoisoned(&cmds_clone).push(cmd);
+                    cmds_clone.lock().unwrap().push(cmd);
                 }
             },
         );
@@ -472,12 +473,18 @@ fn generate_euclidean(pulses: usize, steps: usize) -> Vec<bool> {
 
         // Distribute remainder groups by appending each to a front group
         let distribute_count = split_pos.min(remainder);
-        let mut new_groups = Vec::new();
+        let remainder_groups = groups.split_off(split_pos);
+        let front_groups = groups;
+        let mut new_groups =
+            Vec::with_capacity(front_groups.len() + remainder_groups.len() - distribute_count);
 
         // Take the pairs: front[i] ++ remainder[i]
-        for i in 0..distribute_count {
-            let mut combined = groups[i].clone();
-            combined.extend_from_slice(&groups[split_pos + i]);
+        let mut front_iter = front_groups.into_iter();
+        let mut remainder_iter = remainder_groups.into_iter();
+
+        for _ in 0..distribute_count {
+            let mut combined = front_iter.next().unwrap();
+            combined.extend(remainder_iter.next().unwrap());
             new_groups.push(combined);
         }
 
