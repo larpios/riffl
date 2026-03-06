@@ -87,11 +87,6 @@ impl Note {
 
         Some(Note::new(pitch, octave))
     }
-
-    /// Convert note to string representation
-    pub fn to_string(&self) -> String {
-        format!("{}{}", self.pitch.to_char(), self.octave)
-    }
 }
 
 impl std::fmt::Display for Note {
