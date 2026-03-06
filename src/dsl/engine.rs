@@ -1,13 +1,12 @@
+use rand::Rng;
 /// Rhai scripting engine for live coding pattern generation.
 ///
 /// Wraps a Rhai `Engine` with registered music-domain functions and types,
 /// allowing users to generate and manipulate patterns programmatically.
+use rhai::{Array, Dynamic, Engine, EvalAltResult, Scope, INT};
 
-use rhai::{Engine, EvalAltResult, Array, Dynamic, Scope, INT};
-use rand::Rng;
-
-use crate::pattern::{Note, Pattern, Pitch};
 use super::pattern_api;
+use crate::pattern::{Note, Pattern, Pitch};
 
 /// Acquires a mutex lock, recovering the inner data even if the mutex is poisoned.
 ///
@@ -33,6 +32,12 @@ pub enum ScriptResult {
 /// The DSL scripting engine wrapping Rhai.
 pub struct ScriptEngine {
     engine: Engine,
+}
+
+impl Default for ScriptEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ScriptEngine {
@@ -73,11 +78,14 @@ impl ScriptEngine {
 
         // Register set_note(row, channel, note_map)
         let cmds_clone = commands.clone();
-        engine.register_fn("set_note", move |row: INT, channel: INT, note: rhai::Map| {
-            if let Some(cmd) = map_to_set_note_command(row, channel, &note) {
-                lock_unpoisoned(&cmds_clone).push(cmd);
-            }
-        });
+        engine.register_fn(
+            "set_note",
+            move |row: INT, channel: INT, note: rhai::Map| {
+                if let Some(cmd) = map_to_set_note_command(row, channel, &note) {
+                    lock_unpoisoned(&cmds_clone).push(cmd);
+                }
+            },
+        );
 
         // Register clear_cell(row, channel)
         let cmds_clone = commands.clone();
@@ -103,10 +111,7 @@ impl ScriptEngine {
             if channel < 0 {
                 return;
             }
-            let parsed_notes: Vec<Note> = notes
-                .iter()
-                .filter_map(|d| dynamic_to_note(d))
-                .collect();
+            let parsed_notes: Vec<Note> = notes.iter().filter_map(dynamic_to_note).collect();
             let new_cmds = pattern_api::fill_column(&pat_clone, channel as usize, &parsed_notes);
             lock_unpoisoned(&cmds_clone).extend(new_cmds);
         });
@@ -114,19 +119,23 @@ impl ScriptEngine {
         // Register generate_beat(channel, rhythm_array, note)
         let cmds_clone = commands.clone();
         let pat_clone = pattern.clone();
-        engine.register_fn("generate_beat", move |channel: INT, rhythm: Array, note: rhai::Map| {
-            if channel < 0 {
-                return;
-            }
-            let bools: Vec<bool> = rhythm
-                .iter()
-                .map(|d| d.as_bool().unwrap_or(false))
-                .collect();
-            if let Some(n) = map_to_note(&note) {
-                let new_cmds = pattern_api::generate_beat(&pat_clone, channel as usize, &bools, n);
-                lock_unpoisoned(&cmds_clone).extend(new_cmds);
-            }
-        });
+        engine.register_fn(
+            "generate_beat",
+            move |channel: INT, rhythm: Array, note: rhai::Map| {
+                if channel < 0 {
+                    return;
+                }
+                let bools: Vec<bool> = rhythm
+                    .iter()
+                    .map(|d| d.as_bool().unwrap_or(false))
+                    .collect();
+                if let Some(n) = map_to_note(&note) {
+                    let new_cmds =
+                        pattern_api::generate_beat(&pat_clone, channel as usize, &bools, n);
+                    lock_unpoisoned(&cmds_clone).extend(new_cmds);
+                }
+            },
+        );
 
         // Register transpose(semitones)
         let cmds_clone = commands.clone();
@@ -156,7 +165,7 @@ impl ScriptEngine {
         let cmds_clone = commands.clone();
         let pat_clone = pattern.clone();
         engine.register_fn("humanize", move |velocity_variance: INT| {
-            let variance = (velocity_variance.max(0).min(127)) as u8;
+            let variance = velocity_variance.clamp(0, 127) as u8;
             let new_cmds = pattern_api::humanize(&pat_clone, variance);
             lock_unpoisoned(&cmds_clone).extend(new_cmds);
         });
@@ -220,11 +229,11 @@ pub fn apply_commands(pattern: &mut Pattern, commands: &[PatternCommand]) {
 fn register_music_functions(engine: &mut Engine) {
     // note(pitch_str, octave) -> note map
     engine.register_fn("note", |pitch_str: &str, octave: INT| -> Dynamic {
-        let pitch = match Pitch::from_str(pitch_str) {
+        let pitch = match Pitch::parse_str(pitch_str) {
             Some(p) => p,
             None => return Dynamic::UNIT,
         };
-        if octave < 0 || octave > 9 {
+        if !(0..=9).contains(&octave) {
             return Dynamic::UNIT;
         }
         note_to_dynamic(Note::simple(pitch, octave as u8))
@@ -232,11 +241,11 @@ fn register_music_functions(engine: &mut Engine) {
 
     // scale(root, mode, octave) -> array of note maps
     engine.register_fn("scale", |root: &str, mode: &str, octave: INT| -> Array {
-        let pitch = match Pitch::from_str(root) {
+        let pitch = match Pitch::parse_str(root) {
             Some(p) => p,
             None => return Array::new(),
         };
-        if octave < 0 || octave > 9 {
+        if !(0..=9).contains(&octave) {
             return Array::new();
         }
         let intervals = match mode.to_lowercase().as_str() {
@@ -252,17 +261,17 @@ fn register_music_functions(engine: &mut Engine) {
         intervals
             .iter()
             .filter_map(|&interval| base_note.transpose(interval))
-            .map(|n| note_to_dynamic(n))
+            .map(note_to_dynamic)
             .collect()
     });
 
     // chord(root, quality, octave) -> array of note maps
     engine.register_fn("chord", |root: &str, quality: &str, octave: INT| -> Array {
-        let pitch = match Pitch::from_str(root) {
+        let pitch = match Pitch::parse_str(root) {
             Some(p) => p,
             None => return Array::new(),
         };
-        if octave < 0 || octave > 9 {
+        if !(0..=9).contains(&octave) {
             return Array::new();
         }
         let intervals = match quality.to_lowercase().as_str() {
@@ -278,7 +287,7 @@ fn register_music_functions(engine: &mut Engine) {
         intervals
             .iter()
             .filter_map(|&interval| base_note.transpose(interval))
-            .map(|n| note_to_dynamic(n))
+            .map(note_to_dynamic)
             .collect()
     });
 
@@ -301,7 +310,7 @@ fn register_music_functions(engine: &mut Engine) {
         let pulses = (pulses as usize).min(steps);
         generate_euclidean(pulses, steps)
             .into_iter()
-            .map(|b| Dynamic::from(b))
+            .map(Dynamic::from)
             .collect()
     });
 
@@ -377,7 +386,7 @@ fn dynamic_to_note(d: &Dynamic) -> Option<Note> {
 /// Convert a Rhai Map to a Note.
 fn map_to_note(note: &rhai::Map) -> Option<Note> {
     let pitch_str = note.get("pitch")?.clone().into_string().ok()?;
-    let pitch = Pitch::from_str(&pitch_str)?;
+    let pitch = Pitch::parse_str(&pitch_str)?;
     let octave = note.get("octave")?.as_int().ok()? as u8;
     let velocity = note
         .get("velocity")
@@ -399,7 +408,7 @@ fn map_to_set_note_command(row: INT, channel: INT, note: &rhai::Map) -> Option<P
         return None;
     }
     let pitch_str = note.get("pitch")?.clone().into_string().ok()?;
-    let pitch = Pitch::from_str(&pitch_str)?;
+    let pitch = Pitch::parse_str(&pitch_str)?;
     let octave = note.get("octave")?.as_int().ok()? as u8;
     let velocity = note
         .get("velocity")
@@ -473,14 +482,10 @@ fn generate_euclidean(pulses: usize, steps: usize) -> Vec<bool> {
         }
 
         // Add any leftover front groups
-        for i in distribute_count..split_pos {
-            new_groups.push(groups[i].clone());
-        }
+        new_groups.extend_from_slice(&groups[distribute_count..split_pos]);
 
         // Add any leftover remainder groups
-        for i in (split_pos + distribute_count)..groups.len() {
-            new_groups.push(groups[i].clone());
-        }
+        new_groups.extend_from_slice(&groups[(split_pos + distribute_count)..]);
 
         groups = new_groups;
     }
@@ -721,9 +726,7 @@ mod tests {
     #[test]
     fn test_euclidean_3_8() {
         let engine = ScriptEngine::new();
-        let result = engine
-            .eval(r#"let e = euclidean(3, 8); e.len()"#)
-            .unwrap();
+        let result = engine.eval(r#"let e = euclidean(3, 8); e.len()"#).unwrap();
         match result {
             ScriptResult::Value(v) => assert_eq!(v, "8"),
             _ => panic!("Expected Value result"),
@@ -888,10 +891,7 @@ mod tests {
         }];
         apply_commands(&mut pattern, &commands);
         let cell = pattern.get_cell(0, 0).unwrap();
-        assert_eq!(
-            cell.note,
-            Some(NoteEvent::On(Note::simple(Pitch::C, 4)))
-        );
+        assert_eq!(cell.note, Some(NoteEvent::On(Note::simple(Pitch::C, 4))));
     }
 
     #[test]
@@ -950,9 +950,7 @@ mod tests {
     #[test]
     fn test_note_velocity_accessor() {
         let engine = ScriptEngine::new();
-        let result = engine
-            .eval(r#"let n = note("A", 4); n.velocity"#)
-            .unwrap();
+        let result = engine.eval(r#"let n = note("A", 4); n.velocity"#).unwrap();
         match result {
             ScriptResult::Value(v) => assert_eq!(v, "100"),
             _ => panic!("Expected Value result"),
@@ -1119,15 +1117,23 @@ mod tests {
     fn test_note_creation_produces_correct_fields() {
         let engine = ScriptEngine::new();
         // Verify pitch, octave, and default velocity
-        let result = engine.eval(r#"
+        let result = engine
+            .eval(
+                r#"
             let n = note("C", 4);
             [n.pitch, n.octave, n.velocity]
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
         match result {
             ScriptResult::Value(v) => {
                 assert!(v.contains("C"), "pitch should be C, got: {}", v);
                 assert!(v.contains("4"), "octave should be 4, got: {}", v);
-                assert!(v.contains("100"), "default velocity should be 100, got: {}", v);
+                assert!(
+                    v.contains("100"),
+                    "default velocity should be 100, got: {}",
+                    v
+                );
             }
             _ => panic!("Expected Value result"),
         }
@@ -1136,7 +1142,9 @@ mod tests {
     #[test]
     fn test_note_creation_all_pitches() {
         let engine = ScriptEngine::new();
-        let pitches = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        let pitches = [
+            "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+        ];
         for p in pitches {
             let code = format!(r#"let n = note("{}", 4); n.pitch"#, p);
             let result = engine.eval(&code).unwrap();
@@ -1150,18 +1158,27 @@ mod tests {
     #[test]
     fn test_scale_major_exact_pitches() {
         let engine = ScriptEngine::new();
-        let result = engine.eval(r#"
+        let result = engine
+            .eval(
+                r#"
             let s = scale("C", "major", 4);
             let pitches = [];
             for n in s { pitches.push(n.pitch); }
             pitches
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
         match result {
             ScriptResult::Value(v) => {
                 // C major: C D E F G A B - verify order
                 let expected = ["C", "D", "E", "F", "G", "A", "B"];
                 for pitch in expected {
-                    assert!(v.contains(pitch), "Missing {} in C major scale: {}", pitch, v);
+                    assert!(
+                        v.contains(pitch),
+                        "Missing {} in C major scale: {}",
+                        pitch,
+                        v
+                    );
                 }
             }
             _ => panic!("Expected Value result"),
@@ -1171,7 +1188,9 @@ mod tests {
     #[test]
     fn test_scale_minor() {
         let engine = ScriptEngine::new();
-        let result = engine.eval(r#"let s = scale("A", "minor", 4); s.len()"#).unwrap();
+        let result = engine
+            .eval(r#"let s = scale("A", "minor", 4); s.len()"#)
+            .unwrap();
         match result {
             ScriptResult::Value(v) => assert_eq!(v, "7"),
             _ => panic!("Expected Value result"),
@@ -1181,7 +1200,9 @@ mod tests {
     #[test]
     fn test_scale_dorian() {
         let engine = ScriptEngine::new();
-        let result = engine.eval(r#"let s = scale("D", "dorian", 4); s.len()"#).unwrap();
+        let result = engine
+            .eval(r#"let s = scale("D", "dorian", 4); s.len()"#)
+            .unwrap();
         match result {
             ScriptResult::Value(v) => assert_eq!(v, "7"),
             _ => panic!("Expected Value result"),
@@ -1191,7 +1212,9 @@ mod tests {
     #[test]
     fn test_scale_mixolydian() {
         let engine = ScriptEngine::new();
-        let result = engine.eval(r#"let s = scale("G", "mixolydian", 4); s.len()"#).unwrap();
+        let result = engine
+            .eval(r#"let s = scale("G", "mixolydian", 4); s.len()"#)
+            .unwrap();
         match result {
             ScriptResult::Value(v) => assert_eq!(v, "7"),
             _ => panic!("Expected Value result"),
@@ -1201,12 +1224,16 @@ mod tests {
     #[test]
     fn test_chord_major_exact_pitches() {
         let engine = ScriptEngine::new();
-        let result = engine.eval(r#"
+        let result = engine
+            .eval(
+                r#"
             let c = chord("C", "major", 4);
             let pitches = [];
             for n in c { pitches.push(n.pitch); }
             pitches
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
         match result {
             ScriptResult::Value(v) => {
                 // Should contain exactly C, E, G
@@ -1222,12 +1249,16 @@ mod tests {
     fn test_chord_minor_pitches() {
         let engine = ScriptEngine::new();
         // A minor chord: A, C, E
-        let result = engine.eval(r#"
+        let result = engine
+            .eval(
+                r#"
             let c = chord("A", "minor", 4);
             let pitches = [];
             for n in c { pitches.push(n.pitch); }
             pitches
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
         match result {
             ScriptResult::Value(v) => {
                 assert!(v.contains("A"), "Missing A in chord: {}", v);
@@ -1242,7 +1273,9 @@ mod tests {
     fn test_chord_maj7() {
         let engine = ScriptEngine::new();
         // C maj7: C, E, G, B (4 notes)
-        let result = engine.eval(r#"let c = chord("C", "maj7", 4); c.len()"#).unwrap();
+        let result = engine
+            .eval(r#"let c = chord("C", "maj7", 4); c.len()"#)
+            .unwrap();
         match result {
             ScriptResult::Value(v) => assert_eq!(v, "4"),
             _ => panic!("Expected Value result"),
@@ -1284,12 +1317,16 @@ mod tests {
     #[test]
     fn test_euclidean_via_script() {
         let engine = ScriptEngine::new();
-        let result = engine.eval(r#"
+        let result = engine
+            .eval(
+                r#"
             let e = euclidean(3, 8);
             let trues = 0;
             for v in e { if v { trues += 1; } }
             [e.len(), trues]
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
         match result {
             ScriptResult::Value(v) => {
                 assert!(v.contains("8"), "Expected 8 steps: {}", v);
@@ -1402,7 +1439,7 @@ mod tests {
         let bad_scripts = [
             "",
             "{{{{",
-            "fn x() { x() }",  // recursive but should just error
+            "fn x() { x() }", // recursive but should just error
             r#"note("C", "not_a_number")"#,
             "let x = []; x[999]",
         ];
@@ -1418,7 +1455,10 @@ mod tests {
         let engine = ScriptEngine::new();
         let pattern = Pattern::new(4, 1);
         let result = engine.eval_with_pattern(r#"let x = ;"#, &pattern);
-        assert!(result.is_err(), "Bad script with pattern should return error");
+        assert!(
+            result.is_err(),
+            "Bad script with pattern should return error"
+        );
         let err = result.unwrap_err();
         assert!(!err.is_empty(), "Error message should not be empty");
     }
@@ -1427,17 +1467,22 @@ mod tests {
     fn test_random_note_from_scale() {
         let engine = ScriptEngine::new();
         // random_note should return a valid note from the scale
-        let result = engine.eval(r#"
+        let result = engine
+            .eval(
+                r#"
             let s = scale("C", "pentatonic", 4);
             let n = random_note(s);
             n.pitch
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
         match result {
             ScriptResult::Value(v) => {
                 let valid = ["C", "D", "E", "G", "A"];
                 assert!(
                     valid.contains(&v.as_str()),
-                    "Random note {} not in C pentatonic scale", v
+                    "Random note {} not in C pentatonic scale",
+                    v
                 );
             }
             _ => panic!("Expected Value result"),
@@ -1447,11 +1492,15 @@ mod tests {
     #[test]
     fn test_random_note_empty_array() {
         let engine = ScriptEngine::new();
-        let result = engine.eval(r#"
+        let result = engine
+            .eval(
+                r#"
             let empty = [];
             let n = random_note(empty);
             n
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
         match result {
             ScriptResult::Value(v) => assert_eq!(v, "()"),
             ScriptResult::Unit => {}
@@ -1462,10 +1511,14 @@ mod tests {
     #[test]
     fn test_get_pitch_accessor_function() {
         let engine = ScriptEngine::new();
-        let result = engine.eval(r#"
+        let result = engine
+            .eval(
+                r#"
             let n = note("F#", 3);
             get_pitch(n)
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
         match result {
             ScriptResult::Value(v) => assert_eq!(v, "F#"),
             _ => panic!("Expected Value result"),
@@ -1475,10 +1528,14 @@ mod tests {
     #[test]
     fn test_get_octave_accessor_function() {
         let engine = ScriptEngine::new();
-        let result = engine.eval(r#"
+        let result = engine
+            .eval(
+                r#"
             let n = note("C", 7);
             get_octave(n)
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
         match result {
             ScriptResult::Value(v) => assert_eq!(v, "7"),
             _ => panic!("Expected Value result"),
@@ -1488,10 +1545,14 @@ mod tests {
     #[test]
     fn test_get_velocity_accessor_function() {
         let engine = ScriptEngine::new();
-        let result = engine.eval(r#"
+        let result = engine
+            .eval(
+                r#"
             let n = note("C", 4);
             get_velocity(n)
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
         match result {
             ScriptResult::Value(v) => assert_eq!(v, "100"),
             _ => panic!("Expected Value result"),
