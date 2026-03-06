@@ -393,7 +393,8 @@ mod tests {
         let mut song = Song::new("Multi", 120.0);
         song.add_pattern(Pattern::new(32, 8)); // Pattern 1: 32 rows
         song.arrangement = vec![0, 1]; // 64 + 32 = 96 rows
-                                       // Duration = 96 * 0.125 = 12.0s
+
+        // Duration = 96 * 0.125 = 12.0s
         let dur = song_duration(&song);
         assert!((dur - 12.0).abs() < 0.001, "Expected 12.0s, got {}", dur);
     }

@@ -1,9 +1,10 @@
+//! Effect command types and processing for the tracker.
+//!
+//! Effects modify playback behavior on a per-row basis. Each effect has a
+//! command type (identifying what the effect does) and a parameter byte
+//! controlling its intensity or target value.
+
 use serde::{Deserialize, Serialize};
-/// Effect command types and processing for the tracker.
-///
-/// Effects modify playback behavior on a per-row basis. Each effect has a
-/// command type (identifying what the effect does) and a parameter byte
-/// controlling its intensity or target value.
 use std::fmt;
 
 /// Standard tracker effect command types.
