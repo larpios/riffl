@@ -1,8 +1,8 @@
-//! Built-in example scripts for the code editor template menu.
-//!
-//! Each template demonstrates a different DSL capability and includes
-//! comments explaining what it does. Accessible via `Ctrl+T` in the
-//! code editor.
+/// Built-in example scripts for the code editor template menu.
+///
+/// Each template demonstrates a different DSL capability and includes
+/// comments explaining what it does. Accessible via `Ctrl+T` in the
+/// code editor.
 
 /// A named template with its title and source code.
 #[derive(Debug, Clone)]
