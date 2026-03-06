@@ -1,7 +1,8 @@
+//! Musical note representation for the tracker pattern grid.
+//!
+//! Provides pitch, octave, velocity, and instrument data for each note event.
+
 use serde::{Deserialize, Serialize};
-/// Musical note representation for the tracker pattern grid.
-///
-/// Provides pitch, octave, velocity, and instrument data for each note event.
 use std::fmt;
 
 /// Musical pitch with sharps and flats.

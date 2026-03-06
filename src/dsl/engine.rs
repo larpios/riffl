@@ -1,8 +1,9 @@
+//! Rhai scripting engine for live coding pattern generation.
+//!
+//! Wraps a Rhai `Engine` with registered music-domain functions and types,
+//! allowing users to generate and manipulate patterns programmatically.
+
 use rand::Rng;
-/// Rhai scripting engine for live coding pattern generation.
-///
-/// Wraps a Rhai `Engine` with registered music-domain functions and types,
-/// allowing users to generate and manipulate patterns programmatically.
 use rhai::{Array, Dynamic, Engine, EvalAltResult, Scope, INT};
 
 use super::pattern_api;

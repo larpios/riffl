@@ -177,7 +177,8 @@ mod tests {
         f.write_all(&byte_rate.to_le_bytes()).unwrap();
         f.write_all(&block_align.to_le_bytes()).unwrap();
         f.write_all(&16u16.to_le_bytes()).unwrap(); // bits per sample
-                                                    // data chunk
+
+        // data chunk
         f.write_all(b"data").unwrap();
         f.write_all(&data_len.to_le_bytes()).unwrap();
         for &s in samples {
