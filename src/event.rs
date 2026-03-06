@@ -21,6 +21,8 @@ pub enum Event {
     Quit,
     /// Resize terminal event
     Resize,
+    /// Note character input: pitch letter (A-G, normalised to uppercase) or octave digit (0-9)
+    NoteChar(char),
     /// Unknown or unhandled event
     None,
 }
@@ -31,7 +33,7 @@ pub enum Event {
 /// into our application-specific Event enum.
 ///
 /// # Arguments
-/// * `timeout` - Maximum time to wait for an event in milliseconds
+/// * `timeout` - Maximum time to wait for an event
 ///
 /// # Returns
 /// * `Ok(Event)` - The next event that occurred
@@ -78,22 +80,11 @@ fn handle_key_event(key: KeyEvent) -> Event {
         KeyCode::Char('q') => Event::Quit,
         KeyCode::Esc => Event::Quit,
 
-        // Note input: Check for pitch (A-G) followed by octave (0-9)
-        // For now, we handle single character input and will build note strings
-        // in the main loop
-        KeyCode::Char(c) => {
-            // Check if it's a pitch letter (A-G, case insensitive)
-            if matches!(c.to_ascii_uppercase(), 'A'..='G') {
-                // We'll need the octave digit next, but for now return a marker
-                // The main loop will need to handle two-character note entry
-                Event::None // Will be enhanced in integration phase
-            } else if c.is_ascii_digit() {
-                // Octave digit - will be handled in integration
-                Event::None
-            } else {
-                Event::None
-            }
+        // Note input: pitch letters A-G (normalised to uppercase) and octave digits 0-9
+        KeyCode::Char(c) if matches!(c.to_ascii_uppercase(), 'A'..='G') => {
+            Event::NoteChar(c.to_ascii_uppercase())
         }
+        KeyCode::Char(c) if c.is_ascii_digit() => Event::NoteChar(c),
 
         _ => Event::None,
     }
@@ -185,11 +176,39 @@ mod tests {
     }
 
     #[test]
+    fn test_note_char_events() {
+        // Lowercase pitch letters are normalised to uppercase
+        assert_eq!(
+            handle_key_event(create_key_event(KeyCode::Char('a'), KeyModifiers::NONE)),
+            Event::NoteChar('A')
+        );
+        assert_eq!(
+            handle_key_event(create_key_event(KeyCode::Char('G'), KeyModifiers::NONE)),
+            Event::NoteChar('G')
+        );
+        assert_eq!(
+            handle_key_event(create_key_event(KeyCode::Char('c'), KeyModifiers::NONE)),
+            Event::NoteChar('C')
+        );
+        // Octave digits
+        assert_eq!(
+            handle_key_event(create_key_event(KeyCode::Char('4'), KeyModifiers::NONE)),
+            Event::NoteChar('4')
+        );
+        assert_eq!(
+            handle_key_event(create_key_event(KeyCode::Char('0'), KeyModifiers::NONE)),
+            Event::NoteChar('0')
+        );
+    }
+
+    #[test]
     fn test_event_equality() {
         assert_eq!(Event::MoveUp, Event::MoveUp);
         assert_ne!(Event::MoveUp, Event::MoveDown);
         assert_eq!(Event::Delete, Event::Delete);
         assert_eq!(Event::Quit, Event::Quit);
+        assert_eq!(Event::NoteChar('A'), Event::NoteChar('A'));
+        assert_ne!(Event::NoteChar('A'), Event::NoteChar('B'));
     }
 
     #[test]
@@ -214,3 +233,4 @@ mod tests {
         );
     }
 }
+
