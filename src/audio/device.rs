@@ -101,7 +101,7 @@ pub fn enumerate_devices() -> AudioResult<Vec<DeviceInfo>> {
 
     for device in output_devices {
         if let Ok(name) = device.name() {
-            let is_default = default_name.as_ref() == Some(&name);
+            let is_default = default_name.as_ref().map_or(false, |dn| dn == &name);
             devices.push(DeviceInfo { name, is_default });
         }
     }
@@ -121,12 +121,13 @@ pub fn enumerate_devices() -> AudioResult<Vec<DeviceInfo>> {
 pub fn get_device_by_index(index: usize) -> AudioResult<AudioDevice> {
     let host = cpal::default_host();
 
-    let mut output_devices = host
+    let output_devices = host
         .output_devices()
         .map_err(|_| AudioError::DeviceNotFound)?;
 
     let device = output_devices
-        .nth(index)
+        .skip(index)
+        .next()
         .ok_or(AudioError::DeviceNotFound)?;
 
     AudioDevice::new(device)
@@ -186,17 +187,10 @@ mod tests {
         match device {
             Ok(audio_device) => {
                 // Query supported configurations
-                let configs_result = audio_device.supported_configs();
-                if let Err(e) = configs_result {
-                    // This is acceptable in environments without proper audio hardware configurations
-                    println!(
-                        "Failed to query supported configs (likely CI/test environment): {:?}",
-                        e
-                    );
-                    return;
-                }
+                let configs = audio_device.supported_configs();
+                assert!(configs.is_ok(), "Failed to query supported configs");
 
-                let configs = configs_result.unwrap();
+                let configs = configs.unwrap();
                 println!("Found {} supported configurations", configs.len());
 
                 // Common sample rates to check for
