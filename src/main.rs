@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports)]
 mod app;
 mod audio;
 mod dsl;
@@ -20,10 +21,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::{
-    backend::CrosstermBackend,
-    Terminal,
-};
+use ratatui::{backend::CrosstermBackend, Terminal};
 
 use app::App;
 use editor::{Editor, EditorMode, SubColumn};
@@ -80,10 +78,7 @@ fn restore_terminal() -> Result<()> {
     Ok(())
 }
 
-fn run_app<B: ratatui::backend::Backend>(
-    terminal: &mut Terminal<B>,
-    app: &mut App,
-) -> Result<()> {
+fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
     while app.should_run() {
         terminal.draw(|frame| ui::render(frame, app))?;
 
@@ -197,7 +192,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::DeleteCell => app.editor.delete_cell(),
         Action::InsertRow => app.editor.insert_row(),
         Action::DeleteRow => app.editor.delete_row(),
-        Action::Undo => { app.editor.undo(); }
+        Action::Undo => {
+            app.editor.undo();
+        }
 
         // Transport
         Action::TogglePlay => app.toggle_play(),
@@ -250,7 +247,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::Quit => app.quit(),
         Action::OpenModal => app.open_test_modal(),
         Action::OpenFileBrowser => app.open_file_browser(),
-        Action::Cancel => { app.close_modal(); }
+        Action::Cancel => {
+            app.close_modal();
+        }
         Action::Confirm => {
             if app.has_modal() {
                 app.close_modal();
@@ -398,7 +397,6 @@ fn handle_code_editor_key(app: &mut App, key: KeyEvent) {
     if key.modifiers == KeyModifiers::SHIFT {
         if let KeyCode::Char(c) = key.code {
             app.code_editor.insert_char(c);
-            return;
         }
     }
 }
@@ -420,38 +418,31 @@ fn handle_file_browser_key(app: &mut App, key: KeyEvent) {
         KeyCode::Char('k') | KeyCode::Up => {
             app.file_browser.move_up();
         }
-        KeyCode::Enter => {
-            match app.load_selected_sample() {
-                Ok(idx) => {
-                    let name = app.instrument_names().get(idx)
-                        .cloned()
-                        .unwrap_or_else(|| "unknown".to_string());
-                    app.close_file_browser();
-                    app.open_modal(
-                        ui::modal::Modal::info(
-                            "Sample Loaded".to_string(),
-                            format!("Loaded '{}' as instrument {:02X}", name, idx),
-                        )
-                    );
-                }
-                Err(msg) => {
-                    app.close_file_browser();
-                    app.open_modal(
-                        ui::modal::Modal::error(
-                            "Load Failed".to_string(),
-                            msg,
-                        )
-                    );
-                }
+        KeyCode::Enter => match app.load_selected_sample() {
+            Ok(idx) => {
+                let name = app
+                    .instrument_names()
+                    .get(idx)
+                    .cloned()
+                    .unwrap_or_else(|| "unknown".to_string());
+                app.close_file_browser();
+                app.open_modal(ui::modal::Modal::info(
+                    "Sample Loaded".to_string(),
+                    format!("Loaded '{}' as instrument {:02X}", name, idx),
+                ));
             }
-        }
+            Err(msg) => {
+                app.close_file_browser();
+                app.open_modal(ui::modal::Modal::error("Load Failed".to_string(), msg));
+            }
+        },
         _ => {}
     }
 }
 
 fn handle_export_dialog_key(app: &mut App, key: KeyEvent) {
-    use crossterm::event::{KeyCode, KeyModifiers};
     use crate::ui::export_dialog::ExportPhase;
+    use crossterm::event::{KeyCode, KeyModifiers};
 
     // In Done/Failed phases, any dismiss key closes the dialog
     match app.export_dialog.phase {
@@ -487,7 +478,11 @@ fn handle_export_dialog_key(app: &mut App, key: KeyEvent) {
         KeyCode::Char('k') | KeyCode::Up => {
             app.export_dialog.prev_field();
         }
-        KeyCode::Char('l') | KeyCode::Right | KeyCode::Char('h') | KeyCode::Left | KeyCode::Char(' ') => {
+        KeyCode::Char('l')
+        | KeyCode::Right
+        | KeyCode::Char('h')
+        | KeyCode::Left
+        | KeyCode::Char(' ') => {
             app.export_dialog.toggle_value();
         }
         KeyCode::Enter => {
