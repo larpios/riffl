@@ -159,7 +159,7 @@ impl Mixer {
             }
 
             // Skip muted/non-soloed channels: don't trigger new notes
-            let audible = self.channel_mix.get(ch).map_or(true, |m| m.audible);
+            let audible = self.channel_mix.get(ch).is_none_or(|m| m.audible);
 
             // Determine the note frequency for effect processing
             let note_frequency = match &cell.note {
@@ -201,9 +201,9 @@ impl Mixer {
                 }
                 Some(NoteEvent::Off) => {
                     self.voices[ch] = None;
-                    self.effect_processor
-                        .channel_state_mut(ch)
-                        .map(|s| s.reset());
+                    if let Some(s) = self.effect_processor.channel_state_mut(ch) {
+                        s.reset();
+                    }
                 }
                 None => {
                     // No event — existing voice continues
@@ -779,11 +779,7 @@ mod tests {
         let mut output_b = vec![0.0f32; 64];
 
         // Render with only instrument 0
-        let mut mixer_a = Mixer::new(
-            vec![Arc::new(Sample::new(vec![0.3; 4410], 44100, 1, None))],
-            4,
-            44100,
-        );
+        let mut mixer_a = Mixer::new(vec![Sample::new(vec![0.3; 4410], 44100, 1, None)], 4, 44100);
         let mut pat_a = Pattern::new(16, 4);
         pat_a.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
         mixer_a.tick(0, &pat_a);
@@ -792,8 +788,8 @@ mod tests {
         // Render with only instrument 1 (louder)
         let mut mixer_b = Mixer::new(
             vec![
-                Arc::new(Sample::new(vec![0.0; 1], 44100, 1, None)),
-                Arc::new(Sample::new(vec![0.9; 4410], 44100, 1, None)),
+                Sample::new(vec![0.0; 1], 44100, 1, None),
+                Sample::new(vec![0.9; 4410], 44100, 1, None),
             ],
             4,
             44100,

@@ -4,6 +4,7 @@
 /// in a tracker format: notes, cells, rows, effects, and patterns.
 pub mod effect;
 pub mod note;
+#[allow(clippy::module_inception)]
 pub mod pattern;
 pub mod row;
 pub mod track;
