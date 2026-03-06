@@ -1,7 +1,7 @@
 //! Audio stream management
 
-use crate::audio::error::{AudioError, AudioResult};
 use crate::audio::device::AudioDevice;
+use crate::audio::error::{AudioError, AudioResult};
 use cpal::traits::{DeviceTrait, StreamTrait};
 use std::sync::{Arc, Mutex};
 
@@ -19,9 +19,9 @@ pub struct StreamConfig {
 impl Default for StreamConfig {
     fn default() -> Self {
         StreamConfig {
-            sample_rate: 48000,  // Default to 48kHz
-            channels: 2,          // Default to stereo
-            buffer_size: 256,     // Default to 256 frames
+            sample_rate: 48000, // Default to 48kHz
+            channels: 2,        // Default to stereo
+            buffer_size: 256,   // Default to 256 frames
         }
     }
 }
@@ -69,13 +69,19 @@ impl StreamBuilder {
     pub fn build(self) -> AudioResult<AudioStream> {
         // Validate configuration
         if self.config.sample_rate == 0 {
-            return Err(AudioError::UnsupportedConfig("Sample rate must be greater than 0".to_string()));
+            return Err(AudioError::UnsupportedConfig(
+                "Sample rate must be greater than 0".to_string(),
+            ));
         }
         if self.config.channels == 0 {
-            return Err(AudioError::UnsupportedConfig("Channel count must be greater than 0".to_string()));
+            return Err(AudioError::UnsupportedConfig(
+                "Channel count must be greater than 0".to_string(),
+            ));
         }
         if self.config.buffer_size == 0 {
-            return Err(AudioError::UnsupportedConfig("Buffer size must be greater than 0".to_string()));
+            return Err(AudioError::UnsupportedConfig(
+                "Buffer size must be greater than 0".to_string(),
+            ));
         }
 
         // Use default device if not specified
@@ -157,7 +163,8 @@ impl AudioStream {
         };
 
         // Build the output stream with the callback
-        let stream = self.device
+        let stream = self
+            .device
             .inner()
             .build_output_stream(
                 &config,
@@ -191,12 +198,12 @@ impl AudioStream {
     /// The stream must be built with build_with_callback before calling this
     pub fn play(&self) -> AudioResult<()> {
         match &self.stream {
-            Some(stream) => {
-                stream.play().map_err(|e| {
-                    AudioError::StreamError(format!("Failed to play stream: {}", e))
-                })
-            }
-            None => Err(AudioError::StreamError("Stream not built. Call build_with_callback first.".to_string())),
+            Some(stream) => stream
+                .play()
+                .map_err(|e| AudioError::StreamError(format!("Failed to play stream: {}", e))),
+            None => Err(AudioError::StreamError(
+                "Stream not built. Call build_with_callback first.".to_string(),
+            )),
         }
     }
 
@@ -204,12 +211,12 @@ impl AudioStream {
     /// The stream must be built with build_with_callback before calling this
     pub fn pause(&self) -> AudioResult<()> {
         match &self.stream {
-            Some(stream) => {
-                stream.pause().map_err(|e| {
-                    AudioError::StreamError(format!("Failed to pause stream: {}", e))
-                })
-            }
-            None => Err(AudioError::StreamError("Stream not built. Call build_with_callback first.".to_string())),
+            Some(stream) => stream
+                .pause()
+                .map_err(|e| AudioError::StreamError(format!("Failed to pause stream: {}", e))),
+            None => Err(AudioError::StreamError(
+                "Stream not built. Call build_with_callback first.".to_string(),
+            )),
         }
     }
 }
@@ -294,27 +301,21 @@ mod tests {
     #[test]
     fn test_stream_config_validation() {
         // Test invalid sample rate
-        let result = AudioStream::builder()
-            .sample_rate(0)
-            .build();
+        let result = AudioStream::builder().sample_rate(0).build();
         assert!(result.is_err());
         if let Err(AudioError::UnsupportedConfig(msg)) = result {
             assert!(msg.contains("Sample rate"));
         }
 
         // Test invalid channels
-        let result = AudioStream::builder()
-            .channels(0)
-            .build();
+        let result = AudioStream::builder().channels(0).build();
         assert!(result.is_err());
         if let Err(AudioError::UnsupportedConfig(msg)) = result {
             assert!(msg.contains("Channel count"));
         }
 
         // Test invalid buffer size
-        let result = AudioStream::builder()
-            .buffer_size(0)
-            .build();
+        let result = AudioStream::builder().buffer_size(0).build();
         assert!(result.is_err());
         if let Err(AudioError::UnsupportedConfig(msg)) = result {
             assert!(msg.contains("Buffer size"));
@@ -413,12 +414,18 @@ mod tests {
                     }
                     Err(e) => {
                         // Stream play might fail in some environments
-                        println!("Failed to play stream (acceptable in test environment): {:?}", e);
+                        println!(
+                            "Failed to play stream (acceptable in test environment): {:?}",
+                            e
+                        );
                     }
                 }
             }
             Err(e) => {
-                println!("Failed to build stream with callback (acceptable in test environment): {:?}", e);
+                println!(
+                    "Failed to build stream with callback (acceptable in test environment): {:?}",
+                    e
+                );
             }
         }
     }
@@ -472,7 +479,10 @@ mod tests {
                         std::thread::sleep(Duration::from_millis(100));
 
                         let count_while_playing = invocation_count.load(Ordering::SeqCst);
-                        println!("Callback invoked {} times while playing", count_while_playing);
+                        println!(
+                            "Callback invoked {} times while playing",
+                            count_while_playing
+                        );
 
                         // Pause the stream
                         match stream.pause() {
@@ -484,7 +494,10 @@ mod tests {
 
                                 // Get the count after pausing
                                 let count_after_pause = invocation_count.load(Ordering::SeqCst);
-                                println!("Callback invoked {} times after pause", count_after_pause);
+                                println!(
+                                    "Callback invoked {} times after pause",
+                                    count_after_pause
+                                );
 
                                 // The callback should have been invoked while playing
                                 assert!(
@@ -500,8 +513,12 @@ mod tests {
                                         // Wait for more callbacks
                                         std::thread::sleep(Duration::from_millis(100));
 
-                                        let count_after_resume = invocation_count.load(Ordering::SeqCst);
-                                        println!("Callback invoked {} times after resume", count_after_resume);
+                                        let count_after_resume =
+                                            invocation_count.load(Ordering::SeqCst);
+                                        println!(
+                                            "Callback invoked {} times after resume",
+                                            count_after_resume
+                                        );
 
                                         // Should have more invocations after resuming
                                         assert!(
@@ -517,18 +534,27 @@ mod tests {
                                 }
                             }
                             Err(e) => {
-                                println!("Failed to pause stream (acceptable in test environment): {:?}", e);
+                                println!(
+                                    "Failed to pause stream (acceptable in test environment): {:?}",
+                                    e
+                                );
                             }
                         }
                     }
                     Err(e) => {
                         // Stream play might fail in some environments
-                        println!("Failed to play stream (acceptable in test environment): {:?}", e);
+                        println!(
+                            "Failed to play stream (acceptable in test environment): {:?}",
+                            e
+                        );
                     }
                 }
             }
             Err(e) => {
-                println!("Failed to build stream with callback (acceptable in test environment): {:?}", e);
+                println!(
+                    "Failed to build stream with callback (acceptable in test environment): {:?}",
+                    e
+                );
             }
         }
     }
@@ -594,12 +620,18 @@ mod tests {
                         println!("Stream dropped cleanly (manual verification required for audio artifacts)");
                     }
                     Err(e) => {
-                        println!("Failed to play stream (acceptable in test environment): {:?}", e);
+                        println!(
+                            "Failed to play stream (acceptable in test environment): {:?}",
+                            e
+                        );
                     }
                 }
             }
             Err(e) => {
-                println!("Failed to build stream with callback (acceptable in test environment): {:?}", e);
+                println!(
+                    "Failed to build stream with callback (acceptable in test environment): {:?}",
+                    e
+                );
             }
         }
     }

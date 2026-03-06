@@ -3,7 +3,6 @@
 /// Serializes and deserializes the Song data model to/from JSON files
 /// with the `.trs` extension. Sample audio data is not embedded; only
 /// file path references are stored.
-
 use std::fs;
 use std::path::Path;
 
@@ -16,8 +15,7 @@ use crate::song::Song;
 /// The song is serialized to pretty-printed JSON and written to the specified path.
 /// By convention, tracker-rs project files use the `.trs` extension.
 pub fn save_project(path: &Path, song: &Song) -> Result<()> {
-    let json = serde_json::to_string_pretty(song)
-        .context("Failed to serialize project")?;
+    let json = serde_json::to_string_pretty(song).context("Failed to serialize project")?;
     fs::write(path, json)
         .with_context(|| format!("Failed to write project file: {}", path.display()))?;
     Ok(())
@@ -30,15 +28,14 @@ pub fn save_project(path: &Path, song: &Song) -> Result<()> {
 pub fn load_project(path: &Path) -> Result<Song> {
     let json = fs::read_to_string(path)
         .with_context(|| format!("Failed to read project file: {}", path.display()))?;
-    let song: Song = serde_json::from_str(&json)
-        .context("Failed to deserialize project data")?;
+    let song: Song = serde_json::from_str(&json).context("Failed to deserialize project data")?;
     Ok(song)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pattern::{Note, NoteEvent, Pitch, Cell, Effect, Pattern};
+    use crate::pattern::{Cell, Effect, Note, NoteEvent, Pattern, Pitch};
     use crate::song::Instrument;
     use std::io::Write;
 
@@ -70,12 +67,16 @@ mod tests {
 
         // Add notes to the first pattern
         let note = Note::new(Pitch::CSharp, 4, 100, 1);
-        song.patterns[0].set_cell(0, 0, Cell {
-            note: Some(NoteEvent::On(note)),
-            instrument: Some(1),
-            volume: Some(0x40),
-            effects: vec![Effect::new(0xC, 0x20)],
-        });
+        song.patterns[0].set_cell(
+            0,
+            0,
+            Cell {
+                note: Some(NoteEvent::On(note)),
+                instrument: Some(1),
+                volume: Some(0x40),
+                effects: vec![Effect::new(0xC, 0x20)],
+            },
+        );
         song.patterns[0].set_cell(1, 0, Cell::with_note(NoteEvent::Off));
 
         // Add a second pattern with different data
@@ -117,7 +118,7 @@ mod tests {
 
         // Test various note types
         let notes_to_test = vec![
-            Note::new(Pitch::C, 0, 0, 0),       // minimum values
+            Note::new(Pitch::C, 0, 0, 0),        // minimum values
             Note::new(Pitch::B, 9, 127, 255),    // maximum values
             Note::new(Pitch::FSharp, 4, 64, 42), // mid-range values
         ];
@@ -130,20 +131,28 @@ mod tests {
         song.patterns[0].set_cell(3, 0, Cell::with_note(NoteEvent::Off));
 
         // Test cell with only effect
-        song.patterns[0].set_cell(4, 0, Cell {
-            note: None,
-            instrument: None,
-            volume: None,
-            effects: vec![Effect::new(0xF, 0xFF)],
-        });
+        song.patterns[0].set_cell(
+            4,
+            0,
+            Cell {
+                note: None,
+                instrument: None,
+                volume: None,
+                effects: vec![Effect::new(0xF, 0xFF)],
+            },
+        );
 
         // Test cell with only volume
-        song.patterns[0].set_cell(5, 0, Cell {
-            note: None,
-            instrument: None,
-            volume: Some(0x7F),
-            effects: Vec::new(),
-        });
+        song.patterns[0].set_cell(
+            5,
+            0,
+            Cell {
+                note: None,
+                instrument: None,
+                volume: Some(0x7F),
+                effects: Vec::new(),
+            },
+        );
 
         let dir = std::env::temp_dir();
         let path = dir.join("test_roundtrip_data_integrity.trs");
