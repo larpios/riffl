@@ -157,7 +157,11 @@ mod tests {
     #[test]
     fn test_all_templates_have_descriptions() {
         for t in TEMPLATES {
-            assert!(!t.description.is_empty(), "Template '{}' has empty description", t.name);
+            assert!(
+                !t.description.is_empty(),
+                "Template '{}' has empty description",
+                t.name
+            );
         }
     }
 
@@ -165,7 +169,11 @@ mod tests {
     fn test_all_templates_have_code() {
         for t in TEMPLATES {
             assert!(!t.code.is_empty(), "Template '{}' has empty code", t.name);
-            assert!(t.code.contains("//"), "Template '{}' should have comments", t.name);
+            assert!(
+                t.code.contains("//"),
+                "Template '{}' should have comments",
+                t.name
+            );
         }
     }
 

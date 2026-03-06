@@ -3,8 +3,7 @@
 /// Each track corresponds to a channel in the pattern and holds
 /// metadata such as name, volume, pan, mute/solo state, and
 /// an optional instrument assignment.
-
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Default track volume (full volume).
 pub const DEFAULT_VOLUME: f32 = 1.0;
@@ -227,11 +226,7 @@ mod tests {
 
     #[test]
     fn test_any_track_soloed() {
-        let tracks = vec![
-            Track::new("A"),
-            Track::new("B"),
-            Track::new("C"),
-        ];
+        let tracks = vec![Track::new("A"), Track::new("B"), Track::new("C")];
         assert!(!any_track_soloed(&tracks));
 
         let mut tracks = tracks;

@@ -3,8 +3,7 @@
 /// A Song is the top-level container that holds a pool of patterns,
 /// an arrangement (ordered sequence of pattern indices), global track
 /// metadata, and instrument definitions.
-
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::pattern::{Note, Pattern, Pitch, Track};
 
@@ -284,7 +283,10 @@ mod tests {
         assert_eq!(idx, Some(1));
         assert_eq!(song.patterns.len(), 2);
         assert_eq!(song.patterns[1].num_rows(), song.patterns[0].num_rows());
-        assert_eq!(song.patterns[1].num_channels(), song.patterns[0].num_channels());
+        assert_eq!(
+            song.patterns[1].num_channels(),
+            song.patterns[0].num_channels()
+        );
     }
 
     #[test]
