@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports)]
 mod app;
 mod audio;
 mod dsl;
@@ -396,7 +397,6 @@ fn handle_code_editor_key(app: &mut App, key: KeyEvent) {
     if key.modifiers == KeyModifiers::SHIFT {
         if let KeyCode::Char(c) = key.code {
             app.code_editor.insert_char(c);
-            return;
         }
     }
 }
