@@ -3,12 +3,11 @@
 /// A pattern is a 2D grid of cells organized by rows (time steps) and
 /// channels (parallel voices). The default size is 64 rows x 4 channels,
 /// matching classic tracker conventions.
-
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use super::note::{Note, NoteEvent};
-use super::row::{Cell, Row, new_row};
-use super::track::{Track, any_track_soloed};
+use super::row::{new_row, Cell, Row};
+use super::track::{any_track_soloed, Track};
 
 /// Default number of rows in a pattern.
 pub const DEFAULT_ROWS: usize = 64;
@@ -38,7 +37,11 @@ impl Pattern {
         assert!(channels > 0, "Pattern must have at least 1 channel");
         let rows = (0..num_rows).map(|_| new_row(channels)).collect();
         let tracks = (1..=channels).map(Track::with_number).collect();
-        Self { rows, channels, tracks }
+        Self {
+            rows,
+            channels,
+            tracks,
+        }
     }
 
     /// Get the number of rows in this pattern.
@@ -146,7 +149,8 @@ impl Pattern {
 
     /// Check if a specific channel is audible (considering mute/solo state).
     pub fn is_channel_audible(&self, channel: usize) -> bool {
-        self.tracks.get(channel)
+        self.tracks
+            .get(channel)
             .map(|t| t.is_audible(self.any_track_soloed()))
             .unwrap_or(false)
     }
@@ -162,8 +166,8 @@ impl Default for Pattern {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pattern::note::Pitch;
     use crate::pattern::effect::Effect;
+    use crate::pattern::note::Pitch;
 
     #[test]
     fn test_pattern_default() {
@@ -334,11 +338,17 @@ mod tests {
         let note_e = Note::simple(Pitch::E, 4);
 
         pat.set_note(0, 0, note_c);
-        assert_eq!(pat.get_cell(0, 0).unwrap().note, Some(NoteEvent::On(note_c)));
+        assert_eq!(
+            pat.get_cell(0, 0).unwrap().note,
+            Some(NoteEvent::On(note_c))
+        );
 
         // Overwrite with a different note
         pat.set_note(0, 0, note_e);
-        assert_eq!(pat.get_cell(0, 0).unwrap().note, Some(NoteEvent::On(note_e)));
+        assert_eq!(
+            pat.get_cell(0, 0).unwrap().note,
+            Some(NoteEvent::On(note_e))
+        );
     }
 
     #[test]
@@ -506,7 +516,7 @@ mod tests {
         assert!(pat.any_track_soloed());
         assert!(!pat.is_channel_audible(0)); // not soloed
         assert!(!pat.is_channel_audible(1)); // muted
-        assert!(pat.is_channel_audible(2));  // soloed
+        assert!(pat.is_channel_audible(2)); // soloed
         assert!(!pat.is_channel_audible(3)); // not soloed
     }
 
