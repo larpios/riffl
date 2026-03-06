@@ -8,16 +8,6 @@ use rhai::{Array, Dynamic, Engine, EvalAltResult, Scope, INT};
 use super::pattern_api;
 use crate::pattern::{Note, Pattern, Pitch};
 
-/// Acquires a mutex lock, recovering the inner data even if the mutex is poisoned.
-///
-/// If a thread panics while holding the lock, the mutex becomes poisoned and
-/// subsequent `lock().unwrap()` calls would also panic. This function uses the
-/// poisoned guard's `into_inner()` to recover the data, preventing a
-/// Denial-of-Service from cascading panics.
-fn lock_unpoisoned<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|e| e.into_inner())
-}
-
 /// Result of evaluating a script.
 #[derive(Debug)]
 pub enum ScriptResult {
@@ -32,12 +22,6 @@ pub enum ScriptResult {
 /// The DSL scripting engine wrapping Rhai.
 pub struct ScriptEngine {
     engine: Engine,
-}
-
-impl Default for ScriptEngine {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl ScriptEngine {
@@ -82,8 +66,10 @@ impl ScriptEngine {
             "set_note",
             move |row: INT, channel: INT, note: rhai::Map| {
                 if let Some(cmd) = map_to_set_note_command(row, channel, &note) {
-                    lock_unpoisoned(&cmds_clone).push(cmd);
-                    cmds_clone.lock().unwrap().push(cmd);
+                    cmds_clone
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .push(cmd);
                 }
             },
         );
@@ -92,17 +78,22 @@ impl ScriptEngine {
         let cmds_clone = commands.clone();
         engine.register_fn("clear_cell", move |row: INT, channel: INT| {
             if row >= 0 && channel >= 0 {
-                lock_unpoisoned(&cmds_clone).push(PatternCommand::ClearCell {
-                    row: row as usize,
-                    channel: channel as usize,
-                });
+                cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).push(
+                    PatternCommand::ClearCell {
+                        row: row as usize,
+                        channel: channel as usize,
+                    },
+                );
             }
         });
 
         // Register clear_pattern()
         let cmds_clone = commands.clone();
         engine.register_fn("clear_pattern", move || {
-            lock_unpoisoned(&cmds_clone).push(PatternCommand::ClearPattern);
+            cmds_clone
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(PatternCommand::ClearPattern);
         });
 
         // Register fill_column(channel, notes_array)
@@ -112,9 +103,12 @@ impl ScriptEngine {
             if channel < 0 {
                 return;
             }
-            let parsed_notes: Vec<Note> = notes.iter().filter_map(dynamic_to_note).collect();
+            let parsed_notes: Vec<Note> = notes.iter().filter_map(|d| dynamic_to_note(d)).collect();
             let new_cmds = pattern_api::fill_column(&pat_clone, channel as usize, &parsed_notes);
-            lock_unpoisoned(&cmds_clone).extend(new_cmds);
+            cmds_clone
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .extend(new_cmds);
         });
 
         // Register generate_beat(channel, rhythm_array, note)
@@ -133,7 +127,10 @@ impl ScriptEngine {
                 if let Some(n) = map_to_note(&note) {
                     let new_cmds =
                         pattern_api::generate_beat(&pat_clone, channel as usize, &bools, n);
-                    lock_unpoisoned(&cmds_clone).extend(new_cmds);
+                    cmds_clone
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .extend(new_cmds);
                 }
             },
         );
@@ -143,7 +140,10 @@ impl ScriptEngine {
         let pat_clone = pattern.clone();
         engine.register_fn("transpose", move |semitones: INT| {
             let new_cmds = pattern_api::transpose(&pat_clone, semitones as i32);
-            lock_unpoisoned(&cmds_clone).extend(new_cmds);
+            cmds_clone
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .extend(new_cmds);
         });
 
         // Register reverse()
@@ -151,7 +151,10 @@ impl ScriptEngine {
         let pat_clone = pattern.clone();
         engine.register_fn("reverse", move || {
             let new_cmds = pattern_api::reverse(&pat_clone);
-            lock_unpoisoned(&cmds_clone).extend(new_cmds);
+            cmds_clone
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .extend(new_cmds);
         });
 
         // Register rotate(offset)
@@ -159,16 +162,22 @@ impl ScriptEngine {
         let pat_clone = pattern.clone();
         engine.register_fn("rotate", move |offset: INT| {
             let new_cmds = pattern_api::rotate(&pat_clone, offset as i32);
-            lock_unpoisoned(&cmds_clone).extend(new_cmds);
+            cmds_clone
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .extend(new_cmds);
         });
 
         // Register humanize(velocity_variance)
         let cmds_clone = commands.clone();
         let pat_clone = pattern.clone();
         engine.register_fn("humanize", move |velocity_variance: INT| {
-            let variance = velocity_variance.clamp(0, 127) as u8;
+            let variance = (velocity_variance.max(0).min(127)) as u8;
             let new_cmds = pattern_api::humanize(&pat_clone, variance);
-            lock_unpoisoned(&cmds_clone).extend(new_cmds);
+            cmds_clone
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .extend(new_cmds);
         });
 
         let mut scope = Scope::new();
@@ -177,7 +186,7 @@ impl ScriptEngine {
 
         match engine.eval_with_scope::<Dynamic>(&mut scope, code) {
             Ok(result) => {
-                let cmds = lock_unpoisoned(&commands).clone();
+                let cmds = commands.lock().unwrap_or_else(|e| e.into_inner()).clone();
                 let script_result: ScriptResult = if result.is_unit() {
                     ScriptResult::Unit
                 } else {
@@ -230,11 +239,11 @@ pub fn apply_commands(pattern: &mut Pattern, commands: &[PatternCommand]) {
 fn register_music_functions(engine: &mut Engine) {
     // note(pitch_str, octave) -> note map
     engine.register_fn("note", |pitch_str: &str, octave: INT| -> Dynamic {
-        let pitch = match Pitch::parse_str(pitch_str) {
+        let pitch = match Pitch::from_str(pitch_str) {
             Some(p) => p,
             None => return Dynamic::UNIT,
         };
-        if !(0..=9).contains(&octave) {
+        if octave < 0 || octave > 9 {
             return Dynamic::UNIT;
         }
         note_to_dynamic(Note::simple(pitch, octave as u8))
@@ -242,11 +251,11 @@ fn register_music_functions(engine: &mut Engine) {
 
     // scale(root, mode, octave) -> array of note maps
     engine.register_fn("scale", |root: &str, mode: &str, octave: INT| -> Array {
-        let pitch = match Pitch::parse_str(root) {
+        let pitch = match Pitch::from_str(root) {
             Some(p) => p,
             None => return Array::new(),
         };
-        if !(0..=9).contains(&octave) {
+        if octave < 0 || octave > 9 {
             return Array::new();
         }
         let intervals = match mode.to_lowercase().as_str() {
@@ -262,17 +271,17 @@ fn register_music_functions(engine: &mut Engine) {
         intervals
             .iter()
             .filter_map(|&interval| base_note.transpose(interval))
-            .map(note_to_dynamic)
+            .map(|n| note_to_dynamic(n))
             .collect()
     });
 
     // chord(root, quality, octave) -> array of note maps
     engine.register_fn("chord", |root: &str, quality: &str, octave: INT| -> Array {
-        let pitch = match Pitch::parse_str(root) {
+        let pitch = match Pitch::from_str(root) {
             Some(p) => p,
             None => return Array::new(),
         };
-        if !(0..=9).contains(&octave) {
+        if octave < 0 || octave > 9 {
             return Array::new();
         }
         let intervals = match quality.to_lowercase().as_str() {
@@ -288,7 +297,7 @@ fn register_music_functions(engine: &mut Engine) {
         intervals
             .iter()
             .filter_map(|&interval| base_note.transpose(interval))
-            .map(note_to_dynamic)
+            .map(|n| note_to_dynamic(n))
             .collect()
     });
 
@@ -311,7 +320,7 @@ fn register_music_functions(engine: &mut Engine) {
         let pulses = (pulses as usize).min(steps);
         generate_euclidean(pulses, steps)
             .into_iter()
-            .map(Dynamic::from)
+            .map(|b| Dynamic::from(b))
             .collect()
     });
 
@@ -387,7 +396,7 @@ fn dynamic_to_note(d: &Dynamic) -> Option<Note> {
 /// Convert a Rhai Map to a Note.
 fn map_to_note(note: &rhai::Map) -> Option<Note> {
     let pitch_str = note.get("pitch")?.clone().into_string().ok()?;
-    let pitch = Pitch::parse_str(&pitch_str)?;
+    let pitch = Pitch::from_str(&pitch_str)?;
     let octave = note.get("octave")?.as_int().ok()? as u8;
     let velocity = note
         .get("velocity")
@@ -409,7 +418,7 @@ fn map_to_set_note_command(row: INT, channel: INT, note: &rhai::Map) -> Option<P
         return None;
     }
     let pitch_str = note.get("pitch")?.clone().into_string().ok()?;
-    let pitch = Pitch::parse_str(&pitch_str)?;
+    let pitch = Pitch::from_str(&pitch_str)?;
     let octave = note.get("octave")?.as_int().ok()? as u8;
     let velocity = note
         .get("velocity")
@@ -473,26 +482,24 @@ fn generate_euclidean(pulses: usize, steps: usize) -> Vec<bool> {
 
         // Distribute remainder groups by appending each to a front group
         let distribute_count = split_pos.min(remainder);
-        let remainder_groups = groups.split_off(split_pos);
-        let front_groups = groups;
-        let mut new_groups =
-            Vec::with_capacity(front_groups.len() + remainder_groups.len() - distribute_count);
+        let mut new_groups = Vec::new();
 
         // Take the pairs: front[i] ++ remainder[i]
-        let mut front_iter = front_groups.into_iter();
-        let mut remainder_iter = remainder_groups.into_iter();
-
-        for _ in 0..distribute_count {
-            let mut combined = front_iter.next().unwrap();
-            combined.extend(remainder_iter.next().unwrap());
+        for i in 0..distribute_count {
+            let mut combined = groups[i].clone();
+            combined.extend_from_slice(&groups[split_pos + i]);
             new_groups.push(combined);
         }
 
         // Add any leftover front groups
-        new_groups.extend_from_slice(&groups[distribute_count..split_pos]);
+        for i in distribute_count..split_pos {
+            new_groups.push(groups[i].clone());
+        }
 
         // Add any leftover remainder groups
-        new_groups.extend_from_slice(&groups[(split_pos + distribute_count)..]);
+        for i in (split_pos + distribute_count)..groups.len() {
+            new_groups.push(groups[i].clone());
+        }
 
         groups = new_groups;
     }
@@ -1617,26 +1624,23 @@ mod tests {
     }
 
     #[test]
-    fn test_lock_unpoisoned_recovers_from_poisoned_mutex() {
+    fn test_mutex_poisoning_recovery() {
         use std::sync::{Arc, Mutex};
+        let mutex = Arc::new(Mutex::new(Vec::<PatternCommand>::new()));
 
-        // Create and poison a Mutex<Vec<PatternCommand>> — the same type used
-        // inside eval_with_pattern — by panicking in a thread while holding the lock.
-        let mutex: Arc<Mutex<Vec<PatternCommand>>> = Arc::new(Mutex::new(Vec::new()));
+        // Poison the mutex by panicking while holding the lock in a thread
         let m_clone = mutex.clone();
         let _ = std::thread::spawn(move || {
-            let _guard = m_clone.lock().unwrap();
-            panic!("intentionally poison the mutex");
+            let _lock = m_clone.lock().unwrap();
+            panic!("Poisoning the mutex!");
         })
         .join();
 
-        assert!(mutex.is_poisoned(), "mutex should be poisoned after thread panic");
+        assert!(mutex.is_poisoned());
 
-        // lock_unpoisoned — the shared helper used by eval_with_pattern — must
-        // recover the inner data rather than panicking. If eval_with_pattern
-        // were changed to use .unwrap() directly, this test would fail.
-        let mut guard = lock_unpoisoned(&mutex);
-        guard.push(PatternCommand::ClearPattern);
-        assert_eq!(guard.len(), 1, "should be able to use the recovered mutex");
+        // Now attempt to lock it using our recovery strategy
+        let mut lock = mutex.lock().unwrap_or_else(|e| e.into_inner());
+        lock.push(PatternCommand::ClearPattern);
+        assert_eq!(lock.len(), 1);
     }
 }

@@ -158,7 +158,7 @@ impl Mixer {
             }
 
             // Skip muted/non-soloed channels: don't trigger new notes
-            let audible = self.channel_mix.get(ch).is_none_or(|m| m.audible);
+            let audible = self.channel_mix.get(ch).map_or(true, |m| m.audible);
 
             // Determine the note frequency for effect processing
             let note_frequency = match &cell.note {
@@ -200,9 +200,9 @@ impl Mixer {
                 }
                 Some(NoteEvent::Off) => {
                     self.voices[ch] = None;
-                    if let Some(s) = self.effect_processor.channel_state_mut(ch) {
-                        s.reset();
-                    }
+                    self.effect_processor
+                        .channel_state_mut(ch)
+                        .map(|s| s.reset());
                 }
                 None => {
                     // No event — existing voice continues

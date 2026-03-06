@@ -300,8 +300,8 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     ));
     for ch in ch_scroll..ch_end {
         let track = pattern.get_track(ch);
-        let is_muted = track.is_some_and(|t| t.muted);
-        let is_soloed = track.is_some_and(|t| t.solo);
+        let is_muted = track.map_or(false, |t| t.muted);
+        let is_soloed = track.map_or(false, |t| t.solo);
 
         // Build header label: "CH0 Name [M][S]"
         let track_name = track.map_or_else(
@@ -361,7 +361,7 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 .fg(Color::Black)
                 .bg(theme.success_color())
                 .add_modifier(Modifier::BOLD)
-        } else if row_idx.is_multiple_of(4) {
+        } else if row_idx % 4 == 0 {
             Style::default().fg(theme.primary)
         } else {
             Style::default().fg(theme.text_secondary)
@@ -375,7 +375,7 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         let visual_sel = app.editor.visual_selection();
 
         for ch in ch_scroll..ch_end {
-            let is_track_muted = pattern.get_track(ch).is_some_and(|t| t.muted);
+            let is_track_muted = pattern.get_track(ch).map_or(false, |t| t.muted);
             let is_track_inaudible = !pattern.is_channel_audible(ch);
 
             let separator_style = if is_playback_row {
@@ -390,7 +390,7 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
             // Check if this cell is inside a visual selection
             let is_visual_selected = if mode == EditorMode::Visual {
-                visual_sel.is_some_and(|((r0, c0), (r1, c1))| {
+                visual_sel.map_or(false, |((r0, c0), (r1, c1))| {
                     row_idx >= r0 && row_idx <= r1 && ch >= c0 && ch <= c1
                 })
             } else {
@@ -439,7 +439,7 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 } else if is_track_muted || (any_soloed && is_track_inaudible) {
                     // Muted or inaudible tracks: dimmed text
                     Style::default().fg(theme.text_dimmed)
-                } else if cell.is_none_or(|c| c.is_empty()) {
+                } else if cell.map_or(true, |c| c.is_empty()) {
                     Style::default().fg(theme.text_dimmed)
                 } else {
                     Style::default().fg(theme.text)
@@ -572,7 +572,9 @@ fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
         let visible_rows = inner_area.height.saturating_sub(3) as usize; // reserve header + footer
         let selected = browser.selected_index();
         let total = browser.entries().len();
-        let scroll_offset = if visible_rows >= total || selected < visible_rows / 2 {
+        let scroll_offset = if visible_rows >= total {
+            0
+        } else if selected < visible_rows / 2 {
             0
         } else if selected + visible_rows / 2 >= total {
             total.saturating_sub(visible_rows)
