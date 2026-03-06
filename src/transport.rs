@@ -28,10 +28,7 @@ pub enum AdvanceResult {
     /// Advanced to a new row within the current pattern
     Row(usize),
     /// Advanced to a new pattern in the arrangement (arrangement_index, first_row)
-    PatternChange {
-        arrangement_pos: usize,
-        row: usize,
-    },
+    PatternChange { arrangement_pos: usize, row: usize },
     /// Playback stopped (reached end of arrangement without loop)
     Stopped,
 }
@@ -604,10 +601,13 @@ mod tests {
         assert_eq!(transport.advance(spr), AdvanceResult::Row(3));
 
         // End of pattern 0 → advance to pattern 1
-        assert_eq!(transport.advance(spr), AdvanceResult::PatternChange {
-            arrangement_pos: 1,
-            row: 0,
-        });
+        assert_eq!(
+            transport.advance(spr),
+            AdvanceResult::PatternChange {
+                arrangement_pos: 1,
+                row: 0,
+            }
+        );
         assert_eq!(transport.arrangement_position(), 1);
         assert_eq!(transport.current_row(), 0);
 
@@ -617,10 +617,13 @@ mod tests {
         assert_eq!(transport.advance(spr), AdvanceResult::Row(3));
 
         // End of pattern 1 → advance to pattern 2
-        assert_eq!(transport.advance(spr), AdvanceResult::PatternChange {
-            arrangement_pos: 2,
-            row: 0,
-        });
+        assert_eq!(
+            transport.advance(spr),
+            AdvanceResult::PatternChange {
+                arrangement_pos: 2,
+                row: 0,
+            }
+        );
         assert_eq!(transport.arrangement_position(), 2);
 
         // Pattern 2: rows 0-3
@@ -648,16 +651,22 @@ mod tests {
         // Pattern 0
         assert_eq!(transport.advance(spr), AdvanceResult::Row(1));
         // End of pattern 0 → pattern 1
-        assert_eq!(transport.advance(spr), AdvanceResult::PatternChange {
-            arrangement_pos: 1,
-            row: 0,
-        });
+        assert_eq!(
+            transport.advance(spr),
+            AdvanceResult::PatternChange {
+                arrangement_pos: 1,
+                row: 0,
+            }
+        );
         assert_eq!(transport.advance(spr), AdvanceResult::Row(1));
         // End of arrangement → loop back to pattern 0
-        assert_eq!(transport.advance(spr), AdvanceResult::PatternChange {
-            arrangement_pos: 0,
-            row: 0,
-        });
+        assert_eq!(
+            transport.advance(spr),
+            AdvanceResult::PatternChange {
+                arrangement_pos: 0,
+                row: 0,
+            }
+        );
         assert!(transport.is_playing());
         assert_eq!(transport.arrangement_position(), 0);
         assert_eq!(transport.current_row(), 0);
@@ -775,10 +784,13 @@ mod tests {
 
         assert_eq!(transport.advance(spr), AdvanceResult::Row(1));
         // End of single-entry arrangement → loops back
-        assert_eq!(transport.advance(spr), AdvanceResult::PatternChange {
-            arrangement_pos: 0,
-            row: 0,
-        });
+        assert_eq!(
+            transport.advance(spr),
+            AdvanceResult::PatternChange {
+                arrangement_pos: 0,
+                row: 0,
+            }
+        );
         assert!(transport.is_playing());
     }
 
