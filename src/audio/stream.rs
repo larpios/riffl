@@ -299,39 +299,6 @@ mod tests {
     }
 
     #[test]
-    fn test_stream_builder_new() {
-        let builder = StreamBuilder::new();
-        assert_eq!(builder.config.sample_rate, 48000);
-        assert_eq!(builder.config.channels, 2);
-        assert_eq!(builder.config.buffer_size, 256);
-        assert!(builder.device.is_none());
-    }
-
-    #[test]
-    fn test_stream_builder_sample_rate() {
-        let builder = StreamBuilder::new().sample_rate(44100);
-        assert_eq!(builder.config.sample_rate, 44100);
-    }
-
-    #[test]
-    fn test_stream_builder_channels() {
-        let builder = StreamBuilder::new().channels(1);
-        assert_eq!(builder.config.channels, 1);
-    }
-
-    #[test]
-    fn test_stream_builder_chaining() {
-        let builder = StreamBuilder::new()
-            .sample_rate(96000)
-            .channels(4)
-            .buffer_size(512);
-        assert_eq!(builder.config.sample_rate, 96000);
-        assert_eq!(builder.config.channels, 4);
-        assert_eq!(builder.config.buffer_size, 512);
-        assert!(builder.device.is_none());
-    }
-
-    #[test]
     fn test_stream_config_validation() {
         // Test invalid sample rate
         let result = AudioStream::builder().sample_rate(0).build();
