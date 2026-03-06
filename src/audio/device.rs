@@ -49,16 +49,14 @@ impl AudioDevice {
 
     /// Get device name
     pub fn name(&self) -> AudioResult<String> {
-        self.device
-            .name()
-            .map_err(|_| AudioError::DeviceNotFound)
+        self.device.name().map_err(|_| AudioError::DeviceNotFound)
     }
 
     /// Get supported output configurations for this device
     pub fn supported_configs(&self) -> AudioResult<Vec<SupportedConfig>> {
-        let configs = self.device
-            .supported_output_configs()
-            .map_err(|_| AudioError::UnsupportedConfig("Failed to query supported configs".to_string()))?;
+        let configs = self.device.supported_output_configs().map_err(|_| {
+            AudioError::UnsupportedConfig("Failed to query supported configs".to_string())
+        })?;
 
         let mut supported = Vec::new();
         for config_range in configs {
@@ -93,9 +91,7 @@ pub fn enumerate_devices() -> AudioResult<Vec<DeviceInfo>> {
     let host = cpal::default_host();
 
     let default_device = host.default_output_device();
-    let default_name = default_device
-        .as_ref()
-        .and_then(|d| d.name().ok());
+    let default_name = default_device.as_ref().and_then(|d| d.name().ok());
 
     let mut devices = Vec::new();
 
@@ -106,10 +102,7 @@ pub fn enumerate_devices() -> AudioResult<Vec<DeviceInfo>> {
     for device in output_devices {
         if let Ok(name) = device.name() {
             let is_default = default_name.as_ref().map_or(false, |dn| dn == &name);
-            devices.push(DeviceInfo {
-                name,
-                is_default,
-            });
+            devices.push(DeviceInfo { name, is_default });
         }
     }
 
@@ -197,7 +190,10 @@ mod tests {
                 let configs_result = audio_device.supported_configs();
                 if let Err(e) = configs_result {
                     // This is acceptable in environments without proper audio hardware configurations
-                    println!("Failed to query supported configs (likely CI/test environment): {:?}", e);
+                    println!(
+                        "Failed to query supported configs (likely CI/test environment): {:?}",
+                        e
+                    );
                     return;
                 }
 
@@ -210,9 +206,7 @@ mod tests {
                 for config in &configs {
                     println!(
                         "  Config: {} channels, sample rate {}-{} Hz",
-                        config.channels,
-                        config.min_sample_rate,
-                        config.max_sample_rate
+                        config.channels, config.min_sample_rate, config.max_sample_rate
                     );
 
                     // Check if common sample rates are supported
@@ -224,7 +218,10 @@ mod tests {
                 }
 
                 // Verify at least one configuration exists
-                assert!(!configs.is_empty(), "Device should have at least one supported config");
+                assert!(
+                    !configs.is_empty(),
+                    "Device should have at least one supported config"
+                );
 
                 // Verify sample rate ranges are valid
                 for config in &configs {
