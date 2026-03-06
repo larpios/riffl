@@ -106,3 +106,71 @@ impl Default for Sample {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_base_frequency_a4() {
+        // Note 57 is A4 in tracker base
+        let sample = Sample::default().with_base_note(57);
+        let freq = sample.base_frequency();
+        assert!(
+            (freq - 440.0).abs() < 1e-5,
+            "A4 frequency should be exactly 440.0 Hz, got {}",
+            freq
+        );
+    }
+
+    #[test]
+    fn test_base_frequency_a5() {
+        // Note 69 is A5
+        let sample = Sample::default().with_base_note(69);
+        let freq = sample.base_frequency();
+        assert!(
+            (freq - 880.0).abs() < 1e-5,
+            "A5 frequency should be exactly 880.0 Hz, got {}",
+            freq
+        );
+    }
+
+    #[test]
+    fn test_base_frequency_a3() {
+        // Note 45 is A3
+        let sample = Sample::default().with_base_note(45);
+        let freq = sample.base_frequency();
+        assert!(
+            (freq - 220.0).abs() < 1e-5,
+            "A3 frequency should be exactly 220.0 Hz, got {}",
+            freq
+        );
+    }
+
+    #[test]
+    fn test_base_frequency_c4() {
+        // Note 48 is C4 (default)
+        let sample = Sample::default().with_base_note(48);
+        let freq = sample.base_frequency();
+        assert!(
+            (freq - 261.625565).abs() < 1e-5,
+            "C4 frequency should be roughly 261.63 Hz, got {}",
+            freq
+        );
+    }
+
+    #[test]
+    fn test_base_frequency_0() {
+        // Extreme condition, base note 0
+        let sample = Sample::default().with_base_note(0);
+        let freq = sample.base_frequency();
+        // 57 semitones below A4 (440) -> 440 / (2^(57/12))
+        let expected = 440.0 * 2.0_f64.powf(-57.0 / 12.0);
+        assert!(
+            (freq - expected).abs() < 1e-5,
+            "Note 0 frequency should be {}, got {}",
+            expected,
+            freq
+        );
+    }
+}
