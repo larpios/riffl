@@ -106,3 +106,72 @@ impl Default for Sample {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sample_duration_mono() {
+        let sample_rate = 44100;
+        let channels = 1;
+        let data = vec![0.0; 44100]; // 1 second
+        let sample = Sample::new(data, sample_rate, channels, None);
+        assert_eq!(sample.duration(), 1.0);
+    }
+
+    #[test]
+    fn test_sample_duration_stereo() {
+        let sample_rate = 44100;
+        let channels = 2;
+        let data = vec![0.0; 88200]; // 1 second
+        let sample = Sample::new(data, sample_rate, channels, None);
+        assert_eq!(sample.duration(), 1.0);
+    }
+
+    #[test]
+    fn test_sample_duration_different_rate() {
+        let sample_rate = 48000;
+        let channels = 1;
+        let data = vec![0.0; 24000]; // 0.5 seconds
+        let sample = Sample::new(data, sample_rate, channels, None);
+        assert_eq!(sample.duration(), 0.5);
+    }
+
+    #[test]
+    fn test_sample_duration_empty() {
+        let sample = Sample::default();
+        assert_eq!(sample.duration(), 0.0);
+    }
+
+    #[test]
+    fn test_sample_frame_count() {
+        let sample = Sample::new(vec![0.0; 100], 44100, 2, None);
+        assert_eq!(sample.frame_count(), 50);
+    }
+
+    #[test]
+    fn test_sample_is_empty() {
+        let sample = Sample::default();
+        assert!(sample.is_empty());
+        let sample = Sample::new(vec![0.0], 44100, 1, None);
+        assert!(!sample.is_empty());
+    }
+
+    #[test]
+    fn test_sample_len() {
+        let sample = Sample::new(vec![0.0; 100], 44100, 1, None);
+        assert_eq!(sample.len(), 100);
+    }
+
+    #[test]
+    fn test_sample_properties() {
+        let data = vec![0.1, 0.2, 0.3];
+        let sample = Sample::new(data.clone(), 44100, 1, Some("test".to_string()));
+        assert_eq!(sample.data(), &data);
+        assert_eq!(sample.sample_rate(), 44100);
+        assert_eq!(sample.channels(), 1);
+        assert_eq!(sample.name(), Some("test"));
+        assert_eq!(sample.base_note(), C4_MIDI);
+    }
+}
