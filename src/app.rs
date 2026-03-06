@@ -475,8 +475,7 @@ impl App {
         let name = sample.name().unwrap_or("unknown").to_string();
 
         let idx = if let Ok(mut mixer) = self.mixer.lock() {
-            let idx = mixer.add_sample(sample);
-            idx
+            mixer.add_sample(sample)
         } else {
             return Err("Failed to lock mixer".to_string());
         };
@@ -555,11 +554,7 @@ impl App {
     pub fn set_view(&mut self, view: AppView) {
         self.current_view = view;
         // When switching to CodeEditor view, activate the code editor
-        if view == AppView::CodeEditor {
-            self.code_editor.active = true;
-        } else {
-            self.code_editor.active = false;
-        }
+        self.code_editor.active = view == AppView::CodeEditor;
     }
 
     /// Toggle split view mode (pattern left, code editor right).

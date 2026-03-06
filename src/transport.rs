@@ -1,7 +1,7 @@
-/// Transport system for playback control
-///
-/// Manages play/stop/pause state, BPM timing, row advancement,
-/// pattern looping, and song-level arrangement sequencing for the tracker.
+//! Transport system for playback control
+//!
+//! Manages play/stop/pause state, BPM timing, row advancement,
+//! pattern looping, and song-level arrangement sequencing for the tracker.
 
 /// Transport playback state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
