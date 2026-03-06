@@ -3,7 +3,6 @@
 /// This module provides theme support for the TUI, including color definitions
 /// that work across both 256-color and truecolor terminals. The theme system
 /// allows for consistent styling throughout the application.
-
 use ratatui::style::{Color, Modifier, Style};
 
 /// Color palette for the application theme
@@ -76,22 +75,22 @@ impl Theme {
     pub fn new() -> Self {
         Self {
             // Primary UI colors - using indexed colors for better 256-color support
-            primary: Color::Cyan,          // Cyan for primary accent
-            secondary: Color::Blue,        // Blue for secondary accent
+            primary: Color::Cyan,   // Cyan for primary accent
+            secondary: Color::Blue, // Blue for secondary accent
 
             // Borders and UI chrome
             border: Color::Cyan,           // Cyan for normal borders
             border_focused: Color::Yellow, // Yellow for focused borders
 
             // Text colors
-            text: Color::White,                 // White for main text
-            text_secondary: Color::Gray,        // Gray for secondary text
-            text_dimmed: Color::DarkGray,       // Dark gray for dimmed text
+            text: Color::White,           // White for main text
+            text_secondary: Color::Gray,  // Gray for secondary text
+            text_dimmed: Color::DarkGray, // Dark gray for dimmed text
 
             // Background colors
-            bg_highlight: Color::Yellow,   // Yellow background for highlights
-            bg_header: Color::Reset,       // Default background for header
-            bg_footer: Color::DarkGray,    // Dark gray background for footer
+            bg_highlight: Color::Yellow, // Yellow background for highlights
+            bg_header: Color::Reset,     // Default background for header
+            bg_footer: Color::DarkGray,  // Dark gray background for footer
 
             // Status colors
             status_success: Color::Green,  // Green for success
@@ -123,9 +122,7 @@ impl Theme {
     /// # Returns
     /// Style configured for footer elements
     pub fn footer_style(&self) -> Style {
-        Style::default()
-            .fg(self.text)
-            .bg(self.bg_footer)
+        Style::default().fg(self.text).bg(self.bg_footer)
     }
 
     /// Get the border color for normal UI elements
@@ -152,9 +149,7 @@ impl Theme {
     /// # Returns
     /// Style configured for highlighted elements
     pub fn highlight_style(&self) -> Style {
-        Style::default()
-            .fg(Color::Black)
-            .bg(self.bg_highlight)
+        Style::default().fg(Color::Black).bg(self.bg_highlight)
     }
 
     /// Get the style for Insert mode cursor (active sub-column)
@@ -178,9 +173,7 @@ impl Theme {
     /// # Returns
     /// Style configured for Insert mode inactive sub-columns
     pub fn insert_inactive_style(&self) -> Style {
-        Style::default()
-            .fg(Color::White)
-            .bg(Color::Indexed(236)) // dark gray background
+        Style::default().fg(Color::White).bg(Color::Indexed(236)) // dark gray background
     }
 
     /// Get the style for Visual mode selection highlight
@@ -188,9 +181,7 @@ impl Theme {
     /// # Returns
     /// Style configured for selected cells in Visual mode
     pub fn visual_selection_style(&self) -> Style {
-        Style::default()
-            .fg(Color::White)
-            .bg(Color::Blue)
+        Style::default().fg(Color::White).bg(Color::Blue)
     }
 
     /// Get the style for normal text content

@@ -115,7 +115,7 @@ impl AudioEngine {
     pub fn set_sample_rate(&mut self, rate: u32) -> AudioResult<()> {
         if rate == 0 {
             return Err(AudioError::UnsupportedConfig(
-                "Sample rate must be greater than 0".to_string()
+                "Sample rate must be greater than 0".to_string(),
             ));
         }
         self.config.sample_rate = rate;
@@ -217,7 +217,7 @@ impl AudioEngine {
                 Ok(())
             }
             None => Err(AudioError::StreamError(
-                "No callback set. Call set_callback() first.".to_string()
+                "No callback set. Call set_callback() first.".to_string(),
             )),
         }
     }
@@ -239,7 +239,7 @@ impl AudioEngine {
                 Ok(())
             }
             None => Err(AudioError::StreamError(
-                "No stream active. Call set_callback() and start() first.".to_string()
+                "No stream active. Call set_callback() and start() first.".to_string(),
             )),
         }
     }
@@ -281,7 +281,10 @@ mod tests {
                 // Verify the engine has a device
                 let device_name = eng.device().name();
                 assert!(device_name.is_ok(), "Should be able to get device name");
-                println!("AudioEngine initialized with device: {}", device_name.unwrap());
+                println!(
+                    "AudioEngine initialized with device: {}",
+                    device_name.unwrap()
+                );
 
                 // Verify the engine has the default configuration
                 let config = eng.config();
@@ -315,10 +318,9 @@ mod tests {
 
                 // Print all available devices
                 for (index, device_info) in device_list.iter().enumerate() {
-                    println!("  [{}] {} (default: {})",
-                        index,
-                        device_info.name,
-                        device_info.is_default
+                    println!(
+                        "  [{}] {} (default: {})",
+                        index, device_info.name, device_info.is_default
                     );
                 }
 
@@ -334,24 +336,36 @@ mod tests {
 
                             // Select the first device from the list
                             let select_result = eng.select_device(0);
-                            assert!(select_result.is_ok(), "Should be able to select device at index 0");
+                            assert!(
+                                select_result.is_ok(),
+                                "Should be able to select device at index 0"
+                            );
 
                             let new_device = eng.device().name().ok();
                             println!("Selected device: {:?}", new_device);
 
                             // Verify the device was selected
-                            assert!(new_device.is_some(), "Should have a device name after selection");
+                            assert!(
+                                new_device.is_some(),
+                                "Should have a device name after selection"
+                            );
 
                             // If we have multiple devices, test selecting a different one
                             if device_list.len() > 1 {
                                 let select_result = eng.select_device(1);
-                                assert!(select_result.is_ok(), "Should be able to select device at index 1");
+                                assert!(
+                                    select_result.is_ok(),
+                                    "Should be able to select device at index 1"
+                                );
                                 println!("Successfully selected second device");
                             }
 
                             // Test selecting an out-of-bounds index
                             let invalid_select = eng.select_device(999);
-                            assert!(invalid_select.is_err(), "Should fail when selecting invalid index");
+                            assert!(
+                                invalid_select.is_err(),
+                                "Should fail when selecting invalid index"
+                            );
                             println!("Correctly rejected invalid device index");
 
                             println!("Device selection test passed!");
@@ -371,7 +385,10 @@ mod tests {
             }
             Err(e) => {
                 // Device enumeration failed - acceptable in CI/test environments
-                println!("Device enumeration failed (likely CI/test environment): {:?}", e);
+                println!(
+                    "Device enumeration failed (likely CI/test environment): {:?}",
+                    e
+                );
             }
         }
     }
@@ -389,11 +406,18 @@ mod tests {
                 // Verify latency calculation
                 // Default config: 256 frames, 48000 Hz
                 // Expected: (256 / 48000) * 1000 = 5.33ms
-                let expected_latency = (eng.config().buffer_size as f32 / eng.config().sample_rate as f32) * 1000.0;
-                assert!((latency - expected_latency).abs() < 0.01, "Latency should match calculation");
+                let expected_latency =
+                    (eng.config().buffer_size as f32 / eng.config().sample_rate as f32) * 1000.0;
+                assert!(
+                    (latency - expected_latency).abs() < 0.01,
+                    "Latency should match calculation"
+                );
 
                 // Verify latency is under 20ms (acceptance criteria)
-                assert!(latency < 20.0, "Latency should be under 20ms for optimal configuration");
+                assert!(
+                    latency < 20.0,
+                    "Latency should be under 20ms for optimal configuration"
+                );
 
                 println!("Latency measurement test passed!");
             }
@@ -414,31 +438,53 @@ mod tests {
         match engine {
             Ok(mut eng) => {
                 // Verify default sample rate is 48kHz
-                assert_eq!(eng.sample_rate(), 48000, "Default sample rate should be 48kHz");
+                assert_eq!(
+                    eng.sample_rate(),
+                    48000,
+                    "Default sample rate should be 48kHz"
+                );
                 println!("Default sample rate: {}Hz", eng.sample_rate());
 
                 // Test setting to 44.1kHz (CD quality)
                 let result = eng.set_sample_rate(44100);
-                assert!(result.is_ok(), "Should be able to set sample rate to 44.1kHz");
-                assert_eq!(eng.sample_rate(), 44100, "Sample rate should be 44.1kHz after setting");
+                assert!(
+                    result.is_ok(),
+                    "Should be able to set sample rate to 44.1kHz"
+                );
+                assert_eq!(
+                    eng.sample_rate(),
+                    44100,
+                    "Sample rate should be 44.1kHz after setting"
+                );
                 println!("Set sample rate to 44.1kHz: {}Hz", eng.sample_rate());
 
                 // Test setting to 48kHz (professional audio)
                 let result = eng.set_sample_rate(48000);
                 assert!(result.is_ok(), "Should be able to set sample rate to 48kHz");
-                assert_eq!(eng.sample_rate(), 48000, "Sample rate should be 48kHz after setting");
+                assert_eq!(
+                    eng.sample_rate(),
+                    48000,
+                    "Sample rate should be 48kHz after setting"
+                );
                 println!("Set sample rate to 48kHz: {}Hz", eng.sample_rate());
 
                 // Test invalid sample rate (0 Hz)
                 let result = eng.set_sample_rate(0);
                 assert!(result.is_err(), "Should fail when setting sample rate to 0");
                 if let Err(AudioError::UnsupportedConfig(msg)) = result {
-                    assert!(msg.contains("Sample rate"), "Error message should mention sample rate");
+                    assert!(
+                        msg.contains("Sample rate"),
+                        "Error message should mention sample rate"
+                    );
                     println!("Correctly rejected invalid sample rate: {}", msg);
                 }
 
                 // Verify sample rate wasn't changed after invalid attempt
-                assert_eq!(eng.sample_rate(), 48000, "Sample rate should remain 48kHz after failed set");
+                assert_eq!(
+                    eng.sample_rate(),
+                    48000,
+                    "Sample rate should remain 48kHz after failed set"
+                );
 
                 println!("Sample rate configuration test passed!");
             }
@@ -473,7 +519,10 @@ mod tests {
         println!("Created AudioEngine");
 
         // Verify engine is not playing initially
-        assert!(!engine.is_playing(), "Engine should not be playing initially");
+        assert!(
+            !engine.is_playing(),
+            "Engine should not be playing initially"
+        );
 
         // Create a counter to track callback invocations
         let invocation_count = Arc::new(AtomicUsize::new(0));
@@ -493,7 +542,10 @@ mod tests {
                 println!("Successfully set callback");
 
                 // Verify engine is still not playing after setting callback
-                assert!(!engine.is_playing(), "Engine should not be playing after setting callback");
+                assert!(
+                    !engine.is_playing(),
+                    "Engine should not be playing after setting callback"
+                );
 
                 // Start playback
                 match engine.start() {
@@ -507,10 +559,16 @@ mod tests {
                         std::thread::sleep(Duration::from_millis(100));
 
                         let count_while_playing = invocation_count.load(Ordering::SeqCst);
-                        println!("Callback invoked {} times while playing", count_while_playing);
+                        println!(
+                            "Callback invoked {} times while playing",
+                            count_while_playing
+                        );
 
                         // Verify callback was invoked
-                        assert!(count_while_playing > 0, "Callback should be invoked while playing");
+                        assert!(
+                            count_while_playing > 0,
+                            "Callback should be invoked while playing"
+                        );
 
                         // Pause playback
                         match engine.pause() {
@@ -518,14 +576,20 @@ mod tests {
                                 println!("Successfully paused playback");
 
                                 // Verify engine is not playing after pause
-                                assert!(!engine.is_playing(), "Engine should not be playing after pause");
+                                assert!(
+                                    !engine.is_playing(),
+                                    "Engine should not be playing after pause"
+                                );
 
                                 // Wait a bit
                                 std::thread::sleep(Duration::from_millis(100));
 
                                 // Get count after pause
                                 let count_after_pause = invocation_count.load(Ordering::SeqCst);
-                                println!("Callback invoked {} times after pause", count_after_pause);
+                                println!(
+                                    "Callback invoked {} times after pause",
+                                    count_after_pause
+                                );
 
                                 // Resume playback
                                 match engine.start() {
@@ -533,13 +597,20 @@ mod tests {
                                         println!("Successfully resumed playback");
 
                                         // Verify engine is playing again
-                                        assert!(engine.is_playing(), "Engine should be playing after resume");
+                                        assert!(
+                                            engine.is_playing(),
+                                            "Engine should be playing after resume"
+                                        );
 
                                         // Wait for more callbacks
                                         std::thread::sleep(Duration::from_millis(100));
 
-                                        let count_after_resume = invocation_count.load(Ordering::SeqCst);
-                                        println!("Callback invoked {} times after resume", count_after_resume);
+                                        let count_after_resume =
+                                            invocation_count.load(Ordering::SeqCst);
+                                        println!(
+                                            "Callback invoked {} times after resume",
+                                            count_after_resume
+                                        );
 
                                         // Should have more invocations after resuming
                                         assert!(
@@ -552,7 +623,10 @@ mod tests {
                                         println!("Successfully stopped playback");
 
                                         // Verify engine is not playing after stop
-                                        assert!(!engine.is_playing(), "Engine should not be playing after stop");
+                                        assert!(
+                                            !engine.is_playing(),
+                                            "Engine should not be playing after stop"
+                                        );
 
                                         println!("Engine playback control test passed!");
                                     }
@@ -567,12 +641,18 @@ mod tests {
                         }
                     }
                     Err(e) => {
-                        println!("Failed to start playback (acceptable in test environment): {:?}", e);
+                        println!(
+                            "Failed to start playback (acceptable in test environment): {:?}",
+                            e
+                        );
                     }
                 }
             }
             Err(e) => {
-                println!("Failed to set callback (acceptable in test environment): {:?}", e);
+                println!(
+                    "Failed to set callback (acceptable in test environment): {:?}",
+                    e
+                );
             }
         }
     }
@@ -640,27 +720,42 @@ mod tests {
                         let count = invocation_count.load(Ordering::SeqCst);
                         let samples = samples_processed.load(Ordering::SeqCst);
 
-                        println!("Callback invoked {} times, processed {} samples", count, samples);
+                        println!(
+                            "Callback invoked {} times, processed {} samples",
+                            count, samples
+                        );
 
                         // Verify the callback was invoked
                         assert!(count > 0, "Callback should be invoked during playback");
-                        assert!(samples > 0, "Callback should process samples during playback");
+                        assert!(
+                            samples > 0,
+                            "Callback should process samples during playback"
+                        );
 
                         // Stop playback
                         engine.stop();
                         println!("Successfully stopped playback");
 
-                        assert!(!engine.is_playing(), "Engine should not be playing after stop");
+                        assert!(
+                            !engine.is_playing(),
+                            "Engine should not be playing after stop"
+                        );
 
                         println!("Callback registration test passed!");
                     }
                     Err(e) => {
-                        println!("Failed to start playback (acceptable in test environment): {:?}", e);
+                        println!(
+                            "Failed to start playback (acceptable in test environment): {:?}",
+                            e
+                        );
                     }
                 }
             }
             Err(e) => {
-                println!("Failed to register callback (acceptable in test environment): {:?}", e);
+                println!(
+                    "Failed to register callback (acceptable in test environment): {:?}",
+                    e
+                );
             }
         }
     }
