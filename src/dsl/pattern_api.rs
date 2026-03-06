@@ -1,8 +1,9 @@
+//! Pattern manipulation functions for the DSL.
+//!
+//! These functions operate on Pattern data and are callable from scripts
+//! via the command system, providing algorithmic composition tools.
+
 use super::engine::PatternCommand;
-/// Pattern manipulation functions for the DSL.
-///
-/// These functions operate on Pattern data and are callable from scripts
-/// via the command system, providing algorithmic composition tools.
 use crate::pattern::{Note, NoteEvent, Pattern};
 use rand::Rng;
 
