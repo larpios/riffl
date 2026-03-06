@@ -779,7 +779,11 @@ mod tests {
         let mut output_b = vec![0.0f32; 64];
 
         // Render with only instrument 0
-        let mut mixer_a = Mixer::new(vec![Sample::new(vec![0.3; 4410], 44100, 1, None)], 4, 44100);
+        let mut mixer_a = Mixer::new(
+            vec![Arc::new(Sample::new(vec![0.3; 4410], 44100, 1, None))],
+            4,
+            44100,
+        );
         let mut pat_a = Pattern::new(16, 4);
         pat_a.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
         mixer_a.tick(0, &pat_a);
@@ -788,8 +792,8 @@ mod tests {
         // Render with only instrument 1 (louder)
         let mut mixer_b = Mixer::new(
             vec![
-                Sample::new(vec![0.0; 1], 44100, 1, None),
-                Sample::new(vec![0.9; 4410], 44100, 1, None),
+                Arc::new(Sample::new(vec![0.0; 1], 44100, 1, None)),
+                Arc::new(Sample::new(vec![0.9; 4410], 44100, 1, None)),
             ],
             4,
             44100,
@@ -1021,7 +1025,12 @@ mod tests {
 
     #[test]
     fn test_mixer_track_volume_applied() {
-        let sample = Arc::new(Sample::new(vec![1.0; 4410], 44100, 1, Some("test".to_string())));
+        let sample = Arc::new(Sample::new(
+            vec![1.0; 4410],
+            44100,
+            1,
+            Some("test".to_string()),
+        ));
 
         // Full volume
         let mut mixer_full = Mixer::new(vec![Arc::clone(&sample)], 4, 44100);
