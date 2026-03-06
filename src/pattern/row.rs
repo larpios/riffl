@@ -1,11 +1,10 @@
+use serde::{Deserialize, Serialize};
 /// Row and cell types for the tracker pattern grid.
 ///
 /// A row represents a single time step across all channels. Each channel
 /// position in the row contains a Cell with optional note, instrument,
 /// volume, and effect data.
-
 use std::fmt;
-use serde::{Serialize, Deserialize};
 
 pub use super::effect::{Effect, MAX_EFFECTS_PER_CELL};
 use super::note::NoteEvent;
@@ -406,12 +405,18 @@ mod tests {
 
         // Verify effects are correctly stored and retrievable
         let first = cell.first_effect().unwrap();
-        assert_eq!(first.effect_type(), Some(super::super::effect::EffectType::VolumeSlide));
+        assert_eq!(
+            first.effect_type(),
+            Some(super::super::effect::EffectType::VolumeSlide)
+        );
         assert_eq!(first.param, 0x04);
         assert_eq!(format!("{}", first), "A04");
 
         let second = cell.second_effect().unwrap();
-        assert_eq!(second.effect_type(), Some(super::super::effect::EffectType::SetSpeed));
+        assert_eq!(
+            second.effect_type(),
+            Some(super::super::effect::EffectType::SetSpeed)
+        );
         assert_eq!(second.param, 0x06);
         assert_eq!(format!("{}", second), "F06");
     }
@@ -451,7 +456,12 @@ mod tests {
                 volume: None,
                 effects: vec![effect],
             };
-            assert_eq!(format!("{}", cell), expected, "Display mismatch for effect {}", effect);
+            assert_eq!(
+                format!("{}", cell),
+                expected,
+                "Display mismatch for effect {}",
+                effect
+            );
         }
     }
 
