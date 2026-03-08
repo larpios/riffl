@@ -22,20 +22,22 @@ use tracker_core::export;
 use tracker_core::pattern::note::Pitch;
 use tracker_core::pattern::{Note, Pattern};
 use tracker_core::project;
-use tracker_core::song::Song;
+use tracker_core::song::{Instrument, Song};
 use tracker_core::transport::{AdvanceResult, PlaybackMode, Transport, TransportState};
 
 /// Which top-level view is currently active.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppView {
-    /// Pattern editor (default) — F1
+    /// Pattern editor (default) — F1 / 1
     PatternEditor,
-    /// Arrangement / song sequence — F2
+    /// Arrangement / song sequence — F2 / 2
     Arrangement,
-    /// Instrument list — F3
+    /// Instrument list — F3 / 3
     InstrumentList,
-    /// Code editor (full-screen) — F4
+    /// Code editor (full-screen) — F4 / 4
     CodeEditor,
+    /// Pattern list (pool) — 5
+    PatternList,
 }
 
 /// Application state
@@ -67,6 +69,12 @@ pub struct App {
     /// Names of loaded instruments (indexed by instrument number)
     instrument_names: Vec<String>,
 
+    /// Currently selected instrument index in the instrument list (None if none selected)
+    instrument_selection: Option<usize>,
+
+    /// Currently selected pattern index in the pattern list (None if none selected)
+    pattern_selection: Option<usize>,
+
     /// Path to the current project file (None if unsaved)
     pub project_path: Option<PathBuf>,
 
@@ -96,6 +104,9 @@ pub struct App {
 
     /// Whether live mode is active (scripts auto-re-evaluate on every pattern loop)
     pub live_mode: bool,
+
+    /// Whether help overlay is shown
+    pub show_help: bool,
 
     /// Timestamp of the last update call (for delta time calculation)
     last_update: Instant,
@@ -158,6 +169,8 @@ impl App {
             file_browser,
             export_dialog: ExportDialog::new(),
             instrument_names: vec!["sine440".to_string()],
+            instrument_selection: None,
+            pattern_selection: None,
             project_path: None,
             current_view: AppView::PatternEditor,
             theme: Theme::default(),
@@ -168,6 +181,7 @@ impl App {
             split_view: false,
             script_engine: ScriptEngine::new(),
             live_mode: false,
+            show_help: false,
             last_update: Instant::now(),
         }
     }
@@ -569,6 +583,195 @@ impl App {
     /// Get loaded instrument count.
     pub fn instrument_count(&self) -> usize {
         self.instrument_names.len()
+    }
+
+    /// Get the currently selected instrument index.
+    pub fn instrument_selection(&self) -> Option<usize> {
+        self.instrument_selection
+    }
+
+    /// Set the selected instrument index.
+    pub fn set_instrument_selection(&mut self, index: Option<usize>) {
+        self.instrument_selection = index;
+    }
+
+    /// Move instrument selection up.
+    pub fn instrument_selection_up(&mut self) {
+        let count = self.song.instruments.len();
+        if count == 0 {
+            self.instrument_selection = None;
+            return;
+        }
+        match self.instrument_selection {
+            None => self.instrument_selection = Some(count - 1),
+            Some(0) => self.instrument_selection = Some(count - 1),
+            Some(i) => self.instrument_selection = Some(i - 1),
+        }
+    }
+
+    /// Move instrument selection down.
+    pub fn instrument_selection_down(&mut self) {
+        let count = self.song.instruments.len();
+        if count == 0 {
+            self.instrument_selection = None;
+            return;
+        }
+        match self.instrument_selection {
+            None => self.instrument_selection = Some(0),
+            Some(i) if i >= count - 1 => self.instrument_selection = Some(0),
+            Some(i) => self.instrument_selection = Some(i + 1),
+        }
+    }
+
+    /// Add a new empty instrument.
+    pub fn add_instrument(&mut self) {
+        let idx = self.song.instruments.len();
+        let name = format!("Inst{:02X}", idx);
+        let inst = Instrument::new(&name);
+        self.song.instruments.push(inst);
+        self.instrument_names.push(name);
+        self.instrument_selection = Some(idx);
+    }
+
+    /// Delete the selected instrument.
+    pub fn delete_instrument(&mut self) -> bool {
+        if let Some(idx) = self.instrument_selection {
+            if idx < self.song.instruments.len() {
+                self.song.instruments.remove(idx);
+                self.instrument_names.remove(idx);
+                // Adjust selection
+                if self.song.instruments.is_empty() {
+                    self.instrument_selection = None;
+                } else if idx >= self.song.instruments.len() {
+                    self.instrument_selection = Some(self.song.instruments.len() - 1);
+                }
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Rename the selected instrument.
+    pub fn rename_instrument(&mut self, new_name: String) -> bool {
+        if let Some(idx) = self.instrument_selection {
+            if idx < self.song.instruments.len() {
+                self.song.instruments[idx].name = new_name.clone();
+                self.instrument_names[idx] = new_name;
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Update instrument properties (volume, base_note as MIDI value).
+    pub fn update_instrument(&mut self, volume: f32, base_note_midi: u8) -> bool {
+        if let Some(idx) = self.instrument_selection {
+            if idx < self.song.instruments.len() {
+                self.song.instruments[idx].volume = volume;
+                if let Some(pitch) = Pitch::from_semitone(base_note_midi % 12) {
+                    let octave = base_note_midi / 12;
+                    self.song.instruments[idx].base_note = Note::simple(pitch, octave);
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Select instrument for use in pattern editor.
+    pub fn select_instrument(&mut self) {
+        if let Some(idx) = self.instrument_selection {
+            if idx < self.song.instruments.len() {
+                self.editor.set_instrument(idx);
+            }
+        }
+    }
+
+    /// Get the currently selected pattern index.
+    pub fn pattern_selection(&self) -> Option<usize> {
+        self.pattern_selection
+    }
+
+    /// Set the selected pattern index.
+    pub fn set_pattern_selection(&mut self, index: Option<usize>) {
+        self.pattern_selection = index;
+    }
+
+    /// Move pattern selection up.
+    pub fn pattern_selection_up(&mut self) {
+        let count = self.song.patterns.len();
+        if count == 0 {
+            self.pattern_selection = None;
+            return;
+        }
+        match self.pattern_selection {
+            None => self.pattern_selection = Some(count - 1),
+            Some(0) => self.pattern_selection = Some(count - 1),
+            Some(i) => self.pattern_selection = Some(i - 1),
+        }
+    }
+
+    /// Move pattern selection down.
+    pub fn pattern_selection_down(&mut self) {
+        let count = self.song.patterns.len();
+        if count == 0 {
+            self.pattern_selection = None;
+            return;
+        }
+        match self.pattern_selection {
+            None => self.pattern_selection = Some(0),
+            Some(i) if i >= count - 1 => self.pattern_selection = Some(0),
+            Some(i) => self.pattern_selection = Some(i + 1),
+        }
+    }
+
+    /// Add a new empty pattern.
+    pub fn add_pattern(&mut self) {
+        if let Some(idx) = self.song.add_pattern(Pattern::default()) {
+            self.pattern_selection = Some(idx);
+        }
+    }
+
+    /// Delete the selected pattern.
+    pub fn delete_pattern(&mut self) -> bool {
+        if let Some(idx) = self.pattern_selection {
+            if self.song.remove_pattern(idx) {
+                // Adjust selection
+                if self.song.patterns.is_empty() {
+                    // Add a default pattern if none remain
+                    self.song.add_pattern(Pattern::default());
+                    self.pattern_selection = Some(0);
+                } else if idx >= self.song.patterns.len() {
+                    self.pattern_selection = Some(self.song.patterns.len() - 1);
+                }
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Duplicate (clone) the selected pattern.
+    pub fn duplicate_pattern(&mut self) -> bool {
+        if let Some(idx) = self.pattern_selection {
+            if let Some(new_idx) = self.song.duplicate_pattern(idx) {
+                self.pattern_selection = Some(new_idx);
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Select pattern for editing (load it into the editor).
+    pub fn select_pattern(&mut self) {
+        if let Some(idx) = self.pattern_selection {
+            if idx < self.song.patterns.len() {
+                // Replace editor's pattern with the selected one
+                self.editor.set_pattern(self.song.patterns[idx].clone());
+                // Update transport to match the new pattern's row count
+                self.transport
+                    .set_num_rows(self.song.patterns[idx].num_rows());
+            }
+        }
     }
 
     /// Switch to a different top-level view.

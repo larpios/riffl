@@ -4,6 +4,7 @@ mod editor;
 mod input;
 mod ui;
 
+use crate::app::AppView;
 use std::io;
 use std::panic;
 use std::time::Duration;
@@ -146,10 +147,26 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
     let action = map_key_to_action(key, app.editor_mode());
 
     match action {
-        // Navigation — delegate to editor
+        // Navigation — delegate to editor (or instrument/pattern list)
         Action::MoveLeft => app.editor.move_left(),
-        Action::MoveDown => app.editor.move_down(),
-        Action::MoveUp => app.editor.move_up(),
+        Action::MoveDown => {
+            if app.current_view == AppView::InstrumentList {
+                app.instrument_selection_down();
+            } else if app.current_view == AppView::PatternList {
+                app.pattern_selection_down();
+            } else {
+                app.editor.move_down();
+            }
+        }
+        Action::MoveUp => {
+            if app.current_view == AppView::InstrumentList {
+                app.instrument_selection_up();
+            } else if app.current_view == AppView::PatternList {
+                app.pattern_selection_up();
+            } else {
+                app.editor.move_up();
+            }
+        }
         Action::MoveRight => app.editor.move_right(),
         Action::PageUp => app.editor.page_up(),
         Action::PageDown => app.editor.page_down(),
@@ -171,12 +188,34 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::Copy => app.editor.copy(),
         Action::Paste => app.editor.paste(),
         Action::Cut => app.editor.cut(),
+        Action::Redo => {
+            app.editor.redo();
+        }
 
         // Transpose
         Action::TransposeUp => app.editor.transpose_selection(1),
         Action::TransposeDown => app.editor.transpose_selection(-1),
         Action::TransposeOctaveUp => app.editor.transpose_selection(12),
         Action::TransposeOctaveDown => app.editor.transpose_selection(-12),
+
+        // Octave navigation
+        Action::OctaveUp => app.editor.octave_up(),
+        Action::OctaveDown => app.editor.octave_down(),
+
+        // Go to row (basic - jumps to row 0 for now, could be enhanced with input)
+        Action::GoToRow => app.editor.go_to_row(0),
+
+        // Quantize
+        Action::Quantize => app.editor.quantize(),
+
+        // Track management
+        Action::AddTrack => app.editor.add_track(),
+        Action::DeleteTrack => {
+            app.editor.delete_track();
+        }
+        Action::CloneTrack => {
+            app.editor.clone_track();
+        }
 
         // Interpolation
         Action::Interpolate => app.editor.interpolate(),
@@ -238,6 +277,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
 
         // Application
         Action::Quit => app.quit(),
+        Action::ToggleHelp => app.show_help = !app.show_help,
         Action::OpenModal => app.open_test_modal(),
         Action::OpenFileBrowser => app.open_file_browser(),
         Action::Cancel => {
@@ -246,8 +286,68 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::Confirm => {
             if app.has_modal() {
                 app.close_modal();
+            } else if app.current_view == AppView::InstrumentList {
+                app.select_instrument();
+            } else if app.current_view == AppView::PatternList {
+                app.select_pattern();
             }
         }
+
+        // Instrument management (only when in instrument list view)
+        Action::AddInstrument => {
+            if app.current_view == AppView::InstrumentList {
+                app.add_instrument();
+            }
+        }
+        Action::DeleteInstrument => {
+            if app.current_view == AppView::InstrumentList {
+                app.delete_instrument();
+            }
+        }
+        Action::RenameInstrument => {
+            if app.current_view == AppView::InstrumentList {
+                app.open_modal(ui::modal::Modal::info(
+                    "Rename Instrument".to_string(),
+                    "Enter new name in the terminal.".to_string(),
+                ));
+            }
+        }
+        Action::EditInstrument => {
+            if app.current_view == AppView::InstrumentList {
+                app.open_modal(ui::modal::Modal::info(
+                    "Edit Instrument".to_string(),
+                    "Volume/Base Note editing coming soon.".to_string(),
+                ));
+            }
+        }
+        Action::SelectInstrument => {
+            if app.current_view == AppView::InstrumentList {
+                app.select_instrument();
+            }
+        }
+
+        // Pattern management (only when in pattern list view)
+        Action::AddPattern => {
+            if app.current_view == AppView::PatternList {
+                app.add_pattern();
+            }
+        }
+        Action::DeletePattern => {
+            if app.current_view == AppView::PatternList {
+                app.delete_pattern();
+            }
+        }
+        Action::ClonePattern => {
+            if app.current_view == AppView::PatternList {
+                app.duplicate_pattern();
+            }
+        }
+        Action::SelectPattern => {
+            if app.current_view == AppView::PatternList {
+                app.select_pattern();
+            }
+        }
+
         Action::None => {}
     }
 }

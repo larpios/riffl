@@ -32,6 +32,22 @@ pub enum Action {
     Copy,
     Paste,
     Cut,
+    Redo,
+
+    // Octave navigation
+    OctaveUp,
+    OctaveDown,
+
+    // Go to row
+    GoToRow,
+
+    // Track management
+    AddTrack,
+    DeleteTrack,
+    CloneTrack,
+
+    // Quantize
+    Quantize,
 
     // Transpose
     TransposeUp,
@@ -86,7 +102,21 @@ pub enum Action {
     Confirm,
     Cancel,
     OpenModal,
+    ToggleHelp,
     OpenFileBrowser,
+
+    // Instrument management
+    AddInstrument,
+    DeleteInstrument,
+    RenameInstrument,
+    EditInstrument,
+    SelectInstrument,
+
+    // Pattern management
+    AddPattern,
+    DeletePattern,
+    ClonePattern,
+    SelectPattern,
 
     /// No action (unmapped key)
     None,
@@ -117,6 +147,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             KeyCode::Char('c') => Action::Copy,
             KeyCode::Char('v') => Action::Paste,
             KeyCode::Char('x') => Action::Cut,
+            KeyCode::Char('r') => Action::Redo,
             KeyCode::Char('s') => Action::SaveProject,
             KeyCode::Char('o') => Action::LoadProject,
             KeyCode::Char('e') => Action::OpenExportDialog,
@@ -184,6 +215,19 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         KeyCode::Char('x') | KeyCode::Delete => Action::DeleteCell,
         KeyCode::Char('u') => Action::Undo,
 
+        // Octave navigation (parenthesis keys)
+        KeyCode::Char('(') => Action::OctaveDown,
+        KeyCode::Char(')') => Action::OctaveUp,
+
+        // Go to row (Shift+G), quantize
+        KeyCode::Char('G') => Action::GoToRow,
+        KeyCode::Char('Q') => Action::Quantize,
+
+        // Track management (Shift+T for new, Shift+D delete, Shift+C clone)
+        KeyCode::Char('T') => Action::AddTrack,
+        KeyCode::Char('D') => Action::DeleteTrack,
+        KeyCode::Char('C') => Action::CloneTrack,
+
         // Transport
         KeyCode::Char(' ') => Action::TogglePlay,
         KeyCode::Char('=') => Action::BpmUp,
@@ -192,15 +236,31 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         KeyCode::Char('[') => Action::JumpPrevPattern,
 
         // View switching
+        KeyCode::Char('1') => Action::SwitchView(AppView::PatternEditor),
+        KeyCode::Char('2') => Action::SwitchView(AppView::Arrangement),
+        KeyCode::Char('3') => Action::SwitchView(AppView::InstrumentList),
+        KeyCode::Char('4') => Action::SwitchView(AppView::CodeEditor),
+        KeyCode::Char('5') => Action::SwitchView(AppView::PatternList),
         KeyCode::F(1) => Action::SwitchView(AppView::PatternEditor),
         KeyCode::F(2) => Action::SwitchView(AppView::Arrangement),
         KeyCode::F(3) => Action::SwitchView(AppView::InstrumentList),
         KeyCode::F(4) => Action::SwitchView(AppView::CodeEditor),
 
+        // Instrument management (when in InstrumentList view)
+        KeyCode::Char('n') => Action::AddInstrument,
+        KeyCode::Char('d') => Action::DeleteInstrument,
+        KeyCode::Char('r') => Action::RenameInstrument,
+        KeyCode::Char('a') => Action::EditInstrument,
+        KeyCode::Char('s') => Action::SelectInstrument,
+
+        // Pattern management (when in PatternList view)
+        KeyCode::Char('c') => Action::ClonePattern,
+
         // Application
         KeyCode::Char('q') => Action::Quit,
         KeyCode::Char('m') => Action::OpenModal,
         KeyCode::Char('o') | KeyCode::F(5) => Action::OpenFileBrowser,
+        KeyCode::Char('?') => Action::ToggleHelp,
         KeyCode::Enter => Action::Confirm,
         KeyCode::Esc => Action::Cancel,
 
@@ -233,6 +293,13 @@ fn map_insert_mode(key: KeyEvent) -> Action {
 
         // Octave setting (0-9)
         KeyCode::Char(c @ '0'..='9') => Action::SetOctave(c as u8 - b'0'),
+
+        // Octave jump (parenthesis)
+        KeyCode::Char('(') => Action::OctaveDown,
+        KeyCode::Char(')') => Action::OctaveUp,
+
+        // Go to row (Shift+G in insert mode too)
+        KeyCode::Char('G') => Action::GoToRow,
 
         // Navigation still works in Insert mode
         KeyCode::Left => Action::MoveLeft,

@@ -140,6 +140,8 @@ pub struct Editor {
     current_instrument: u8,
     /// Undo history (snapshots before edits).
     history: Vec<HistoryEntry>,
+    /// Redo stack (snapshots restored by undo, cleared on new edits).
+    redo_history: Vec<HistoryEntry>,
     /// Visual mode anchor (row, channel) — starting position of selection.
     visual_anchor: Option<(usize, usize)>,
     /// Clipboard for copy/paste operations.
@@ -160,6 +162,7 @@ impl Editor {
             current_octave: 4,
             current_instrument: 0,
             history: Vec::new(),
+            redo_history: Vec::new(),
             visual_anchor: None,
             clipboard: None,
             effect_digit_position: 0,
@@ -198,6 +201,83 @@ impl Editor {
 
     pub fn current_instrument(&self) -> u8 {
         self.current_instrument
+    }
+
+    pub fn set_instrument(&mut self, instrument: usize) {
+        self.current_instrument = instrument as u8;
+    }
+
+    /// Increase current octave by 1 (max 9).
+    pub fn octave_up(&mut self) {
+        if self.current_octave < 9 {
+            self.current_octave += 1;
+        }
+    }
+
+    /// Decrease current octave by 1 (min 0).
+    pub fn octave_down(&mut self) {
+        if self.current_octave > 0 {
+            self.current_octave -= 1;
+        }
+    }
+
+    /// Go to specific row.
+    pub fn go_to_row(&mut self, row: usize) {
+        let max_row = self.pattern.num_rows().saturating_sub(1);
+        self.cursor_row = row.min(max_row);
+    }
+
+    /// Quantize: snap all notes in selection to grid (4-row intervals).
+    pub fn quantize(&mut self) {
+        if let Some(((r0, c0), (r1, c1))) = self.visual_selection() {
+            self.save_history();
+            for row in r0..=r1 {
+                for ch in c0..=c1 {
+                    if let Some(cell) = self.pattern.get_cell(row, ch) {
+                        if cell.note.is_some() {
+                            let quantized_row = (row / 4) * 4;
+                            if quantized_row != row {
+                                let cell_clone = cell.clone();
+                                self.pattern.set_cell(quantized_row, ch, cell_clone);
+                                self.pattern.set_cell(row, ch, Cell::empty());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Replace the pattern being edited.
+    pub fn set_pattern(&mut self, pattern: Pattern) {
+        self.pattern = pattern;
+        self.cursor_row = 0;
+        self.cursor_channel = 0;
+        self.history.clear();
+    }
+
+    /// Add a new track at the end.
+    pub fn add_track(&mut self) {
+        self.save_history();
+        self.pattern.add_track();
+    }
+
+    /// Delete the track at the current cursor channel.
+    pub fn delete_track(&mut self) -> bool {
+        if self.pattern.remove_track(self.cursor_channel) {
+            if self.cursor_channel >= self.pattern.num_channels() {
+                self.cursor_channel = self.pattern.num_channels().saturating_sub(1);
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Clone the track at the current cursor channel.
+    pub fn clone_track(&mut self) -> bool {
+        self.save_history();
+        self.pattern.clone_track(self.cursor_channel)
     }
 
     // --- Navigation ---
@@ -327,11 +407,34 @@ impl Editor {
             cursor_row: self.cursor_row,
             cursor_channel: self.cursor_channel,
         });
+        self.redo_history.clear();
     }
 
     /// Undo the last edit, restoring the previous pattern and cursor.
     pub fn undo(&mut self) -> bool {
         if let Some(entry) = self.history.pop() {
+            self.redo_history.push(HistoryEntry {
+                pattern: self.pattern.clone(),
+                cursor_row: self.cursor_row,
+                cursor_channel: self.cursor_channel,
+            });
+            self.pattern = entry.pattern;
+            self.cursor_row = entry.cursor_row;
+            self.cursor_channel = entry.cursor_channel;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Redo the last undone edit.
+    pub fn redo(&mut self) -> bool {
+        if let Some(entry) = self.redo_history.pop() {
+            self.history.push(HistoryEntry {
+                pattern: self.pattern.clone(),
+                cursor_row: self.cursor_row,
+                cursor_channel: self.cursor_channel,
+            });
             self.pattern = entry.pattern;
             self.cursor_row = entry.cursor_row;
             self.cursor_channel = entry.cursor_channel;

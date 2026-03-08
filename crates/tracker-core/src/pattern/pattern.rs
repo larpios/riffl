@@ -154,6 +154,45 @@ impl Pattern {
             .map(|t| t.is_audible(self.any_track_soloed()))
             .unwrap_or(false)
     }
+
+    /// Add a new track at the end.
+    pub fn add_track(&mut self) {
+        let new_ch = self.channels;
+        self.channels += 1;
+        self.tracks.push(Track::with_number(new_ch + 1));
+        for row in &mut self.rows {
+            row.push(Cell::empty());
+        }
+    }
+
+    /// Remove a track at the given channel index.
+    pub fn remove_track(&mut self, channel: usize) -> bool {
+        if self.channels <= 1 || channel >= self.channels {
+            return false;
+        }
+        self.channels -= 1;
+        self.tracks.remove(channel);
+        for row in &mut self.rows {
+            row.remove(channel);
+        }
+        true
+    }
+
+    /// Clone a track and insert the clone after the original.
+    pub fn clone_track(&mut self, channel: usize) -> bool {
+        if channel >= self.channels {
+            return false;
+        }
+        let new_ch = channel + 1;
+        self.channels += 1;
+        let cloned_track = self.tracks[channel].clone();
+        self.tracks.insert(new_ch, cloned_track);
+        for row in &mut self.rows {
+            let cloned_cell = row[channel].clone();
+            row.insert(new_ch, cloned_cell);
+        }
+        true
+    }
 }
 
 impl Default for Pattern {

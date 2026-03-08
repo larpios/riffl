@@ -20,10 +20,14 @@ pub mod arrangement;
 pub mod code_editor;
 pub mod export_dialog;
 pub mod file_browser;
+pub mod help;
 pub mod instrument_list;
 pub mod layout;
 pub mod modal;
+pub mod pattern_list;
 pub mod theme;
+
+use help::render_help;
 
 /// Render the application UI
 pub fn render(frame: &mut Frame, app: &App) {
@@ -68,10 +72,21 @@ pub fn render(frame: &mut Frame, app: &App) {
                     &app.song,
                     app.instrument_names(),
                     &app.theme,
+                    app.instrument_selection(),
                 );
             }
             AppView::CodeEditor => {
                 code_editor::render_code_editor(frame, content_area, &app.code_editor, &app.theme);
+            }
+            AppView::PatternList => {
+                pattern_list::render_pattern_list(
+                    frame,
+                    content_area,
+                    &app.song,
+                    &app.theme,
+                    app.pattern_selection(),
+                    0,
+                );
             }
         }
     }
@@ -91,6 +106,11 @@ pub fn render(frame: &mut Frame, app: &App) {
     // Render modal on top if one is active
     if let Some(active_modal) = app.current_modal() {
         modal::render_modal(frame, full_area, active_modal, &app.theme);
+    }
+
+    // Render help overlay on top if active
+    if app.show_help {
+        render_help(frame, full_area, &app.theme);
     }
 }
 
@@ -739,6 +759,7 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             AppView::Arrangement => "F2:ARR",
             AppView::InstrumentList => "F3:INS",
             AppView::CodeEditor => "F4:CODE",
+            AppView::PatternList => "5:PATLIST",
         }
     };
     footer_spans.extend([

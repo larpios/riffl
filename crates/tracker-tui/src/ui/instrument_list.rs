@@ -19,6 +19,7 @@ pub fn render_instrument_list(
     song: &Song,
     sample_names: &[String],
     theme: &Theme,
+    selection: Option<usize>,
 ) {
     let block = Block::default()
         .borders(Borders::ALL)
@@ -77,10 +78,14 @@ pub fn render_instrument_list(
                 base_note,
             );
 
-            lines.push(Line::from(Span::styled(
-                line_text,
-                Style::default().fg(theme.text),
-            )));
+            let is_selected = selection == Some(idx);
+            let style = if is_selected {
+                Style::default().fg(theme.text).bg(theme.bg_highlight)
+            } else {
+                Style::default().fg(theme.text)
+            };
+
+            lines.push(Line::from(Span::styled(line_text, style)));
         }
 
         // Also list loaded samples that don't have instrument entries yet
@@ -118,12 +123,16 @@ pub fn render_instrument_list(
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
         Span::raw("  "),
-        Span::styled("F1", Style::default().fg(theme.success_color())),
-        Span::raw(":pattern  "),
-        Span::styled("F2", Style::default().fg(theme.success_color())),
-        Span::raw(":arrange  "),
-        Span::styled("o/F5", Style::default().fg(theme.success_color())),
-        Span::raw(":load sample"),
+        Span::styled("1-4", Style::default().fg(theme.success_color())),
+        Span::raw(":view  "),
+        Span::styled("n", Style::default().fg(theme.success_color())),
+        Span::raw(":new  "),
+        Span::styled("d", Style::default().fg(theme.success_color())),
+        Span::raw(":del  "),
+        Span::styled("r", Style::default().fg(theme.success_color())),
+        Span::raw(":ren  "),
+        Span::styled("s", Style::default().fg(theme.success_color())),
+        Span::raw(":sel"),
     ]));
 
     let paragraph = Paragraph::new(lines)
@@ -150,7 +159,7 @@ mod tests {
         terminal
             .draw(|frame| {
                 let area = frame.area();
-                render_instrument_list(frame, area, &song, &names, &theme);
+                render_instrument_list(frame, area, &song, &names, &theme, None);
             })
             .unwrap();
     }
@@ -166,7 +175,7 @@ mod tests {
         terminal
             .draw(|frame| {
                 let area = frame.area();
-                render_instrument_list(frame, area, &song, &names, &theme);
+                render_instrument_list(frame, area, &song, &names, &theme, None);
             })
             .unwrap();
     }
