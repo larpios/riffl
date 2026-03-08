@@ -333,6 +333,12 @@ impl Mixer {
         idx
     }
 
+    /// Clear all loaded samples.
+    pub fn clear_samples(&mut self) {
+        self.samples.clear();
+        self.stop_all();
+    }
+
     /// Get the number of loaded samples.
     pub fn sample_count(&self) -> usize {
         self.samples.len()

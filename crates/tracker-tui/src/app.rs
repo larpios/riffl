@@ -138,6 +138,12 @@ impl App {
         let mut song = Song::new("Untitled", 125.0);
         song.patterns[0] = pattern;
 
+        use tracker_core::song::Instrument;
+        let mut demo_inst = Instrument::new("sine440");
+        demo_inst.sample_index = Some(0);
+        demo_inst.sample_path = None;
+        song.instruments.push(demo_inst);
+
         // Initialize file browser at current working directory
         let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let file_browser = FileBrowser::new(&cwd);
@@ -213,19 +219,18 @@ impl App {
         let delta = now.duration_since(self.last_update).as_secs_f64();
         self.last_update = now;
 
-        // Keep transport in sync with current pattern size and arrangement length
         self.transport
             .set_num_rows(self.editor.pattern().num_rows());
         self.transport
             .set_arrangement_length(self.song.arrangement.len());
 
         let was_playing = self.transport.is_playing();
+        let old_arrangement_pos = self.transport.arrangement_position();
 
         let advance_result = self.transport.advance(delta);
 
         match advance_result {
             AdvanceResult::Row(row) => {
-                // In live mode, re-execute script when pattern loops back to row 0
                 if row == 0 && self.live_mode {
                     self.execute_script();
                 }
@@ -237,9 +242,9 @@ impl App {
                 arrangement_pos,
                 row,
             } => {
-                // Load the new pattern from the arrangement
+                self.flush_editor_pattern(old_arrangement_pos);
                 self.load_arrangement_pattern(arrangement_pos);
-                // In live mode, re-execute script on pattern change
+
                 if self.live_mode {
                     self.execute_script();
                 }
@@ -272,6 +277,14 @@ impl App {
         }
 
         Ok(())
+    }
+
+    pub fn flush_editor_pattern(&mut self, arrangement_pos: usize) {
+        if let Some(&pattern_idx) = self.song.arrangement.get(arrangement_pos) {
+            if let Some(pattern) = self.song.patterns.get_mut(pattern_idx) {
+                *pattern = self.editor.pattern().clone();
+            }
+        }
     }
 
     /// Load the pattern at the given arrangement position into the editor.
@@ -386,6 +399,7 @@ impl App {
         let current = self.transport.arrangement_position();
         let next = current + 1;
         if next < self.song.arrangement.len() {
+            self.flush_editor_pattern(current);
             self.transport.jump_to_arrangement_position(next);
             self.load_arrangement_pattern(next);
         }
@@ -398,6 +412,7 @@ impl App {
         let current = self.transport.arrangement_position();
         if current > 0 {
             let prev = current - 1;
+            self.flush_editor_pattern(current);
             self.transport.jump_to_arrangement_position(prev);
             self.load_arrangement_pattern(prev);
         }
@@ -479,6 +494,12 @@ impl App {
         } else {
             return Err("Failed to lock mixer".to_string());
         };
+
+        use tracker_core::song::Instrument;
+        let mut instrument = Instrument::new(&name);
+        instrument.sample_index = Some(idx);
+        instrument.sample_path = Some(path.display().to_string());
+        self.song.instruments.push(instrument);
 
         self.instrument_names.push(name);
         Ok(idx)
@@ -646,6 +667,9 @@ impl App {
     /// If a project path is set, saves to that path. Otherwise saves to
     /// "untitled.trs" in the current directory.
     pub fn save_project(&mut self) {
+        let current_pos = self.transport.arrangement_position();
+        self.flush_editor_pattern(current_pos);
+
         let path = self
             .project_path
             .clone()
@@ -672,22 +696,66 @@ impl App {
     pub fn load_project(&mut self, path: &std::path::Path) {
         match project::load_project(path) {
             Ok(song) => {
-                // Update the editor with the first pattern from the loaded song
                 let pattern = if !song.patterns.is_empty() {
                     song.patterns[0].clone()
                 } else {
                     Pattern::default()
                 };
                 self.editor = Editor::new(pattern);
+
+                let output_sample_rate = self
+                    .audio_engine
+                    .as_ref()
+                    .map(|e| e.sample_rate())
+                    .unwrap_or(44100);
+
+                let mut missing_samples = Vec::new();
+                if let Ok(mut mixer) = self.mixer.lock() {
+                    mixer.clear_samples();
+                    self.instrument_names.clear();
+
+                    for inst in &song.instruments {
+                        let sample_name = if let Some(sample_path) = &inst.sample_path {
+                            let sp_path = PathBuf::from(sample_path);
+                            match load_sample(&sp_path, output_sample_rate) {
+                                Ok(sample) => {
+                                    mixer.add_sample(Arc::new(sample));
+                                    inst.name.clone()
+                                }
+                                Err(_) => {
+                                    mixer.add_sample(Arc::new(Sample::default()));
+                                    missing_samples.push(sample_path.clone());
+                                    format!("{} (MISSING)", inst.name)
+                                }
+                            }
+                        } else {
+                            mixer.add_sample(Arc::new(Sample::default()));
+                            inst.name.clone()
+                        };
+                        self.instrument_names.push(sample_name);
+                    }
+                }
+
                 self.song = song;
                 self.project_path = Some(path.to_path_buf());
                 self.arrangement_view = ArrangementView::new();
                 self.transport.stop();
 
-                self.open_modal(Modal::info(
-                    "Project Loaded".to_string(),
-                    format!("Loaded: {}", path.display()),
-                ));
+                if missing_samples.is_empty() {
+                    self.open_modal(Modal::info(
+                        "Project Loaded".to_string(),
+                        format!("Loaded: {}", path.display()),
+                    ));
+                } else {
+                    self.open_modal(Modal::error(
+                        "Project Loaded with Missing Samples".to_string(),
+                        format!(
+                            "Loaded: {}\n\nMissing samples:\n{}",
+                            path.display(),
+                            missing_samples.join("\n")
+                        ),
+                    ));
+                }
             }
             Err(e) => {
                 self.open_modal(Modal::error("Load Failed".to_string(), format!("{}", e)));

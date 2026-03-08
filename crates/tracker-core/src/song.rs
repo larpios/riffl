@@ -14,6 +14,8 @@ pub struct Instrument {
     pub name: String,
     /// Index into the sample pool, if a sample is assigned.
     pub sample_index: Option<usize>,
+    /// File path to the audio sample, relative to the project or absolute.
+    pub sample_path: Option<String>,
     /// Base note for sample pitch mapping (default C-4).
     pub base_note: Note,
     /// Volume multiplier for this instrument (0.0 to 1.0).
@@ -26,6 +28,7 @@ impl Instrument {
         Self {
             name: name.into(),
             sample_index: None,
+            sample_path: None,
             base_note: Note::simple(Pitch::C, 4),
             volume: 1.0,
         }
