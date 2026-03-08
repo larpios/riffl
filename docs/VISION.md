@@ -210,7 +210,7 @@ Both TUI and GUI import `tracker-core` and build their own UI/input layer on top
 - ~30k lines of Rust, 79 source files
 
 ### What's Missing (vs the vision)
-- [ ] Workspace architecture (monolith currently)
+- [x] Workspace architecture (completed 2026-03-08)
 - [ ] Professional mixer (channel strips, sends/returns)
 - [ ] Built-in effects (EQ, compressor, reverb, delay)
 - [ ] MIDI I/O
