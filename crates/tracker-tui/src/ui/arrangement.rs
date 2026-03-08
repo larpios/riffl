@@ -10,9 +10,9 @@ use ratatui::{
     Frame,
 };
 
-use crate::pattern::note::NoteEvent;
-use crate::song::Song;
 use crate::ui::theme::Theme;
+use tracker_core::pattern::note::NoteEvent;
+use tracker_core::song::Song;
 
 /// State for the arrangement view.
 #[derive(Debug)]
@@ -80,7 +80,7 @@ impl ArrangementView {
         } else {
             4
         };
-        let new_pattern = crate::pattern::Pattern::new(64, num_channels);
+        let new_pattern = tracker_core::pattern::Pattern::new(64, num_channels);
         if let Some(idx) = song.add_pattern(new_pattern) {
             let pos = (self.cursor + 1).min(song.arrangement.len());
             song.insert_in_arrangement(pos, idx);
@@ -108,7 +108,7 @@ impl Default for ArrangementView {
 }
 
 /// Generate a short preview string of the first few notes in a pattern.
-fn pattern_preview(pattern: &crate::pattern::Pattern) -> String {
+fn pattern_preview(pattern: &tracker_core::pattern::Pattern) -> String {
     let mut notes = Vec::new();
     let max_preview = 4;
     for row in 0..pattern.num_rows() {
@@ -237,8 +237,8 @@ fn calculate_scroll(cursor: usize, visible_rows: usize, total: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pattern::note::{Note, Pitch};
-    use crate::pattern::Pattern;
+    use tracker_core::pattern::note::{Note, Pitch};
+    use tracker_core::pattern::Pattern;
 
     fn test_song() -> Song {
         let mut song = Song::new("Test", 120.0);

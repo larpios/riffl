@@ -14,7 +14,7 @@ use ratatui::{
 
 use super::layout::create_centered_rect;
 use super::theme::Theme;
-use crate::export::{BitDepth, ExportConfig};
+use tracker_core::export::{BitDepth, ExportConfig};
 
 /// Which field the user is currently editing in the export dialog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

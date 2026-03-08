@@ -4,7 +4,7 @@
 use std::f32::consts::PI;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tracker_rs::audio::{AudioEngine, AudioError};
+use tracker_core::audio::{AudioEngine, AudioError};
 
 fn main() {
     println!("===========================================");
