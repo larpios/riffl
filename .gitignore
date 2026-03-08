@@ -2,7 +2,47 @@
 
 # Auto Claude data directory
 .auto-claude/
-.auto-claude-security.json
-.auto-claude-status
+.auto-claude*
 .claude_settings.json
 Auto\ Run\ Docs/
+
+# Project files
+*.rtm
+
+.serena
+.direnv
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
+
+.claude*
+.codex
+.gemini
+.rtk
+node_modules
+.ralph
+.ralph-tui/
+.mcp.json
+.agents
+
+# Beads / Dolt files (added by bd init)
+.beads-credential-key
+
+# bv (beads viewer) local config and caches
+.bv/
+
+.agent/
+
+.gemini
+.opencode
+.codex
+research/
+openspec/
+conductor/
+
+# Test OPL build artifacts
+test-opl/target
+
+# Nix build result
+result
