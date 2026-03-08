@@ -3,7 +3,8 @@
 //! The mixer reads pattern data row by row, triggers sample playback for
 //! note events, and mixes all active voices into a stereo output buffer.
 
-use crate::audio::effect_processor::{EffectProcessor, TransportCommand};
+use crate::audio::channel_strip::ChannelStrip;
+use crate::audio::effect_processor::{TrackerEffectProcessor, TransportCommand};
 use crate::audio::sample::Sample;
 use crate::pattern::note::NoteEvent;
 use crate::pattern::pattern::Pattern;
@@ -37,29 +38,6 @@ impl Voice {
     }
 }
 
-/// Per-channel mixing state derived from track metadata.
-#[derive(Debug, Clone)]
-struct ChannelMix {
-    /// Left channel gain (combines track volume and pan law).
-    left_gain: f32,
-    /// Right channel gain (combines track volume and pan law).
-    right_gain: f32,
-    /// Whether this channel is audible (mute/solo resolved).
-    audible: bool,
-}
-
-impl Default for ChannelMix {
-    fn default() -> Self {
-        // Default: center pan, full volume, audible
-        let center_gain = std::f32::consts::FRAC_1_SQRT_2; // ~0.707 (-3dB)
-        Self {
-            left_gain: center_gain,
-            right_gain: center_gain,
-            audible: true,
-        }
-    }
-}
-
 /// Audio mixer that reads pattern data and produces mixed audio output.
 ///
 /// The mixer holds references to loaded samples and maintains per-channel
@@ -77,10 +55,10 @@ pub struct Mixer {
     voices: Vec<Option<Voice>>,
     /// Output sample rate in Hz (used for pitch calculation).
     output_sample_rate: u32,
-    /// Per-channel mixing state (volume, pan gains, audibility).
-    channel_mix: Vec<ChannelMix>,
+    /// Per-channel mixing state (volume, pan, mute, solo).
+    channel_strips: Vec<ChannelStrip>,
     /// Per-channel effect processing state.
-    effect_processor: EffectProcessor,
+    effect_processor: TrackerEffectProcessor,
 }
 
 impl Mixer {
@@ -91,25 +69,21 @@ impl Mixer {
     /// * `num_channels` - Number of pattern channels (one voice per channel)
     /// * `output_sample_rate` - The output sample rate in Hz
     pub fn new(samples: Vec<Arc<Sample>>, num_channels: usize, output_sample_rate: u32) -> Self {
+        let channel_strips: Vec<ChannelStrip> = (0..num_channels)
+            .map(|_| {
+                let mut strip = ChannelStrip::new();
+                strip.set_sample_rate(output_sample_rate as f32);
+                strip
+            })
+            .collect();
+
         Self {
             samples,
             voices: vec![None; num_channels],
             output_sample_rate,
-            channel_mix: (0..num_channels).map(|_| ChannelMix::default()).collect(),
-            effect_processor: EffectProcessor::new(num_channels, output_sample_rate),
+            channel_strips,
+            effect_processor: TrackerEffectProcessor::new(num_channels, output_sample_rate),
         }
-    }
-
-    /// Compute equal-power pan gains for a pan position.
-    ///
-    /// Pan law: equal-power panning (-3dB at center).
-    /// - `pan = -1.0`: full left (left=1.0, right=0.0)
-    /// - `pan = 0.0`: center (left≈0.707, right≈0.707)
-    /// - `pan = 1.0`: full right (left=0.0, right=1.0)
-    fn pan_gains(pan: f32) -> (f32, f32) {
-        // Map pan [-1, 1] to angle [0, π/2]
-        let angle = (pan.clamp(-1.0, 1.0) + 1.0) * 0.25 * std::f32::consts::PI;
-        (angle.cos(), angle.sin())
     }
 
     /// Update per-channel mixing state from track metadata.
@@ -119,15 +93,17 @@ impl Mixer {
     pub fn update_tracks(&mut self, tracks: &[Track]) {
         let any_soloed = tracks.iter().any(|t| t.solo);
 
-        for (ch, mix) in self.channel_mix.iter_mut().enumerate() {
+        for (ch, strip) in self.channel_strips.iter_mut().enumerate() {
             if let Some(track) = tracks.get(ch) {
-                mix.audible = track.is_audible(any_soloed);
-                let (pan_left, pan_right) = Self::pan_gains(track.pan);
-                mix.left_gain = track.volume * pan_left;
-                mix.right_gain = track.volume * pan_right;
+                strip.update_from_track(
+                    track.volume,
+                    track.pan,
+                    track.muted,
+                    any_soloed,
+                    track.solo,
+                );
             } else {
-                // No track metadata for this channel — use defaults
-                *mix = ChannelMix::default();
+                strip.update_from_track(1.0, 0.0, false, false, false);
             }
         }
     }
@@ -159,7 +135,10 @@ impl Mixer {
             }
 
             // Skip muted/non-soloed channels: don't trigger new notes
-            let audible = self.channel_mix.get(ch).is_none_or(|m| m.audible);
+            let audible = !self
+                .channel_strips
+                .get(ch)
+                .is_some_and(ChannelStrip::is_silent);
 
             // Determine the note frequency for effect processing
             let note_frequency = match &cell.note {
@@ -235,22 +214,6 @@ impl Mixer {
                 _ => continue,
             };
 
-            // Check channel audibility (mute/solo filtering)
-            let mix = self.channel_mix.get(ch).cloned().unwrap_or_default();
-            if !mix.audible {
-                // Still advance the voice position so it stays in sync,
-                // but don't mix any audio into the output.
-                voice.position += voice.playback_rate * num_frames as f64;
-                let sample_frames = self
-                    .samples
-                    .get(voice.sample_index)
-                    .map_or(0, |s| s.frame_count());
-                if voice.position as usize >= sample_frames {
-                    voice.active = false;
-                }
-                continue;
-            }
-
             let sample = match self.samples.get(voice.sample_index) {
                 Some(s) => s,
                 None => {
@@ -269,9 +232,8 @@ impl Mixer {
             }
 
             for frame in 0..num_frames {
-                // Apply effect pitch modulation
-                let pitch_mod = self.effect_processor.pitch_ratio(ch);
-                let effective_rate = voice.playback_rate * pitch_mod;
+                let render_state = self.effect_processor.voice_render_state(ch);
+                let effective_rate = voice.playback_rate * render_state.pitch_ratio;
 
                 let src_frame = voice.position as usize;
                 if src_frame >= sample_frames {
@@ -298,13 +260,12 @@ impl Mixer {
                     }
                 };
 
-                // Apply effect volume override (if any)
-                let effect_volume = self.effect_processor.volume_override(ch).unwrap_or(1.0);
+                let effect_gain = render_state.gain.unwrap_or(1.0);
+                let (left_gain, right_gain) = self.channel_strips[ch].next_gains();
 
-                // Apply velocity gain, effect volume, track volume, and pan law
                 let out_idx = frame * 2;
-                output[out_idx] += left * voice.velocity_gain * effect_volume * mix.left_gain;
-                output[out_idx + 1] += right * voice.velocity_gain * effect_volume * mix.right_gain;
+                output[out_idx] += left * voice.velocity_gain * effect_gain * left_gain;
+                output[out_idx + 1] += right * voice.velocity_gain * effect_gain * right_gain;
 
                 voice.position += effective_rate;
 
@@ -363,8 +324,15 @@ impl Mixer {
     }
 
     /// Get a reference to the effect processor.
-    pub fn effect_processor(&self) -> &EffectProcessor {
+    pub fn effect_processor(&self) -> &TrackerEffectProcessor {
         &self.effect_processor
+    }
+
+    /// Returns whether a channel is currently silenced by mute/solo state.
+    pub fn is_channel_silent(&self, channel: usize) -> bool {
+        self.channel_strips
+            .get(channel)
+            .is_some_and(ChannelStrip::is_silent)
     }
 }
 
@@ -923,69 +891,6 @@ mod tests {
     // --- Multi-track mixing tests ---
 
     #[test]
-    fn test_pan_gains_center() {
-        let (left, right) = Mixer::pan_gains(0.0);
-        // Center should be -3dB ≈ 0.707
-        let expected = std::f32::consts::FRAC_1_SQRT_2;
-        assert!(
-            (left - expected).abs() < 0.001,
-            "Center left gain: {}",
-            left
-        );
-        assert!(
-            (right - expected).abs() < 0.001,
-            "Center right gain: {}",
-            right
-        );
-    }
-
-    #[test]
-    fn test_pan_gains_full_left() {
-        let (left, right) = Mixer::pan_gains(-1.0);
-        assert!(
-            (left - 1.0).abs() < 0.001,
-            "Full left: left gain should be 1.0, got {}",
-            left
-        );
-        assert!(
-            right.abs() < 0.001,
-            "Full left: right gain should be 0.0, got {}",
-            right
-        );
-    }
-
-    #[test]
-    fn test_pan_gains_full_right() {
-        let (left, right) = Mixer::pan_gains(1.0);
-        assert!(
-            left.abs() < 0.001,
-            "Full right: left gain should be 0.0, got {}",
-            left
-        );
-        assert!(
-            (right - 1.0).abs() < 0.001,
-            "Full right: right gain should be 1.0, got {}",
-            right
-        );
-    }
-
-    #[test]
-    fn test_pan_gains_equal_power_property() {
-        // Equal-power: left² + right² = 1.0 for any pan position
-        for i in -10..=10 {
-            let pan = i as f32 / 10.0;
-            let (l, r) = Mixer::pan_gains(pan);
-            let power = l * l + r * r;
-            assert!(
-                (power - 1.0).abs() < 0.001,
-                "Equal power property violated at pan={}: L²+R²={}",
-                pan,
-                power
-            );
-        }
-    }
-
-    #[test]
     fn test_mixer_muted_channel_produces_silence() {
         let sample = Sample::new(vec![0.8; 4410], 44100, 1, Some("test".to_string()));
         let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
@@ -1047,8 +952,10 @@ mod tests {
 
         let mut output_full = vec![0.0f32; 64];
         let mut output_half = vec![0.0f32; 64];
-        mixer_full.render(&mut output_full);
-        mixer_half.render(&mut output_half);
+        for _ in 0..10 {
+            mixer_full.render(&mut output_full);
+            mixer_half.render(&mut output_half);
+        }
 
         let peak_full: f32 = output_full.iter().map(|s| s.abs()).fold(0.0, f32::max);
         let peak_half: f32 = output_half.iter().map(|s| s.abs()).fold(0.0, f32::max);
@@ -1080,7 +987,9 @@ mod tests {
         mixer.tick(0, &pattern);
 
         let mut output = vec![0.0f32; 64];
-        mixer.render(&mut output);
+        for _ in 0..10 {
+            mixer.render(&mut output);
+        }
 
         // Check that right channel is silent
         let right_peak: f32 = (0..output.len() / 2)
@@ -1110,7 +1019,9 @@ mod tests {
         mixer.tick(0, &pattern);
 
         let mut output = vec![0.0f32; 64];
-        mixer.render(&mut output);
+        for _ in 0..10 {
+            mixer.render(&mut output);
+        }
 
         let left_peak: f32 = (0..output.len() / 2)
             .map(|i| output[i * 2].abs())
@@ -1145,14 +1056,10 @@ mod tests {
 
         mixer.update_tracks(&tracks);
 
-        // Channel 0: not audible (track 2 is soloed, track 0 is not)
-        assert!(!mixer.channel_mix[0].audible);
-        // Channel 1: not audible (muted)
-        assert!(!mixer.channel_mix[1].audible);
-        // Channel 2: audible (soloed)
-        assert!(mixer.channel_mix[2].audible);
-        // Channel 3: not audible (not soloed)
-        assert!(!mixer.channel_mix[3].audible);
+        assert!(mixer.is_channel_silent(0));
+        assert!(mixer.is_channel_silent(1));
+        assert!(!mixer.is_channel_silent(2));
+        assert!(mixer.is_channel_silent(3));
     }
 
     #[test]
@@ -1166,23 +1073,21 @@ mod tests {
         mixer.tick(0, &pattern);
         assert_eq!(mixer.active_voice_count(), 1);
 
-        // Now mute and render — voice should advance but not produce audio
         pattern.get_track_mut(0).unwrap().toggle_mute();
         mixer.update_tracks(pattern.tracks());
 
         let mut output = vec![0.0f32; 512];
-        mixer.render(&mut output);
+        for _ in 0..4 {
+            mixer.render(&mut output);
+        }
 
-        // Output should be silent (muted)
-        assert!(
-            output.iter().all(|&s| s == 0.0),
-            "Muted render should be silent"
-        );
+        let peak: f32 = output.iter().map(|s| s.abs()).fold(0.0, f32::max);
+        assert!(peak < 0.0001, "Muted render should be effectively silent");
     }
 
     #[test]
     fn test_mixer_multi_track_independent_mix() {
-        let sample = Sample::new(vec![1.0; 4410], 44100, 1, Some("test".to_string()));
+        let sample = Sample::new(vec![0.2; 4410], 44100, 1, Some("test".to_string()));
         let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
@@ -1198,10 +1103,13 @@ mod tests {
         let mut output = vec![0.0f32; 64];
         mixer.render(&mut output);
 
-        // Both channels should have audio on the left
-        let left = output[0];
-        let right = output[1];
-        // Left should be louder than right (channel 1 panned full left adds to left only)
+        let left: f32 = (0..output.len() / 2)
+            .map(|i| output[i * 2].abs())
+            .fold(0.0, f32::max);
+        let right: f32 = (0..output.len() / 2)
+            .map(|i| output[i * 2 + 1].abs())
+            .fold(0.0, f32::max);
+
         assert!(
             left > right,
             "Left ({}) should exceed right ({}) due to left-panned track",
