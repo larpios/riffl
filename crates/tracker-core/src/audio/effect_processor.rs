@@ -22,6 +22,20 @@ pub enum TransportCommand {
     PatternBreak(usize),
 }
 
+/// Output from the effect processor for a single channel.
+///
+/// Contains the resolved pitch and gain values that the mixer should
+/// apply when rendering a voice.
+#[derive(Debug, Clone, Copy)]
+pub struct VoiceRenderState {
+    /// Combined pitch ratio from all pitch effects (arpeggio, slides, vibrato, portamento).
+    /// 1.0 = no change, 2.0 = one octave up, 0.5 = one octave down.
+    pub pitch_ratio: f64,
+    /// Volume gain from effect commands (Cxx set volume, Axy volume slide).
+    /// None means no effect override (use default 1.0).
+    pub gain: Option<f32>,
+}
+
 /// Per-channel effect state tracking.
 ///
 /// Maintains running state for continuous effects (vibrato, slides) and
@@ -194,14 +208,14 @@ impl ChannelEffectState {
 /// The processor is called once per row (via `process_row`) to read effect
 /// commands from pattern cells, and once per audio frame (via `advance_frame`)
 /// to update continuous modulations like vibrato and arpeggio cycling.
-pub struct EffectProcessor {
+pub struct TrackerEffectProcessor {
     /// Per-channel effect state.
     channels: Vec<ChannelEffectState>,
     /// Output sample rate (for timing calculations).
     sample_rate: u32,
 }
 
-impl EffectProcessor {
+impl TrackerEffectProcessor {
     /// Create a new effect processor for the given number of channels.
     pub fn new(num_channels: usize, sample_rate: u32) -> Self {
         Self {
@@ -360,6 +374,14 @@ impl EffectProcessor {
         self.channels
             .get(channel)
             .and_then(|s| s.effective_volume())
+    }
+
+    /// Get the combined render state for a channel.
+    pub fn voice_render_state(&self, channel: usize) -> VoiceRenderState {
+        VoiceRenderState {
+            pitch_ratio: self.pitch_ratio(channel),
+            gain: self.volume_override(channel),
+        }
     }
 
     /// Get the channel effect state for a channel.
@@ -588,13 +610,13 @@ mod tests {
 
     #[test]
     fn test_processor_creation() {
-        let proc = EffectProcessor::new(8, 48000);
+        let proc = TrackerEffectProcessor::new(8, 48000);
         assert_eq!(proc.num_channels(), 8);
     }
 
     #[test]
     fn test_processor_default_pitch_ratio() {
-        let proc = EffectProcessor::new(4, 48000);
+        let proc = TrackerEffectProcessor::new(4, 48000);
         for ch in 0..4 {
             assert!((proc.pitch_ratio(ch) - 1.0).abs() < 0.001);
         }
@@ -602,14 +624,14 @@ mod tests {
 
     #[test]
     fn test_processor_out_of_bounds_channel() {
-        let proc = EffectProcessor::new(4, 48000);
+        let proc = TrackerEffectProcessor::new(4, 48000);
         assert!((proc.pitch_ratio(99) - 1.0).abs() < 0.001);
         assert_eq!(proc.volume_override(99), None);
     }
 
     #[test]
     fn test_process_row_set_volume() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![Effect::from_type(EffectType::SetVolume, 0x20)]; // half volume
         let cmds = proc.process_row(0, &effects, None);
 
@@ -620,7 +642,7 @@ mod tests {
 
     #[test]
     fn test_process_row_set_volume_max() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![Effect::from_type(EffectType::SetVolume, 0x40)]; // full volume
         proc.process_row(0, &effects, None);
 
@@ -630,7 +652,7 @@ mod tests {
 
     #[test]
     fn test_process_row_set_volume_zero() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![Effect::from_type(EffectType::SetVolume, 0x00)];
         proc.process_row(0, &effects, None);
 
@@ -640,7 +662,7 @@ mod tests {
 
     #[test]
     fn test_process_row_arpeggio() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![Effect::from_type(EffectType::Arpeggio, 0x47)]; // x=4, y=7
         proc.process_row(0, &effects, None);
 
@@ -652,7 +674,7 @@ mod tests {
 
     #[test]
     fn test_process_row_arpeggio_zero_not_active() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![Effect::from_type(EffectType::Arpeggio, 0x00)];
         proc.process_row(0, &effects, None);
 
@@ -662,7 +684,7 @@ mod tests {
 
     #[test]
     fn test_process_row_pitch_slide_up() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![Effect::from_type(EffectType::PitchSlideUp, 0x10)];
         proc.process_row(0, &effects, None);
 
@@ -671,7 +693,7 @@ mod tests {
 
     #[test]
     fn test_process_row_pitch_slide_down() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![Effect::from_type(EffectType::PitchSlideDown, 0x10)];
         proc.process_row(0, &effects, None);
 
@@ -680,7 +702,7 @@ mod tests {
 
     #[test]
     fn test_process_row_pitch_slide_accumulates() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![Effect::from_type(EffectType::PitchSlideUp, 0x10)];
 
         proc.process_row(0, &effects, None);
@@ -699,7 +721,7 @@ mod tests {
 
     #[test]
     fn test_process_row_vibrato() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![Effect::from_type(EffectType::Vibrato, 0x48)]; // speed=4, depth=8
         proc.process_row(0, &effects, None);
 
@@ -711,7 +733,7 @@ mod tests {
 
     #[test]
     fn test_process_row_volume_slide_up() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         // First set a base volume
         proc.process_row(0, &[Effect::from_type(EffectType::SetVolume, 0x20)], None);
         let vol_before = proc.volume_override(0).unwrap();
@@ -730,7 +752,7 @@ mod tests {
 
     #[test]
     fn test_process_row_volume_slide_down() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         proc.process_row(0, &[Effect::from_type(EffectType::SetVolume, 0x40)], None);
         let vol_before = proc.volume_override(0).unwrap();
 
@@ -747,7 +769,7 @@ mod tests {
 
     #[test]
     fn test_process_row_volume_slide_clamped() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         // Set volume to max
         proc.process_row(0, &[Effect::from_type(EffectType::SetVolume, 0x40)], None);
 
@@ -767,7 +789,7 @@ mod tests {
 
     #[test]
     fn test_process_row_set_bpm() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![Effect::from_type(EffectType::SetSpeed, 0x80)]; // BPM = 128
         let cmds = proc.process_row(0, &effects, None);
 
@@ -777,7 +799,7 @@ mod tests {
 
     #[test]
     fn test_process_row_set_speed_low_value_no_bpm() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![Effect::from_type(EffectType::SetSpeed, 0x06)]; // Speed, not BPM
         let cmds = proc.process_row(0, &effects, None);
 
@@ -789,7 +811,7 @@ mod tests {
 
     #[test]
     fn test_process_row_position_jump() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![Effect::from_type(EffectType::PositionJump, 0x03)];
         let cmds = proc.process_row(0, &effects, None);
 
@@ -799,7 +821,7 @@ mod tests {
 
     #[test]
     fn test_process_row_pattern_break() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![Effect::from_type(EffectType::PatternBreak, 0x10)];
         let cmds = proc.process_row(0, &effects, None);
 
@@ -809,7 +831,7 @@ mod tests {
 
     #[test]
     fn test_process_row_unknown_effect_ignored() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![Effect::new(0x07, 0xFF)]; // Unknown command
         let cmds = proc.process_row(0, &effects, None);
 
@@ -819,7 +841,7 @@ mod tests {
 
     #[test]
     fn test_process_row_multiple_effects() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![
             Effect::from_type(EffectType::SetVolume, 0x20),
             Effect::from_type(EffectType::Vibrato, 0x48),
@@ -836,7 +858,7 @@ mod tests {
 
     #[test]
     fn test_advance_frame_increments_counter() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         proc.advance_frame(0);
         let state = proc.channel_state(0).unwrap();
         assert_eq!(state.row_frame_counter, 1);
@@ -844,7 +866,7 @@ mod tests {
 
     #[test]
     fn test_advance_frame_out_of_bounds() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         proc.advance_frame(99); // Should not panic
     }
 
@@ -852,7 +874,7 @@ mod tests {
 
     #[test]
     fn test_reset_all() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
 
         // Apply some effects
         proc.process_row(0, &[Effect::from_type(EffectType::SetVolume, 0x20)], None);
@@ -874,7 +896,7 @@ mod tests {
 
     #[test]
     fn test_update_tempo() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         proc.update_tempo(120.0);
 
         // At 120 BPM, 4 rows/beat: 0.125s/row → 6000 frames at 48kHz
@@ -884,7 +906,7 @@ mod tests {
 
     #[test]
     fn test_update_tempo_fast() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         proc.update_tempo(240.0);
 
         // At 240 BPM: 0.0625s/row → 3000 frames at 48kHz
@@ -896,7 +918,7 @@ mod tests {
 
     #[test]
     fn test_portamento_sets_target() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![Effect::from_type(EffectType::PortamentoToNote, 0x08)];
         proc.process_row(0, &effects, Some(440.0));
 
@@ -907,7 +929,7 @@ mod tests {
 
     #[test]
     fn test_portamento_no_note_no_target() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![Effect::from_type(EffectType::PortamentoToNote, 0x08)];
         proc.process_row(0, &effects, None);
 
@@ -919,7 +941,7 @@ mod tests {
 
     #[test]
     fn test_effects_independent_per_channel() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
 
         proc.process_row(0, &[Effect::from_type(EffectType::SetVolume, 0x20)], None);
         proc.process_row(
@@ -939,7 +961,7 @@ mod tests {
 
     #[test]
     fn test_set_bpm_boundary() {
-        let mut proc = EffectProcessor::new(4, 48000);
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
 
         // F20 = BPM 32 (minimum BPM-range value)
         let cmds = proc.process_row(0, &[Effect::from_type(EffectType::SetSpeed, 0x20)], None);
