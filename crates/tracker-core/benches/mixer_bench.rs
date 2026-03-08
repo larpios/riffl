@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use tracker_rs::audio::mixer::Mixer;
-use tracker_rs::audio::sample::Sample;
+use tracker_core::audio::mixer::Mixer;
+use tracker_core::audio::sample::Sample;
 
 fn bench_mixer_new(c: &mut Criterion) {
     // Large sample data to simulate real-world usage (10 seconds @ 44.1kHz)

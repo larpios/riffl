@@ -9,21 +9,21 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 
-use crate::audio::{load_sample, AudioEngine, Mixer, Sample};
-use crate::dsl::engine::ScriptEngine;
 use crate::editor::{Editor, EditorMode};
-use crate::export;
-use crate::pattern::note::Pitch;
-use crate::pattern::{Note, Pattern};
-use crate::project;
-use crate::song::Song;
-use crate::transport::{AdvanceResult, PlaybackMode, Transport, TransportState};
 use crate::ui::arrangement::ArrangementView;
 use crate::ui::code_editor::CodeEditor;
 use crate::ui::export_dialog::ExportDialog;
 use crate::ui::file_browser::FileBrowser;
 use crate::ui::modal::Modal;
 use crate::ui::theme::Theme;
+use tracker_core::audio::{load_sample, AudioEngine, Mixer, Sample};
+use tracker_core::dsl::engine::ScriptEngine;
+use tracker_core::export;
+use tracker_core::pattern::note::Pitch;
+use tracker_core::pattern::{Note, Pattern};
+use tracker_core::project;
+use tracker_core::song::Song;
+use tracker_core::transport::{AdvanceResult, PlaybackMode, Transport, TransportState};
 
 /// Which top-level view is currently active.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -605,7 +605,7 @@ impl App {
         {
             Ok((result, commands)) => {
                 // Apply pattern commands to the editor's pattern
-                use crate::dsl::engine::{apply_commands, ScriptResult};
+                use tracker_core::dsl::engine::{apply_commands, ScriptResult};
                 let cmd_count = commands.len();
                 apply_commands(self.editor.pattern_mut(), &commands);
 
@@ -954,7 +954,7 @@ mod tests {
         app.open_export_dialog();
         app.export_dialog.output_path = path.display().to_string();
         app.export_dialog.sample_rate = 48000;
-        app.export_dialog.bit_depth = crate::export::BitDepth::Bits24;
+        app.export_dialog.bit_depth = tracker_core::export::BitDepth::Bits24;
         app.execute_export();
 
         use crate::ui::export_dialog::ExportPhase;
@@ -1175,7 +1175,7 @@ mod tests {
         // But update() uses last_update for delta, so let's simulate directly
         // by calling the transport advance and then mimicking update behavior
         let result = app.transport.advance(spr);
-        assert_eq!(result, crate::transport::AdvanceResult::Row(0));
+        assert_eq!(result, tracker_core::transport::AdvanceResult::Row(0));
 
         // Simulate what update() does for Row(0) with live_mode
         if app.live_mode {
@@ -1213,7 +1213,7 @@ mod tests {
         app.transport.advance(spr); // Row 2
         app.transport.advance(spr); // Row 3
         let result = app.transport.advance(spr); // Row 0 (loop)
-        assert_eq!(result, crate::transport::AdvanceResult::Row(0));
+        assert_eq!(result, tracker_core::transport::AdvanceResult::Row(0));
 
         // Pattern should remain empty since live mode is off
         let cell = app.editor.pattern().get_cell(0, 0);
@@ -1360,7 +1360,7 @@ mod tests {
 
         // Loop back to row 0 — live mode should re-execute script
         let result = app.transport.advance(spr);
-        assert_eq!(result, crate::transport::AdvanceResult::Row(0));
+        assert_eq!(result, tracker_core::transport::AdvanceResult::Row(0));
         // Simulate update() behavior
         if app.live_mode {
             app.execute_script();

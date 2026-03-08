@@ -1,0 +1,13 @@
+[package]
+name = "tracker-tui"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tracker-core = { path = "../tracker-core" }
+ratatui = "0.28"
+crossterm = "0.28"
+anyhow = "1.0"
+
+[dev-dependencies]
+hound = "3.5"
