@@ -1,3 +1,7 @@
 [workspace]
-members = ["crates/tracker-core", "crates/tracker-tui"]
+members = ["crates/riffl-core", "crates/riffl-tui"]
+exclude = ["test-opl"]
 resolver = "2"
+
+[patch.crates-io]
+proc-macro-error = { git = "https://gitlab.com/CreepySkeleton/proc-macro-error", branch = "master" }

@@ -4,7 +4,7 @@ This document outlines the comprehensive acceptance test procedure for the audio
 
 ## Test Environment
 
-- **Project:** tracker-rs
+- **Project:** riffl
 - **Feature:** Audio Engine with cpal
 - **Version:** 0.1.0
 - **Dependencies:** cpal 0.15
@@ -28,7 +28,7 @@ cargo build --release
 
 **Expected Result:**
 - Clean compilation with no errors
-- Binary created at `target/release/tracker-rs`
+- Binary created at `target/release/riffl`
 
 **Status:** ✓ Code reviewed - implementation is syntactically correct
 
