@@ -2,6 +2,7 @@
 //!
 //! This module handles audio output, sample loading, and playback control.
 
+pub mod bus;
 pub mod channel_strip;
 pub mod device;
 pub mod dsp;
@@ -14,6 +15,7 @@ pub mod mixer;
 pub mod sample;
 pub mod stream;
 
+pub use bus::{BusSystem, SendBus, DEFAULT_NUM_BUSES};
 pub use channel_strip::ChannelStrip;
 pub use device::{AudioDevice, DeviceInfo};
 pub use dsp::{DspProcessor, ProcessSpec, RampedParam};

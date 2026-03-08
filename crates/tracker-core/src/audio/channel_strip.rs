@@ -24,6 +24,10 @@ pub struct ChannelStrip {
     mute_gain: RampedParam,
     /// Solo gain (1.0 = audible, 0.0 = silenced by another channel's solo), smoothed.
     solo_gain: RampedParam,
+    /// Per-bus send levels, smoothed.
+    send_levels: Vec<RampedParam>,
+    /// Sample rate used by all ramp parameters.
+    sample_rate: f32,
 }
 
 impl ChannelStrip {
@@ -34,15 +38,30 @@ impl ChannelStrip {
             pan: RampedParam::new(0.0),
             mute_gain: RampedParam::new(1.0),
             solo_gain: RampedParam::new(1.0),
+            send_levels: Vec::new(),
+            sample_rate: 48_000.0,
         }
     }
 
     /// Set the sample rate for all internal ramp parameters.
     pub fn set_sample_rate(&mut self, sample_rate: f32) {
+        self.sample_rate = sample_rate;
         self.volume.set_sample_rate(sample_rate);
         self.pan.set_sample_rate(sample_rate);
         self.mute_gain.set_sample_rate(sample_rate);
         self.solo_gain.set_sample_rate(sample_rate);
+        for send in &mut self.send_levels {
+            send.set_sample_rate(sample_rate);
+        }
+    }
+
+    /// Ensure we have enough send level parameters for the given bus count.
+    pub fn ensure_send_levels(&mut self, num_buses: usize) {
+        while self.send_levels.len() < num_buses {
+            let mut param = RampedParam::new(0.0);
+            param.set_sample_rate(self.sample_rate);
+            self.send_levels.push(param);
+        }
     }
 
     /// Set channel control targets from track metadata.
@@ -56,6 +75,7 @@ impl ChannelStrip {
         muted: bool,
         any_soloed: bool,
         this_soloed: bool,
+        send_levels: &[f32],
     ) {
         self.volume.set(volume, MIXER_RAMP_SECS);
         self.pan.set(pan, MIXER_RAMP_SECS);
@@ -65,6 +85,11 @@ impl ChannelStrip {
 
         let solo_target = if any_soloed && !this_soloed { 0.0 } else { 1.0 };
         self.solo_gain.set(solo_target, MIXER_RAMP_SECS);
+
+        for (i, param) in self.send_levels.iter_mut().enumerate() {
+            let level = send_levels.get(i).copied().unwrap_or(0.0);
+            param.set(level, MIXER_RAMP_SECS);
+        }
     }
 
     /// Compute the left and right channel gains for the current sample.
@@ -86,6 +111,18 @@ impl ChannelStrip {
         let combined = vol * mute * solo;
 
         (combined * pan_l, combined * pan_r)
+    }
+
+    /// Get the current smoothed send level for a bus, advancing the ramp.
+    pub fn next_send_level(&mut self, bus_index: usize) -> f32 {
+        self.send_levels
+            .get_mut(bus_index)
+            .map_or(0.0, RampedParam::next)
+    }
+
+    /// Get the number of configured send levels.
+    pub fn num_send_levels(&self) -> usize {
+        self.send_levels.len()
     }
 
     /// Get the current left/right gains without advancing the ramp.
@@ -142,7 +179,7 @@ mod tests {
     #[test]
     fn test_channel_strip_update_volume() {
         let mut strip = ChannelStrip::new();
-        strip.update_from_track(0.5, 0.0, false, false, false);
+        strip.update_from_track(0.5, 0.0, false, false, false, &[]);
         run_to_target(&mut strip);
 
         let (left, right) = strip.current_gains();
@@ -154,7 +191,7 @@ mod tests {
     #[test]
     fn test_channel_strip_update_pan_left() {
         let mut strip = ChannelStrip::new();
-        strip.update_from_track(1.0, -1.0, false, false, false);
+        strip.update_from_track(1.0, -1.0, false, false, false, &[]);
         run_to_target(&mut strip);
 
         let (left, right) = strip.current_gains();
@@ -165,7 +202,7 @@ mod tests {
     #[test]
     fn test_channel_strip_update_pan_right() {
         let mut strip = ChannelStrip::new();
-        strip.update_from_track(1.0, 1.0, false, false, false);
+        strip.update_from_track(1.0, 1.0, false, false, false, &[]);
         run_to_target(&mut strip);
 
         let (left, right) = strip.current_gains();
@@ -176,7 +213,7 @@ mod tests {
     #[test]
     fn test_channel_strip_mute() {
         let mut strip = ChannelStrip::new();
-        strip.update_from_track(1.0, 0.0, true, false, false);
+        strip.update_from_track(1.0, 0.0, true, false, false, &[]);
         run_to_target(&mut strip);
 
         let (left, right) = strip.current_gains();
@@ -188,7 +225,7 @@ mod tests {
     #[test]
     fn test_channel_strip_solo() {
         let mut strip = ChannelStrip::new();
-        strip.update_from_track(1.0, 0.0, false, true, false);
+        strip.update_from_track(1.0, 0.0, false, true, false, &[]);
         run_to_target(&mut strip);
 
         let (left, right) = strip.current_gains();
@@ -202,10 +239,10 @@ mod tests {
         let mut strip = ChannelStrip::new();
         assert!(!strip.is_silent());
 
-        strip.update_from_track(1.0, 0.0, true, false, false);
+        strip.update_from_track(1.0, 0.0, true, false, false, &[]);
         assert!(strip.is_silent());
 
-        strip.update_from_track(1.0, 0.0, false, false, false);
+        strip.update_from_track(1.0, 0.0, false, false, false, &[]);
         assert!(!strip.is_silent());
     }
 
@@ -214,7 +251,7 @@ mod tests {
         let mut strip = ChannelStrip::new();
 
         let (before_l, before_r) = strip.current_gains();
-        strip.update_from_track(0.0, 0.0, false, false, false);
+        strip.update_from_track(0.0, 0.0, false, false, false, &[]);
         let (after_one_l, after_one_r) = strip.next_gains();
 
         assert!(after_one_l > 0.0 && after_one_l < before_l);
@@ -224,5 +261,36 @@ mod tests {
         let (final_l, final_r) = strip.current_gains();
         assert!(final_l.abs() < 0.001);
         assert!(final_r.abs() < 0.001);
+    }
+
+    #[test]
+    fn test_channel_strip_send_levels_default() {
+        let strip = ChannelStrip::new();
+        assert_eq!(strip.num_send_levels(), 0);
+    }
+
+    #[test]
+    fn test_channel_strip_ensure_send_levels() {
+        let mut strip = ChannelStrip::new();
+        strip.ensure_send_levels(4);
+        assert_eq!(strip.num_send_levels(), 4);
+    }
+
+    #[test]
+    fn test_channel_strip_send_level_ramp() {
+        let mut strip = ChannelStrip::new();
+        strip.set_sample_rate(48_000.0);
+        strip.ensure_send_levels(1);
+        strip.update_from_track(1.0, 0.0, false, false, false, &[1.0]);
+
+        let first = strip.next_send_level(0);
+        assert!(first > 0.0 && first < 1.0);
+
+        for _ in 0..320 {
+            let _ = strip.next_send_level(0);
+        }
+
+        let near_target = strip.next_send_level(0);
+        assert!((near_target - 1.0).abs() < 0.001);
     }
 }

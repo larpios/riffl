@@ -3,7 +3,9 @@
 //! The mixer reads pattern data row by row, triggers sample playback for
 //! note events, and mixes all active voices into a stereo output buffer.
 
+use crate::audio::bus::{self, BusSystem};
 use crate::audio::channel_strip::ChannelStrip;
+use crate::audio::dsp::ProcessSpec;
 use crate::audio::effect_processor::{TrackerEffectProcessor, TransportCommand};
 use crate::audio::sample::Sample;
 use crate::pattern::note::NoteEvent;
@@ -59,6 +61,8 @@ pub struct Mixer {
     channel_strips: Vec<ChannelStrip>,
     /// Per-channel effect processing state.
     effect_processor: TrackerEffectProcessor,
+    /// Send/return bus system for effects routing.
+    bus_system: BusSystem,
 }
 
 impl Mixer {
@@ -69,10 +73,18 @@ impl Mixer {
     /// * `num_channels` - Number of pattern channels (one voice per channel)
     /// * `output_sample_rate` - The output sample rate in Hz
     pub fn new(samples: Vec<Arc<Sample>>, num_channels: usize, output_sample_rate: u32) -> Self {
+        let mut bus_system = BusSystem::new(bus::DEFAULT_NUM_BUSES);
+        bus_system.prepare(ProcessSpec {
+            sample_rate: output_sample_rate as f32,
+            max_block_frames: 2048,
+            channels: 2,
+        });
+
         let channel_strips: Vec<ChannelStrip> = (0..num_channels)
             .map(|_| {
                 let mut strip = ChannelStrip::new();
                 strip.set_sample_rate(output_sample_rate as f32);
+                strip.ensure_send_levels(bus_system.num_buses());
                 strip
             })
             .collect();
@@ -83,6 +95,7 @@ impl Mixer {
             output_sample_rate,
             channel_strips,
             effect_processor: TrackerEffectProcessor::new(num_channels, output_sample_rate),
+            bus_system,
         }
     }
 
@@ -95,15 +108,18 @@ impl Mixer {
 
         for (ch, strip) in self.channel_strips.iter_mut().enumerate() {
             if let Some(track) = tracks.get(ch) {
+                strip.ensure_send_levels(self.bus_system.num_buses());
                 strip.update_from_track(
                     track.volume,
                     track.pan,
                     track.muted,
                     any_soloed,
                     track.solo,
+                    &track.send_levels,
                 );
             } else {
-                strip.update_from_track(1.0, 0.0, false, false, false);
+                strip.ensure_send_levels(self.bus_system.num_buses());
+                strip.update_from_track(1.0, 0.0, false, false, false, &[]);
             }
         }
     }
@@ -201,20 +217,28 @@ impl Mixer {
     /// # Arguments
     /// * `output` - Mutable slice of f32 samples to fill (stereo interleaved: L, R, L, R, ...)
     pub fn render(&mut self, output: &mut [f32]) {
+        let channel_strips = &mut self.channel_strips;
+        let bus_system = &mut self.bus_system;
+        let effect_processor = &mut self.effect_processor;
+        let voices = &mut self.voices;
+        let samples = &self.samples;
+
         // Clear the buffer first
         for sample in output.iter_mut() {
             *sample = 0.0;
         }
 
         let num_frames = output.len() / 2;
+        bus_system.clear_all(num_frames);
+        let num_buses = bus_system.num_buses();
 
-        for (ch, voice_slot) in self.voices.iter_mut().enumerate() {
+        for (ch, voice_slot) in voices.iter_mut().enumerate() {
             let voice = match voice_slot {
                 Some(v) if v.active => v,
                 _ => continue,
             };
 
-            let sample = match self.samples.get(voice.sample_index) {
+            let sample = match samples.get(voice.sample_index) {
                 Some(s) => s,
                 None => {
                     voice.active = false;
@@ -231,8 +255,10 @@ impl Mixer {
                 continue;
             }
 
+            let strip = &mut channel_strips[ch];
+
             for frame in 0..num_frames {
-                let render_state = self.effect_processor.voice_render_state(ch);
+                let render_state = effect_processor.voice_render_state(ch);
                 let effective_rate = voice.playback_rate * render_state.pitch_ratio;
 
                 let src_frame = voice.position as usize;
@@ -261,18 +287,30 @@ impl Mixer {
                 };
 
                 let effect_gain = render_state.gain.unwrap_or(1.0);
-                let (left_gain, right_gain) = self.channel_strips[ch].next_gains();
+                let (left_gain, right_gain) = strip.next_gains();
 
                 let out_idx = frame * 2;
-                output[out_idx] += left * voice.velocity_gain * effect_gain * left_gain;
-                output[out_idx + 1] += right * voice.velocity_gain * effect_gain * right_gain;
+                let post_l = left * voice.velocity_gain * effect_gain * left_gain;
+                let post_r = right * voice.velocity_gain * effect_gain * right_gain;
+
+                output[out_idx] += post_l;
+                output[out_idx + 1] += post_r;
+
+                for bus_idx in 0..num_buses {
+                    let send_level = strip.next_send_level(bus_idx);
+                    if send_level > 0.0001 {
+                        bus_system.accumulate(bus_idx, frame, post_l, post_r, send_level);
+                    }
+                }
 
                 voice.position += effective_rate;
 
                 // Advance frame-level effect modulations
-                self.effect_processor.advance_frame(ch);
+                effect_processor.advance_frame(ch);
             }
         }
+
+        bus_system.process_and_mix(output, num_frames);
 
         // Clamp output to [-1.0, 1.0] to prevent clipping distortion
         for sample in output.iter_mut() {
@@ -316,6 +354,7 @@ impl Mixer {
             *voice = None;
         }
         self.effect_processor.reset_all();
+        self.bus_system.reset();
     }
 
     /// Update the effect processor's tempo (frames per row).
@@ -326,6 +365,16 @@ impl Mixer {
     /// Get a reference to the effect processor.
     pub fn effect_processor(&self) -> &TrackerEffectProcessor {
         &self.effect_processor
+    }
+
+    /// Get a mutable reference to the bus system for configuration.
+    pub fn bus_system_mut(&mut self) -> &mut BusSystem {
+        &mut self.bus_system
+    }
+
+    /// Get a reference to the bus system.
+    pub fn bus_system(&self) -> &BusSystem {
+        &self.bus_system
     }
 
     /// Returns whether a channel is currently silenced by mute/solo state.

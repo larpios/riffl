@@ -31,6 +31,9 @@ pub struct Track {
     pub solo: bool,
     /// Optional instrument index assigned to this track.
     pub instrument_index: Option<usize>,
+    /// Per-bus send levels (0.0 = no send, 1.0 = full send). Post-fader.
+    /// Length may differ from actual bus count; missing entries default to 0.0.
+    pub send_levels: Vec<f32>,
 }
 
 impl Track {
@@ -43,6 +46,7 @@ impl Track {
             muted: false,
             solo: false,
             instrument_index: None,
+            send_levels: Vec::new(),
         }
     }
 
@@ -69,6 +73,20 @@ impl Track {
     /// Toggle solo state.
     pub fn toggle_solo(&mut self) {
         self.solo = !self.solo;
+    }
+
+    /// Get the send level for a specific bus, defaulting to 0.0 if not set.
+    pub fn send_level(&self, bus_index: usize) -> f32 {
+        self.send_levels.get(bus_index).copied().unwrap_or(0.0)
+    }
+
+    /// Set the send level for a specific bus, clamped to 0.0..=1.0.
+    /// Extends the send_levels vector if needed.
+    pub fn set_send_level(&mut self, bus_index: usize, level: f32) {
+        if bus_index >= self.send_levels.len() {
+            self.send_levels.resize(bus_index + 1, 0.0);
+        }
+        self.send_levels[bus_index] = level.clamp(0.0, 1.0);
     }
 
     /// Check if this track should produce audio given the solo state of all tracks.
@@ -110,6 +128,7 @@ mod tests {
         assert!(!track.muted);
         assert!(!track.solo);
         assert_eq!(track.instrument_index, None);
+        assert!(track.send_levels.is_empty());
     }
 
     #[test]
@@ -124,6 +143,7 @@ mod tests {
         assert_eq!(track.name, "Track");
         assert_eq!(track.volume, 1.0);
         assert_eq!(track.pan, 0.0);
+        assert!(track.send_levels.is_empty());
     }
 
     #[test]
@@ -291,5 +311,38 @@ mod tests {
         assert!(!tracks[1].is_audible(any_solo));
         assert!(!tracks[2].is_audible(any_solo));
         assert!(!tracks[3].is_audible(any_solo));
+    }
+
+    #[test]
+    fn test_track_send_level_default() {
+        let track = Track::new("Send");
+        assert_eq!(track.send_level(0), 0.0);
+        assert!(track.send_levels.is_empty());
+    }
+
+    #[test]
+    fn test_track_set_send_level() {
+        let mut track = Track::new("Send");
+        track.set_send_level(0, 0.75);
+        assert_eq!(track.send_level(0), 0.75);
+    }
+
+    #[test]
+    fn test_track_set_send_level_extends() {
+        let mut track = Track::new("Send");
+        track.set_send_level(3, 0.25);
+        assert_eq!(track.send_levels.len(), 4);
+        assert_eq!(track.send_level(0), 0.0);
+        assert_eq!(track.send_level(3), 0.25);
+    }
+
+    #[test]
+    fn test_track_set_send_level_clamping() {
+        let mut track = Track::new("Send");
+        track.set_send_level(0, -0.5);
+        assert_eq!(track.send_level(0), 0.0);
+
+        track.set_send_level(0, 1.5);
+        assert_eq!(track.send_level(0), 1.0);
     }
 }
