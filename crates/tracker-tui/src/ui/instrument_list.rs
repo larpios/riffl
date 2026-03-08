@@ -9,8 +9,8 @@ use ratatui::{
     Frame,
 };
 
-use crate::song::Song;
 use crate::ui::theme::Theme;
+use tracker_core::song::Song;
 
 /// Render the instrument list view.
 pub fn render_instrument_list(
@@ -136,7 +136,7 @@ pub fn render_instrument_list(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::song::Song;
+    use tracker_core::song::Song;
 
     #[test]
     fn test_render_instrument_list_no_panic_empty() {

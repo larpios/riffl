@@ -2,10 +2,10 @@
 ///
 /// Provides a vim-inspired modal editor for the tracker pattern grid.
 /// Supports Normal (navigation), Insert (note entry), and Visual (selection) modes.
-use crate::pattern::effect::Effect;
-use crate::pattern::note::{Note, NoteEvent, Pitch};
-use crate::pattern::pattern::Pattern;
-use crate::pattern::row::Cell;
+use tracker_core::pattern::effect::Effect;
+use tracker_core::pattern::note::{Note, NoteEvent, Pitch};
+use tracker_core::pattern::pattern::Pattern;
+use tracker_core::pattern::row::Cell;
 
 /// Clipboard for copy/paste operations.
 ///

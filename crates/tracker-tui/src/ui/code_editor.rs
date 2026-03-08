@@ -10,7 +10,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::dsl::examples::TEMPLATES;
+use tracker_core::dsl::examples::TEMPLATES;
 
 use super::theme::Theme;
 

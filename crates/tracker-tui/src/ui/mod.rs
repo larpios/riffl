@@ -12,8 +12,8 @@ use ratatui::{
 
 use crate::app::{App, AppView};
 use crate::editor::{EditorMode, SubColumn};
-use crate::pattern::note::NoteEvent;
-use crate::transport::{PlaybackMode, TransportState};
+use tracker_core::pattern::note::NoteEvent;
+use tracker_core::transport::{PlaybackMode, TransportState};
 
 // Submodules
 pub mod arrangement;
@@ -465,7 +465,9 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 }
 
 /// Format a cell into its four sub-column parts: (note, instrument, volume, effect).
-fn format_cell_parts(cell: Option<&crate::pattern::row::Cell>) -> (String, String, String, String) {
+fn format_cell_parts(
+    cell: Option<&tracker_core::pattern::row::Cell>,
+) -> (String, String, String, String) {
     match cell {
         Some(cell) => {
             let note_str = match &cell.note {
@@ -497,7 +499,7 @@ fn format_cell_parts(cell: Option<&crate::pattern::row::Cell>) -> (String, Strin
 }
 
 /// Format a cell for display in the tracker grid
-fn format_cell_display(cell: &crate::pattern::row::Cell) -> String {
+fn format_cell_display(cell: &tracker_core::pattern::row::Cell) -> String {
     let note_str = match &cell.note {
         Some(NoteEvent::On(note)) => note.display_str(),
         Some(NoteEvent::Off) => "===".to_string(),
@@ -793,28 +795,29 @@ mod tests {
 
     #[test]
     fn test_format_cell_empty() {
-        let cell = crate::pattern::row::Cell::empty();
+        let cell = tracker_core::pattern::row::Cell::empty();
         assert_eq!(format_cell_display(&cell), "--- .. .. ...");
     }
 
     #[test]
     fn test_format_cell_with_note() {
-        use crate::pattern::note::{Note, Pitch};
-        let cell = crate::pattern::row::Cell::with_note(NoteEvent::On(Note::simple(Pitch::C, 4)));
+        use tracker_core::pattern::note::{Note, Pitch};
+        let cell =
+            tracker_core::pattern::row::Cell::with_note(NoteEvent::On(Note::simple(Pitch::C, 4)));
         assert_eq!(format_cell_display(&cell), "C-4 .. .. ...");
     }
 
     #[test]
     fn test_format_cell_note_off() {
-        let cell = crate::pattern::row::Cell::with_note(NoteEvent::Off);
+        let cell = tracker_core::pattern::row::Cell::with_note(NoteEvent::Off);
         assert_eq!(format_cell_display(&cell), "=== .. .. ...");
     }
 
     #[test]
     fn test_format_cell_full() {
-        use crate::pattern::effect::Effect;
-        use crate::pattern::note::{Note, Pitch};
-        let cell = crate::pattern::row::Cell {
+        use tracker_core::pattern::effect::Effect;
+        use tracker_core::pattern::note::{Note, Pitch};
+        let cell = tracker_core::pattern::row::Cell {
             note: Some(NoteEvent::On(Note::new(Pitch::CSharp, 4, 100, 1))),
             instrument: Some(1),
             volume: Some(0x40),
@@ -836,7 +839,7 @@ mod tests {
 
     #[test]
     fn test_format_cell_parts_empty() {
-        let cell = crate::pattern::row::Cell::empty();
+        let cell = tracker_core::pattern::row::Cell::empty();
         let (n, i, v, e) = format_cell_parts(Some(&cell));
         assert_eq!(n, "---");
         assert_eq!(i, "..");
@@ -846,8 +849,9 @@ mod tests {
 
     #[test]
     fn test_format_cell_parts_with_note() {
-        use crate::pattern::note::{Note, Pitch};
-        let cell = crate::pattern::row::Cell::with_note(NoteEvent::On(Note::simple(Pitch::C, 4)));
+        use tracker_core::pattern::note::{Note, Pitch};
+        let cell =
+            tracker_core::pattern::row::Cell::with_note(NoteEvent::On(Note::simple(Pitch::C, 4)));
         let (n, i, v, e) = format_cell_parts(Some(&cell));
         assert_eq!(n, "C-4");
         assert_eq!(i, "..");
@@ -857,9 +861,9 @@ mod tests {
 
     #[test]
     fn test_format_cell_parts_full() {
-        use crate::pattern::effect::Effect;
-        use crate::pattern::note::{Note, Pitch};
-        let cell = crate::pattern::row::Cell {
+        use tracker_core::pattern::effect::Effect;
+        use tracker_core::pattern::note::{Note, Pitch};
+        let cell = tracker_core::pattern::row::Cell {
             note: Some(NoteEvent::On(Note::new(Pitch::CSharp, 4, 100, 1))),
             instrument: Some(1),
             volume: Some(0x40),
@@ -874,7 +878,7 @@ mod tests {
 
     #[test]
     fn test_format_cell_parts_note_off() {
-        let cell = crate::pattern::row::Cell::with_note(NoteEvent::Off);
+        let cell = tracker_core::pattern::row::Cell::with_note(NoteEvent::Off);
         let (n, _i, _v, _e) = format_cell_parts(Some(&cell));
         assert_eq!(n, "===");
     }

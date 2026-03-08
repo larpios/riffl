@@ -1,14 +1,7 @@
 #![allow(dead_code, unused_imports)]
 mod app;
-mod audio;
-mod dsl;
 mod editor;
-mod export;
 mod input;
-mod pattern;
-mod project;
-mod song;
-mod transport;
 mod ui;
 
 use std::io;
