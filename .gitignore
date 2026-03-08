@@ -6,3 +6,4 @@
 .auto-claude-status
 .claude_settings.json
 Auto\ Run\ Docs/
+*.trs
