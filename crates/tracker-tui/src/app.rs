@@ -90,6 +90,9 @@ pub struct App {
     /// Shared mixer for audio rendering (shared with audio callback thread)
     mixer: Arc<Mutex<Mixer>>,
 
+    /// Prototype Glicol mixer
+    glicol_mixer: Arc<Mutex<tracker_core::audio::glicol_mixer::GlicolMixer>>,
+
     /// Transport system for playback control (play/pause/stop, BPM, looping)
     pub transport: Transport,
 
@@ -145,6 +148,13 @@ impl App {
 
         let editor = Editor::new(pattern.clone());
 
+        let glicol_mixer = Arc::new(Mutex::new(
+            tracker_core::audio::glicol_mixer::GlicolMixer::new(
+                pattern.num_channels(),
+                output_sample_rate,
+            ),
+        ));
+
         // Create a song with the demo pattern in its pool
         let mut song = Song::new("Untitled", 125.0);
         song.patterns[0] = pattern;
@@ -176,6 +186,7 @@ impl App {
             theme: Theme::default(),
             audio_engine,
             mixer,
+            glicol_mixer,
             transport,
             code_editor: CodeEditor::new(),
             split_view: false,
@@ -206,12 +217,23 @@ impl App {
         // Set up audio callback that renders from the shared mixer
         if let Some(ref mut engine) = self.audio_engine {
             let mixer = self.mixer.clone();
+            let glicol_mixer = self.glicol_mixer.clone();
             let callback = Arc::new(Mutex::new(move |data: &mut [f32]| {
+                // Mix both mixers for now to verify Glicol
                 if let Ok(mut m) = mixer.lock() {
                     m.render(data);
                 } else {
                     for sample in data.iter_mut() {
                         *sample = 0.0;
+                    }
+                }
+
+                if let Ok(mut gm) = glicol_mixer.lock() {
+                    // Create a temp buffer for Glicol to avoid overwriting the original mixer's output
+                    let mut gm_buf = vec![0.0; data.len()];
+                    gm.render(&mut gm_buf);
+                    for (i, sample) in data.iter_mut().enumerate() {
+                        *sample = (*sample + gm_buf[i]).clamp(-1.0, 1.0);
                     }
                 }
             }));
@@ -251,6 +273,23 @@ impl App {
                 if let Ok(mut mixer) = self.mixer.lock() {
                     mixer.tick(row, self.editor.pattern());
                 }
+                if let Ok(mut gm) = self.glicol_mixer.lock() {
+                    // Primitive Glicol trigger: if there's a note on channel 0, play it
+                    if let Some(r) = self.editor.pattern().get_row(row) {
+                        if let Some(cell) = r.get(0) {
+                            use tracker_core::pattern::note::NoteEvent;
+                            match &cell.note {
+                                Some(NoteEvent::On(note)) => {
+                                    gm.note_on(0, note.frequency() as f32);
+                                }
+                                Some(NoteEvent::Off) => {
+                                    gm.note_off(0);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
             }
             AdvanceResult::PatternChange {
                 arrangement_pos,
@@ -264,6 +303,23 @@ impl App {
                 }
                 if let Ok(mut mixer) = self.mixer.lock() {
                     mixer.tick(row, self.editor.pattern());
+                }
+                if let Ok(mut gm) = self.glicol_mixer.lock() {
+                    // Primitive Glicol trigger: if there's a note on channel 0, play it
+                    if let Some(r) = self.editor.pattern().get_row(row) {
+                        if let Some(cell) = r.get(0) {
+                            use tracker_core::pattern::note::NoteEvent;
+                            match &cell.note {
+                                Some(NoteEvent::On(note)) => {
+                                    gm.note_on(0, note.frequency() as f32);
+                                }
+                                Some(NoteEvent::Off) => {
+                                    gm.note_off(0);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
                 }
             }
             AdvanceResult::Stopped => {

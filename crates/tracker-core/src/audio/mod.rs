@@ -10,6 +10,7 @@ pub mod effect_processor;
 pub mod effects;
 pub mod engine;
 pub mod error;
+pub mod glicol_mixer;
 pub mod loader;
 pub mod mixer;
 pub mod sample;
