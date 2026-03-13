@@ -1,0 +1,287 @@
+#+TITLE: tracker-rs Roadmap
+#+DATE: 2026-03-13
+#+DESCRIPTION: Development roadmap. Floor: ProTracker parity. Ceiling: Renoise-level power and fun.
+
+* Goals
+  Minimum target: feature parity with ProTracker (Amiga MOD tracker).
+  Real target: the power and feel of Renoise — deep instrument system, flexible
+  pattern editing, great DSP, live recording, and a scripting DSL that no
+  commercial tracker has. Chip emulation (Furnace-style) is a potential future
+  direction but not a priority.
+
+  See VISION.md for the long-horizon plan (GUI, plugin hosting, monetisation).
+
+* Milestone 1 — ProTracker Parity
+  :PROPERTIES:
+  :STATUS: in-progress
+  :END:
+
+** Effect Commands
+   ProTracker has 10 top-level effects + 14 extended (Exy) sub-effects.
+   We implement 9 of the top-level ones. Missing:
+
+*** TODO 5xy — Tone Portamento + Volume Slide
+    Combine effect 3 (portamento-to-note) and A (volume slide) in one column.
+    Param: same nibble split as Axy (upper = slide up, lower = slide down).
+
+*** TODO 6xy — Vibrato + Volume Slide
+    Combine effect 4 (vibrato) and A (volume slide).
+    Continues vibrato from previous row while sliding volume.
+
+*** TODO 7xy — Tremolo
+    Periodic volume modulation (analogous to vibrato but on amplitude).
+    Upper nibble = speed, lower = depth. Same waveform table as vibrato.
+    State needed: tremolo_phase, tremolo_speed, tremolo_depth, tremolo_waveform.
+
+*** TODO 9xx — Sample Offset
+    Start sample playback at offset (xx * 256) frames into the sample.
+    Needs Voice to accept an initial position override on note-on.
+
+*** TODO Exy — Extended Effects (command 0xE, sub-command in upper param nibble)
+    The E-effects share a single command slot; sub-command is param >> 4.
+
+**** TODO E1x — Fine Portamento Up
+     Like 1xx but applied once per row (not per tick). Param = semitones * 16.
+
+**** TODO E2x — Fine Portamento Down
+     Like 2xx but applied once per row.
+
+**** TODO E3x — Glissando Control
+     Toggle whether tone portamento (3xx) snaps to nearest semitone.
+     E30 = smooth, E31 = glissando (semitone steps).
+
+**** TODO E4x — Set Vibrato Waveform
+     0=sine (default), 1=ramp-down, 2=square, 3=random.
+     Waveform table used by 4xy and 6xy.
+
+**** TODO E5x — Set Finetune
+     Override instrument finetune for the current channel on this row.
+     Param range 0–F maps to -8..+7 (ProTracker convention).
+
+**** TODO E6x — Pattern Loop
+     E60 = set loop start point; E6x (x>0) = loop x times back to start.
+     State needed per-channel: loop_start_row, loop_count.
+
+**** TODO E7x — Set Tremolo Waveform
+     Same waveform options as E4x, applies to 7xy tremolo.
+
+**** TODO E9x — Retrigger Note
+     Re-trigger the current sample every x ticks within the row.
+
+**** TODO EAx — Fine Volume Slide Up
+     Like Ax0 but applied once per row.
+
+**** TODO EBx — Fine Volume Slide Down
+     Like A0x but applied once per row.
+
+**** TODO ECx — Note Cut
+     Set volume to 0 after x ticks within the row (sample keeps playing silently).
+
+**** TODO EDx — Note Delay
+     Delay note trigger by x ticks within the row.
+
+**** TODO EEx — Pattern Delay
+     Delay advancing to the next row by x extra row-lengths.
+
+** Sample Features
+
+*** TODO Loop Points
+    Add =loop_start: Option<usize>= and =loop_end: Option<usize>= to =Sample=.
+    Mixer render loop must check loop bounds and wrap =voice.position= instead
+    of deactivating the voice when it reaches the end.
+    Three modes: no loop, forward loop, ping-pong loop.
+
+*** TODO Sample Finetune
+    Add =finetune: i8= (-8..+7, ProTracker convention) to =Instrument= in song.rs.
+    Wire into playback rate calculation in mixer tick:
+    =playback_rate *= 2.0_f64.powf(finetune as f64 / 12.0 / 8.0)=
+    E5x effect should be able to override this per-row.
+
+*** TODO Sample Default Volume
+    =Instrument= already has volume in the instrument editor state; make sure
+    it is wired to =velocity_gain= as a multiplier at note-on time.
+
+** File Format
+
+*** TODO MOD Import
+    Parse Amiga .mod files (15- and 31-sample variants) into Song.
+    Crate candidates: =mod-rs= or implement minimal parser (format is simple).
+    Maps: sample data → Sample, instruments → Instrument, patterns → Pattern,
+    arrangement → Song arrangement.
+
+*** TODO MOD Export
+    Serialise Song back to .mod (lossy — only ProTracker-compatible features survive).
+    Useful for sharing with other trackers.
+
+* Milestone 2 — Renoise-Level Instrument System
+  :PROPERTIES:
+  :STATUS: planned
+  :END:
+
+  This is what separates a toy tracker from a real composition tool.
+
+** TODO Instrument Envelopes
+   Per-instrument ADSR + LFO for volume, pitch, and panning.
+   Applied on top of effect commands (commands take priority, envelope is default).
+   - Volume envelope: shapes amplitude over note duration
+   - Pitch envelope: automatic pitch glide/vibrato without effect columns
+   - Panning envelope: auto-pan effects
+
+** TODO Multi-Sample Instruments (Keyzone Mapping)
+   One instrument can map different samples to different key ranges and/or
+   velocity layers. E.g.: low notes use a bass sample, high notes use a
+   different recording.
+   Data model: =Instrument= gets =keyzones: Vec<Keyzone>=, each with
+   =note_range=, =velocity_range=, =sample_index=.
+
+** TODO Sample Slicing
+   Mark slice points on a sample; each slice is addressable as a separate note
+   in the pattern. Beat-chopping workflow. Essential for drum programming.
+
+** TODO Per-Note Extra Columns (Renoise-style)
+   Alongside Note + Instrument + Effect(s), add optional columns:
+   - Volume column (00–FF, overrides instrument default)
+   - Panning column (00–FF, L–R)
+   - Delay column (00–FF ticks, delays note trigger within the row)
+   These are per-cell, not global effects.
+
+** TODO Phrases (Sub-Patterns inside Instruments)
+   An instrument can contain mini-patterns ("phrases") that play back when the
+   instrument is triggered. Like Renoise phrases. Enables complex rhythms
+   triggered by a single note.
+
+** TODO Sample Editor View
+   Waveform display with loop point handles (set via cursor keys).
+   Zoom in/out. Mark loop start/end. Normalize, reverse, fade in/out operations.
+
+** TODO More Channels
+   Support up to 64 channels (like Renoise). UI adapts with horizontal scroll.
+   Current Vec<> is unbounded; the default and new-project dialog need updating.
+
+** TODO Configurable Pattern Length
+   Not locked to 64 rows. Per-pattern row count (16–512), like Renoise.
+   Transport must handle variable-length patterns in the arrangement.
+
+** TODO Undo/Redo Beyond Pattern Snapshots
+   Global undo stack covering instrument edits, arrangement changes, etc.
+   (Pattern-level undo already exists in Editor.)
+
+* Milestone 3 — Quality-of-Life / Usability
+  :PROPERTIES:
+  :STATUS: planned
+  :END:
+
+** TODO Live Recording
+   Record notes into the pattern in real-time while playback runs.
+   Keys/MIDI trigger notes that are written to the current row, advancing
+   with the playback cursor.
+
+** TODO Visual Feedback
+   - Per-channel VU meters in the pattern view
+   - Waveform preview in instrument list
+   - Spectrum analyser on master output (optional, can be toggled)
+
+** TODO Pattern Clone / Duplicate / Merge
+   Common pattern operations: duplicate a pattern, merge two patterns,
+   create a variant. Speeds up composition significantly.
+
+* Milestone 4 — Audio Engine Upgrades (Phase 2 from VISION.md)
+  :PROPERTIES:
+  :STATUS: planned
+  :END:
+
+** TODO Built-in Synth Voice
+   Subtractive synth per channel (oscillator → filter → ADSR envelope).
+   No sample needed — instrument can be synth-based or sample-based.
+
+** TODO Insert Effects on Channel Strips
+   Per-channel effect chain: EQ, compressor, delay, reverb.
+   Infrastructure partially exists (PluginChain / PluginSlot).
+
+** TODO Master Bus Processing
+   Brickwall limiter, master EQ, metering.
+
+** TODO Built-in DSP Effects (Renoise-level)
+   Beyond the basic delay/filter already in the plugin system:
+   - Chorus / flanger
+   - Bitcrusher / sample rate reducer (lo-fi, chiptune-adjacent)
+   - Waveshaper / distortion
+   - Convolution reverb (impulse response based)
+   - Multiband compressor
+   - Parametric EQ
+
+* Milestone 5 — MIDI (Phase 3 from VISION.md)
+  :PROPERTIES:
+  :STATUS: planned
+  :END:
+
+** TODO MIDI Input
+   midir-based. Note-on/off → trigger notes in editor (Insert mode).
+   CC → map to parameters (volume, BPM, etc.) with learn mode.
+
+** TODO MIDI Output
+   Send pattern notes as MIDI to external synths/DAWs.
+
+** TODO MIDI File Import/Export
+   .mid → Pattern (quantised to rows). Pattern → .mid for DAW roundtrip.
+
+* Milestone 6 — Advanced DSL (Phase 7 from VISION.md)
+  :PROPERTIES:
+  :STATUS: planned
+  :END:
+
+** TODO Mini-Notation Parser
+   Strudel/TidalCycles-style: ="bd sd [hh hh] cp"=.
+   Translates to pattern rows at parse time.
+
+** TODO Pattern Combinators
+   =stack=, =cat=, =fast=, =slow=, =rev=, =every=, =sometimes= — usable from Rhai scripts.
+
+** TODO Live Eval
+   Modify a running pattern via DSL without stopping playback.
+
+* Milestone 7 — Chip Sound Emulation (Furnace-style, optional future)
+  :PROPERTIES:
+  :STATUS: parked
+  :END:
+
+  Not a priority, but the architecture should not preclude it.
+  Would require a =ChipVoice= variant alongside =SampleVoice= and =SynthVoice=.
+  Candidates: YM2612 (Genesis FM), SN76489 (Game Boy/SMS), NES APU, SID (C64).
+  Each chip has its own effect command vocabulary.
+
+* Milestone 8 — Glicol Integration (parked)
+  :PROPERTIES:
+  :STATUS: parked
+  :END:
+
+  Prototype exists in =src/audio/glicol_mixer.rs= (basic sine/noise via
+  =glicol_synth= AudioContext). The goal is to use Glicol's graph-based DSP
+  nodes (Sampler, filters, envelopes) as an alternative voice engine alongside
+  the existing sample mixer.
+
+** TODO Map Instruments to Glicol Sampler Nodes
+   Replace placeholder SinOsc/Noise nodes with =glicol_synth::Sampler= nodes
+   that load actual sample data from =Arc<Sample>=.
+
+** TODO Replace Old Mixer Logic
+   Once Sampler playback is validated, phase out the custom =Voice= renderer
+   and route everything through =GlicolMixer=.
+   Keep =TrackerEffectProcessor= — it is engine-agnostic.
+
+* Milestone 9 — Plugin Hosting (Phase 5 from VISION.md)
+  :PROPERTIES:
+  :STATUS: planned
+  :END:
+
+** TODO CLAP Hosting via clack-host
+** TODO VST3 Hosting via vst3-sys
+** TODO Plugin Parameter Automation
+
+* Milestone 10 — GUI Frontend (Phase 6 from VISION.md)
+  :PROPERTIES:
+  :STATUS: planned
+  :END:
+
+  Framework decision deferred until Phase 5 experience.
+  Candidates: egui, Iced, Tauri.
