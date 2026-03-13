@@ -59,8 +59,8 @@ pub trait DspProcessor: Send {
 /// They also work correctly with automation systems.
 ///
 /// # Usage
-/// ```ignore
-/// use tracker_core::audio::RampedParam;
+/// ```
+/// use tracker_core::audio::dsp::RampedParam;
 ///
 /// let mut param = RampedParam::new(1.0);
 /// param.set_sample_rate(48000.0);

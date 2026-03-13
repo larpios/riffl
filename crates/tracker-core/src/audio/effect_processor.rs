@@ -62,6 +62,8 @@ pub struct ChannelEffectState {
     pub portamento_speed: f64,
     /// Current portamento frequency (tracks the sliding frequency).
     pub portamento_freq: Option<f64>,
+    /// Whether to snap portamento to nearest semitone (E3x effect).
+    pub glissando: bool,
 
     // --- Vibrato ---
     /// Vibrato LFO phase in radians.
@@ -72,6 +74,24 @@ pub struct ChannelEffectState {
     pub vibrato_depth: u8,
     /// Whether vibrato is active.
     pub vibrato_active: bool,
+    /// Vibrato waveform: 0=sine, 1=ramp-down, 2=square, 3=random (E4x).
+    pub vibrato_waveform: u8,
+
+    // --- Tremolo ---
+    /// Tremolo LFO phase in radians.
+    pub tremolo_phase: f64,
+    /// Tremolo speed.
+    pub tremolo_speed: u8,
+    /// Tremolo depth.
+    pub tremolo_depth: u8,
+    /// Whether tremolo is active.
+    pub tremolo_active: bool,
+    /// Tremolo waveform: 0=sine, 1=ramp-down, 2=square, 3=random (E7x).
+    pub tremolo_waveform: u8,
+
+    // --- Sample ---
+    /// Sample playback offset in frames (9xx effect).
+    pub sample_offset: Option<usize>,
 
     // --- Volume ---
     /// Current effect-controlled volume (0.0 - 1.0).
@@ -81,6 +101,12 @@ pub struct ChannelEffectState {
     pub volume_slide_up: u8,
     /// Volume slide down speed per row.
     pub volume_slide_down: u8,
+
+    // --- Pattern Loop (E6x) ---
+    /// Row index where the loop starts.
+    pub pattern_loop_start_row: Option<usize>,
+    /// Number of remaining loop repetitions.
+    pub pattern_loop_count: u8,
 
     // --- Frame tracking ---
     /// Frames elapsed within the current row (for sub-row modulation).
@@ -99,13 +125,23 @@ impl Default for ChannelEffectState {
             portamento_target: None,
             portamento_speed: 0.0,
             portamento_freq: None,
+            glissando: false,
             vibrato_phase: 0.0,
             vibrato_speed: 0,
             vibrato_depth: 0,
             vibrato_active: false,
+            vibrato_waveform: 0,
+            tremolo_phase: 0.0,
+            tremolo_speed: 0,
+            tremolo_depth: 0,
+            tremolo_active: false,
+            tremolo_waveform: 0,
+            sample_offset: None,
             volume_override: None,
             volume_slide_up: 0,
             volume_slide_down: 0,
+            pattern_loop_start_row: None,
+            pattern_loop_count: 0,
             row_frame_counter: 0,
             frames_per_row: 6000, // ~125ms at 48kHz (120 BPM default)
         }
@@ -127,8 +163,10 @@ impl ChannelEffectState {
         self.arpeggio_x = 0;
         self.arpeggio_y = 0;
         self.vibrato_active = false;
+        self.tremolo_active = false;
         self.volume_slide_up = 0;
         self.volume_slide_down = 0;
+        self.sample_offset = None;
         self.row_frame_counter = 0;
     }
 
@@ -164,7 +202,19 @@ impl ChannelEffectState {
 
         // Vibrato depth: each unit = ~1/16 semitone
         let depth_semitones = self.vibrato_depth as f64 / 16.0;
-        let modulation = self.vibrato_phase.sin() * depth_semitones;
+
+        let modulation = match self.vibrato_waveform {
+            0 => self.vibrato_phase.sin(),                          // sine
+            1 => 1.0 - (self.vibrato_phase / std::f64::consts::PI), // ramp down
+            2 => {
+                if self.vibrato_phase < std::f64::consts::PI {
+                    1.0
+                } else {
+                    -1.0
+                }
+            } // square
+            _ => (self.vibrato_phase * 1000.0).sin().fract() * 2.0 - 1.0, // pseudo-random
+        } * depth_semitones;
 
         // Convert semitone offset to frequency ratio
         2.0_f64.powf(modulation / 12.0)
@@ -176,15 +226,53 @@ impl ChannelEffectState {
             return;
         }
 
-        // Vibrato speed: each unit = some Hz of LFO rate
-        // Classic tracker: speed 1 ≈ 0.5Hz, speed F ≈ 7.5Hz
         let lfo_hz = self.vibrato_speed as f64 * 0.5;
         let phase_increment = 2.0 * std::f64::consts::PI * lfo_hz / sample_rate as f64;
         self.vibrato_phase += phase_increment;
 
-        // Keep phase bounded
         if self.vibrato_phase > 2.0 * std::f64::consts::PI {
             self.vibrato_phase -= 2.0 * std::f64::consts::PI;
+        }
+    }
+
+    /// Get the tremolo amplitude modulation as a gain multiplier.
+    ///
+    /// Returns a multiplier typically between 0.0 and 1.0 (e.g., 0.8 to 1.0).
+    pub fn tremolo_amplitude_modulation(&self) -> f32 {
+        if !self.tremolo_active || self.tremolo_depth == 0 {
+            return 1.0;
+        }
+
+        // Tremolo depth: each unit = ~1/32 of full range modulation
+        let depth = self.tremolo_depth as f64 / 32.0;
+        let modulation = match self.tremolo_waveform {
+            0 => self.tremolo_phase.sin(),                          // sine
+            1 => 1.0 - (self.tremolo_phase / std::f64::consts::PI), // ramp down
+            2 => {
+                if self.tremolo_phase < std::f64::consts::PI {
+                    1.0
+                } else {
+                    -1.0
+                }
+            } // square
+            _ => (self.tremolo_phase * 1000.0).sin().fract() * 2.0 - 1.0, // pseudo-random
+        };
+
+        (1.0 + (modulation * depth * 0.5)) as f32
+    }
+
+    /// Advance tremolo LFO phase by one frame.
+    pub fn advance_tremolo(&mut self, sample_rate: u32) {
+        if !self.tremolo_active || self.tremolo_speed == 0 {
+            return;
+        }
+
+        let lfo_hz = self.tremolo_speed as f64 * 0.5;
+        let phase_increment = 2.0 * std::f64::consts::PI * lfo_hz / sample_rate as f64;
+        self.tremolo_phase += phase_increment;
+
+        if self.tremolo_phase > 2.0 * std::f64::consts::PI {
+            self.tremolo_phase -= 2.0 * std::f64::consts::PI;
         }
     }
 
@@ -194,12 +282,25 @@ impl ChannelEffectState {
     pub fn combined_pitch_ratio(&self) -> f64 {
         let arpeggio = 2.0_f64.powf(self.arpeggio_semitone_offset() / 12.0);
         let vibrato = self.vibrato_pitch_ratio();
-        self.pitch_ratio * arpeggio * vibrato
+        
+        let mut ratio = self.pitch_ratio;
+        if self.glissando {
+            // Snap to nearest semitone
+            let semitones = (ratio.log2() * 12.0).round();
+            ratio = 2.0_f64.powf(semitones / 12.0);
+        }
+        
+        ratio * arpeggio * vibrato
     }
 
     /// Get the effective volume from effects (if any volume override is active).
     pub fn effective_volume(&self) -> Option<f32> {
-        self.volume_override
+        if self.volume_override.is_none() && !self.tremolo_active {
+            return None;
+        }
+        let base_vol = self.volume_override.unwrap_or(1.0);
+        let tremolo = self.tremolo_amplitude_modulation();
+        Some((base_vol * tremolo).clamp(0.0, 2.0))
     }
 }
 
@@ -300,6 +401,44 @@ impl TrackerEffectProcessor {
                     state.vibrato_depth = effect.param_y();
                 }
 
+                EffectType::TonePortamentoVolumeSlide => {
+                    // 5xy: 3xx + Axy
+                    // Uses existing portamento speed, adds volume slide
+                    let up = effect.param_x();
+                    let down = effect.param_y();
+                    state.volume_slide_up = up;
+                    state.volume_slide_down = down;
+
+                    // Portamento target is handled by new notes triggered on this row
+                    if let Some(freq) = note_frequency {
+                        state.portamento_target = Some(freq);
+                        if state.portamento_freq.is_none() {
+                            state.portamento_freq = Some(freq);
+                        }
+                    }
+                }
+
+                EffectType::VibratoVolumeSlide => {
+                    // 6xy: 4xy + Axy
+                    // Continues vibrato, adds volume slide
+                    state.vibrato_active = true;
+                    let up = effect.param_x();
+                    let down = effect.param_y();
+                    state.volume_slide_up = up;
+                    state.volume_slide_down = down;
+                }
+
+                EffectType::Tremolo => {
+                    state.tremolo_active = true;
+                    state.tremolo_speed = effect.param_x();
+                    state.tremolo_depth = effect.param_y();
+                }
+
+                EffectType::SampleOffset => {
+                    // 9xx: Set sample playback offset
+                    state.sample_offset = Some(effect.param as usize * 256);
+                }
+
                 EffectType::VolumeSlide => {
                     let up = effect.param_x();
                     let down = effect.param_y();
@@ -318,13 +457,75 @@ impl TrackerEffectProcessor {
 
                 EffectType::SetVolume => {
                     // Cxx: set volume (0x00 = silence, 0x40 = normal, 0x80 = double)
-                    // Map 0x00-0x40 to 0.0-1.0 range
                     let vol = (effect.param as f32 / 0x40 as f32).clamp(0.0, 2.0);
                     state.volume_override = Some(vol);
                 }
 
                 EffectType::PatternBreak => {
                     commands.push(TransportCommand::PatternBreak(effect.param as usize));
+                }
+
+                EffectType::Extended => {
+                    let sub_command = effect.param_x();
+                    let sub_param = effect.param_y();
+
+                    match sub_command {
+                        0x1 => {
+                            // E1x: Fine Portamento Up
+                            let semitones = sub_param as f64 / 256.0;
+                            state.pitch_ratio *= 2.0_f64.powf(semitones / 12.0);
+                        }
+                        0x2 => {
+                            // E2x: Fine Portamento Down
+                            let semitones = sub_param as f64 / 256.0;
+                            state.pitch_ratio *= 2.0_f64.powf(-semitones / 12.0);
+                        }
+                        0x3 => {
+                            // E3x: Glissando Control
+                            state.glissando = sub_param != 0;
+                        }
+                        0x4 => {
+                            // E4x: Set Vibrato Waveform
+                            state.vibrato_waveform = sub_param;
+                        }
+                        0x6 => {
+                            // E6x: Pattern Loop
+                            if sub_param == 0 {
+                                // Set loop point - handled by the transport/mixer
+                            } else {
+                                // Loop x times - handled by the transport/mixer
+                            }
+                        }
+                        0x7 => {
+                            // E7x: Set Tremolo Waveform
+                            state.tremolo_waveform = sub_param;
+                        }
+                        0x9 => {
+                            // E9x: Retrigger Note
+                            // Handled by the mixer frame loop
+                        }
+                        0xA => {
+                            // EAx: Fine Volume Slide Up
+                            let current_vol = state.volume_override.unwrap_or(1.0);
+                            let delta = sub_param as f32 / 64.0;
+                            state.volume_override = Some((current_vol + delta).clamp(0.0, 1.0));
+                        }
+                        0xB => {
+                            // EBx: Fine Volume Slide Down
+                            let current_vol = state.volume_override.unwrap_or(1.0);
+                            let delta = sub_param as f32 / 64.0;
+                            state.volume_override = Some((current_vol - delta).clamp(0.0, 1.0));
+                        }
+                        0xC => {
+                            // ECx: Note Cut
+                            // Handled by the mixer frame loop
+                        }
+                        0xD => {
+                            // EDx: Note Delay
+                            // Handled by the mixer row trigger
+                        }
+                        _ => {}
+                    }
                 }
 
                 EffectType::SetSpeed => {
@@ -354,6 +555,7 @@ impl TrackerEffectProcessor {
 
         state.row_frame_counter += 1;
         state.advance_vibrato(self.sample_rate);
+        state.advance_tremolo(self.sample_rate);
     }
 
     /// Get the combined pitch ratio for a channel (all pitch effects combined).
@@ -367,6 +569,11 @@ impl TrackerEffectProcessor {
     /// Get the portamento frequency for a channel, if portamento is active.
     pub fn portamento_frequency(&self, channel: usize) -> Option<f64> {
         self.channels.get(channel).and_then(|s| s.portamento_freq)
+    }
+
+    /// Get the sample playback offset for a channel (from 9xx effect).
+    pub fn sample_offset(&self, channel: usize) -> Option<usize> {
+        self.channels.get(channel).and_then(|s| s.sample_offset)
     }
 
     /// Get the effective volume override for a channel (from Cxx or Axy effects).
@@ -530,6 +737,67 @@ mod tests {
         state.vibrato_speed = 4;
         state.vibrato_depth = 0;
         assert_eq!(state.vibrato_pitch_ratio(), 1.0);
+    }
+
+    // --- Tremolo Tests ---
+
+    #[test]
+    fn test_tremolo_inactive_returns_unity() {
+        let state = ChannelEffectState::default();
+        assert_eq!(state.tremolo_amplitude_modulation(), 1.0);
+    }
+
+    #[test]
+    fn test_tremolo_zero_depth_returns_unity() {
+        let mut state = ChannelEffectState::default();
+        state.tremolo_active = true;
+        state.tremolo_speed = 4;
+        state.tremolo_depth = 0;
+        assert_eq!(state.tremolo_amplitude_modulation(), 1.0);
+    }
+
+    #[test]
+    fn test_tremolo_produces_modulation() {
+        let mut state = ChannelEffectState::default();
+        state.tremolo_active = true;
+        state.tremolo_speed = 4;
+        state.tremolo_depth = 16; // Significant depth
+
+        // At phase 0, sin(0) = 0, so ratio should be 1.0
+        state.tremolo_phase = 0.0;
+        assert!((state.tremolo_amplitude_modulation() - 1.0).abs() < 0.001);
+
+        // At phase π/2, sin(π/2) = 1.0, ratio should be > 1.0
+        state.tremolo_phase = std::f64::consts::FRAC_PI_2;
+        assert!(state.tremolo_amplitude_modulation() > 1.0);
+
+        // At phase 3π/2, sin(3π/2) = -1.0, ratio should be < 1.0
+        state.tremolo_phase = 3.0 * std::f64::consts::FRAC_PI_2;
+        assert!(state.tremolo_amplitude_modulation() < 1.0);
+    }
+
+    #[test]
+    fn test_tremolo_waveforms() {
+        let mut state = ChannelEffectState::default();
+        state.tremolo_active = true;
+        state.tremolo_depth = 32; // Full depth
+        state.tremolo_phase = std::f64::consts::FRAC_PI_2; // Peak of sine
+
+        // Sine
+        state.tremolo_waveform = 0;
+        assert!((state.tremolo_amplitude_modulation() - 1.5).abs() < 0.01);
+
+        // Ramp down
+        state.tremolo_waveform = 1;
+        state.tremolo_phase = 0.0; // Starts at 1.0
+        assert!((state.tremolo_amplitude_modulation() - 1.5).abs() < 0.01);
+
+        // Square
+        state.tremolo_waveform = 2;
+        state.tremolo_phase = 0.5; // First half
+        assert!((state.tremolo_amplitude_modulation() - 1.5).abs() < 0.01);
+        state.tremolo_phase = 4.0; // Second half
+        assert!((state.tremolo_amplitude_modulation() - 0.5).abs() < 0.01);
     }
 
     #[test]
@@ -729,6 +997,75 @@ mod tests {
         assert!(state.vibrato_active);
         assert_eq!(state.vibrato_speed, 4);
         assert_eq!(state.vibrato_depth, 8);
+    }
+
+    #[test]
+    fn test_process_row_tremolo() {
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
+        let effects = vec![Effect::from_type(EffectType::Tremolo, 0x48)];
+        proc.process_row(0, &effects, None);
+
+        let state = proc.channel_state(0).unwrap();
+        assert!(state.tremolo_active);
+        assert_eq!(state.tremolo_speed, 4);
+        assert_eq!(state.tremolo_depth, 8);
+    }
+
+    #[test]
+    fn test_process_row_tone_portamento_volume_slide() {
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
+        // Set initial speed and volume
+        proc.process_row(
+            0,
+            &[Effect::from_type(EffectType::PortamentoToNote, 0x10)],
+            None,
+        );
+        proc.process_row(0, &[Effect::from_type(EffectType::SetVolume, 0x40)], None);
+
+        // 5xy: Porta + Vol Slide
+        let effects = vec![Effect::from_type(
+            EffectType::TonePortamentoVolumeSlide,
+            0x10,
+        )]; // Up 1
+        proc.process_row(0, &effects, None);
+
+        let state = proc.channel_state(0).unwrap();
+        assert_eq!(state.portamento_speed, 1.0);
+        assert_eq!(state.volume_slide_up, 1);
+    }
+
+    #[test]
+    fn test_process_row_sample_offset() {
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
+        let effects = vec![Effect::from_type(EffectType::SampleOffset, 0x01)]; // offset 256
+        proc.process_row(0, &effects, None);
+
+        assert_eq!(proc.sample_offset(0), Some(256));
+    }
+
+    #[test]
+    fn test_process_row_extended_fine_portamento() {
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
+        let initial_ratio = proc.pitch_ratio(0);
+
+        // E11: Fine Porta Up 1
+        let effects = vec![Effect::from_type(EffectType::Extended, 0x11)];
+        proc.process_row(0, &effects, None);
+
+        assert!(proc.pitch_ratio(0) > initial_ratio);
+    }
+
+    #[test]
+    fn test_process_row_extended_fine_volume_slide() {
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
+        proc.process_row(0, &[Effect::from_type(EffectType::SetVolume, 0x40)], None);
+        let initial_vol = proc.volume_override(0).unwrap();
+
+        // EB1: Fine Volume Slide Down 1
+        let effects = vec![Effect::from_type(EffectType::Extended, 0xB1)];
+        proc.process_row(0, &effects, None);
+
+        assert!(proc.volume_override(0).unwrap() < initial_vol);
     }
 
     #[test]

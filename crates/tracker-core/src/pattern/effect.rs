@@ -24,6 +24,14 @@ pub enum EffectType {
     PortamentoToNote,
     /// `4xy` — Vibrato: oscillate pitch with speed x, depth y.
     Vibrato,
+    /// `5xy` — Tone Portamento + Volume Slide.
+    TonePortamentoVolumeSlide,
+    /// `6xy` — Vibrato + Volume Slide.
+    VibratoVolumeSlide,
+    /// `7xy` — Tremolo: oscillate amplitude with speed x, depth y.
+    Tremolo,
+    /// `9xx` — Sample Offset: start sample at xx * 256 frames.
+    SampleOffset,
     /// `Axy` — Volume slide: x = up speed, y = down speed.
     VolumeSlide,
     /// `Bxx` — Position jump: jump to arrangement position xx.
@@ -32,6 +40,8 @@ pub enum EffectType {
     SetVolume,
     /// `Dxx` — Pattern break: jump to row xx of the next pattern.
     PatternBreak,
+    /// `Exy` — Extended effects: sub-command x, param y.
+    Extended,
     /// `Fxx` — Set speed/BPM.
     SetSpeed,
 }
@@ -47,10 +57,15 @@ impl EffectType {
             0x2 => Some(EffectType::PitchSlideDown),
             0x3 => Some(EffectType::PortamentoToNote),
             0x4 => Some(EffectType::Vibrato),
+            0x5 => Some(EffectType::TonePortamentoVolumeSlide),
+            0x6 => Some(EffectType::VibratoVolumeSlide),
+            0x7 => Some(EffectType::Tremolo),
+            0x9 => Some(EffectType::SampleOffset),
             0xA => Some(EffectType::VolumeSlide),
             0xB => Some(EffectType::PositionJump),
             0xC => Some(EffectType::SetVolume),
             0xD => Some(EffectType::PatternBreak),
+            0xE => Some(EffectType::Extended),
             0xF => Some(EffectType::SetSpeed),
             _ => None,
         }
@@ -64,10 +79,15 @@ impl EffectType {
             EffectType::PitchSlideDown => 0x2,
             EffectType::PortamentoToNote => 0x3,
             EffectType::Vibrato => 0x4,
+            EffectType::TonePortamentoVolumeSlide => 0x5,
+            EffectType::VibratoVolumeSlide => 0x6,
+            EffectType::Tremolo => 0x7,
+            EffectType::SampleOffset => 0x9,
             EffectType::VolumeSlide => 0xA,
             EffectType::SetVolume => 0xC,
             EffectType::PositionJump => 0xB,
             EffectType::PatternBreak => 0xD,
+            EffectType::Extended => 0xE,
             EffectType::SetSpeed => 0xF,
         }
     }
@@ -80,10 +100,15 @@ impl EffectType {
             EffectType::PitchSlideDown => "Pitch Down",
             EffectType::PortamentoToNote => "Porta Note",
             EffectType::Vibrato => "Vibrato",
+            EffectType::TonePortamentoVolumeSlide => "Porta+Vol",
+            EffectType::VibratoVolumeSlide => "Vib+Vol",
+            EffectType::Tremolo => "Tremolo",
+            EffectType::SampleOffset => "Offset",
             EffectType::VolumeSlide => "Vol Slide",
             EffectType::PositionJump => "Pos Jump",
             EffectType::SetVolume => "Set Vol",
             EffectType::PatternBreak => "Pat Break",
+            EffectType::Extended => "Extended",
             EffectType::SetSpeed => "Set Speed",
         }
     }
@@ -258,6 +283,19 @@ mod tests {
             Some(EffectType::PortamentoToNote)
         );
         assert_eq!(EffectType::from_command(0x4), Some(EffectType::Vibrato));
+        assert_eq!(
+            EffectType::from_command(0x5),
+            Some(EffectType::TonePortamentoVolumeSlide)
+        );
+        assert_eq!(
+            EffectType::from_command(0x6),
+            Some(EffectType::VibratoVolumeSlide)
+        );
+        assert_eq!(EffectType::from_command(0x7), Some(EffectType::Tremolo));
+        assert_eq!(
+            EffectType::from_command(0x9),
+            Some(EffectType::SampleOffset)
+        );
         assert_eq!(EffectType::from_command(0xA), Some(EffectType::VolumeSlide));
         assert_eq!(
             EffectType::from_command(0xB),
@@ -268,17 +306,14 @@ mod tests {
             EffectType::from_command(0xD),
             Some(EffectType::PatternBreak)
         );
+        assert_eq!(EffectType::from_command(0xE), Some(EffectType::Extended));
         assert_eq!(EffectType::from_command(0xF), Some(EffectType::SetSpeed));
     }
 
     #[test]
     fn test_effect_type_unrecognized_commands() {
-        assert_eq!(EffectType::from_command(0x5), None);
-        assert_eq!(EffectType::from_command(0x6), None);
-        assert_eq!(EffectType::from_command(0x7), None);
+        // Now only 0x8 is unrecognized among standard 0-F
         assert_eq!(EffectType::from_command(0x8), None);
-        assert_eq!(EffectType::from_command(0x9), None);
-        assert_eq!(EffectType::from_command(0xE), None);
     }
 
     #[test]
@@ -289,10 +324,15 @@ mod tests {
             EffectType::PitchSlideDown,
             EffectType::PortamentoToNote,
             EffectType::Vibrato,
+            EffectType::TonePortamentoVolumeSlide,
+            EffectType::VibratoVolumeSlide,
+            EffectType::Tremolo,
+            EffectType::SampleOffset,
             EffectType::VolumeSlide,
             EffectType::PositionJump,
             EffectType::SetVolume,
             EffectType::PatternBreak,
+            EffectType::Extended,
             EffectType::SetSpeed,
         ];
         for &effect_type in &types {
@@ -321,7 +361,7 @@ mod tests {
         assert_eq!(eff.effect_type(), Some(EffectType::SetVolume));
 
         // Unknown command
-        let eff_unknown = Effect::new(0x7, 0x00);
+        let eff_unknown = Effect::new(0x8, 0x00);
         assert_eq!(eff_unknown.effect_type(), None);
     }
 
@@ -334,12 +374,17 @@ mod tests {
         assert_eq!(Effect::new(0x2, 0x20).mnemonic(), "Pitch Down");
         assert_eq!(Effect::new(0x3, 0x08).mnemonic(), "Porta Note");
         assert_eq!(Effect::new(0x4, 0x46).mnemonic(), "Vibrato");
+        assert_eq!(Effect::new(0x5, 0x00).mnemonic(), "Porta+Vol");
+        assert_eq!(Effect::new(0x6, 0x00).mnemonic(), "Vib+Vol");
+        assert_eq!(Effect::new(0x7, 0x00).mnemonic(), "Tremolo");
+        assert_eq!(Effect::new(0x9, 0x00).mnemonic(), "Offset");
         assert_eq!(Effect::new(0xA, 0x04).mnemonic(), "Vol Slide");
         assert_eq!(Effect::new(0xB, 0x02).mnemonic(), "Pos Jump");
         assert_eq!(Effect::new(0xC, 0x40).mnemonic(), "Set Vol");
         assert_eq!(Effect::new(0xD, 0x00).mnemonic(), "Pat Break");
+        assert_eq!(Effect::new(0xE, 0x00).mnemonic(), "Extended");
         assert_eq!(Effect::new(0xF, 0x06).mnemonic(), "Set Speed");
-        assert_eq!(Effect::new(0x7, 0x00).mnemonic(), "Unknown");
+        assert_eq!(Effect::new(0x8, 0x00).mnemonic(), "Unknown");
     }
 
     #[test]
@@ -452,10 +497,15 @@ mod tests {
             (EffectType::PitchSlideDown, 0x20, 0x2),
             (EffectType::PortamentoToNote, 0x08, 0x3),
             (EffectType::Vibrato, 0x46, 0x4),
+            (EffectType::TonePortamentoVolumeSlide, 0x12, 0x5),
+            (EffectType::VibratoVolumeSlide, 0x21, 0x6),
+            (EffectType::Tremolo, 0x48, 0x7),
+            (EffectType::SampleOffset, 0x80, 0x9),
             (EffectType::VolumeSlide, 0x04, 0xA),
             (EffectType::PositionJump, 0x02, 0xB),
             (EffectType::SetVolume, 0x40, 0xC),
             (EffectType::PatternBreak, 0x00, 0xD),
+            (EffectType::Extended, 0x12, 0xE),
             (EffectType::SetSpeed, 0x06, 0xF),
         ];
         for (effect_type, param, expected_cmd) in cases {
