@@ -7,6 +7,18 @@
 /// MIDI note number for C-4 (standard tracker base pitch).
 pub const C4_MIDI: u8 = 48;
 
+/// Loop mode for sample playback.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LoopMode {
+    /// No loop: playback stops at the end of the sample.
+    #[default]
+    NoLoop,
+    /// Forward loop: playback jumps back to `loop_start` when `loop_end` is reached.
+    Forward,
+    /// Ping-pong loop: playback reverses direction at `loop_start` and `loop_end`.
+    PingPong,
+}
+
 /// Represents a loaded audio sample
 #[derive(Clone, Debug)]
 pub struct Sample {
@@ -21,23 +33,41 @@ pub struct Sample {
     /// MIDI note number of the sample's natural pitch (default: C-4 = 48).
     /// Playing this note will reproduce the sample at its original rate.
     base_note: u8,
+    /// Loop playback mode.
+    pub loop_mode: LoopMode,
+    /// Start point of the loop in frames.
+    pub loop_start: usize,
+    /// End point of the loop in frames (inclusive).
+    pub loop_end: usize,
 }
 
 impl Sample {
     /// Create a new Sample instance with default base note C-4.
     pub fn new(data: Vec<f32>, sample_rate: u32, channels: u16, name: Option<String>) -> Self {
+        let frame_count = data.len() / channels as usize;
         Self {
             data,
             sample_rate,
             channels,
             name,
             base_note: C4_MIDI,
+            loop_mode: LoopMode::NoLoop,
+            loop_start: 0,
+            loop_end: frame_count.saturating_sub(1),
         }
     }
 
     /// Create a new Sample with an explicit base note (MIDI note number).
     pub fn with_base_note(mut self, base_note: u8) -> Self {
         self.base_note = base_note;
+        self
+    }
+
+    /// Set the loop points and mode for the sample.
+    pub fn with_loop(mut self, mode: LoopMode, start: usize, end: usize) -> Self {
+        self.loop_mode = mode;
+        self.loop_start = start;
+        self.loop_end = end;
         self
     }
 
@@ -103,6 +133,9 @@ impl Default for Sample {
             channels: 1,
             name: None,
             base_note: C4_MIDI,
+            loop_mode: LoopMode::NoLoop,
+            loop_start: 0,
+            loop_end: 0,
         }
     }
 }
@@ -173,5 +206,14 @@ mod tests {
         assert_eq!(sample.channels(), 1);
         assert_eq!(sample.name(), Some("test"));
         assert_eq!(sample.base_note(), C4_MIDI);
+    }
+
+    #[test]
+    fn test_sample_loop_properties() {
+        let sample = Sample::new(vec![0.0; 100], 44100, 1, None)
+            .with_loop(LoopMode::Forward, 10, 90);
+        assert_eq!(sample.loop_mode, LoopMode::Forward);
+        assert_eq!(sample.loop_start, 10);
+        assert_eq!(sample.loop_end, 90);
     }
 }
