@@ -102,6 +102,10 @@ pub struct ChannelEffectState {
     /// Volume slide down speed per row.
     pub volume_slide_down: u8,
 
+    // --- Finetune ---
+    /// Per-row finetune override (E5x effect).
+    pub finetune_override: Option<i8>,
+
     // --- Pattern Loop (E6x) ---
     /// Row index where the loop starts.
     pub pattern_loop_start_row: Option<usize>,
@@ -140,6 +144,7 @@ impl Default for ChannelEffectState {
             volume_override: None,
             volume_slide_up: 0,
             volume_slide_down: 0,
+            finetune_override: None,
             pattern_loop_start_row: None,
             pattern_loop_count: 0,
             row_frame_counter: 0,
@@ -167,6 +172,7 @@ impl ChannelEffectState {
         self.volume_slide_up = 0;
         self.volume_slide_down = 0;
         self.sample_offset = None;
+        self.finetune_override = None;
         self.row_frame_counter = 0;
     }
 
@@ -488,6 +494,16 @@ impl TrackerEffectProcessor {
                             // E4x: Set Vibrato Waveform
                             state.vibrato_waveform = sub_param;
                         }
+                        0x5 => {
+                            // E5x: Set Finetune
+                            // Maps 0x0-0x7 to 0..+7, 0x8-0xF to -8..-1
+                            let ft = if sub_param <= 0x7 {
+                                sub_param as i8
+                            } else {
+                                (sub_param as i8) - 16
+                            };
+                            state.finetune_override = Some(ft);
+                        }
                         0x6 => {
                             // E6x: Pattern Loop
                             if sub_param == 0 {
@@ -574,6 +590,11 @@ impl TrackerEffectProcessor {
     /// Get the sample playback offset for a channel (from 9xx effect).
     pub fn sample_offset(&self, channel: usize) -> Option<usize> {
         self.channels.get(channel).and_then(|s| s.sample_offset)
+    }
+
+    /// Get the finetune override for a channel (from E5x effect).
+    pub fn finetune_override(&self, channel: usize) -> Option<i8> {
+        self.channels.get(channel).and_then(|s| s.finetune_override)
     }
 
     /// Get the effective volume override for a channel (from Cxx or Axy effects).

@@ -59,9 +59,13 @@ impl Voice {
 /// Multi-track support: the mixer stores per-channel mixing state (volume,
 /// pan, mute/solo) synced from track metadata. Equal-power panning is used
 /// with -3dB center.
+use crate::song::Instrument;
+
 pub struct Mixer {
     /// Loaded audio samples available for playback.
     samples: Vec<Arc<Sample>>,
+    /// Instrument definitions (mapping name to sample index).
+    instruments: Vec<Instrument>,
     /// Per-channel voice state (one voice per channel).
     voices: Vec<Option<Voice>>,
     /// Output sample rate in Hz (used for pitch calculation).
@@ -75,13 +79,19 @@ pub struct Mixer {
 }
 
 impl Mixer {
-    /// Create a new mixer with the given samples and channel count.
+    /// Create a new mixer with the given samples, instruments, and channel count.
     ///
     /// # Arguments
     /// * `samples` - The loaded audio samples indexed by instrument number
+    /// * `instruments` - Instrument definitions
     /// * `num_channels` - Number of pattern channels (one voice per channel)
     /// * `output_sample_rate` - The output sample rate in Hz
-    pub fn new(samples: Vec<Arc<Sample>>, num_channels: usize, output_sample_rate: u32) -> Self {
+    pub fn new(
+        samples: Vec<Arc<Sample>>,
+        instruments: Vec<Instrument>,
+        num_channels: usize,
+        output_sample_rate: u32,
+    ) -> Self {
         let mut bus_system = BusSystem::new(bus::DEFAULT_NUM_BUSES);
         bus_system.prepare(ProcessSpec {
             sample_rate: output_sample_rate as f32,
@@ -100,6 +110,7 @@ impl Mixer {
 
         Self {
             samples,
+            instruments,
             voices: vec![None; num_channels],
             output_sample_rate,
             channel_strips,
@@ -184,9 +195,9 @@ impl Mixer {
                         self.voices[ch] = None;
                         continue;
                     }
-                    let instrument = cell.instrument.unwrap_or(note.instrument) as usize;
-                    if instrument < self.samples.len() {
-                        let sample = &self.samples[instrument];
+                    let instrument_idx = cell.instrument.unwrap_or(note.instrument) as usize;
+                    if instrument_idx < self.samples.len() {
+                        let sample = &self.samples[instrument_idx];
                         // Calculate playback rate to pitch the sample to the desired note.
                         // The sample's base_note (default C-4) plays at original speed.
                         // Higher notes play faster, lower notes play slower.
@@ -194,12 +205,24 @@ impl Mixer {
                         let target_freq = note.frequency();
                         let sample_rate_ratio =
                             sample.sample_rate() as f64 / self.output_sample_rate as f64;
-                        let playback_rate = (target_freq / base_freq) * sample_rate_ratio;
+                        let mut playback_rate = (target_freq / base_freq) * sample_rate_ratio;
+
+                        // Apply finetune from instrument or effect override
+                        let finetune = if let Some(ft_override) = self.effect_processor.finetune_override(ch) {
+                            ft_override
+                        } else {
+                            self.instruments.get(instrument_idx).map(|inst| inst.finetune).unwrap_or(0)
+                        };
+
+                        if finetune != 0 {
+                            // ProTracker finetune formula: 1 unit = 1/8th of a semitone
+                            playback_rate *= 2.0_f64.powf(finetune as f64 / (12.0 * 8.0));
+                        }
 
                         // Map velocity 0-127 to gain 0.0-1.0
                         let velocity_gain = note.velocity as f32 / 127.0;
 
-                        let mut voice = Voice::new(instrument, playback_rate, velocity_gain);
+                        let mut voice = Voice::new(instrument_idx, playback_rate, velocity_gain);
                         if let Some(offset) = self.effect_processor.sample_offset(ch) {
                             voice = voice.with_position(offset as f64);
                         }
@@ -456,14 +479,14 @@ mod tests {
     #[test]
     fn test_mixer_creation() {
         let sample = make_test_sample(44100, 0.25);
-        let mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
         assert_eq!(mixer.active_voice_count(), 0);
     }
 
     #[test]
     fn test_mixer_tick_triggers_voice() {
         let sample = make_test_sample(44100, 0.25);
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         let note = Note::new(Pitch::A, 4, 100, 0);
@@ -476,7 +499,7 @@ mod tests {
     #[test]
     fn test_mixer_tick_note_off() {
         let sample = make_test_sample(44100, 0.25);
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
@@ -492,7 +515,7 @@ mod tests {
     #[test]
     fn test_mixer_tick_empty_row_continues() {
         let sample = make_test_sample(44100, 0.25);
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
@@ -508,7 +531,7 @@ mod tests {
     #[test]
     fn test_mixer_tick_out_of_bounds_row() {
         let sample = make_test_sample(44100, 0.25);
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
         let pattern = Pattern::new(16, 4);
 
         // Should not panic on out-of-bounds row
@@ -519,7 +542,7 @@ mod tests {
     #[test]
     fn test_mixer_tick_invalid_instrument() {
         let sample = make_test_sample(44100, 0.25);
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         // Instrument index 5 doesn't exist (only one sample loaded)
@@ -533,7 +556,7 @@ mod tests {
     #[test]
     fn test_mixer_render_silence_when_no_voices() {
         let sample = make_test_sample(44100, 0.25);
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
         let mut output = vec![0.0f32; 512];
 
         mixer.render(&mut output);
@@ -545,7 +568,7 @@ mod tests {
     #[test]
     fn test_mixer_render_produces_audio() {
         let sample = make_test_sample(44100, 0.25);
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
@@ -563,8 +586,8 @@ mod tests {
     #[test]
     fn test_mixer_render_velocity_scaling() {
         let sample = Arc::new(make_test_sample(44100, 0.25));
-        let mut mixer_loud = Mixer::new(vec![Arc::clone(&sample)], 4, 44100);
-        let mut mixer_quiet = Mixer::new(vec![Arc::clone(&sample)], 4, 44100);
+        let mut mixer_loud = Mixer::new(vec![Arc::clone(&sample)], Vec::new(), 4, 44100);
+        let mut mixer_quiet = Mixer::new(vec![Arc::clone(&sample)], Vec::new(), 4, 44100);
 
         let mut pattern_loud = Pattern::new(16, 4);
         pattern_loud.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
@@ -596,7 +619,7 @@ mod tests {
     #[test]
     fn test_mixer_render_multiple_voices() {
         let sample = make_test_sample(44100, 0.25);
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         pattern.set_note(0, 0, Note::new(Pitch::C, 4, 100, 0));
@@ -620,7 +643,7 @@ mod tests {
         let data: Vec<f32> = vec![1.0; num_samples];
         let sample = Sample::new(data, 44100, 1, Some("loud".to_string()));
 
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         // Trigger on all 4 channels at max velocity
@@ -643,7 +666,7 @@ mod tests {
     #[test]
     fn test_mixer_stop_all() {
         let sample = make_test_sample(44100, 0.25);
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
@@ -662,7 +685,7 @@ mod tests {
         let data: Vec<f32> = vec![0.5; 10];
         let sample = Sample::new(data, 44100, 1, Some("short".to_string()));
 
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
@@ -684,7 +707,7 @@ mod tests {
     #[test]
     fn test_mixer_zero_velocity() {
         let sample = make_test_sample(44100, 0.25);
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         pattern.set_note(0, 0, Note::new(Pitch::A, 4, 0, 0));
@@ -711,7 +734,7 @@ mod tests {
         }
         let sample = Sample::new(data, 44100, 2, Some("stereo".to_string()));
 
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
@@ -741,7 +764,7 @@ mod tests {
         let sample = Sample::new(data, 44100, 1, Some("test".to_string()));
         assert_eq!(sample.base_note(), 48); // C-4 default
 
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
         let mut pattern = Pattern::new(16, 4);
         // C-4 note should play at original rate
         pattern.set_note(0, 0, Note::new(Pitch::C, 4, 100, 0));
@@ -762,8 +785,8 @@ mod tests {
         let data: Vec<f32> = (0..4410).map(|i| i as f32 / 4410.0).collect();
         let sample = Arc::new(Sample::new(data, 44100, 1, None));
 
-        let mut mixer_low = Mixer::new(vec![Arc::clone(&sample)], 4, 44100);
-        let mut mixer_high = Mixer::new(vec![Arc::clone(&sample)], 4, 44100);
+        let mut mixer_low = Mixer::new(vec![Arc::clone(&sample)], Vec::new(), 4, 44100);
+        let mut mixer_high = Mixer::new(vec![Arc::clone(&sample)], Vec::new(), 4, 44100);
 
         let mut pattern_low = Pattern::new(16, 4);
         pattern_low.set_note(0, 0, Note::new(Pitch::C, 3, 100, 0)); // C-3: one octave below base
@@ -800,7 +823,7 @@ mod tests {
         let data: Vec<f32> = vec![0.8; 4410];
         let sample = Sample::new(data, 44100, 1, Some("a4_sample".to_string())).with_base_note(57); // A-4
 
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
         let mut pattern = Pattern::new(16, 4);
         pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
 
@@ -829,7 +852,7 @@ mod tests {
         let sample_a = Sample::new(vec![0.3; 4410], 44100, 1, Some("A".to_string()));
         let sample_b = Sample::new(vec![0.9; 4410], 44100, 1, Some("B".to_string()));
 
-        let mut mixer = Mixer::new(vec![Arc::new(sample_a), Arc::new(sample_b)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample_a), Arc::new(sample_b)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         // Channel 0: instrument 0 (quieter sample)
@@ -846,6 +869,7 @@ mod tests {
         // Render with only instrument 0
         let mut mixer_a = Mixer::new(
             vec![Arc::new(Sample::new(vec![0.3; 4410], 44100, 1, None))],
+            Vec::new(),
             4,
             44100,
         );
@@ -860,6 +884,7 @@ mod tests {
                 Arc::new(Sample::new(vec![0.0; 1], 44100, 1, None)),
                 Arc::new(Sample::new(vec![0.9; 4410], 44100, 1, None)),
             ],
+            Vec::new(),
             4,
             44100,
         );
@@ -882,7 +907,7 @@ mod tests {
     #[test]
     fn test_mixer_note_off_stops_sample() {
         let sample = Sample::new(vec![0.5; 44100], 44100, 1, None); // 1 second sample
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         pattern.set_note(0, 0, Note::new(Pitch::C, 4, 100, 0));
@@ -927,7 +952,7 @@ mod tests {
     #[test]
     fn test_mixer_empty_sample_deactivates() {
         let sample = Sample::new(vec![], 44100, 1, None);
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
@@ -948,7 +973,7 @@ mod tests {
     #[test]
     fn test_mixer_add_sample() {
         let sample1 = make_test_sample(44100, 0.25);
-        let mut mixer = Mixer::new(vec![Arc::new(sample1)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample1)], Vec::new(), 4, 44100);
         assert_eq!(mixer.sample_count(), 1);
 
         let sample2 = make_test_sample(44100, 0.5);
@@ -960,7 +985,7 @@ mod tests {
     #[test]
     fn test_mixer_sample_name() {
         let sample = make_test_sample(44100, 0.25);
-        let mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
         assert_eq!(mixer.sample_name(0), Some("sine440"));
         assert_eq!(mixer.sample_name(1), None);
     }
@@ -969,7 +994,7 @@ mod tests {
     fn test_mixer_add_sample_playback() {
         let sample1 = make_test_sample(44100, 0.25);
         let sample2 = Sample::new(vec![0.8; 4410], 44100, 1, Some("loud".to_string()));
-        let mut mixer = Mixer::new(vec![Arc::new(sample1)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample1)], Vec::new(), 4, 44100);
         let idx = mixer.add_sample(Arc::new(sample2));
 
         let mut pattern = Pattern::new(16, 4);
@@ -990,7 +1015,7 @@ mod tests {
     #[test]
     fn test_mixer_muted_channel_produces_silence() {
         let sample = Sample::new(vec![0.8; 4410], 44100, 1, Some("test".to_string()));
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
@@ -1012,7 +1037,7 @@ mod tests {
     #[test]
     fn test_mixer_solo_filters_non_soloed() {
         let sample = Sample::new(vec![0.8; 4410], 44100, 1, Some("test".to_string()));
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
@@ -1035,13 +1060,13 @@ mod tests {
         ));
 
         // Full volume
-        let mut mixer_full = Mixer::new(vec![Arc::clone(&sample)], 4, 44100);
+        let mut mixer_full = Mixer::new(vec![Arc::clone(&sample)], Vec::new(), 4, 44100);
         let mut pattern_full = Pattern::new(16, 4);
         pattern_full.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
         mixer_full.tick(0, &pattern_full);
 
         // Half volume
-        let mut mixer_half = Mixer::new(vec![Arc::clone(&sample)], 4, 44100);
+        let mut mixer_half = Mixer::new(vec![Arc::clone(&sample)], Vec::new(), 4, 44100);
         let mut pattern_half = Pattern::new(16, 4);
         pattern_half.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
         pattern_half.get_track_mut(0).unwrap().set_volume(0.5);
@@ -1075,7 +1100,7 @@ mod tests {
     #[test]
     fn test_mixer_pan_left_only_left_channel() {
         let sample = Sample::new(vec![1.0; 4410], 44100, 1, Some("test".to_string()));
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         pattern.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
@@ -1107,7 +1132,7 @@ mod tests {
     #[test]
     fn test_mixer_pan_right_only_right_channel() {
         let sample = Sample::new(vec![1.0; 4410], 44100, 1, Some("test".to_string()));
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         pattern.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
@@ -1138,7 +1163,7 @@ mod tests {
     #[test]
     fn test_mixer_update_tracks_syncs_state() {
         let sample = Sample::new(vec![0.8; 4410], 44100, 1, None);
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut tracks = vec![
             Track::new("Kick"),
@@ -1162,7 +1187,7 @@ mod tests {
     #[test]
     fn test_mixer_muted_voice_still_advances_position() {
         let sample = Sample::new(vec![0.5; 4410], 44100, 1, None);
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         // Start with unmuted to trigger voice
         let mut pattern = Pattern::new(16, 4);
@@ -1185,7 +1210,7 @@ mod tests {
     #[test]
     fn test_mixer_multi_track_independent_mix() {
         let sample = Sample::new(vec![0.2; 4410], 44100, 1, Some("test".to_string()));
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 4, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         // Channel 0: full volume, center
@@ -1222,7 +1247,7 @@ mod tests {
         let data = vec![0.5; 10];
         let sample = Sample::new(data, 44100, 1, None).with_loop(LoopMode::Forward, 5, 9);
 
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 1, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 1, 44100);
         let mut pattern = Pattern::new(16, 1);
         pattern.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
 
@@ -1240,7 +1265,7 @@ mod tests {
     #[test]
     fn test_mixer_sample_offset_effect() {
         let sample = Sample::new(vec![0.0, 0.0, 0.0, 0.0, 0.8, 0.8], 44100, 1, None);
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], 1, 44100);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 1, 44100);
 
         let mut pattern = Pattern::new(16, 1);
         let mut cell = Cell::with_note(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));

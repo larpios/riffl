@@ -138,6 +138,7 @@ impl App {
         // Create mixer with engine's output sample rate
         let mixer = Arc::new(Mutex::new(Mixer::new(
             vec![Arc::new(demo_sample)],
+            Vec::new(),
             pattern.num_channels(),
             output_sample_rate,
         )));

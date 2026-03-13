@@ -20,6 +20,9 @@ pub struct Instrument {
     pub base_note: Note,
     /// Volume multiplier for this instrument (0.0 to 1.0).
     pub volume: f32,
+    /// Finetune adjustment (-8 to +7).
+    /// Each unit is 1/8th of a semitone (12.5 cents).
+    pub finetune: i8,
 }
 
 impl Instrument {
@@ -31,7 +34,14 @@ impl Instrument {
             sample_path: None,
             base_note: Note::simple(Pitch::C, 4),
             volume: 1.0,
+            finetune: 0,
         }
+    }
+
+    /// Set the finetune value for the instrument.
+    pub fn with_finetune(mut self, finetune: i8) -> Self {
+        self.finetune = finetune.clamp(-8, 7);
+        self
     }
 }
 
