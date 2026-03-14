@@ -6,18 +6,18 @@
 
 ## Phase 2: ProTracker Effects Implementation
 
-- [ ] Task: Implement Arpeggio Effect (0xx)
-    - [ ] Write failing tests for arpeggio
-    - [ ] Implement arpeggio to pass tests
-    - [ ] Refactor and verify coverage for arpeggio
-- [ ] Task: Implement Portamento Effects (1xx/2xx/3xx)
-    - [ ] Write failing tests for portamento
-    - [ ] Implement portamento to pass tests
-    - [ ] Refactor and verify coverage for portamento
-- [ ] Task: Implement Vibrato Effect (4xx)
-    - [ ] Write failing tests for vibrato
-    - [ ] Implement vibrato to pass tests
-    - [ ] Refactor and verify coverage for vibrato
+- [x] Task: Implement Arpeggio Effect (0xx) 7b9dbfb
+    - [x] Write failing tests for arpeggio
+    - [x] Implement arpeggio to pass tests
+    - [x] Refactor and verify coverage for arpeggio
+- [x] Task: Implement Portamento Effects (1xx/2xx/3xx) aa58ed1
+    - [x] Write failing tests for portamento
+    - [x] Implement portamento to pass tests
+    - [x] Refactor and verify coverage for portamento
+- [x] Task: Implement Vibrato Effect (4xx) aa58ed1
+    - [x] Write failing tests for vibrato
+    - [x] Implement vibrato to pass tests
+    - [x] Refactor and verify coverage for vibrato
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: ProTracker Effects Implementation' (Protocol in workflow.md)
 
 ## Phase 3: Integration & UI Update
