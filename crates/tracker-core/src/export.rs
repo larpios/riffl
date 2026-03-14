@@ -80,7 +80,12 @@ where
     F: FnMut(f32),
 {
     let num_channels = song.patterns.first().map_or(8, |p| p.num_channels());
-    let mut mixer = Mixer::new(samples.to_vec(), Vec::new(), num_channels, config.sample_rate);
+    let mut mixer = Mixer::new(
+        samples.to_vec(),
+        Vec::new(),
+        num_channels,
+        config.sample_rate,
+    );
     mixer.update_tempo(song.bpm);
 
     // Calculate frames per row based on BPM

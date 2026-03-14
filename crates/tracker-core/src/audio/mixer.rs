@@ -208,10 +208,15 @@ impl Mixer {
                         let mut playback_rate = (target_freq / base_freq) * sample_rate_ratio;
 
                         // Apply finetune from instrument or effect override
-                        let finetune = if let Some(ft_override) = self.effect_processor.finetune_override(ch) {
+                        let finetune = if let Some(ft_override) =
+                            self.effect_processor.finetune_override(ch)
+                        {
                             ft_override
                         } else {
-                            self.instruments.get(instrument_idx).map(|inst| inst.finetune).unwrap_or(0)
+                            self.instruments
+                                .get(instrument_idx)
+                                .map(|inst| inst.finetune)
+                                .unwrap_or(0)
                         };
 
                         if finetune != 0 {
@@ -220,7 +225,12 @@ impl Mixer {
                         }
 
                         // Map velocity 0-127 to gain 0.0-1.0
-                        let velocity_gain = note.velocity as f32 / 127.0;
+                        let inst_vol = self
+                            .instruments
+                            .get(instrument_idx)
+                            .map(|inst| inst.volume)
+                            .unwrap_or(1.0);
+                        let velocity_gain = (note.velocity as f32 / 127.0) * inst_vol;
 
                         let mut voice = Voice::new(instrument_idx, playback_rate, velocity_gain);
                         if let Some(offset) = self.effect_processor.sample_offset(ch) {
@@ -396,6 +406,11 @@ impl Mixer {
         let idx = self.samples.len();
         self.samples.push(sample);
         idx
+    }
+
+    /// Replace the instrument definitions used for volume/finetune lookup.
+    pub fn set_instruments(&mut self, instruments: Vec<Instrument>) {
+        self.instruments = instruments;
     }
 
     /// Clear all loaded samples.
@@ -852,7 +867,12 @@ mod tests {
         let sample_a = Sample::new(vec![0.3; 4410], 44100, 1, Some("A".to_string()));
         let sample_b = Sample::new(vec![0.9; 4410], 44100, 1, Some("B".to_string()));
 
-        let mut mixer = Mixer::new(vec![Arc::new(sample_a), Arc::new(sample_b)], Vec::new(), 4, 44100);
+        let mut mixer = Mixer::new(
+            vec![Arc::new(sample_a), Arc::new(sample_b)],
+            Vec::new(),
+            4,
+            44100,
+        );
 
         let mut pattern = Pattern::new(16, 4);
         // Channel 0: instrument 0 (quieter sample)

@@ -210,8 +210,8 @@ mod tests {
 
     #[test]
     fn test_sample_loop_properties() {
-        let sample = Sample::new(vec![0.0; 100], 44100, 1, None)
-            .with_loop(LoopMode::Forward, 10, 90);
+        let sample =
+            Sample::new(vec![0.0; 100], 44100, 1, None).with_loop(LoopMode::Forward, 10, 90);
         assert_eq!(sample.loop_mode, LoopMode::Forward);
         assert_eq!(sample.loop_start, 10);
         assert_eq!(sample.loop_end, 90);

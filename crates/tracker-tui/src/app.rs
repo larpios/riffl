@@ -113,6 +113,21 @@ pub struct App {
 
     /// Timestamp of the last update call (for delta time calculation)
     last_update: Instant,
+
+    /// Pending first key of a two-key chord (e.g. 'd' waiting for 'dd')
+    pub pending_key: Option<char>,
+
+    /// Whether the project has unsaved changes
+    pub is_dirty: bool,
+
+    /// Whether a quit confirmation is pending (user pressed q with unsaved changes)
+    pub pending_quit: bool,
+
+    /// Whether vim command-line mode is active (`:` was pressed)
+    pub command_mode: bool,
+
+    /// Current command-line input buffer
+    pub command_input: String,
 }
 
 impl App {
@@ -195,6 +210,11 @@ impl App {
             live_mode: false,
             show_help: false,
             last_update: Instant::now(),
+            pending_key: None,
+            is_dirty: false,
+            pending_quit: false,
+            command_mode: false,
+            command_input: String::new(),
         }
     }
 
@@ -214,27 +234,17 @@ impl App {
     /// Initialize the application and set up the audio callback
     pub fn init(&mut self) -> Result<()> {
         self.running = true;
+        self.sync_mixer_instruments();
 
         // Set up audio callback that renders from the shared mixer
         if let Some(ref mut engine) = self.audio_engine {
             let mixer = self.mixer.clone();
-            let glicol_mixer = self.glicol_mixer.clone();
             let callback = Arc::new(Mutex::new(move |data: &mut [f32]| {
-                // Mix both mixers for now to verify Glicol
                 if let Ok(mut m) = mixer.lock() {
                     m.render(data);
                 } else {
                     for sample in data.iter_mut() {
                         *sample = 0.0;
-                    }
-                }
-
-                if let Ok(mut gm) = glicol_mixer.lock() {
-                    // Create a temp buffer for Glicol to avoid overwriting the original mixer's output
-                    let mut gm_buf = vec![0.0; data.len()];
-                    gm.render(&mut gm_buf);
-                    for (i, sample) in data.iter_mut().enumerate() {
-                        *sample = (*sample + gm_buf[i]).clamp(-1.0, 1.0);
                     }
                 }
             }));
@@ -380,6 +390,18 @@ impl App {
 
     /// Handle application quit with audio cleanup
     pub fn quit(&mut self) {
+        if self.is_dirty {
+            self.pending_quit = true;
+            self.open_modal(Modal::confirmation(
+                "Unsaved Changes".to_string(),
+                "Quit without saving? (Enter=yes, Esc=no)".to_string(),
+            ));
+            return;
+        }
+        self.force_quit();
+    }
+
+    pub fn force_quit(&mut self) {
         if !self.transport.is_stopped() {
             self.transport.stop();
             if let Ok(mut mixer) = self.mixer.lock() {
@@ -391,6 +413,36 @@ impl App {
         }
         self.should_quit = true;
         self.running = false;
+    }
+
+    /// Mark the project as having unsaved changes.
+    pub fn mark_dirty(&mut self) {
+        self.is_dirty = true;
+    }
+
+    /// Execute the current command-line input and exit command mode.
+    pub fn execute_command(&mut self) {
+        let cmd = self.command_input.trim().to_string();
+        self.command_mode = false;
+        self.command_input.clear();
+
+        match cmd.as_str() {
+            "w" => self.save_project(),
+            "wq" | "x" => {
+                self.save_project();
+                if !self.is_dirty {
+                    self.force_quit();
+                }
+            }
+            "q" => self.quit(),
+            "q!" => self.force_quit(),
+            _ => {
+                self.open_modal(Modal::error(
+                    "Unknown command".to_string(),
+                    format!(":{}", cmd),
+                ));
+            }
+        }
     }
 
     /// Toggle audio playback between play and pause.
@@ -445,6 +497,14 @@ impl App {
         }
         if let Ok(mut mixer) = self.mixer.lock() {
             mixer.stop_all();
+        }
+    }
+
+    /// Sync the mixer's instrument list from song.instruments.
+    /// Must be called after any mutation to song.instruments.
+    fn sync_mixer_instruments(&self) {
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.set_instruments(self.song.instruments.clone());
         }
     }
 
@@ -571,9 +631,44 @@ impl App {
         instrument.sample_index = Some(idx);
         instrument.sample_path = Some(path.display().to_string());
         self.song.instruments.push(instrument);
+        self.sync_mixer_instruments();
 
         self.instrument_names.push(name);
         Ok(idx)
+    }
+
+    /// Import a ProTracker .mod file, replacing the current song.
+    /// Returns Ok(()) on success, or an error message.
+    pub fn import_mod_file(&mut self, path: &std::path::Path) -> Result<(), String> {
+        let data = std::fs::read(path).map_err(|e| format!("Read error: {e}"))?;
+        let result = tracker_core::mod_import::import_mod(&data)
+            .map_err(|e| format!("MOD parse error: {e}"))?;
+
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.clear_samples();
+            self.instrument_names.clear();
+            for (sample, inst) in result.samples.iter().zip(result.song.instruments.iter()) {
+                mixer.add_sample(Arc::new(sample.clone()));
+                self.instrument_names.push(inst.name.clone());
+            }
+        } else {
+            return Err("Failed to lock mixer".to_string());
+        }
+
+        self.song = result.song;
+        self.sync_mixer_instruments();
+        self.transport.stop();
+
+        let pattern = if !self.song.patterns.is_empty() {
+            self.song.patterns[0].clone()
+        } else {
+            tracker_core::pattern::Pattern::default()
+        };
+        self.editor = crate::editor::Editor::new(pattern);
+        self.arrangement_view = crate::ui::arrangement::ArrangementView::new();
+        self.is_dirty = false;
+
+        Ok(())
     }
 
     /// Open the export dialog.
@@ -686,6 +781,7 @@ impl App {
         let name = format!("Inst{:02X}", idx);
         let inst = Instrument::new(&name);
         self.song.instruments.push(inst);
+        self.sync_mixer_instruments();
         self.instrument_names.push(name);
         self.instrument_selection = Some(idx);
     }
@@ -695,6 +791,7 @@ impl App {
         if let Some(idx) = self.instrument_selection {
             if idx < self.song.instruments.len() {
                 self.song.instruments.remove(idx);
+                self.sync_mixer_instruments();
                 self.instrument_names.remove(idx);
                 // Adjust selection
                 if self.song.instruments.is_empty() {
@@ -728,6 +825,7 @@ impl App {
                 if let Some(pitch) = Pitch::from_semitone(base_note_midi % 12) {
                     let octave = base_note_midi / 12;
                     self.song.instruments[idx].base_note = Note::simple(pitch, octave);
+                    self.sync_mixer_instruments();
                     return true;
                 }
             }
@@ -938,6 +1036,7 @@ impl App {
         match project::save_project(&path, &self.song) {
             Ok(()) => {
                 self.project_path = Some(path.clone());
+                self.is_dirty = false;
                 self.open_modal(Modal::info(
                     "Project Saved".to_string(),
                     format!("Saved to: {}", path.display()),
@@ -997,7 +1096,9 @@ impl App {
                 }
 
                 self.song = song;
+                self.sync_mixer_instruments();
                 self.project_path = Some(path.to_path_buf());
+                self.is_dirty = false;
                 self.arrangement_view = ArrangementView::new();
                 self.transport.stop();
 

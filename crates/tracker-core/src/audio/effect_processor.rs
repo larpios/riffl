@@ -288,14 +288,14 @@ impl ChannelEffectState {
     pub fn combined_pitch_ratio(&self) -> f64 {
         let arpeggio = 2.0_f64.powf(self.arpeggio_semitone_offset() / 12.0);
         let vibrato = self.vibrato_pitch_ratio();
-        
+
         let mut ratio = self.pitch_ratio;
         if self.glissando {
             // Snap to nearest semitone
             let semitones = (ratio.log2() * 12.0).round();
             ratio = 2.0_f64.powf(semitones / 12.0);
         }
-        
+
         ratio * arpeggio * vibrato
     }
 

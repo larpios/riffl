@@ -61,8 +61,10 @@ pub enum Action {
     // Editing (Normal mode)
     DeleteCell,
     InsertRow,
+    InsertRowBelow,
     DeleteRow,
     Undo,
+    EnterCommandMode,
 
     // Transport
     TogglePlay,
@@ -150,11 +152,13 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             KeyCode::Char('r') => Action::Redo,
             KeyCode::Char('s') => Action::SaveProject,
             KeyCode::Char('o') => Action::LoadProject,
+            KeyCode::Char('f') => Action::OpenFileBrowser,
             KeyCode::Char('e') => Action::OpenExportDialog,
             KeyCode::Char('\\') => Action::ToggleSplitView,
             KeyCode::Char('t') => Action::OpenTemplates,
             KeyCode::Char('l') => Action::ToggleLiveMode,
             KeyCode::Enter => Action::ExecuteScript,
+            KeyCode::Delete => Action::DeleteRow,
             _ => Action::None,
         };
     }
@@ -213,6 +217,9 @@ fn map_normal_mode(key: KeyEvent) -> Action {
 
         // Editing
         KeyCode::Char('x') | KeyCode::Delete => Action::DeleteCell,
+        KeyCode::Insert => Action::InsertRow,
+        KeyCode::Char('o') => Action::InsertRowBelow,
+        KeyCode::Char(':') => Action::EnterCommandMode,
         KeyCode::Char('u') => Action::Undo,
 
         // Octave navigation (parenthesis keys)
@@ -241,10 +248,6 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         KeyCode::Char('3') => Action::SwitchView(AppView::InstrumentList),
         KeyCode::Char('4') => Action::SwitchView(AppView::CodeEditor),
         KeyCode::Char('5') => Action::SwitchView(AppView::PatternList),
-        KeyCode::F(1) => Action::SwitchView(AppView::PatternEditor),
-        KeyCode::F(2) => Action::SwitchView(AppView::Arrangement),
-        KeyCode::F(3) => Action::SwitchView(AppView::InstrumentList),
-        KeyCode::F(4) => Action::SwitchView(AppView::CodeEditor),
 
         // Instrument management (when in InstrumentList view)
         KeyCode::Char('n') => Action::AddInstrument,
@@ -259,7 +262,6 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         // Application
         KeyCode::Char('q') => Action::Quit,
         KeyCode::Char('m') => Action::OpenModal,
-        KeyCode::Char('o') | KeyCode::F(5) => Action::OpenFileBrowser,
         KeyCode::Char('?') => Action::ToggleHelp,
         KeyCode::Enter => Action::Confirm,
         KeyCode::Esc => Action::Cancel,
@@ -288,8 +290,8 @@ fn map_insert_mode(key: KeyEvent) -> Action {
         // Escape returns to Normal mode
         KeyCode::Esc => Action::EnterNormalMode,
 
-        // Note entry (A-G)
-        KeyCode::Char(c @ ('a'..='g' | 'A'..='G')) => Action::EnterNote(c),
+        // Note entry (a-g lowercase; A-F uppercase; G uppercase = GoToRow)
+        KeyCode::Char(c @ ('a'..='g' | 'A'..='F')) => Action::EnterNote(c),
 
         // Octave setting (0-9)
         KeyCode::Char(c @ '0'..='9') => Action::SetOctave(c as u8 - b'0'),
@@ -317,6 +319,9 @@ fn map_insert_mode(key: KeyEvent) -> Action {
 
         // Delete current cell
         KeyCode::Delete | KeyCode::Backspace => Action::DeleteCell,
+
+        // Insert a new row at cursor
+        KeyCode::Insert => Action::InsertRow,
 
         _ => Action::None,
     }
@@ -535,21 +540,21 @@ mod tests {
     }
 
     #[test]
-    fn test_normal_mode_view_switching_f1_f2_f3() {
+    fn test_normal_mode_view_switching_1_2_3() {
         use crate::app::AppView;
-        let f1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
-        let f2 = KeyEvent::new(KeyCode::F(2), KeyModifiers::NONE);
-        let f3 = KeyEvent::new(KeyCode::F(3), KeyModifiers::NONE);
+        let k1 = KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE);
+        let k2 = KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE);
+        let k3 = KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE);
         assert_eq!(
-            map_key_to_action(f1, EditorMode::Normal),
+            map_key_to_action(k1, EditorMode::Normal),
             Action::SwitchView(AppView::PatternEditor)
         );
         assert_eq!(
-            map_key_to_action(f2, EditorMode::Normal),
+            map_key_to_action(k2, EditorMode::Normal),
             Action::SwitchView(AppView::Arrangement)
         );
         assert_eq!(
-            map_key_to_action(f3, EditorMode::Normal),
+            map_key_to_action(k3, EditorMode::Normal),
             Action::SwitchView(AppView::InstrumentList)
         );
     }
@@ -561,12 +566,12 @@ mod tests {
     }
 
     #[test]
-    fn test_normal_mode_shift_f1_f2_unmapped() {
-        // Shift+F1/F2 are no longer BPM large; F1/F2 now switch views
-        let sf1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::SHIFT);
-        let sf2 = KeyEvent::new(KeyCode::F(2), KeyModifiers::SHIFT);
-        assert_eq!(map_key_to_action(sf1, EditorMode::Normal), Action::None);
-        assert_eq!(map_key_to_action(sf2, EditorMode::Normal), Action::None);
+    fn test_normal_mode_ctrl_f_opens_file_browser() {
+        let ctrl_f = KeyEvent::new(KeyCode::Char('f'), KeyModifiers::CONTROL);
+        assert_eq!(
+            map_key_to_action(ctrl_f, EditorMode::Normal),
+            Action::OpenFileBrowser
+        );
     }
 
     #[test]
@@ -704,22 +709,23 @@ mod tests {
     }
 
     #[test]
-    fn test_normal_mode_open_file_browser_o() {
+    fn test_normal_mode_o_inserts_row_below() {
         let o = KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE);
         assert_eq!(
             map_key_to_action(o, EditorMode::Normal),
-            Action::OpenFileBrowser
+            Action::InsertRowBelow
         );
     }
 
     #[test]
-    fn test_normal_mode_open_file_browser_f5() {
-        let f5 = KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE);
+    fn test_normal_mode_ctrl_f_opens_file_browser2() {
+        let ctrl_f = KeyEvent::new(KeyCode::Char('f'), KeyModifiers::CONTROL);
         assert_eq!(
-            map_key_to_action(f5, EditorMode::Normal),
+            map_key_to_action(ctrl_f, EditorMode::Normal),
             Action::OpenFileBrowser
         );
     }
+
 
     // --- Track Operation Tests ---
 
@@ -944,10 +950,10 @@ mod tests {
     // --- Code Editor Keybinding Tests ---
 
     #[test]
-    fn test_normal_mode_f4_switches_to_code_editor() {
-        let f4 = KeyEvent::new(KeyCode::F(4), KeyModifiers::NONE);
+    fn test_normal_mode_4_switches_to_code_editor() {
+        let k4 = KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE);
         assert_eq!(
-            map_key_to_action(f4, EditorMode::Normal),
+            map_key_to_action(k4, EditorMode::Normal),
             Action::SwitchView(AppView::CodeEditor)
         );
     }

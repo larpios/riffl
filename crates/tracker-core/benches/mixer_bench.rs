@@ -12,6 +12,7 @@ fn bench_mixer_new(c: &mut Criterion) {
         b.iter(|| {
             let mixer = Mixer::new(
                 black_box(vec![std::sync::Arc::clone(&sample_arc)]),
+                Vec::new(),
                 4,
                 44100,
             );

@@ -95,6 +95,30 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
 }
 
 fn handle_key_event(app: &mut App, key: KeyEvent) {
+    use crossterm::event::{KeyCode, KeyModifiers};
+
+    // Command mode: handle line input
+    if app.command_mode {
+        match key.code {
+            KeyCode::Enter => app.execute_command(),
+            KeyCode::Esc => {
+                app.command_mode = false;
+                app.command_input.clear();
+            }
+            KeyCode::Backspace => {
+                app.command_input.pop();
+                if app.command_input.is_empty() {
+                    app.command_mode = false;
+                }
+            }
+            KeyCode::Char(c) if key.modifiers == KeyModifiers::NONE || key.modifiers == KeyModifiers::SHIFT => {
+                app.command_input.push(c);
+            }
+            _ => {}
+        }
+        return;
+    }
+
     // If a modal is open, handle modal-specific input first
     if app.has_modal() {
         let action = map_key_to_action(key, app.editor_mode());
@@ -139,9 +163,40 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         if let crossterm::event::KeyCode::Char(c) = key.code {
             if let Some(digit) = hex_char_to_digit(c) {
                 app.editor.enter_effect_digit(digit);
+                app.mark_dirty();
                 return;
             }
         }
+    }
+
+    // Chord handling for Normal mode (e.g. dd = delete row)
+    if app.editor.mode() == EditorMode::Normal
+        && key.modifiers == crossterm::event::KeyModifiers::NONE
+    {
+        if let crossterm::event::KeyCode::Char(c) = key.code {
+            if let Some(pending) = app.pending_key.take() {
+                match (pending, c) {
+                    ('d', 'd') => {
+                        app.editor.delete_row();
+                        app.mark_dirty();
+                        return;
+                    }
+                    _ => {
+                        // Not a recognized chord — fall through with the new key
+                    }
+                }
+            }
+            // 'd' starts a chord; consume and wait for next key
+            if c == 'd' {
+                app.pending_key = Some('d');
+                return;
+            }
+        } else {
+            // Non-char key clears any pending chord
+            app.pending_key = None;
+        }
+    } else {
+        app.pending_key = None;
     }
 
     let action = map_key_to_action(key, app.editor_mode());
@@ -154,6 +209,8 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                 app.instrument_selection_down();
             } else if app.current_view == AppView::PatternList {
                 app.pattern_selection_down();
+            } else if app.editor.mode() == EditorMode::Insert {
+                app.editor.extend_down();
             } else {
                 app.editor.move_down();
             }
@@ -180,23 +237,25 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::EnterNote(c) => {
             if let Some(pitch) = Editor::char_to_pitch(c) {
                 app.editor.enter_note(pitch);
+                app.mark_dirty();
             }
         }
         Action::SetOctave(oct) => app.editor.set_octave(oct),
 
         // Clipboard
         Action::Copy => app.editor.copy(),
-        Action::Paste => app.editor.paste(),
-        Action::Cut => app.editor.cut(),
+        Action::Paste => { app.editor.paste(); app.mark_dirty(); }
+        Action::Cut => { app.editor.cut(); app.mark_dirty(); }
         Action::Redo => {
             app.editor.redo();
+            app.mark_dirty();
         }
 
         // Transpose
-        Action::TransposeUp => app.editor.transpose_selection(1),
-        Action::TransposeDown => app.editor.transpose_selection(-1),
-        Action::TransposeOctaveUp => app.editor.transpose_selection(12),
-        Action::TransposeOctaveDown => app.editor.transpose_selection(-12),
+        Action::TransposeUp => { app.editor.transpose_selection(1); app.mark_dirty(); }
+        Action::TransposeDown => { app.editor.transpose_selection(-1); app.mark_dirty(); }
+        Action::TransposeOctaveUp => { app.editor.transpose_selection(12); app.mark_dirty(); }
+        Action::TransposeOctaveDown => { app.editor.transpose_selection(-12); app.mark_dirty(); }
 
         // Octave navigation
         Action::OctaveUp => app.editor.octave_up(),
@@ -206,24 +265,25 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::GoToRow => app.editor.go_to_row(0),
 
         // Quantize
-        Action::Quantize => app.editor.quantize(),
+        Action::Quantize => { app.editor.quantize(); app.mark_dirty(); }
 
         // Track management
-        Action::AddTrack => app.editor.add_track(),
-        Action::DeleteTrack => {
-            app.editor.delete_track();
-        }
-        Action::CloneTrack => {
-            app.editor.clone_track();
-        }
+        Action::AddTrack => { app.editor.add_track(); app.mark_dirty(); }
+        Action::DeleteTrack => { app.editor.delete_track(); app.mark_dirty(); }
+        Action::CloneTrack => { app.editor.clone_track(); app.mark_dirty(); }
 
         // Interpolation
-        Action::Interpolate => app.editor.interpolate(),
+        Action::Interpolate => { app.editor.interpolate(); app.mark_dirty(); }
 
         // Editing
-        Action::DeleteCell => app.editor.delete_cell(),
-        Action::InsertRow => app.editor.insert_row(),
-        Action::DeleteRow => app.editor.delete_row(),
+        Action::DeleteCell => { app.editor.delete_cell(); app.mark_dirty(); }
+        Action::InsertRow => { app.editor.insert_row(); app.mark_dirty(); }
+        Action::InsertRowBelow => { app.editor.insert_row_below(); app.mark_dirty(); }
+        Action::DeleteRow => { app.editor.delete_row(); app.mark_dirty(); }
+        Action::EnterCommandMode => {
+            app.command_mode = true;
+            app.command_input.clear();
+        }
         Action::Undo => {
             app.editor.undo();
         }
@@ -281,10 +341,14 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::OpenModal => app.open_test_modal(),
         Action::OpenFileBrowser => app.open_file_browser(),
         Action::Cancel => {
+            app.pending_quit = false;
             app.close_modal();
         }
         Action::Confirm => {
-            if app.has_modal() {
+            if app.pending_quit {
+                app.close_modal();
+                app.force_quit();
+            } else if app.has_modal() {
                 app.close_modal();
             } else if app.current_view == AppView::InstrumentList {
                 app.select_instrument();
@@ -511,24 +575,61 @@ fn handle_file_browser_key(app: &mut App, key: KeyEvent) {
         KeyCode::Char('k') | KeyCode::Up => {
             app.file_browser.move_up();
         }
-        KeyCode::Enter => match app.load_selected_sample() {
-            Ok(idx) => {
-                let name = app
-                    .instrument_names()
-                    .get(idx)
-                    .cloned()
-                    .unwrap_or_else(|| "unknown".to_string());
-                app.close_file_browser();
-                app.open_modal(ui::modal::Modal::info(
-                    "Sample Loaded".to_string(),
-                    format!("Loaded '{}' as instrument {:02X}", name, idx),
-                ));
+        KeyCode::Enter => {
+            let is_mod = app
+                .file_browser
+                .selected_path()
+                .and_then(|p| p.extension())
+                .and_then(|e| e.to_str())
+                .map(|e| e.eq_ignore_ascii_case("mod"))
+                .unwrap_or(false);
+
+            if is_mod {
+                let path = app.file_browser.selected_path().map(|p| p.to_path_buf());
+                if let Some(path) = path {
+                    match app.import_mod_file(&path) {
+                        Ok(()) => {
+                            let name = path
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("unknown")
+                                .to_string();
+                            app.close_file_browser();
+                            app.open_modal(ui::modal::Modal::info(
+                                "MOD Imported".to_string(),
+                                format!("Imported '{}'", name),
+                            ));
+                        }
+                        Err(msg) => {
+                            app.close_file_browser();
+                            app.open_modal(ui::modal::Modal::error(
+                                "Import Failed".to_string(),
+                                msg,
+                            ));
+                        }
+                    }
+                }
+            } else {
+                match app.load_selected_sample() {
+                    Ok(idx) => {
+                        let name = app
+                            .instrument_names()
+                            .get(idx)
+                            .cloned()
+                            .unwrap_or_else(|| "unknown".to_string());
+                        app.close_file_browser();
+                        app.open_modal(ui::modal::Modal::info(
+                            "Sample Loaded".to_string(),
+                            format!("Loaded '{}' as instrument {:02X}", name, idx),
+                        ));
+                    }
+                    Err(msg) => {
+                        app.close_file_browser();
+                        app.open_modal(ui::modal::Modal::error("Load Failed".to_string(), msg));
+                    }
+                }
             }
-            Err(msg) => {
-                app.close_file_browser();
-                app.open_modal(ui::modal::Modal::error("Load Failed".to_string(), msg));
-            }
-        },
+        }
         _ => {}
     }
 }

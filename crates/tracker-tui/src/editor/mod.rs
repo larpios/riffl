@@ -297,6 +297,27 @@ impl Editor {
         self.effect_digit_position = 0;
     }
 
+    /// Advance cursor down after note/effect entry in Insert mode.
+    /// Appends a new row if already at the last row.
+    fn advance_row(&mut self) {
+        let last = self.pattern.num_rows().saturating_sub(1);
+        if self.cursor_row >= last {
+            self.pattern.insert_row(self.pattern.num_rows());
+        }
+        self.cursor_row += 1;
+        self.effect_digit_position = 0;
+    }
+
+    /// Move down in Insert mode, extending the pattern if at the last row.
+    pub fn extend_down(&mut self) {
+        let last = self.pattern.num_rows().saturating_sub(1);
+        if self.cursor_row >= last {
+            self.pattern.insert_row(self.pattern.num_rows());
+        }
+        self.cursor_row += 1;
+        self.effect_digit_position = 0;
+    }
+
     /// Move cursor left. In Normal mode, moves by channel. In Insert mode,
     /// moves by sub-column first, then wraps to previous channel.
     pub fn move_left(&mut self) {
@@ -457,8 +478,7 @@ impl Editor {
             self.cursor_channel,
             Cell::with_note(NoteEvent::On(note)),
         );
-        // Advance cursor down after entering a note
-        self.move_down();
+        self.advance_row();
     }
 
     /// Enter a note-off event at the current cursor position.
@@ -472,7 +492,7 @@ impl Editor {
             self.cursor_channel,
             Cell::with_note(NoteEvent::Off),
         );
-        self.move_down();
+        self.advance_row();
     }
 
     /// Set the current octave (0-9). Used when typing a digit in Insert mode.
@@ -525,7 +545,7 @@ impl Editor {
 
             // After completing all 3 digits, advance to next row
             if self.effect_digit_position == 0 {
-                self.move_down();
+                self.advance_row();
             }
         }
     }
@@ -546,6 +566,16 @@ impl Editor {
     pub fn insert_row(&mut self) {
         self.save_history();
         self.pattern.insert_row(self.cursor_row);
+    }
+
+    /// Insert a new empty row below the cursor, move down, and enter Insert mode.
+    pub fn insert_row_below(&mut self) {
+        self.save_history();
+        let insert_at = self.cursor_row + 1;
+        self.pattern.insert_row(insert_at);
+        self.cursor_row = insert_at;
+        self.mode = EditorMode::Insert;
+        self.effect_digit_position = 0;
     }
 
     /// Delete the row at the cursor position, pulling rows up.
@@ -1209,13 +1239,14 @@ mod tests {
     // --- Edge Cases ---
 
     #[test]
-    fn test_enter_note_at_last_row_stays() {
+    fn test_enter_note_at_last_row_extends() {
         let mut editor = Editor::new(Pattern::new(2, 1));
         editor.enter_insert_mode();
         editor.cursor_row = 1;
         editor.enter_note(Pitch::C);
-        // Should stay at last row since move_down can't go past it
-        assert_eq!(editor.cursor_row(), 1);
+        // Should extend the pattern and advance cursor
+        assert_eq!(editor.pattern().num_rows(), 3);
+        assert_eq!(editor.cursor_row(), 2);
     }
 
     // --- Next Track (Tab) Tests ---

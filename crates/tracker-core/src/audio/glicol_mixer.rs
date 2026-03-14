@@ -1,4 +1,3 @@
-use glicol_synth::signal::Noise;
 use glicol_synth::{AudioContext, AudioContextBuilder, Message};
 use petgraph::graph::NodeIndex;
 
@@ -22,23 +21,10 @@ impl GlicolMixer {
         let mut track_nodes = Vec::new();
 
         use glicol_synth::oscillator::SinOsc;
-        for i in 0..num_channels {
-            let node = if i % 2 == 0 {
-                context.add_mono_node(SinOsc::new())
-            } else {
-                context.add_mono_node(Noise::new(42))
-            };
+        for _ in 0..num_channels {
+            let node = context.add_mono_node(SinOsc::new());
             let dest = context.destination;
-            if i % 2 == 0 {
-                context.connect(node, dest);
-            } else {
-                // Gain node is unavailable; skipping for now
-                // Add a Mul node for gain control
-                let gain_node = context.add_mono_node(glicol_synth::operator::Mul::new(1.0));
-                context.connect(node, gain_node);
-                context.connect(gain_node, dest);
-                track_nodes.push(gain_node);
-            }
+            context.connect(node, dest);
             context.send_msg(node, Message::SetToNumber(0, 0.0));
             track_nodes.push(node);
         }

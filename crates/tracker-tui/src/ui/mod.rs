@@ -139,8 +139,10 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     } else {
         ""
     };
+    let dirty_marker = if app.is_dirty { " *" } else { "" };
     let title = format!(
-        " tracker-rs | BPM: {:.0} | {} {}{} [{}] ",
+        " tracker-rs{} | BPM: {:.0} | {} {}{} [{}] ",
+        dirty_marker,
         app.transport.bpm(),
         play_icon,
         play_status,
@@ -568,7 +570,7 @@ fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
     frame.render_widget(Clear, browser_area);
 
     let dir_display = browser.directory().display().to_string();
-    let title = format!(" Load Sample - {} ", dir_display);
+    let title = format!(" Load File  {}  ", dir_display);
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -585,7 +587,7 @@ fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
     if browser.is_empty() {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            "  No audio files found (.wav, .flac, .ogg)",
+            "  No files found (.wav, .flac, .ogg, .mod)",
             Style::default().fg(theme.text_dimmed),
         )));
         lines.push(Line::from(""));
@@ -602,10 +604,26 @@ fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
             selected.saturating_sub(visible_rows / 2)
         };
 
-        // Header line
+        // Header line: describe what Enter will do for the selected file
+        let selected_ext = browser
+            .selected_path()
+            .and_then(|p| p.extension())
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_ascii_lowercase());
+        let action_hint = match selected_ext.as_deref() {
+            Some("mod") => "  Enter → import MOD as new song (replaces current)".to_string(),
+            _ => format!(
+                "  Enter → load as instrument {:02X} (adds to instrument list)",
+                app.song.instruments.len()
+            ),
+        };
         lines.push(Line::from(Span::styled(
-            format!("  {} file(s) found", total),
+            format!("  {} file(s)", total),
             Style::default().fg(theme.text_secondary),
+        )));
+        lines.push(Line::from(Span::styled(
+            action_hint,
+            Style::default().fg(theme.info_color()),
         )));
         lines.push(Line::from(""));
 
@@ -634,12 +652,13 @@ fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
         Span::raw("  "),
-        Span::styled("j/k", Style::default().fg(theme.success_color())),
+        Span::styled("j/k ↑↓", Style::default().fg(theme.success_color())),
         Span::raw(":navigate  "),
         Span::styled("Enter", Style::default().fg(theme.success_color())),
         Span::raw(":load  "),
         Span::styled("Esc", Style::default().fg(theme.error_color())),
-        Span::raw(":cancel"),
+        Span::raw(":close  "),
+        Span::styled(".wav .flac .ogg .mod", Style::default().fg(theme.text_dimmed)),
     ]));
 
     let paragraph = Paragraph::new(lines)
@@ -653,6 +672,22 @@ fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
 /// Render the footer with mode indicator and keybindings
 fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let theme = &app.theme;
+
+    // Command mode: show command line input instead of normal footer
+    if app.command_mode {
+        let cmd_style = Style::default().fg(theme.text);
+        let line = Line::from(vec![
+            Span::styled(":", cmd_style),
+            Span::styled(app.command_input.clone(), cmd_style),
+            Span::styled("█", Style::default().fg(theme.primary)),
+        ]);
+        frame.render_widget(
+            ratatui::widgets::Paragraph::new(line),
+            area,
+        );
+        return;
+    }
+
     let mode = app.editor.mode();
     let cursor_row = app.editor.cursor_row();
     let cursor_channel = app.editor.cursor_channel();
@@ -685,6 +720,8 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 Span::raw(":solo "),
                 Span::styled("space", key_style),
                 Span::raw(":play "),
+                Span::styled("=/−", key_style),
+                Span::raw(":bpm "),
                 Span::styled("q", key_style),
                 Span::raw(":quit"),
             ]);
@@ -755,10 +792,10 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         "SPLIT"
     } else {
         match app.current_view {
-            AppView::PatternEditor => "F1:PAT",
-            AppView::Arrangement => "F2:ARR",
-            AppView::InstrumentList => "F3:INS",
-            AppView::CodeEditor => "F4:CODE",
+            AppView::PatternEditor => "1:PAT",
+            AppView::Arrangement => "2:ARR",
+            AppView::InstrumentList => "3:INS",
+            AppView::CodeEditor => "4:CODE",
             AppView::PatternList => "5:PATLIST",
         }
     };
