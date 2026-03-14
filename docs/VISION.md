@@ -1,4 +1,4 @@
-# Tracker-rs Vision & Roadmap
+# Riffl Vision & Roadmap
 
 **Last updated:** 2026-03-08
 
@@ -29,7 +29,7 @@ A full-featured DAW with tracker-style interface and live coding capabilities (i
 ### Target Structure (Cargo Workspace)
 
 ```
-tracker-rs/
+riffl/
 ├── crates/
 │   ├── tracker-core/        # Engine: audio, mixer, transport, pattern, song, DSL, project I/O
 │   │   └── src/

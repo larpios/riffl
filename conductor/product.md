@@ -1,13 +1,13 @@
 # Initial Concept
-Tracker-rs is an ambitious TUI music tracker app with coding capabilities like in Strudel written in Rust.
+Riffl is an ambitious TUI music tracker app with coding capabilities like in Strudel written in Rust.
 
-# Product Guide: Tracker-rs
+# Product Guide: Riffl
 
 ## Product Vision
-Tracker-rs is an ambitious music tracker app, primarily focusing on a terminal-based interface (TUI) with future plans for a graphical user interface (GUI). Inspired by the depth of Renoise and the creative coding capabilities of Strudel, Tracker-rs aims to bridge the gap between traditional step-based tracking and modern algorithmic composition.
+Riffl is an ambitious music tracker app, primarily focusing on a terminal-based interface (TUI) with future plans for a graphical user interface (GUI). Inspired by the depth of Renoise and the creative coding capabilities of Strudel, Riffl aims to bridge the gap between traditional step-based tracking and modern algorithmic composition.
 
 ## Core Philosophy: Hybrid Workflow
-Tracker-rs embraces a **Hybrid Workflow**, where the user interface and a robust domain-specific language (DSL) for scripting and automation coexist. This allows for both precise manual editing of patterns and dynamic, code-driven generation of musical structures.
+Riffl embraces a **Hybrid Workflow**, where the user interface and a robust domain-specific language (DSL) for scripting and automation coexist. This allows for both precise manual editing of patterns and dynamic, code-driven generation of musical structures.
 
 ## Target Audience
 - **Tracker Enthusiasts:** Musicians who demand the speed and efficiency of a keyboard-driven interface.

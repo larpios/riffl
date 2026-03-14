@@ -9,13 +9,14 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 
+use crate::config::Config;
 use crate::editor::{Editor, EditorMode};
 use crate::ui::arrangement::ArrangementView;
 use crate::ui::code_editor::CodeEditor;
 use crate::ui::export_dialog::ExportDialog;
 use crate::ui::file_browser::FileBrowser;
 use crate::ui::modal::Modal;
-use crate::ui::theme::Theme;
+use crate::ui::theme::{Theme, ThemeKind};
 use tracker_core::audio::{load_sample, AudioEngine, Mixer, Sample};
 use tracker_core::dsl::engine::ScriptEngine;
 use tracker_core::export;
@@ -81,8 +82,14 @@ pub struct App {
     /// Currently active top-level view
     pub current_view: AppView,
 
-    /// The application's color theme
+    /// Currently active theme kind
+    pub theme_kind: ThemeKind,
+
+    /// Derived color theme (always in sync with theme_kind)
     pub theme: Theme,
+
+    /// Loaded application configuration
+    pub config: Config,
 
     /// Audio engine (None if no audio device is available)
     audio_engine: Option<AudioEngine>,

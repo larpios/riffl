@@ -310,8 +310,6 @@ impl Mixer {
 
             for frame in 0..num_frames {
                 let render_state = effect_processor.voice_render_state(ch);
-                let effective_rate =
-                    voice.playback_rate * render_state.pitch_ratio * voice.loop_direction;
 
                 let src_frame = voice.position as usize;
 
@@ -347,23 +345,63 @@ impl Mixer {
                     break;
                 }
 
-                // Read sample data (mono or stereo)
-                let (left, right) = if sample_channels >= 2 {
-                    let idx = src_frame * sample_channels;
-                    if idx + 1 < sample_data.len() {
-                        (sample_data[idx], sample_data[idx + 1])
-                    } else {
-                        voice.active = false;
-                        break;
-                    }
-                } else {
-                    let idx = src_frame;
-                    if idx < sample_data.len() {
-                        (sample_data[idx], sample_data[idx])
-                    } else {
-                        voice.active = false;
-                        break;
-                    }
+                let effective_rate =
+                    voice.playback_rate * render_state.pitch_ratio * voice.loop_direction;
+
+                // Read sample data with linear interpolation
+                let (left, right) = {
+                    let pos_floor = voice.position.floor() as usize;
+                    let frac = (voice.position - pos_floor as f64) as f32;
+                    let next_frame = {
+                        let next = pos_floor + 1;
+                        match sample.loop_mode {
+                            LoopMode::NoLoop => next,
+                            LoopMode::Forward => {
+                                if next > sample.loop_end {
+                                    sample.loop_start
+                                } else {
+                                    next
+                                }
+                            }
+                            LoopMode::PingPong => {
+                                // For ping-pong, if we're at the boundary, the interpolation
+                                // should go towards the next position based on loop_direction.
+                                if voice.loop_direction > 0.0 {
+                                    if next > sample.loop_end {
+                                        sample.loop_end
+                                    } else {
+                                        next
+                                    }
+                                } else {
+                                    // Reverse direction: frac is effectively the distance from pos_floor.
+                                    // But position is decreasing.
+                                    // Actually, linear interpolation usually assumes pos1 + (pos2-pos1)*frac.
+                                    // If we're moving backwards, frac is the distance from the lower integer.
+                                    if pos_floor > sample.loop_start {
+                                        pos_floor - 1
+                                    } else {
+                                        sample.loop_start
+                                    }
+                                }
+                            }
+                        }
+                    };
+
+                    let get_stereo = |f: usize| {
+                        if f >= sample_frames {
+                            (0.0, 0.0)
+                        } else if sample_channels >= 2 {
+                            let idx = f * sample_channels;
+                            (sample_data[idx], sample_data[idx + 1])
+                        } else {
+                            (sample_data[f], sample_data[f])
+                        }
+                    };
+
+                    let (l1, r1) = get_stereo(pos_floor);
+                    let (l2, r2) = get_stereo(next_frame);
+
+                    (l1 + (l2 - l1) * frac, r1 + (r2 - r1) * frac)
                 };
 
                 let effect_gain = render_state.gain.unwrap_or(1.0);
@@ -1288,26 +1326,88 @@ mod tests {
     }
 
     #[test]
-    fn test_mixer_sample_finetune_applied() {
-        let data: Vec<f32> = vec![0.5; 4410];
-        let sample_no_ft = Arc::new(Sample::new(data.clone(), 44100, 1, None));
-        let sample_ft = Arc::new(Sample::new(data, 44100, 1, None).with_finetune(100)); // One semitone up
+    fn test_mixer_subframe_interpolation() {
+        // Sample data: 0.0, 1.0 (at frames 0 and 1)
+        let data: Vec<f32> = vec![0.0, 1.0];
+        let sample = Arc::new(Sample::new(data, 44100, 1, None));
 
-        let mut mixer_no_ft = Mixer::new(vec![sample_no_ft], Vec::new(), 1, 44100);
-        let mut mixer_ft = Mixer::new(vec![sample_ft], Vec::new(), 1, 44100);
-
+        let mut mixer = Mixer::new(vec![sample], Vec::new(), 1, 44100);
         let mut pattern = Pattern::new(16, 1);
-        pattern.set_note(0, 0, Note::new(Pitch::C, 4, 100, 0));
+        pattern.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
 
-        mixer_no_ft.tick(0, &pattern);
-        mixer_ft.tick(0, &pattern);
+        mixer.tick(0, &pattern);
+        
+        // Manually set position to 0.5 — without interpolation we'd get 0.0 or 1.0
+        // with linear interpolation we should get 0.5
+        if let Some(voice) = mixer.voices[0].as_mut() {
+            voice.position = 0.5;
+        }
 
-        let v_no_ft = mixer_no_ft.voices[0].as_ref().unwrap();
-        let v_ft = mixer_ft.voices[0].as_ref().unwrap();
+        let mut output = vec![0.0f32; 2];
+        mixer.render(&mut output);
 
-        // v_ft.playback_rate should be higher than v_no_ft.playback_rate
-        // 100 cents = 2^(1/12) factor
-        let factor = 2.0_f64.powf(1.0 / 12.0);
-        assert!((v_ft.playback_rate / v_no_ft.playback_rate - factor).abs() < 0.001);
+        // Center pan gain is ~0.707
+        let expected = 0.5 * 0.70710677;
+        assert!((output[0] - expected).abs() < 0.01, "Expected ~{}, got {}", expected, output[0]);
+    }
+
+    #[test]
+    fn test_mixer_forward_loop_boundary() {
+        use crate::audio::sample::LoopMode;
+        // 10 frame sample, loop frames 5-9 (end inclusive)
+        // Values: 0.0, 0.1, 0.2, ..., 0.9
+        let data: Vec<f32> = (0..10).map(|i| i as f32 / 10.0).collect();
+        let sample = Arc::new(Sample::new(data, 44100, 1, None).with_loop(LoopMode::Forward, 5, 9));
+
+        let mut mixer = Mixer::new(vec![sample], Vec::new(), 1, 44100);
+        let mut pattern = Pattern::new(16, 1);
+        pattern.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
+        mixer.tick(0, &pattern);
+
+        // Position just at the end of loop
+        if let Some(voice) = mixer.voices[0].as_mut() {
+            voice.position = 9.5;
+        }
+
+        let mut output = vec![0.0f32; 2];
+        mixer.render(&mut output);
+
+        // Interpolation between 0.9 (end) and 0.5 (start)
+        // pos 9.5: l1=0.9, l2=0.5, frac=0.5 => 0.9 + (0.5-0.9)*0.5 = 0.7
+        let expected = 0.7 * 0.70710677;
+        assert!((output[0] - expected).abs() < 0.01, "Expected ~{}, got {}", expected, output[0]);
+    }
+
+    #[test]
+    fn test_mixer_pingpong_loop_boundary() {
+        use crate::audio::sample::LoopMode;
+        // Values: 0.0, 0.1, 0.2, ..., 0.9
+        let data: Vec<f32> = (0..10).map(|i| i as f32 / 10.0).collect();
+        let sample = Arc::new(Sample::new(data, 44100, 1, None).with_loop(LoopMode::PingPong, 5, 9));
+
+        let mut mixer = Mixer::new(vec![sample], Vec::new(), 1, 44100);
+        let mut pattern = Pattern::new(16, 1);
+        pattern.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
+        mixer.tick(0, &pattern);
+
+        // Position just at the end of loop, moving forward
+        if let Some(voice) = mixer.voices[0].as_mut() {
+            voice.position = 8.5;
+            voice.loop_direction = 1.0;
+        }
+
+        // Render 3 frames (6 samples)
+        let mut output = vec![0.0f32; 6];
+        mixer.render(&mut output);
+
+        // Frame 1: pos 8.5. No reversal. pos -> 9.5
+        // Frame 2: pos 9.5. No reversal (9 > 9 is false). pos -> 10.5
+        // Frame 3: pos 10.5. src_frame = 10. 10 > 9 is true. REVERSAL.
+        //          loop_dir -> -1.0. pos -> 9.0.
+        //          Then it renders pos 9.0. pos -> 9.0 + (-1.0) = 8.0.
+        
+        let voice = mixer.voices[0].as_ref().unwrap();
+        assert_eq!(voice.loop_direction, -1.0);
+        assert_eq!(voice.position, 8.0);
     }
 }

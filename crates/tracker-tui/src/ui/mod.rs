@@ -151,7 +151,7 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     };
     let dirty_marker = if app.is_dirty { " *" } else { "" };
     let title = format!(
-        " tracker-rs{} | BPM: {:.0} | {} {}{} [{}] ",
+        " riffl{} | BPM: {:.0} | {} {}{} [{}] ",
         dirty_marker,
         app.transport.bpm(),
         play_icon,
@@ -168,7 +168,7 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
     let mut status_spans = vec![
         Span::styled(
-            "tracker-rs",
+            "riffl",
             Style::default()
                 .fg(theme.primary)
                 .add_modifier(Modifier::BOLD),
@@ -668,7 +668,10 @@ fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
         Span::raw(":load  "),
         Span::styled("Esc", Style::default().fg(theme.error_color())),
         Span::raw(":close  "),
-        Span::styled(".wav .flac .ogg .mod", Style::default().fg(theme.text_dimmed)),
+        Span::styled(
+            ".wav .flac .ogg .mod",
+            Style::default().fg(theme.text_dimmed),
+        ),
     ]));
 
     let paragraph = Paragraph::new(lines)
@@ -691,10 +694,7 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             Span::styled(app.command_input.clone(), cmd_style),
             Span::styled("█", Style::default().fg(theme.primary)),
         ]);
-        frame.render_widget(
-            ratatui::widgets::Paragraph::new(line),
-            area,
-        );
+        frame.render_widget(ratatui::widgets::Paragraph::new(line), area);
         return;
     }
 
@@ -1024,11 +1024,7 @@ const COMMANDS: &[(&str, &str)] = &[
 ];
 
 /// Render command-line autocomplete suggestions above the footer.
-fn render_command_completions(
-    frame: &mut Frame,
-    footer_area: ratatui::layout::Rect,
-    app: &App,
-) {
+fn render_command_completions(frame: &mut Frame, footer_area: ratatui::layout::Rect, app: &App) {
     let input = app.command_input.trim();
     let input_word = input.split_whitespace().next().unwrap_or(input);
     let matches: Vec<(&str, &str)> = COMMANDS
@@ -1058,7 +1054,12 @@ fn render_command_completions(
         .map(|(cmd, desc)| {
             Line::from(vec![
                 Span::raw(" :"),
-                Span::styled(*cmd, Style::default().fg(theme.success_color()).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    *cmd,
+                    Style::default()
+                        .fg(theme.success_color())
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::raw(format!("  {}", desc)),
             ])
         })
@@ -1074,9 +1075,7 @@ fn render_command_completions(
 }
 
 /// Which-key descriptions for pending chords.
-const WHICH_KEY_ENTRIES: &[(&str, &str, &str)] = &[
-    ("d", "d", "delete row"),
-];
+const WHICH_KEY_ENTRIES: &[(&str, &str, &str)] = &[("d", "d", "delete row")];
 
 /// Render a which-key popup showing completions for the current pending key.
 fn render_which_key(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
@@ -1113,7 +1112,9 @@ fn render_which_key(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 Span::raw(" "),
                 Span::styled(
                     format!("{}{}", pending, key),
-                    Style::default().fg(theme.success_color()).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme.success_color())
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::raw(format!("  {}", desc)),
             ])

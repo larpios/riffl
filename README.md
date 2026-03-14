@@ -1,6 +1,6 @@
-# Tracker-rs
+# Riffl
 
-Tracker-rs is an ambitious TUI music tracker app with coding capabilities like in Strudel written in Rust.
+Riffl is an ambitious TUI music tracker app with coding capabilities like in Strudel written in Rust.
 
 ## Rationale
 
@@ -8,7 +8,7 @@ I fell love in the idea of Strudel when I first discovered it. However, I want a
 
 ## Audio Engine
 
-Tracker-rs features a low-latency audio playback engine built on the [cpal](https://github.com/RustAudio/cpal) crate, providing cross-platform audio support without requiring complex external dependencies like SuperCollider.
+Riffl features a low-latency audio playback engine built on the [cpal](https://github.com/RustAudio/cpal) crate, providing cross-platform audio support without requiring complex external dependencies like SuperCollider.
 
 ### Cross-Platform Support
 

@@ -1,5 +1,5 @@
 {
-  description = "tracker-rs: A Renoise-inspired TUI music tracker with live coding, using Rust.";
+  description = "riffl: A Renoise-inspired TUI music tracker with live coding, using Rust.";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   inputs.flake-utils.url = "github:numtide/flake-utils";
@@ -18,7 +18,7 @@
         ];
 
         shellHook = ''
-          echo "Entering tracker-rs development environment!"
+          echo "Entering riffl development environment!"
           rustup override set stable
           cargo fmt --all
           cargo check
@@ -26,7 +26,7 @@
       };
 
       defaultPackage = pkgs.rustPlatform.buildRustPackage {
-        pname = "tracker-rs";
+        pname = "riffl";
         version = "0.1.0";
         src = self;
         cargoSha256 = "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; # Temporary dummy value

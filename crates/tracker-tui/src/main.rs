@@ -1,5 +1,6 @@
 #![allow(dead_code, unused_imports)]
 mod app;
+mod config;
 mod editor;
 mod input;
 mod ui;
@@ -37,7 +38,7 @@ fn main() -> Result<()> {
     let mut terminal = match init_terminal() {
         Ok(t) => t,
         Err(e) => {
-            eprintln!("tracker-rs: Failed to initialize terminal: {}", e);
+            eprintln!("riffl: Failed to initialize terminal: {}", e);
             eprintln!("This application requires an interactive terminal (TTY) to run.");
             return Err(e);
         }
@@ -111,7 +112,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                     app.command_mode = false;
                 }
             }
-            KeyCode::Char(c) if key.modifiers == KeyModifiers::NONE || key.modifiers == KeyModifiers::SHIFT => {
+            KeyCode::Char(c)
+                if key.modifiers == KeyModifiers::NONE || key.modifiers == KeyModifiers::SHIFT =>
+            {
                 app.command_input.push(c);
             }
             _ => {}
@@ -244,18 +247,36 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
 
         // Clipboard
         Action::Copy => app.editor.copy(),
-        Action::Paste => { app.editor.paste(); app.mark_dirty(); }
-        Action::Cut => { app.editor.cut(); app.mark_dirty(); }
+        Action::Paste => {
+            app.editor.paste();
+            app.mark_dirty();
+        }
+        Action::Cut => {
+            app.editor.cut();
+            app.mark_dirty();
+        }
         Action::Redo => {
             app.editor.redo();
             app.mark_dirty();
         }
 
         // Transpose
-        Action::TransposeUp => { app.editor.transpose_selection(1); app.mark_dirty(); }
-        Action::TransposeDown => { app.editor.transpose_selection(-1); app.mark_dirty(); }
-        Action::TransposeOctaveUp => { app.editor.transpose_selection(12); app.mark_dirty(); }
-        Action::TransposeOctaveDown => { app.editor.transpose_selection(-12); app.mark_dirty(); }
+        Action::TransposeUp => {
+            app.editor.transpose_selection(1);
+            app.mark_dirty();
+        }
+        Action::TransposeDown => {
+            app.editor.transpose_selection(-1);
+            app.mark_dirty();
+        }
+        Action::TransposeOctaveUp => {
+            app.editor.transpose_selection(12);
+            app.mark_dirty();
+        }
+        Action::TransposeOctaveDown => {
+            app.editor.transpose_selection(-12);
+            app.mark_dirty();
+        }
 
         // Octave navigation
         Action::OctaveUp => app.editor.octave_up(),
@@ -265,21 +286,48 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::GoToRow => app.editor.go_to_row(0),
 
         // Quantize
-        Action::Quantize => { app.editor.quantize(); app.mark_dirty(); }
+        Action::Quantize => {
+            app.editor.quantize();
+            app.mark_dirty();
+        }
 
         // Track management
-        Action::AddTrack => { app.editor.add_track(); app.mark_dirty(); }
-        Action::DeleteTrack => { app.editor.delete_track(); app.mark_dirty(); }
-        Action::CloneTrack => { app.editor.clone_track(); app.mark_dirty(); }
+        Action::AddTrack => {
+            app.editor.add_track();
+            app.mark_dirty();
+        }
+        Action::DeleteTrack => {
+            app.editor.delete_track();
+            app.mark_dirty();
+        }
+        Action::CloneTrack => {
+            app.editor.clone_track();
+            app.mark_dirty();
+        }
 
         // Interpolation
-        Action::Interpolate => { app.editor.interpolate(); app.mark_dirty(); }
+        Action::Interpolate => {
+            app.editor.interpolate();
+            app.mark_dirty();
+        }
 
         // Editing
-        Action::DeleteCell => { app.editor.delete_cell(); app.mark_dirty(); }
-        Action::InsertRow => { app.editor.insert_row(); app.mark_dirty(); }
-        Action::InsertRowBelow => { app.editor.insert_row_below(); app.mark_dirty(); }
-        Action::DeleteRow => { app.editor.delete_row(); app.mark_dirty(); }
+        Action::DeleteCell => {
+            app.editor.delete_cell();
+            app.mark_dirty();
+        }
+        Action::InsertRow => {
+            app.editor.insert_row();
+            app.mark_dirty();
+        }
+        Action::InsertRowBelow => {
+            app.editor.insert_row_below();
+            app.mark_dirty();
+        }
+        Action::DeleteRow => {
+            app.editor.delete_row();
+            app.mark_dirty();
+        }
         Action::EnterCommandMode => {
             app.command_mode = true;
             app.command_input.clear();

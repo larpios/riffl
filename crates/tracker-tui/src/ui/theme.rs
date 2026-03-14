@@ -1,112 +1,211 @@
 /// Theme and color scheme management
-///
-/// This module provides theme support for the TUI, including color definitions
-/// that work across both 256-color and truecolor terminals. The theme system
-/// allows for consistent styling throughout the application.
 use ratatui::style::{Color, Modifier, Style};
 
-/// Color palette for the application theme
-///
-/// The Theme struct contains all color definitions used throughout the UI.
-/// Colors are defined to work well in both 256-color and truecolor terminals.
-/// Uses a mix of named colors and indexed colors (256-color palette) which
-/// automatically work in truecolor terminals as well.
-///
-/// # Example
-/// ```
-/// let theme = Theme::default();
-/// let header_style = theme.header_style();
-/// ```
+/// Available built-in themes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ThemeKind {
+    #[default]
+    Dark,
+    CatppuccinMocha,
+    Nord,
+}
+
+impl ThemeKind {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Dark => "dark",
+            Self::CatppuccinMocha => "mocha",
+            Self::Nord => "nord",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "dark" | "default" => Some(Self::Dark),
+            "mocha" | "catppuccin" | "catppuccin-mocha" => Some(Self::CatppuccinMocha),
+            "nord" => Some(Self::Nord),
+            _ => None,
+        }
+    }
+}
+
+/// Color palette for the application theme.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Theme {
-    // Primary UI colors
-    /// Primary accent color for interactive elements
-    pub primary: Color,
-    /// Secondary accent color for less prominent elements
-    pub secondary: Color,
-
-    // Borders and UI chrome
-    /// Border color for normal UI elements
-    pub border: Color,
-    /// Border color for focused/active elements
-    pub border_focused: Color,
-
-    // Text colors
-    /// Primary text color for main content
-    pub text: Color,
-    /// Secondary text color for less important content
-    pub text_secondary: Color,
-    /// Dimmed text color for disabled/inactive elements
-    pub text_dimmed: Color,
-
-    // Background colors
-    /// Background color for highlighted/selected elements
+    // Backgrounds
+    /// Main terminal background
+    pub bg: Color,
+    /// Panel / container background (slightly elevated)
+    pub bg_surface: Color,
+    /// Highlighted row / selected item background
     pub bg_highlight: Color,
-    /// Background color for the header area
+    /// Header area background
     pub bg_header: Color,
-    /// Background color for the footer area
+    /// Footer area background
     pub bg_footer: Color,
 
-    // Status colors
-    /// Color for success/positive status
+    // Primary accents
+    pub primary: Color,
+    pub secondary: Color,
+
+    // Borders
+    pub border: Color,
+    pub border_focused: Color,
+
+    // Text
+    pub text: Color,
+    pub text_secondary: Color,
+    pub text_dimmed: Color,
+
+    // Cursor / selection backgrounds
+    pub cursor_normal_bg: Color,
+    pub cursor_insert_bg: Color,
+    pub cursor_visual_bg: Color,
+    pub cursor_fg: Color,
+
+    // Status
     pub status_success: Color,
-    /// Color for warning status
     pub status_warning: Color,
-    /// Color for error/danger status
     pub status_error: Color,
-    /// Color for informational status
     pub status_info: Color,
 }
 
 impl Theme {
-    /// Create a new theme with default colors
-    ///
-    /// This creates the default theme with a carefully chosen color palette
-    /// that works well in both dark and light terminals and supports both
-    /// 256-color and truecolor modes.
-    ///
-    /// The color palette uses:
-    /// - Named colors (Color::White, Color::Cyan, etc.) for basic colors
-    /// - Indexed colors (Color::Indexed) for 256-color terminal support
-    /// - All colors automatically work in truecolor terminals
-    ///
-    /// # Returns
-    /// A new Theme instance with default color definitions
-    pub fn new() -> Self {
-        Self {
-            // Primary UI colors - using indexed colors for better 256-color support
-            primary: Color::Cyan,   // Cyan for primary accent
-            secondary: Color::Blue, // Blue for secondary accent
-
-            // Borders and UI chrome
-            border: Color::Cyan,           // Cyan for normal borders
-            border_focused: Color::Yellow, // Yellow for focused borders
-
-            // Text colors
-            text: Color::White,           // White for main text
-            text_secondary: Color::Gray,  // Gray for secondary text
-            text_dimmed: Color::DarkGray, // Dark gray for dimmed text
-
-            // Background colors
-            bg_highlight: Color::Yellow, // Yellow background for highlights
-            bg_header: Color::Reset,     // Default background for header
-            bg_footer: Color::DarkGray,  // Dark gray background for footer
-
-            // Status colors
-            status_success: Color::Green,  // Green for success
-            status_warning: Color::Yellow, // Yellow for warning
-            status_error: Color::Red,      // Red for errors
-            status_info: Color::Cyan,      // Cyan for info
+    pub fn from_kind(kind: ThemeKind) -> Self {
+        match kind {
+            ThemeKind::Dark => Self::dark(),
+            ThemeKind::CatppuccinMocha => Self::catppuccin_mocha(),
+            ThemeKind::Nord => Self::nord(),
         }
     }
 
-    /// Get the style for header elements
-    ///
-    /// Returns the default style for header areas including title bars
-    /// and section headers.
-    ///
-    /// # Returns
-    /// Style configured for header elements
+    // ── Dark (default) ──────────────────────────────────────────────────────
+    pub fn dark() -> Self {
+        Self {
+            bg: Color::Reset,
+            bg_surface: Color::Reset,
+            bg_highlight: Color::Yellow,
+            bg_header: Color::Reset,
+            bg_footer: Color::DarkGray,
+
+            primary: Color::Cyan,
+            secondary: Color::Blue,
+
+            border: Color::Cyan,
+            border_focused: Color::Yellow,
+
+            text: Color::White,
+            text_secondary: Color::Gray,
+            text_dimmed: Color::DarkGray,
+
+            cursor_normal_bg: Color::Yellow,
+            cursor_insert_bg: Color::LightMagenta,
+            cursor_visual_bg: Color::Blue,
+            cursor_fg: Color::Black,
+
+            status_success: Color::Green,
+            status_warning: Color::Yellow,
+            status_error: Color::Red,
+            status_info: Color::Cyan,
+        }
+    }
+
+    // ── Catppuccin Mocha ────────────────────────────────────────────────────
+    pub fn catppuccin_mocha() -> Self {
+        // https://github.com/catppuccin/catppuccin
+        let base = Color::Rgb(30, 30, 46); // #1e1e2e
+        let mantle = Color::Rgb(24, 24, 37); // #181825
+        let surface0 = Color::Rgb(49, 50, 68); // #313244
+        let surface1 = Color::Rgb(69, 71, 90); // #45475a
+        let overlay1 = Color::Rgb(127, 132, 156); // #7f849c
+        let text = Color::Rgb(205, 214, 244); // #cdd6f4
+        let subtext0 = Color::Rgb(166, 173, 200); // #a6adc8
+        let blue = Color::Rgb(137, 180, 250); // #89b4fa
+        let lavender = Color::Rgb(180, 190, 254); // #b4befe
+        let green = Color::Rgb(166, 227, 161); // #a6e3a1
+        let yellow = Color::Rgb(249, 226, 175); // #f9e2af
+        let peach = Color::Rgb(250, 179, 135); // #fab387
+        let red = Color::Rgb(243, 139, 168); // #f38ba8
+        let mauve = Color::Rgb(203, 166, 247); // #cba6f7
+        let teal = Color::Rgb(148, 226, 213); // #94e2d5
+        let crust = Color::Rgb(17, 17, 27); // #11111b
+
+        Self {
+            bg: base,
+            bg_surface: mantle,
+            bg_highlight: surface0,
+            bg_header: mantle,
+            bg_footer: mantle,
+
+            primary: blue,
+            secondary: lavender,
+
+            border: surface1,
+            border_focused: blue,
+
+            text,
+            text_secondary: subtext0,
+            text_dimmed: overlay1,
+
+            cursor_normal_bg: peach,
+            cursor_insert_bg: mauve,
+            cursor_visual_bg: Color::Rgb(69, 71, 90), // surface1
+            cursor_fg: crust,
+
+            status_success: green,
+            status_warning: yellow,
+            status_error: red,
+            status_info: teal,
+        }
+    }
+
+    // ── Nord ────────────────────────────────────────────────────────────────
+    pub fn nord() -> Self {
+        let polar0 = Color::Rgb(46, 52, 64); // #2e3440
+        let polar1 = Color::Rgb(59, 66, 82); // #3b4252
+        let polar2 = Color::Rgb(67, 76, 94); // #434c5e
+        let polar3 = Color::Rgb(76, 86, 106); // #4c566a
+        let snow0 = Color::Rgb(216, 222, 233); // #d8dee9
+        let snow1 = Color::Rgb(229, 233, 240); // #e5e9f0
+        let frost0 = Color::Rgb(143, 188, 187); // #8fbcbb
+        let frost1 = Color::Rgb(136, 192, 208); // #88c0d0
+        let frost3 = Color::Rgb(129, 161, 193); // #81a1c1
+        let aurora_red = Color::Rgb(191, 97, 106); // #bf616a
+        let aurora_orange = Color::Rgb(208, 135, 112); // #d08770
+        let aurora_yellow = Color::Rgb(235, 203, 139); // #ebcb8b
+        let aurora_green = Color::Rgb(163, 190, 140); // #a3be8c
+
+        Self {
+            bg: polar0,
+            bg_surface: polar1,
+            bg_highlight: polar2,
+            bg_header: polar1,
+            bg_footer: polar1,
+
+            primary: frost1,
+            secondary: frost3,
+
+            border: polar3,
+            border_focused: frost1,
+
+            text: snow0,
+            text_secondary: Color::Rgb(180, 186, 198),
+            text_dimmed: polar3,
+
+            cursor_normal_bg: aurora_yellow,
+            cursor_insert_bg: aurora_orange,
+            cursor_visual_bg: polar2,
+            cursor_fg: polar0,
+
+            status_success: aurora_green,
+            status_warning: aurora_yellow,
+            status_error: aurora_red,
+            status_info: frost0,
+        }
+    }
+
+    // ── Style helpers ────────────────────────────────────────────────────────
+
     pub fn header_style(&self) -> Style {
         Style::default()
             .fg(self.text)
@@ -114,122 +213,62 @@ impl Theme {
             .add_modifier(Modifier::BOLD)
     }
 
-    /// Get the style for footer elements
-    ///
-    /// Returns the default style for footer areas including status bars
-    /// and keyboard hint displays.
-    ///
-    /// # Returns
-    /// Style configured for footer elements
     pub fn footer_style(&self) -> Style {
         Style::default().fg(self.text).bg(self.bg_footer)
     }
 
-    /// Get the border color for normal UI elements
-    ///
-    /// # Returns
-    /// Color for standard UI borders
     pub fn border_color(&self) -> Color {
         self.border
     }
 
-    /// Get the border style for UI elements
-    ///
-    /// # Returns
-    /// Style configured for borders
     pub fn border_style(&self) -> Style {
-        Style::default().fg(self.border_color())
+        Style::default().fg(self.border)
     }
 
-    /// Get the style for highlighted/selected elements (Normal mode cursor)
-    ///
-    /// Returns the style used for cursor position, selected items,
-    /// and other highlighted UI elements.
-    ///
-    /// # Returns
-    /// Style configured for highlighted elements
+    pub fn focused_border_style(&self) -> Style {
+        Style::default().fg(self.border_focused)
+    }
+
     pub fn highlight_style(&self) -> Style {
-        Style::default().fg(Color::Black).bg(self.bg_highlight)
+        Style::default()
+            .fg(self.cursor_fg)
+            .bg(self.cursor_normal_bg)
     }
 
-    /// Get the style for Insert mode cursor (active sub-column)
-    ///
-    /// Uses a distinct color from Normal mode to make the mode visually obvious.
-    ///
-    /// # Returns
-    /// Style configured for Insert mode active sub-column
     pub fn insert_cursor_style(&self) -> Style {
         Style::default()
-            .fg(Color::Black)
-            .bg(Color::LightMagenta)
+            .fg(self.cursor_fg)
+            .bg(self.cursor_insert_bg)
             .add_modifier(Modifier::BOLD)
     }
 
-    /// Get the style for Insert mode cursor (inactive sub-columns)
-    ///
-    /// Shows the rest of the cell in a muted highlight to indicate the cursor row
-    /// without drawing attention away from the active sub-column.
-    ///
-    /// # Returns
-    /// Style configured for Insert mode inactive sub-columns
     pub fn insert_inactive_style(&self) -> Style {
-        Style::default().fg(Color::White).bg(Color::Indexed(236)) // dark gray background
+        Style::default()
+            .fg(self.text_secondary)
+            .bg(self.bg_highlight)
     }
 
-    /// Get the style for Visual mode selection highlight
-    ///
-    /// # Returns
-    /// Style configured for selected cells in Visual mode
     pub fn visual_selection_style(&self) -> Style {
-        Style::default().fg(Color::White).bg(Color::Blue)
+        Style::default().fg(self.text).bg(self.cursor_visual_bg)
     }
 
-    /// Get the style for normal text content
-    ///
-    /// # Returns
-    /// Style configured for regular text
     pub fn text_style(&self) -> Style {
-        Style::default().fg(self.text)
+        Style::default().fg(self.text).bg(self.bg)
     }
 
-    /// Get the style for dimmed/secondary text
-    ///
-    /// Used for less important information or disabled elements.
-    ///
-    /// # Returns
-    /// Style configured for dimmed text
     pub fn dimmed_style(&self) -> Style {
         Style::default().fg(self.text_dimmed)
     }
 
-    /// Get color for success/positive status
-    ///
-    /// # Returns
-    /// Color for success states
     pub fn success_color(&self) -> Color {
         self.status_success
     }
-
-    /// Get color for warning status
-    ///
-    /// # Returns
-    /// Color for warning states
     pub fn warning_color(&self) -> Color {
         self.status_warning
     }
-
-    /// Get color for error/danger status
-    ///
-    /// # Returns
-    /// Color for error states
     pub fn error_color(&self) -> Color {
         self.status_error
     }
-
-    /// Get color for info status
-    ///
-    /// # Returns
-    /// Color for informational elements
     pub fn info_color(&self) -> Color {
         self.status_info
     }
@@ -237,7 +276,7 @@ impl Theme {
 
 impl Default for Theme {
     fn default() -> Self {
-        Self::new()
+        Self::dark()
     }
 }
 
@@ -246,168 +285,74 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_theme_new() {
-        let theme = Theme::new();
-        assert_eq!(theme, Theme::default());
+    fn test_theme_default_is_dark() {
+        assert_eq!(Theme::default(), Theme::dark());
     }
 
     #[test]
-    fn test_theme_default() {
-        let theme1 = Theme::default();
-        let theme2 = Theme::default();
-        assert_eq!(theme1, theme2);
+    fn test_from_kind_roundtrip() {
+        for kind in [ThemeKind::Dark, ThemeKind::CatppuccinMocha, ThemeKind::Nord] {
+            let t = Theme::from_kind(kind);
+            assert_eq!(t, Theme::from_kind(kind));
+        }
     }
 
     #[test]
-    fn test_header_style() {
-        let theme = Theme::default();
-        let style = theme.header_style();
-        assert_eq!(style.fg, Some(Color::White));
+    fn test_theme_kind_from_str() {
+        assert_eq!(ThemeKind::from_str("dark"), Some(ThemeKind::Dark));
+        assert_eq!(
+            ThemeKind::from_str("mocha"),
+            Some(ThemeKind::CatppuccinMocha)
+        );
+        assert_eq!(
+            ThemeKind::from_str("catppuccin-mocha"),
+            Some(ThemeKind::CatppuccinMocha)
+        );
+        assert_eq!(ThemeKind::from_str("nord"), Some(ThemeKind::Nord));
+        assert_eq!(ThemeKind::from_str("unknown"), None);
     }
 
     #[test]
-    fn test_footer_style() {
-        let theme = Theme::default();
-        let style = theme.footer_style();
-        assert_eq!(style.fg, Some(Color::White));
-        assert_eq!(style.bg, Some(Color::DarkGray));
+    fn test_theme_kind_name() {
+        assert_eq!(ThemeKind::Dark.name(), "dark");
+        assert_eq!(ThemeKind::CatppuccinMocha.name(), "mocha");
+        assert_eq!(ThemeKind::Nord.name(), "nord");
     }
 
     #[test]
-    fn test_border_color() {
-        let theme = Theme::default();
-        assert_eq!(theme.border_color(), Color::Cyan);
+    fn test_dark_theme_colors() {
+        let t = Theme::dark();
+        assert_eq!(t.primary, Color::Cyan);
+        assert_eq!(t.text, Color::White);
+        assert_eq!(t.status_success, Color::Green);
+        assert_eq!(t.status_error, Color::Red);
+        assert_eq!(t.cursor_normal_bg, Color::Yellow);
+        assert_eq!(t.cursor_insert_bg, Color::LightMagenta);
     }
 
     #[test]
-    fn test_border_style() {
-        let theme = Theme::default();
-        let style = theme.border_style();
-        assert_eq!(style.fg, Some(Color::Cyan));
+    fn test_mocha_theme_has_rgb_colors() {
+        let t = Theme::catppuccin_mocha();
+        assert!(matches!(t.bg, Color::Rgb(_, _, _)));
+        assert!(matches!(t.primary, Color::Rgb(_, _, _)));
+        assert!(matches!(t.text, Color::Rgb(_, _, _)));
     }
 
     #[test]
-    fn test_highlight_style() {
-        let theme = Theme::default();
-        let style = theme.highlight_style();
-        assert_eq!(style.fg, Some(Color::Black));
-        assert_eq!(style.bg, Some(Color::Yellow));
-    }
-
-    #[test]
-    fn test_insert_cursor_style() {
-        let theme = Theme::default();
-        let style = theme.insert_cursor_style();
-        assert_eq!(style.fg, Some(Color::Black));
-        assert_eq!(style.bg, Some(Color::LightMagenta));
-    }
-
-    #[test]
-    fn test_insert_inactive_style() {
-        let theme = Theme::default();
-        let style = theme.insert_inactive_style();
-        assert_eq!(style.fg, Some(Color::White));
-        assert_eq!(style.bg, Some(Color::Indexed(236)));
-    }
-
-    #[test]
-    fn test_visual_selection_style() {
-        let theme = Theme::default();
-        let style = theme.visual_selection_style();
-        assert_eq!(style.fg, Some(Color::White));
-        assert_eq!(style.bg, Some(Color::Blue));
-    }
-
-    #[test]
-    fn test_text_style() {
-        let theme = Theme::default();
-        let style = theme.text_style();
-        assert_eq!(style.fg, Some(Color::White));
-    }
-
-    #[test]
-    fn test_dimmed_style() {
-        let theme = Theme::default();
-        let style = theme.dimmed_style();
-        assert_eq!(style.fg, Some(Color::DarkGray));
-    }
-
-    #[test]
-    fn test_status_colors() {
-        let theme = Theme::default();
-        assert_eq!(theme.success_color(), Color::Green);
-        assert_eq!(theme.warning_color(), Color::Yellow);
-        assert_eq!(theme.error_color(), Color::Red);
-        assert_eq!(theme.info_color(), Color::Cyan);
-    }
-
-    #[test]
-    fn test_theme_clone() {
-        let theme1 = Theme::default();
-        let theme2 = theme1;
-        assert_eq!(theme1, theme2);
-    }
-
-    #[test]
-    fn test_color_palette_fields() {
-        let theme = Theme::default();
-
-        // Test primary UI colors
-        assert_eq!(theme.primary, Color::Cyan);
-        assert_eq!(theme.secondary, Color::Blue);
-
-        // Test border colors
-        assert_eq!(theme.border, Color::Cyan);
-        assert_eq!(theme.border_focused, Color::Yellow);
-
-        // Test text colors
-        assert_eq!(theme.text, Color::White);
-        assert_eq!(theme.text_secondary, Color::Gray);
-        assert_eq!(theme.text_dimmed, Color::DarkGray);
-
-        // Test background colors
-        assert_eq!(theme.bg_highlight, Color::Yellow);
-        assert_eq!(theme.bg_header, Color::Reset);
-        assert_eq!(theme.bg_footer, Color::DarkGray);
-
-        // Test status colors
-        assert_eq!(theme.status_success, Color::Green);
-        assert_eq!(theme.status_warning, Color::Yellow);
-        assert_eq!(theme.status_error, Color::Red);
-        assert_eq!(theme.status_info, Color::Cyan);
-    }
-
-    #[test]
-    fn test_256_color_compatibility() {
-        let theme = Theme::default();
-
-        // All colors should work in 256-color terminals
-        // Named colors (White, Cyan, etc.) are supported in all terminals
-        // This test verifies the color assignments are compatible
-        assert!(matches!(
-            theme.text,
-            Color::White | Color::Indexed(_) | Color::Rgb(_, _, _)
-        ));
-        assert!(matches!(
-            theme.border,
-            Color::Cyan | Color::Indexed(_) | Color::Rgb(_, _, _)
-        ));
-        assert!(matches!(
-            theme.status_success,
-            Color::Green | Color::Indexed(_) | Color::Rgb(_, _, _)
-        ));
+    fn test_nord_theme_has_rgb_colors() {
+        let t = Theme::nord();
+        assert!(matches!(t.bg, Color::Rgb(_, _, _)));
+        assert!(matches!(t.primary, Color::Rgb(_, _, _)));
     }
 
     #[test]
     fn test_style_methods_use_theme_colors() {
-        let theme = Theme::default();
-
-        // Verify that style methods use theme color fields
-        assert_eq!(theme.header_style().fg, Some(theme.text));
-        assert_eq!(theme.footer_style().bg, Some(theme.bg_footer));
-        assert_eq!(theme.border_style().fg, Some(theme.border));
-        assert_eq!(theme.highlight_style().bg, Some(theme.bg_highlight));
-        assert_eq!(theme.text_style().fg, Some(theme.text));
-        assert_eq!(theme.dimmed_style().fg, Some(theme.text_dimmed));
+        let t = Theme::dark();
+        assert_eq!(t.header_style().fg, Some(t.text));
+        assert_eq!(t.footer_style().bg, Some(t.bg_footer));
+        assert_eq!(t.border_style().fg, Some(t.border));
+        assert_eq!(t.highlight_style().bg, Some(t.cursor_normal_bg));
+        assert_eq!(t.text_style().fg, Some(t.text));
+        assert_eq!(t.dimmed_style().fg, Some(t.text_dimmed));
     }
 }

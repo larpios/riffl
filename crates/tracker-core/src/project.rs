@@ -13,7 +13,7 @@ use crate::song::Song;
 /// Save a project (Song) to a JSON file.
 ///
 /// The song is serialized to pretty-printed JSON and written to the specified path.
-/// By convention, tracker-rs project files use the `.trs` extension.
+/// By convention, riffl project files use the `.trs` extension.
 pub fn save_project(path: &Path, song: &Song) -> Result<()> {
     let json = serde_json::to_string_pretty(song).context("Failed to serialize project")?;
     fs::write(path, json)

@@ -1,4 +1,4 @@
-# Technology Stack: Tracker-rs
+# Technology Stack: Riffl
 
 ## Core Programming Language
 - **Rust:** The primary language for the entire project, chosen for its performance, safety, and modern toolchain.

@@ -4,5 +4,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Implement Enhanced Sample Management and ProTracker Effects**
+- [~] **Track: Implement Enhanced Sample Management and ProTracker Effects**
   *Link: [./tracks/enhanced_sample_20260314/](./tracks/enhanced_sample_20260314/)*

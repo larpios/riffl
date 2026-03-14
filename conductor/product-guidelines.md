@@ -1,11 +1,11 @@
-# Product Guidelines: Tracker-rs
+# Product Guidelines: Riffl
 
 ## Purpose
-This document defines the branding, communication style, and user experience (UX) principles for Tracker-rs. It serves as a guide for development and documentation to ensure a consistent and high-quality user experience.
+This document defines the branding, communication style, and user experience (UX) principles for Riffl. It serves as a guide for development and documentation to ensure a consistent and high-quality user experience.
 
 ## Communication Style & Tone
 - **Academic & Thorough:** Documentation, in-app messages, and labels should be precise, technically accurate, and comprehensive. We value depth and clarity, ensuring that every feature and parameter is fully documented with its underlying logic and behavior.
-- **Modern & Sleek:** The aesthetic tone is contemporary, clean, and forward-looking. While Tracker-rs draws inspiration from the history of tracking, its branding and visual style are firmly rooted in modern music production and software design.
+- **Modern & Sleek:** The aesthetic tone is contemporary, clean, and forward-looking. While Riffl draws inspiration from the history of tracking, its branding and visual style are firmly rooted in modern music production and software design.
 
 ## User Experience (UX) Principles
 - **Clutter-Free Information Density:** We aim for a "sleek and simple" initial experience that provides a wealth of information without overwhelming the user.

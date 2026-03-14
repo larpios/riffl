@@ -1,7 +1,7 @@
 # Track Specification: Enhanced Sample Management and ProTracker Effects
 
 ## Overview
-This track aims to enhance the audio engine of Tracker-rs by adding support for common sample-level parameters (Fine-tune, Loops, Volume) and implementing classic ProTracker effects. These additions are crucial for achieving the depth of a professional music tracker like Renoise.
+This track aims to enhance the audio engine of Riffl by adding support for common sample-level parameters (Fine-tune, Loops, Volume) and implementing classic ProTracker effects. These additions are crucial for achieving the depth of a professional music tracker like Renoise.
 
 ## Goals
 - Support for sample fine-tuning.
