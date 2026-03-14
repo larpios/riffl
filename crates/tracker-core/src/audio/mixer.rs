@@ -1336,7 +1336,7 @@ mod tests {
         pattern.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
 
         mixer.tick(0, &pattern);
-        
+
         // Manually set position to 0.5 — without interpolation we'd get 0.0 or 1.0
         // with linear interpolation we should get 0.5
         if let Some(voice) = mixer.voices[0].as_mut() {
@@ -1348,7 +1348,12 @@ mod tests {
 
         // Center pan gain is ~0.707
         let expected = 0.5 * 0.70710677;
-        assert!((output[0] - expected).abs() < 0.01, "Expected ~{}, got {}", expected, output[0]);
+        assert!(
+            (output[0] - expected).abs() < 0.01,
+            "Expected ~{}, got {}",
+            expected,
+            output[0]
+        );
     }
 
     #[test]
@@ -1375,7 +1380,12 @@ mod tests {
         // Interpolation between 0.9 (end) and 0.5 (start)
         // pos 9.5: l1=0.9, l2=0.5, frac=0.5 => 0.9 + (0.5-0.9)*0.5 = 0.7
         let expected = 0.7 * 0.70710677;
-        assert!((output[0] - expected).abs() < 0.01, "Expected ~{}, got {}", expected, output[0]);
+        assert!(
+            (output[0] - expected).abs() < 0.01,
+            "Expected ~{}, got {}",
+            expected,
+            output[0]
+        );
     }
 
     #[test]
@@ -1383,7 +1393,8 @@ mod tests {
         use crate::audio::sample::LoopMode;
         // Values: 0.0, 0.1, 0.2, ..., 0.9
         let data: Vec<f32> = (0..10).map(|i| i as f32 / 10.0).collect();
-        let sample = Arc::new(Sample::new(data, 44100, 1, None).with_loop(LoopMode::PingPong, 5, 9));
+        let sample =
+            Arc::new(Sample::new(data, 44100, 1, None).with_loop(LoopMode::PingPong, 5, 9));
 
         let mut mixer = Mixer::new(vec![sample], Vec::new(), 1, 44100);
         let mut pattern = Pattern::new(16, 1);
@@ -1405,7 +1416,7 @@ mod tests {
         // Frame 3: pos 10.5. src_frame = 10. 10 > 9 is true. REVERSAL.
         //          loop_dir -> -1.0. pos -> 9.0.
         //          Then it renders pos 9.0. pos -> 9.0 + (-1.0) = 8.0.
-        
+
         let voice = mixer.voices[0].as_ref().unwrap();
         assert_eq!(voice.loop_direction, -1.0);
         assert_eq!(voice.position, 8.0);
