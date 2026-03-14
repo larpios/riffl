@@ -43,6 +43,12 @@ impl Instrument {
         self.finetune = finetune.clamp(-8, 7);
         self
     }
+
+    /// Set the default volume for the instrument (0.0 to 1.0).
+    pub fn with_volume(mut self, volume: f32) -> Self {
+        self.volume = volume.clamp(0.0, 1.0);
+        self
+    }
 }
 
 impl Default for Instrument {

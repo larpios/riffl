@@ -39,6 +39,8 @@ pub struct Sample {
     pub loop_start: usize,
     /// End point of the loop in frames (inclusive).
     pub loop_end: usize,
+    /// Default volume multiplier for this sample (0.0 to 1.0).
+    pub volume: f32,
     /// Fine-tune adjustment in cents (-100 to +100).
     pub finetune: i32,
 }
@@ -56,6 +58,7 @@ impl Sample {
             loop_mode: LoopMode::NoLoop,
             loop_start: 0,
             loop_end: frame_count.saturating_sub(1),
+            volume: 1.0,
             finetune: 0,
         }
     }
@@ -77,6 +80,12 @@ impl Sample {
     /// Set the fine-tune value for the sample in cents.
     pub fn with_finetune(mut self, finetune: i32) -> Self {
         self.finetune = finetune;
+        self
+    }
+
+    /// Set the default volume for the sample (0.0 to 1.0).
+    pub fn with_volume(mut self, volume: f32) -> Self {
+        self.volume = volume.clamp(0.0, 1.0);
         self
     }
 
@@ -145,6 +154,7 @@ impl Default for Sample {
             loop_mode: LoopMode::NoLoop,
             loop_start: 0,
             loop_end: 0,
+            volume: 1.0,
             finetune: 0,
         }
     }

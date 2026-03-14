@@ -229,13 +229,14 @@ impl Mixer {
                             playback_rate *= 2.0_f64.powf(finetune as f64 / (12.0 * 8.0));
                         }
 
-                        // Map velocity 0-127 to gain 0.0-1.0
+                        // Map velocity 0-127 to gain 0.0-1.0, scaled by instrument and sample volume
                         let inst_vol = self
                             .instruments
                             .get(instrument_idx)
                             .map(|inst| inst.volume)
                             .unwrap_or(1.0);
-                        let velocity_gain = (note.velocity as f32 / 127.0) * inst_vol;
+                        let velocity_gain =
+                            (note.velocity as f32 / 127.0) * inst_vol * sample.volume;
 
                         let mut voice = Voice::new(instrument_idx, playback_rate, velocity_gain);
                         if let Some(offset) = self.effect_processor.sample_offset(ch) {
@@ -735,6 +736,26 @@ mod tests {
 
         mixer.stop_all();
         assert_eq!(mixer.active_voice_count(), 0);
+    }
+
+    #[test]
+    fn test_mixer_sample_and_instrument_volume() {
+        let sample = Arc::new(make_test_sample(44100, 0.25).with_volume(0.5));
+        let instruments = vec![Instrument::new("Test").with_volume(0.8)];
+        let mut mixer = Mixer::new(vec![sample], instruments, 4, 44100);
+
+        let mut pattern = Pattern::new(16, 4);
+        // velocity 127 (1.0), inst volume 0.8, sample volume 0.5
+        // expected final gain = 1.0 * 0.8 * 0.5 = 0.4
+        pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
+
+        mixer.tick(0, &pattern);
+
+        if let Some(voice) = &mixer.voices[0] {
+            assert!((voice.velocity_gain - 0.4).abs() < 0.001);
+        } else {
+            panic!("Voice should be triggered");
+        }
     }
 
     #[test]
