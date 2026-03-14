@@ -10,7 +10,7 @@
     - [ ] Write failing tests for sample loops
     - [ ] Implement sample loops to pass tests
     - [ ] Refactor and verify coverage for sample loops
-- [ ] Task: Implement Sample Volume Control Refinement
+- [x] Task: Implement Sample Volume Control Refinement 68b481c
     - [ ] Write failing tests for sample volume
     - [ ] Implement sample volume to pass tests
     - [ ] Refactor and verify coverage for sample volume
