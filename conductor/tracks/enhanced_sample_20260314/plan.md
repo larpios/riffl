@@ -6,7 +6,7 @@
     - [ ] Write failing tests for sample fine-tune
     - [ ] Implement sample fine-tune to pass tests
     - [ ] Refactor and verify coverage for sample fine-tune
-- [~] Task: Implement Sample Loop Support
+- [x] Task: Implement Sample Loop Support 6848b02
     - [ ] Write failing tests for sample loops
     - [ ] Implement sample loops to pass tests
     - [ ] Refactor and verify coverage for sample loops
