@@ -426,6 +426,25 @@ impl App {
         self.command_mode = false;
         self.command_input.clear();
 
+        // Parse "bpm N" or "t N" or "tempo N"
+        let parts: Vec<&str> = cmd.splitn(2, ' ').collect();
+        let is_bpm_cmd = matches!(parts[0], "bpm" | "t" | "tempo");
+
+        if is_bpm_cmd {
+            if let Some(val) = parts.get(1).and_then(|s| s.trim().parse::<f64>().ok()) {
+                let clamped = val.clamp(20.0, 999.0);
+                self.transport.set_bpm(clamped);
+                self.song.bpm = clamped;
+                self.mark_dirty();
+            } else {
+                self.open_modal(Modal::error(
+                    "Invalid BPM".to_string(),
+                    format!("Usage: :bpm <value>  (got: {:?})", parts.get(1)),
+                ));
+            }
+            return;
+        }
+
         match cmd.as_str() {
             "w" => self.save_project(),
             "wq" | "x" => {

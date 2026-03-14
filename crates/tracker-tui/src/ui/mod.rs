@@ -1018,6 +1018,9 @@ const COMMANDS: &[(&str, &str)] = &[
     ("x", "save and quit"),
     ("q", "quit"),
     ("q!", "quit without saving"),
+    ("bpm <n>", "set tempo (20–999)"),
+    ("t <n>", "set tempo (shorthand)"),
+    ("tempo <n>", "set tempo"),
 ];
 
 /// Render command-line autocomplete suggestions above the footer.
@@ -1027,9 +1030,13 @@ fn render_command_completions(
     app: &App,
 ) {
     let input = app.command_input.trim();
+    let input_word = input.split_whitespace().next().unwrap_or(input);
     let matches: Vec<(&str, &str)> = COMMANDS
         .iter()
-        .filter(|(cmd, _)| cmd.starts_with(input))
+        .filter(|(cmd, _)| {
+            let cmd_word = cmd.split_whitespace().next().unwrap_or(cmd);
+            cmd_word.starts_with(input_word)
+        })
         .copied()
         .collect();
 

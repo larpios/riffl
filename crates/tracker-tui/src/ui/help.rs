@@ -99,6 +99,7 @@ fn right_column(theme: &Theme) -> Vec<Line<'static>> {
         section("TRANSPORT", theme),
         key("Space", "Play / Stop", theme),
         key("= / -", "BPM up / down", theme),
+        key(":bpm <n>", "Set BPM directly", theme),
         key("[ / ]", "Prev / Next pattern", theme),
         key("Shift+P", "Toggle Pattern / Song", theme),
         key("Shift+L", "Toggle loop", theme),
