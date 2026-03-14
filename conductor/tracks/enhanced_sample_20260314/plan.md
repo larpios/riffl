@@ -2,7 +2,7 @@
 
 ## Phase 1: Sample Management Enhancement
 
-- [ ] Task: Implement Sample Fine-tune Support
+- [x] Task: Implement Sample Fine-tune Support ec6ecff
     - [ ] Write failing tests for sample fine-tune
     - [ ] Implement sample fine-tune to pass tests
     - [ ] Refactor and verify coverage for sample fine-tune
