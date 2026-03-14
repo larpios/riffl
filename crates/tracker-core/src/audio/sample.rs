@@ -39,6 +39,8 @@ pub struct Sample {
     pub loop_start: usize,
     /// End point of the loop in frames (inclusive).
     pub loop_end: usize,
+    /// Fine-tune adjustment in cents (-100 to +100).
+    pub finetune: i32,
 }
 
 impl Sample {
@@ -54,6 +56,7 @@ impl Sample {
             loop_mode: LoopMode::NoLoop,
             loop_start: 0,
             loop_end: frame_count.saturating_sub(1),
+            finetune: 0,
         }
     }
 
@@ -68,6 +71,12 @@ impl Sample {
         self.loop_mode = mode;
         self.loop_start = start;
         self.loop_end = end;
+        self
+    }
+
+    /// Set the fine-tune value for the sample in cents.
+    pub fn with_finetune(mut self, finetune: i32) -> Self {
+        self.finetune = finetune;
         self
     }
 
@@ -136,6 +145,7 @@ impl Default for Sample {
             loop_mode: LoopMode::NoLoop,
             loop_start: 0,
             loop_end: 0,
+            finetune: 0,
         }
     }
 }
@@ -215,5 +225,11 @@ mod tests {
         assert_eq!(sample.loop_mode, LoopMode::Forward);
         assert_eq!(sample.loop_start, 10);
         assert_eq!(sample.loop_end, 90);
+    }
+
+    #[test]
+    fn test_sample_finetune_property() {
+        let sample = Sample::new(vec![0.0; 100], 44100, 1, None).with_finetune(50);
+        assert_eq!(sample.finetune, 50);
     }
 }

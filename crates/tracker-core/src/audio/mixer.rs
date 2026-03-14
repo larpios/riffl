@@ -207,6 +207,11 @@ impl Mixer {
                             sample.sample_rate() as f64 / self.output_sample_rate as f64;
                         let mut playback_rate = (target_freq / base_freq) * sample_rate_ratio;
 
+                        // Apply sample-level finetune (in cents)
+                        if sample.finetune != 0 {
+                            playback_rate *= 2.0_f64.powf(sample.finetune as f64 / 1200.0);
+                        }
+
                         // Apply finetune from instrument or effect override
                         let finetune = if let Some(ft_override) =
                             self.effect_processor.finetune_override(ch)
@@ -1283,25 +1288,26 @@ mod tests {
     }
 
     #[test]
-    fn test_mixer_sample_offset_effect() {
-        let sample = Sample::new(vec![0.0, 0.0, 0.0, 0.0, 0.8, 0.8], 44100, 1, None);
-        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 1, 44100);
+    fn test_mixer_sample_finetune_applied() {
+        let data: Vec<f32> = vec![0.5; 4410];
+        let sample_no_ft = Arc::new(Sample::new(data.clone(), 44100, 1, None));
+        let sample_ft = Arc::new(Sample::new(data, 44100, 1, None).with_finetune(100)); // One semitone up
+
+        let mut mixer_no_ft = Mixer::new(vec![sample_no_ft], Vec::new(), 1, 44100);
+        let mut mixer_ft = Mixer::new(vec![sample_ft], Vec::new(), 1, 44100);
 
         let mut pattern = Pattern::new(16, 1);
-        let mut cell = Cell::with_note(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
-        // 900 effect (sample offset 0) is already there by default if no effect
-        // 901 = offset 256, but our sample is short.
-        // Let's manually set a small offset for testing by mock effect.
-        use crate::pattern::effect::Effect;
-        // We'll use 900 but the processor doesn't know it's a test.
-        // Actually the 9xx param is x * 256.
-        // Let's just verify the Voice position is set.
-        cell.effects.push(Effect::new(0x9, 0x00));
-        pattern.set_cell(0, 0, cell);
+        pattern.set_note(0, 0, Note::new(Pitch::C, 4, 100, 0));
 
-        mixer.tick(0, &pattern);
-        // This is hard to test without exposing Voice position.
-        // But we can check that it triggered.
-        assert_eq!(mixer.active_voice_count(), 1);
+        mixer_no_ft.tick(0, &pattern);
+        mixer_ft.tick(0, &pattern);
+
+        let v_no_ft = mixer_no_ft.voices[0].as_ref().unwrap();
+        let v_ft = mixer_ft.voices[0].as_ref().unwrap();
+
+        // v_ft.playback_rate should be higher than v_no_ft.playback_rate
+        // 100 cents = 2^(1/12) factor
+        let factor = 2.0_f64.powf(1.0 / 12.0);
+        assert!((v_ft.playback_rate / v_no_ft.playback_rate - factor).abs() < 0.001);
     }
 }
