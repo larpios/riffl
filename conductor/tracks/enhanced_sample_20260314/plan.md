@@ -1,20 +1,8 @@
 # Implementation Plan: Enhanced Sample Management and ProTracker Effects
 
-## Phase 1: Sample Management Enhancement
-
-- [x] Task: Implement Sample Fine-tune Support ec6ecff
-    - [ ] Write failing tests for sample fine-tune
-    - [ ] Implement sample fine-tune to pass tests
-    - [ ] Refactor and verify coverage for sample fine-tune
-- [x] Task: Implement Sample Loop Support 6848b02
-    - [ ] Write failing tests for sample loops
-    - [ ] Implement sample loops to pass tests
-    - [ ] Refactor and verify coverage for sample loops
-- [x] Task: Implement Sample Volume Control Refinement 68b481c
-    - [ ] Write failing tests for sample volume
-    - [ ] Implement sample volume to pass tests
-    - [ ] Refactor and verify coverage for sample volume
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Sample Management Enhancement' (Protocol in workflow.md)
+## Phase 1: Sample Management Enhancement [checkpoint: aa58ed1]
+...
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Sample Management Enhancement' (Protocol in workflow.md) aa58ed1
 
 ## Phase 2: ProTracker Effects Implementation
 
