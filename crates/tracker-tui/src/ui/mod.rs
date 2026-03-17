@@ -756,7 +756,7 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 Span::raw(":play "),
                 Span::styled("=/−", key_style),
                 Span::raw(":bpm "),
-                Span::styled("q", key_style),
+                Span::styled(":q", key_style),
                 Span::raw(":quit"),
             ]);
         }

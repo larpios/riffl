@@ -260,7 +260,6 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         KeyCode::Char('c') => Action::ClonePattern,
 
         // Application
-        KeyCode::Char('q') => Action::Quit,
         KeyCode::Char('m') => Action::OpenModal,
         KeyCode::Char('?') => Action::ToggleHelp,
         KeyCode::Enter => Action::Confirm,
@@ -488,7 +487,8 @@ mod tests {
         let enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
         let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
 
-        assert_eq!(map_key_to_action(q, EditorMode::Normal), Action::Quit);
+        // q no longer quits directly — use :q in command mode instead
+        assert_eq!(map_key_to_action(q, EditorMode::Normal), Action::None);
         assert_eq!(
             map_key_to_action(enter, EditorMode::Normal),
             Action::Confirm

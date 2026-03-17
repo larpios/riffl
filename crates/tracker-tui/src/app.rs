@@ -968,6 +968,8 @@ impl App {
 
     /// Switch to a different top-level view.
     pub fn set_view(&mut self, view: AppView) {
+        // Always start code editor in Normal mode when entering/leaving it
+        self.code_editor.insert_mode = false;
         self.current_view = view;
         // When switching to CodeEditor view, activate the code editor
         self.code_editor.active = view == AppView::CodeEditor;

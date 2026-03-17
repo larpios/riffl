@@ -506,16 +506,94 @@ fn handle_code_editor_key(app: &mut App, key: KeyEvent) {
 
     // No modifiers: text editing and navigation
     if key.modifiers == KeyModifiers::NONE {
-        match key.code {
-            // Escape: deactivate code editor, return to pattern editor
-            KeyCode::Esc => {
-                if app.split_view {
-                    // In split view, Esc deactivates the code editor focus
-                    app.code_editor.active = false;
-                } else {
-                    // In full-screen code editor, switch back to pattern editor
-                    app.set_view(app::AppView::PatternEditor);
+        // In Normal mode: navigation and view-switching only, no text input
+        if !app.code_editor.insert_mode {
+            match key.code {
+                // Enter insert mode
+                KeyCode::Char('i') => {
+                    app.code_editor.insert_mode = true;
+                    return;
                 }
+                // View switching (same as pattern editor)
+                KeyCode::Char('1') => {
+                    app.set_view(app::AppView::PatternEditor);
+                    app.split_view = false;
+                    return;
+                }
+                KeyCode::Char('2') => {
+                    app.set_view(app::AppView::Arrangement);
+                    app.split_view = false;
+                    return;
+                }
+                KeyCode::Char('3') => {
+                    app.set_view(app::AppView::InstrumentList);
+                    app.split_view = false;
+                    return;
+                }
+                KeyCode::Char('4') => {
+                    app.set_view(app::AppView::CodeEditor);
+                    return;
+                }
+                KeyCode::Char('5') => {
+                    app.set_view(app::AppView::PatternList);
+                    app.split_view = false;
+                    return;
+                }
+                // Command mode
+                KeyCode::Char(':') => {
+                    app.command_mode = true;
+                    return;
+                }
+                // Escape in normal mode: leave code editor (same as before)
+                KeyCode::Esc => {
+                    if app.split_view {
+                        app.code_editor.active = false;
+                    } else {
+                        app.set_view(app::AppView::PatternEditor);
+                    }
+                    return;
+                }
+                // Navigation still works in Normal mode
+                KeyCode::Left | KeyCode::Char('h') => {
+                    app.code_editor.move_left();
+                    return;
+                }
+                KeyCode::Right | KeyCode::Char('l') => {
+                    app.code_editor.move_right();
+                    return;
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    app.code_editor.move_up();
+                    return;
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    app.code_editor.move_down();
+                    return;
+                }
+                KeyCode::Home => {
+                    app.code_editor.move_home();
+                    return;
+                }
+                KeyCode::End => {
+                    app.code_editor.move_end();
+                    return;
+                }
+                KeyCode::PageUp => {
+                    app.code_editor.page_up(20);
+                    return;
+                }
+                KeyCode::PageDown => {
+                    app.code_editor.page_down(20);
+                    return;
+                }
+                _ => return,
+            }
+        }
+
+        match key.code {
+            // Escape: exit insert mode (back to normal, don't leave the view)
+            KeyCode::Esc => {
+                app.code_editor.insert_mode = false;
                 return;
             }
             // Text editing

@@ -43,6 +43,8 @@ pub struct CodeEditor {
     pub show_templates: bool,
     /// Currently highlighted template index in the menu.
     pub template_cursor: usize,
+    /// Whether the editor is in insert (typing) mode vs. normal (navigation) mode.
+    pub insert_mode: bool,
 }
 
 impl CodeEditor {
@@ -59,6 +61,7 @@ impl CodeEditor {
             active: false,
             show_templates: false,
             template_cursor: 0,
+            insert_mode: false,
         }
     }
 
@@ -496,10 +499,15 @@ fn render_editor_panel(frame: &mut Frame, area: Rect, editor: &CodeEditor, theme
         theme.border_style()
     };
 
+    let mode_label = if editor.insert_mode {
+        " INSERT "
+    } else {
+        " NORMAL "
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(border_style)
-        .title(" Code Editor (Rhai) ")
+        .title(format!(" Code Editor (Rhai) {} ", mode_label))
         .title_alignment(Alignment::Left);
 
     let inner = block.inner(area);
