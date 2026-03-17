@@ -123,11 +123,10 @@ pub fn render_instrument_list(
         }
     }
 
-    // Footer with keybinding hints
+    // Footer
     let visible_rows = inner.height as usize;
     let content_lines = lines.len();
     if content_lines < visible_rows {
-        // Pad to push instructions to the bottom area
         for _ in content_lines..visible_rows.saturating_sub(2) {
             lines.push(Line::from(""));
         }
@@ -135,16 +134,8 @@ pub fn render_instrument_list(
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
         Span::raw("  "),
-        Span::styled("1-4", Style::default().fg(theme.success_color())),
-        Span::raw(":view  "),
-        Span::styled("n", Style::default().fg(theme.success_color())),
-        Span::raw(":new  "),
-        Span::styled("d", Style::default().fg(theme.success_color())),
-        Span::raw(":del  "),
-        Span::styled("r", Style::default().fg(theme.success_color())),
-        Span::raw(":ren  "),
-        Span::styled("s", Style::default().fg(theme.success_color())),
-        Span::raw(":sel"),
+        Span::styled("?", Style::default().fg(theme.success_color())),
+        Span::raw(" help"),
     ]));
 
     let paragraph = Paragraph::new(lines)

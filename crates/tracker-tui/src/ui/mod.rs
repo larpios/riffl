@@ -738,38 +738,11 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         Span::raw(" "),
     ];
 
-    // Show mode-specific hints
+    // Show context-specific state indicators (not a cheatsheet — press ? for that)
     match mode {
-        EditorMode::Normal => {
-            footer_spans.extend([
-                Span::styled("i", key_style),
-                Span::raw(":insert "),
-                Span::styled("v", key_style),
-                Span::raw(":visual "),
-                Span::styled("Tab", key_style),
-                Span::raw(":track "),
-                Span::styled("M", key_style),
-                Span::raw(":mute "),
-                Span::styled("S", key_style),
-                Span::raw(":solo "),
-                Span::styled("space", key_style),
-                Span::raw(":play "),
-                Span::styled("=/−", key_style),
-                Span::raw(":bpm "),
-                Span::styled(":q", key_style),
-                Span::raw(":quit"),
-            ]);
-        }
+        EditorMode::Normal => {}
         EditorMode::Insert => {
             if app.editor.sub_column() == SubColumn::Effect {
-                // Effect column: show hex digit entry hints and current effect mnemonic
-                footer_spans.extend([
-                    Span::styled("0-F", key_style),
-                    Span::raw(":hex digit "),
-                    Span::styled("Esc", key_style),
-                    Span::raw(":normal "),
-                ]);
-                // Show the mnemonic of the current effect under the cursor
                 let cell = app
                     .editor
                     .pattern()
@@ -782,7 +755,6 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     format!("Eff:{}", mnemonic),
                     Style::default().fg(theme.warning_color()),
                 ));
-                // Show digit position indicator
                 let pos = app.editor.effect_digit_position();
                 let pos_label = match pos {
                     0 => "cmd",
@@ -795,31 +767,21 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     Style::default().fg(theme.info_color()),
                 ));
             } else {
-                footer_spans.extend([
-                    Span::styled("A-G", key_style),
-                    Span::raw(":note "),
-                    Span::styled("0-9", key_style),
-                    Span::raw(":octave "),
-                    Span::styled("Esc", key_style),
-                    Span::raw(":normal "),
-                    Span::styled(
-                        format!("Oct:{}", app.editor.current_octave()),
-                        Style::default().fg(theme.warning_color()),
-                    ),
-                ]);
+                footer_spans.push(Span::styled(
+                    format!("Oct:{}", app.editor.current_octave()),
+                    Style::default().fg(theme.warning_color()),
+                ));
             }
         }
-        EditorMode::Visual => {
-            footer_spans.extend([
-                Span::styled("hjkl", key_style),
-                Span::raw(":select "),
-                Span::styled("x", key_style),
-                Span::raw(":delete "),
-                Span::styled("Esc", key_style),
-                Span::raw(":normal"),
-            ]);
-        }
+        EditorMode::Visual => {}
     }
+
+    // Help hint
+    footer_spans.extend([
+        Span::raw("  "),
+        Span::styled("?", key_style),
+        Span::raw(" help"),
+    ]);
 
     // View indicator
     let view_label = if app.split_view {
