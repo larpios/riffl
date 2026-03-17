@@ -8,3 +8,7 @@ Auto\ Run\ Docs/
 *.trs
 .serena
 .direnv
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
