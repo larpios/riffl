@@ -134,6 +134,14 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    // If help overlay is open, Esc or ? closes it
+    if app.show_help {
+        if matches!(key.code, KeyCode::Esc | KeyCode::Char('?')) {
+            app.show_help = false;
+        }
+        return;
+    }
+
     // If export dialog is open, handle export dialog input
     if app.has_export_dialog() {
         handle_export_dialog_key(app, key);
