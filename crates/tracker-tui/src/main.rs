@@ -44,8 +44,16 @@ fn main() -> Result<()> {
         }
     };
 
+    // Resolve sample directories and ensure the default one exists
+    let cli_sample_dir = parse_sample_dir_flag();
+    let config = crate::config::Config::load();
+    let sample_dirs = config.resolve_sample_dirs(cli_sample_dir.as_deref());
+    let default_samples = crate::config::Config::default_samples_dir();
+    let _ = std::fs::create_dir_all(&default_samples);
+
     // Create and initialize app
     let mut app = App::new();
+    app.set_sample_dirs(sample_dirs);
     app.init()?;
 
     // Run the application
@@ -108,9 +116,6 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             }
             KeyCode::Backspace => {
                 app.command_input.pop();
-                if app.command_input.is_empty() {
-                    app.command_mode = false;
-                }
             }
             KeyCode::Char(c)
                 if key.modifiers == KeyModifiers::NONE || key.modifiers == KeyModifiers::SHIFT =>
@@ -152,6 +157,15 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
     if app.has_file_browser() {
         handle_file_browser_key(app, key);
         return;
+    }
+
+    // If the sample browser view is active, handle browser-specific keys.
+    // Unhandled keys fall through to normal processing so view switching,
+    // command mode, help, transport, etc. all continue to work.
+    if app.current_view == AppView::SampleBrowser {
+        if handle_sample_browser_key(app, key) {
+            return;
+        }
     }
 
     // If code editor is active, handle code editor input first
@@ -692,6 +706,96 @@ fn handle_code_editor_key(app: &mut App, key: KeyEvent) {
     }
 }
 
+/// Returns `true` if the key was consumed by the sample browser, `false` to fall through.
+fn handle_sample_browser_key(app: &mut App, key: KeyEvent) -> bool {
+    use crossterm::event::{KeyCode, KeyModifiers};
+
+    // Only consume plain (no-modifier) navigation keys.
+    // Everything else falls through so view switching, command mode, help,
+    // transport shortcuts, etc. all keep working.
+    if key.modifiers != KeyModifiers::NONE {
+        return false;
+    }
+
+    match key.code {
+        // Navigation
+        KeyCode::Char('j') | KeyCode::Down => { app.sample_browser.move_down(); true }
+        KeyCode::Char('k') | KeyCode::Up => { app.sample_browser.move_up(); true }
+
+        // Enter directory
+        KeyCode::Char('l') | KeyCode::Right => {
+            app.sample_browser.enter_dir();
+            true
+        }
+
+        // Go up a directory
+        KeyCode::Char('h') | KeyCode::Left | KeyCode::Backspace => {
+            app.sample_browser.go_up();
+            true
+        }
+
+        // Load file or enter directory
+        KeyCode::Enter => {
+            if app.sample_browser.selected_is_file() {
+                let is_mod = app
+                    .sample_browser
+                    .selected_path()
+                    .and_then(|p| p.extension())
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.eq_ignore_ascii_case("mod"))
+                    .unwrap_or(false);
+
+                if is_mod {
+                    let path = app.sample_browser.selected_path().map(|p| p.to_path_buf());
+                    if let Some(path) = path {
+                        match app.import_mod_file(&path) {
+                            Ok(()) => {
+                                let name = path
+                                    .file_name()
+                                    .and_then(|n| n.to_str())
+                                    .unwrap_or("file")
+                                    .to_string();
+                                app.open_modal(ui::modal::Modal::info(
+                                    "MOD Imported".to_string(),
+                                    format!("Loaded '{name}'"),
+                                ));
+                            }
+                            Err(e) => {
+                                app.open_modal(ui::modal::Modal::error(
+                                    "Import Failed".to_string(),
+                                    e,
+                                ));
+                            }
+                        }
+                    }
+                } else {
+                    match app.load_sample_from_browser() {
+                        Ok(idx) => {
+                            let name = app
+                                .instrument_names()
+                                .get(idx)
+                                .cloned()
+                                .unwrap_or_else(|| "sample".to_string());
+                            app.open_modal(ui::modal::Modal::info(
+                                "Sample Loaded".to_string(),
+                                format!("Loaded '{name}' as instrument {:02X}", idx),
+                            ));
+                        }
+                        Err(e) => {
+                            app.open_modal(ui::modal::Modal::error("Load Failed".to_string(), e));
+                        }
+                    }
+                }
+            } else {
+                app.sample_browser.enter_dir();
+            }
+            true
+        }
+
+        _ => false,
+    }
+}
+
 fn handle_file_browser_key(app: &mut App, key: KeyEvent) {
     use crossterm::event::{KeyCode, KeyModifiers};
 
@@ -834,6 +938,21 @@ fn handle_export_dialog_key(app: &mut App, key: KeyEvent) {
 }
 
 /// Convert a character to a hex digit value (0-15), or None if not a hex digit.
+/// Parse `--sample-dir <path>` from the process arguments, returning the value if present.
+fn parse_sample_dir_flag() -> Option<String> {
+    let args: Vec<String> = std::env::args().collect();
+    let mut iter = args.iter().skip(1);
+    while let Some(arg) = iter.next() {
+        if arg == "--sample-dir" {
+            return iter.next().cloned();
+        }
+        if let Some(val) = arg.strip_prefix("--sample-dir=") {
+            return Some(val.to_string());
+        }
+    }
+    None
+}
+
 fn hex_char_to_digit(c: char) -> Option<u8> {
     match c {
         '0'..='9' => Some(c as u8 - b'0'),

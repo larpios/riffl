@@ -248,6 +248,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         KeyCode::Char('3') => Action::SwitchView(AppView::InstrumentList),
         KeyCode::Char('4') => Action::SwitchView(AppView::CodeEditor),
         KeyCode::Char('5') => Action::SwitchView(AppView::PatternList),
+        KeyCode::Char('6') => Action::SwitchView(AppView::SampleBrowser),
 
         // Instrument management (when in InstrumentList view)
         KeyCode::Char('n') => Action::AddInstrument,

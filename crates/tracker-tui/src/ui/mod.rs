@@ -25,6 +25,7 @@ pub mod instrument_list;
 pub mod layout;
 pub mod modal;
 pub mod pattern_list;
+pub mod sample_browser;
 pub mod theme;
 
 use help::render_help;
@@ -86,6 +87,14 @@ pub fn render(frame: &mut Frame, app: &App) {
                     &app.theme,
                     app.pattern_selection(),
                     0,
+                );
+            }
+            AppView::SampleBrowser => {
+                sample_browser::render_sample_browser(
+                    frame,
+                    content_area,
+                    &app.sample_browser,
+                    &app.theme,
                 );
             }
         }
@@ -793,6 +802,7 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             AppView::InstrumentList => "3:INS",
             AppView::CodeEditor => "4:CODE",
             AppView::PatternList => "5:PATLIST",
+            AppView::SampleBrowser => "6:SAMPLES",
         }
     };
     footer_spans.extend([

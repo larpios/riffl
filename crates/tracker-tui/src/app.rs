@@ -16,6 +16,7 @@ use crate::ui::code_editor::CodeEditor;
 use crate::ui::export_dialog::ExportDialog;
 use crate::ui::file_browser::FileBrowser;
 use crate::ui::modal::Modal;
+use crate::ui::sample_browser::SampleBrowser;
 use crate::ui::theme::{Theme, ThemeKind};
 use tracker_core::audio::{load_sample, AudioEngine, Mixer, Sample};
 use tracker_core::dsl::engine::ScriptEngine;
@@ -39,6 +40,8 @@ pub enum AppView {
     CodeEditor,
     /// Pattern list (pool) — 5
     PatternList,
+    /// Dedicated sample browser — 6
+    SampleBrowser,
 }
 
 /// Application state
@@ -61,8 +64,11 @@ pub struct App {
     /// Stack of active modal dialogs (top modal is last in Vec)
     modal_stack: Vec<Modal>,
 
-    /// File browser for loading audio samples
+    /// File browser for loading audio samples (overlay, Ctrl+F)
     pub file_browser: FileBrowser,
+
+    /// Dedicated sample browser view (view 6)
+    pub sample_browser: SampleBrowser,
 
     /// Export dialog for rendering to WAV
     pub export_dialog: ExportDialog,
@@ -188,9 +194,10 @@ impl App {
         demo_inst.sample_path = None;
         song.instruments.push(demo_inst);
 
-        // Initialize file browser at current working directory
+        // Initialize file browser and sample browser at current working directory
         let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let file_browser = FileBrowser::new(&cwd);
+        let sample_browser = SampleBrowser::new(vec![cwd.clone()]);
 
         Self {
             should_quit: false,
@@ -200,6 +207,7 @@ impl App {
             arrangement_view: ArrangementView::new(),
             modal_stack: Vec::new(),
             file_browser,
+            sample_browser,
             export_dialog: ExportDialog::new(),
             instrument_names: vec!["sine440".to_string()],
             instrument_selection: None,
@@ -613,6 +621,15 @@ impl App {
         !self.modal_stack.is_empty()
     }
 
+    /// Set the sample directories used by both the overlay file browser and the dedicated view.
+    pub fn set_sample_dirs(&mut self, dirs: Vec<std::path::PathBuf>) {
+        // Overlay file browser uses the first dir as its starting point
+        if let Some(first) = dirs.first() {
+            self.file_browser = FileBrowser::new(first);
+        }
+        self.sample_browser.set_roots(dirs);
+    }
+
     /// Open the file browser overlay
     pub fn open_file_browser(&mut self) {
         self.file_browser.open();
@@ -645,6 +662,44 @@ impl App {
 
         let sample =
             load_sample(&path, output_sample_rate).map_err(|e| format!("Failed to load: {}", e))?;
+
+        let name = sample.name().unwrap_or("unknown").to_string();
+
+        let idx = if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.add_sample(Arc::new(sample))
+        } else {
+            return Err("Failed to lock mixer".to_string());
+        };
+
+        use tracker_core::song::Instrument;
+        let mut instrument = Instrument::new(&name);
+        instrument.sample_index = Some(idx);
+        instrument.sample_path = Some(path.display().to_string());
+        self.song.instruments.push(instrument);
+        self.sync_mixer_instruments();
+
+        self.instrument_names.push(name);
+        Ok(idx)
+    }
+
+    /// Load the currently selected file from the dedicated sample browser view.
+    /// Returns Ok(instrument_index) on success, or an error message.
+    pub fn load_sample_from_browser(&mut self) -> Result<usize, String> {
+        let path = self
+            .sample_browser
+            .selected_path()
+            .filter(|_| self.sample_browser.selected_is_file())
+            .ok_or_else(|| "No file selected".to_string())?
+            .to_path_buf();
+
+        let output_sample_rate = self
+            .audio_engine
+            .as_ref()
+            .map(|e| e.sample_rate())
+            .unwrap_or(44100);
+
+        let sample =
+            load_sample(&path, output_sample_rate).map_err(|e| format!("Failed to load: {e}"))?;
 
         let name = sample.name().unwrap_or("unknown").to_string();
 

@@ -22,6 +22,12 @@ pub struct Config {
 
     /// Default number of channels (tracks) for new patterns
     pub default_channels: usize,
+
+    /// Additional sample directories shown in the sample browser.
+    /// `~/.config/riffl/samples/` is always included automatically.
+    /// Also overridden/extended by RIFFL_SAMPLE_DIR env var or --sample-dir CLI flag.
+    #[serde(default)]
+    pub sample_dirs: Vec<String>,
 }
 
 impl Default for Config {
@@ -31,6 +37,7 @@ impl Default for Config {
             default_bpm: 125.0,
             default_pattern_rows: 16,
             default_channels: 4,
+            sample_dirs: Vec::new(),
         }
     }
 }
@@ -71,6 +78,60 @@ impl Config {
     /// Resolve the ThemeKind for this config's theme string.
     pub fn theme_kind(&self) -> ThemeKind {
         ThemeKind::from_str(&self.theme).unwrap_or_default()
+    }
+
+    /// Return the riffl config directory (`$XDG_CONFIG_HOME/riffl` or `~/.config/riffl`).
+    pub fn config_dir() -> std::path::PathBuf {
+        let base = if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+            std::path::PathBuf::from(xdg)
+        } else {
+            dirs_next().join(".config")
+        };
+        base.join("riffl")
+    }
+
+    /// Return the default samples directory (`~/.config/riffl/samples/`).
+    pub fn default_samples_dir() -> std::path::PathBuf {
+        Self::config_dir().join("samples")
+    }
+
+    /// Resolve all sample directories for the browser.
+    ///
+    /// Order: default samples dir, then config `sample_dirs`, then
+    /// RIFFL_SAMPLE_DIR env var (if set), then --sample-dir CLI flag (if set).
+    /// Duplicates are removed. Directories that don't exist are kept
+    /// (the browser shows them as empty rather than hiding them).
+    pub fn resolve_sample_dirs(&self, cli_override: Option<&str>) -> Vec<std::path::PathBuf> {
+        let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+
+        // 1. Always include the default samples dir
+        dirs.push(Self::default_samples_dir());
+
+        // 2. Dirs from config file
+        for p in &self.sample_dirs {
+            let path = std::path::PathBuf::from(p);
+            if !dirs.contains(&path) {
+                dirs.push(path);
+            }
+        }
+
+        // 3. RIFFL_SAMPLE_DIR env var
+        if let Ok(p) = std::env::var("RIFFL_SAMPLE_DIR") {
+            let path = std::path::PathBuf::from(p);
+            if !dirs.contains(&path) {
+                dirs.push(path);
+            }
+        }
+
+        // 4. --sample-dir CLI flag
+        if let Some(p) = cli_override {
+            let path = std::path::PathBuf::from(p);
+            if !dirs.contains(&path) {
+                dirs.push(path);
+            }
+        }
+
+        dirs
     }
 
     /// Return the config file path (does not check whether it exists).
@@ -128,6 +189,7 @@ mod tests {
             default_bpm: 140.0,
             default_pattern_rows: 32,
             default_channels: 8,
+            sample_dirs: vec!["/tmp/samples".to_string()],
         };
         let s = toml::to_string_pretty(&cfg).unwrap();
         let restored: Config = toml::from_str(&s).unwrap();

@@ -46,7 +46,7 @@ pub fn render_instrument_list(
     if song.instruments.is_empty() && samples.is_empty() {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            "  No instruments defined. Press 'o' or F5 to load a sample.",
+            "  No instruments defined. Press Ctrl+F to load a sample.",
             Style::default().fg(theme.text_dimmed),
         )));
     } else {
