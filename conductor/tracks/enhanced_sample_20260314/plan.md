@@ -10,12 +10,12 @@
 
 ## Phase 3: Integration & UI Update
 
-- [ ] Task: Update Instrument List UI for Sample Parameters
-    - [ ] Write failing tests for instrument list updates
-    - [ ] Implement instrument list updates to pass tests
-    - [ ] Refactor and verify coverage for instrument list updates
-- [ ] Task: Update Pattern Editor UI for Effect Commands
-    - [ ] Write failing tests for pattern editor updates
-    - [ ] Implement pattern editor updates to pass tests
-    - [ ] Refactor and verify coverage for pattern editor updates
+- [x] Task: Update Instrument List UI for Sample Parameters
+    - [x] Write failing tests for instrument list updates
+    - [x] Implement instrument list updates to pass tests
+    - [x] Refactor and verify coverage for instrument list updates
+- [x] Task: Update Pattern Editor UI for Effect Commands
+    - [x] Write failing tests for pattern editor updates
+    - [x] Implement pattern editor updates to pass tests
+    - [x] Refactor and verify coverage for pattern editor updates
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Integration & UI Update' (Protocol in workflow.md)

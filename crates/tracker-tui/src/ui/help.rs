@@ -41,7 +41,7 @@ fn section(label: &str, theme: &Theme) -> Line<'static> {
     ))
 }
 
-fn key<'a>(keys: &str, desc: &str, theme: &Theme) -> Line<'static> {
+fn key(keys: &str, desc: &str, theme: &Theme) -> Line<'static> {
     Line::from(vec![
         Span::styled(
             format!("  {:<18}", keys),

@@ -70,7 +70,7 @@ pub fn render(frame: &mut Frame, app: &App) {
                     frame,
                     content_area,
                     &app.song,
-                    app.instrument_names(),
+                    &app.loaded_samples(),
                     &app.theme,
                     app.instrument_selection(),
                 );
@@ -450,33 +450,57 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 row_spans.push(Span::styled(" ", inactive));
                 row_spans.push(Span::styled(eff_str, es));
             } else {
-                // Single style for the whole cell
-                let cell_text = format!("{} {} {} {}", note_str, inst_str, vol_str, eff_str);
-                let cell_style = if is_cursor && is_playback_row {
-                    // Cursor ON the playback row: distinct combined style
-                    Style::default()
-                        .fg(Color::Black)
-                        .bg(Color::LightGreen)
-                        .add_modifier(Modifier::BOLD)
+                // Determine the base style for override situations (playback, cursor, visual, muted)
+                let override_style = if is_cursor && is_playback_row {
+                    Some(
+                        Style::default()
+                            .fg(Color::Black)
+                            .bg(Color::LightGreen)
+                            .add_modifier(Modifier::BOLD),
+                    )
                 } else if is_cursor {
-                    theme.highlight_style()
+                    Some(theme.highlight_style())
                 } else if is_visual_selected {
-                    theme.visual_selection_style()
+                    Some(theme.visual_selection_style())
                 } else if is_playback_row {
-                    // Playback row: bright green bar across entire row
-                    Style::default()
-                        .fg(Color::Black)
-                        .bg(Color::Green)
-                        .add_modifier(Modifier::BOLD)
+                    Some(
+                        Style::default()
+                            .fg(Color::Black)
+                            .bg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
+                    )
                 } else if is_track_muted || (any_soloed && is_track_inaudible) {
-                    // Muted or inaudible tracks: dimmed text
-                    Style::default().fg(theme.text_dimmed)
-                } else if cell.is_none_or(|c| c.is_empty()) {
-                    Style::default().fg(theme.text_dimmed)
+                    Some(Style::default().fg(theme.text_dimmed))
                 } else {
-                    Style::default().fg(theme.text)
+                    None
                 };
-                row_spans.push(Span::styled(cell_text, cell_style));
+
+                if let Some(cell_style) = override_style {
+                    // Uniform style for special states (cursor, playback, visual, muted)
+                    let cell_text = format!("{} {} {} {}", note_str, inst_str, vol_str, eff_str);
+                    row_spans.push(Span::styled(cell_text, cell_style));
+                } else {
+                    // Normal state: color-code each sub-column for visual clarity
+                    let is_empty = cell.is_none_or(|c| c.is_empty());
+                    let base = if is_empty {
+                        Style::default().fg(theme.text_dimmed)
+                    } else {
+                        Style::default().fg(theme.text)
+                    };
+                    let has_effect = eff_str != "...";
+                    let eff_style = if has_effect {
+                        Style::default().fg(theme.warning_color())
+                    } else {
+                        Style::default().fg(theme.text_dimmed)
+                    };
+                    row_spans.push(Span::styled(note_str, base));
+                    row_spans.push(Span::styled(" ", base));
+                    row_spans.push(Span::styled(inst_str, base));
+                    row_spans.push(Span::styled(" ", base));
+                    row_spans.push(Span::styled(vol_str, base));
+                    row_spans.push(Span::styled(" ", base));
+                    row_spans.push(Span::styled(eff_str, eff_style));
+                }
             }
             let trailing_style = if is_playback_row {
                 Style::default().bg(Color::Green)
@@ -944,6 +968,101 @@ mod tests {
         assert_eq!(e, "C20");
     }
 
+    // --- ProTracker effect rendering tests (Phase 2 effects) ---
+
+    #[test]
+    fn test_format_cell_parts_effect_5xy_tone_porta_vol_slide() {
+        use tracker_core::pattern::effect::Effect;
+        let cell = tracker_core::pattern::row::Cell {
+            note: None,
+            instrument: None,
+            volume: None,
+            effects: vec![Effect::new(0x5, 0x34)],
+        };
+        let (_, _, _, e) = format_cell_parts(Some(&cell));
+        assert_eq!(e, "534");
+    }
+
+    #[test]
+    fn test_format_cell_parts_effect_6xy_vibrato_vol_slide() {
+        use tracker_core::pattern::effect::Effect;
+        let cell = tracker_core::pattern::row::Cell {
+            note: None,
+            instrument: None,
+            volume: None,
+            effects: vec![Effect::new(0x6, 0x12)],
+        };
+        let (_, _, _, e) = format_cell_parts(Some(&cell));
+        assert_eq!(e, "612");
+    }
+
+    #[test]
+    fn test_format_cell_parts_effect_7xy_tremolo() {
+        use tracker_core::pattern::effect::Effect;
+        let cell = tracker_core::pattern::row::Cell {
+            note: None,
+            instrument: None,
+            volume: None,
+            effects: vec![Effect::new(0x7, 0x44)],
+        };
+        let (_, _, _, e) = format_cell_parts(Some(&cell));
+        assert_eq!(e, "744");
+    }
+
+    #[test]
+    fn test_format_cell_parts_effect_9xx_sample_offset() {
+        use tracker_core::pattern::effect::Effect;
+        let cell = tracker_core::pattern::row::Cell {
+            note: None,
+            instrument: None,
+            volume: None,
+            effects: vec![Effect::new(0x9, 0x80)],
+        };
+        let (_, _, _, e) = format_cell_parts(Some(&cell));
+        assert_eq!(e, "980");
+    }
+
+    #[test]
+    fn test_format_cell_parts_effect_exy_extended() {
+        use tracker_core::pattern::effect::Effect;
+        let cell = tracker_core::pattern::row::Cell {
+            note: None,
+            instrument: None,
+            volume: None,
+            effects: vec![Effect::new(0xE, 0x10)],
+        };
+        let (_, _, _, e) = format_cell_parts(Some(&cell));
+        assert_eq!(e, "E10");
+    }
+
+    #[test]
+    fn test_format_cell_parts_effect_zero_param() {
+        use tracker_core::pattern::effect::Effect;
+        // Effect with zero param renders as "X00"
+        let cell = tracker_core::pattern::row::Cell {
+            note: None,
+            instrument: None,
+            volume: None,
+            effects: vec![Effect::new(0xA, 0x00)],
+        };
+        let (_, _, _, e) = format_cell_parts(Some(&cell));
+        assert_eq!(e, "A00");
+    }
+
+    #[test]
+    fn test_format_cell_parts_effect_ff_param() {
+        use tracker_core::pattern::effect::Effect;
+        // Full-range param renders correctly
+        let cell = tracker_core::pattern::row::Cell {
+            note: None,
+            instrument: None,
+            volume: None,
+            effects: vec![Effect::new(0xF, 0xFF)],
+        };
+        let (_, _, _, e) = format_cell_parts(Some(&cell));
+        assert_eq!(e, "FFF");
+    }
+
     #[test]
     fn test_format_cell_parts_note_off() {
         let cell = tracker_core::pattern::row::Cell::with_note(NoteEvent::Off);
@@ -1087,7 +1206,7 @@ fn render_which_key(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let theme = &app.theme;
     let entries: Vec<(&str, &str)> = WHICH_KEY_ENTRIES
         .iter()
-        .filter(|(prefix, _, _)| prefix.chars().next() == Some(pending))
+        .filter(|(prefix, _, _)| prefix.starts_with(pending))
         .map(|(_, key, desc)| (*key, *desc))
         .collect();
 

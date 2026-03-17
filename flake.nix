@@ -14,6 +14,7 @@
           rustc
           cargo
           cargo-audit
+          lldb
           (if pkgs.stdenv.isLinux then [ pkgs.alsa-lib ] else [])  # Conditional ALSA inclusion for Linux
         ];
 

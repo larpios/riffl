@@ -206,7 +206,9 @@ impl App {
             pattern_selection: None,
             project_path: None,
             current_view: AppView::PatternEditor,
-            theme: Theme::default(),
+            theme_kind: ThemeKind::Nord,
+            theme: Theme::from_kind(ThemeKind::Nord),
+            config: Config::default(),
             audio_engine,
             mixer,
             glicol_mixer,
@@ -294,7 +296,7 @@ impl App {
                 if let Ok(mut gm) = self.glicol_mixer.lock() {
                     // Primitive Glicol trigger: if there's a note on channel 0, play it
                     if let Some(r) = self.editor.pattern().get_row(row) {
-                        if let Some(cell) = r.get(0) {
+                        if let Some(cell) = r.first() {
                             use tracker_core::pattern::note::NoteEvent;
                             match &cell.note {
                                 Some(NoteEvent::On(note)) => {
@@ -325,7 +327,7 @@ impl App {
                 if let Ok(mut gm) = self.glicol_mixer.lock() {
                     // Primitive Glicol trigger: if there's a note on channel 0, play it
                     if let Some(r) = self.editor.pattern().get_row(row) {
-                        if let Some(cell) = r.get(0) {
+                        if let Some(cell) = r.first() {
                             use tracker_core::pattern::note::NoteEvent;
                             match &cell.note {
                                 Some(NoteEvent::On(note)) => {
@@ -756,6 +758,15 @@ impl App {
     /// Get the list of loaded instrument names.
     pub fn instrument_names(&self) -> &[String] {
         &self.instrument_names
+    }
+
+    /// Get the loaded samples from the mixer.
+    pub fn loaded_samples(&self) -> Vec<Arc<Sample>> {
+        if let Ok(mixer) = self.mixer.lock() {
+            mixer.samples().to_vec()
+        } else {
+            Vec::new()
+        }
     }
 
     /// Get loaded instrument count.

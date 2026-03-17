@@ -166,7 +166,7 @@ impl Theme {
         let polar2 = Color::Rgb(67, 76, 94); // #434c5e
         let polar3 = Color::Rgb(76, 86, 106); // #4c566a
         let snow0 = Color::Rgb(216, 222, 233); // #d8dee9
-        let snow1 = Color::Rgb(229, 233, 240); // #e5e9f0
+        let _snow1 = Color::Rgb(229, 233, 240); // #e5e9f0
         let frost0 = Color::Rgb(143, 188, 187); // #8fbcbb
         let frost1 = Color::Rgb(136, 192, 208); // #88c0d0
         let frost3 = Color::Rgb(129, 161, 193); // #81a1c1
