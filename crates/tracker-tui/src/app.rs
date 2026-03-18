@@ -411,7 +411,7 @@ impl App {
             self.pending_quit = true;
             self.open_modal(Modal::confirmation(
                 "Unsaved Changes".to_string(),
-                "Quit without saving? (Enter=yes, Esc=no)".to_string(),
+                "Quit without saving? (y=yes, n/Esc=no)".to_string(),
             ));
             return;
         }

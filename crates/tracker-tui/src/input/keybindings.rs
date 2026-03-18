@@ -361,8 +361,11 @@ fn map_visual_mode(key: KeyEvent) -> Action {
     }
 
     match key.code {
-        // Escape returns to Normal mode
-        KeyCode::Esc => Action::EnterNormalMode,
+        // Escape or v returns to Normal mode
+        KeyCode::Esc | KeyCode::Char('v') => Action::EnterNormalMode,
+
+        // Command mode
+        KeyCode::Char(':') => Action::EnterCommandMode,
 
         // Navigation in Visual mode
         KeyCode::Char('h') | KeyCode::Left => Action::MoveLeft,

@@ -248,6 +248,13 @@ impl Theme {
             .bg(self.bg_highlight)
     }
 
+    /// Style for non-cursor sub-columns when in Normal mode cursor.
+    pub fn normal_inactive_style(&self) -> Style {
+        Style::default()
+            .fg(self.text_secondary)
+            .bg(self.bg_highlight)
+    }
+
     pub fn visual_selection_style(&self) -> Style {
         Style::default().fg(self.text).bg(self.cursor_visual_bg)
     }

@@ -129,9 +129,18 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
 
     // If a modal is open, handle modal-specific input first
     if app.has_modal() {
-        let action = map_key_to_action(key, app.editor_mode());
-        match action {
-            Action::Cancel | Action::Confirm | Action::EnterNormalMode => {
+        match key.code {
+            // Quit confirmation: y = yes quit, n/Esc = cancel
+            KeyCode::Char('y') if app.pending_quit => {
+                app.close_modal();
+                app.force_quit();
+            }
+            KeyCode::Char('n') | KeyCode::Esc if app.pending_quit => {
+                app.pending_quit = false;
+                app.close_modal();
+            }
+            // Dismiss any other modal
+            KeyCode::Enter | KeyCode::Esc | KeyCode::Char(' ') => {
                 app.close_modal();
             }
             _ => {}
@@ -179,17 +188,23 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         app.stop();
     }
 
-    // In Insert mode on the Effect sub-column, intercept hex digit keys (0-9, A-F)
-    // for effect entry instead of their normal note/octave mappings.
+    // In Insert mode on Effect/Instrument/Volume sub-columns, intercept hex digit
+    // keys (0-9, A-F) for data entry instead of their normal note/octave mappings.
     if app.editor.mode() == EditorMode::Insert
-        && app.editor.sub_column() == SubColumn::Effect
         && key.modifiers == crossterm::event::KeyModifiers::NONE
     {
         if let crossterm::event::KeyCode::Char(c) = key.code {
             if let Some(digit) = hex_char_to_digit(c) {
-                app.editor.enter_effect_digit(digit);
-                app.mark_dirty();
-                return;
+                match app.editor.sub_column() {
+                    SubColumn::Effect => app.editor.enter_effect_digit(digit),
+                    SubColumn::Instrument => app.editor.enter_instrument_digit(digit),
+                    SubColumn::Volume => app.editor.enter_volume_digit(digit),
+                    SubColumn::Note => {} // fall through to note entry
+                }
+                if app.editor.sub_column() != SubColumn::Note {
+                    app.mark_dirty();
+                    return;
+                }
             }
         }
     }
@@ -719,8 +734,14 @@ fn handle_sample_browser_key(app: &mut App, key: KeyEvent) -> bool {
 
     match key.code {
         // Navigation
-        KeyCode::Char('j') | KeyCode::Down => { app.sample_browser.move_down(); true }
-        KeyCode::Char('k') | KeyCode::Up => { app.sample_browser.move_up(); true }
+        KeyCode::Char('j') | KeyCode::Down => {
+            app.sample_browser.move_down();
+            true
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            app.sample_browser.move_up();
+            true
+        }
 
         // Enter directory
         KeyCode::Char('l') | KeyCode::Right => {

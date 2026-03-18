@@ -222,11 +222,12 @@ pub fn render_modal(frame: &mut Frame, area: Rect, modal: &Modal, theme: &Theme)
     let footer_text = match modal.modal_type {
         ModalType::Confirmation => {
             vec![
-                Span::raw("Press "),
-                Span::styled("Enter", Style::default().fg(theme.success_color())),
-                Span::raw(" to confirm, "),
-                Span::styled("ESC", Style::default().fg(theme.error_color())),
-                Span::raw(" to cancel"),
+                Span::styled("y", Style::default().fg(theme.success_color())),
+                Span::raw(" = yes  "),
+                Span::styled("n", Style::default().fg(theme.error_color())),
+                Span::raw(" / "),
+                Span::styled("Esc", Style::default().fg(theme.error_color())),
+                Span::raw(" = no"),
             ]
         }
         _ => {

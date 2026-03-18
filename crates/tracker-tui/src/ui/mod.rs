@@ -441,10 +441,16 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             // Format cell parts
             let (note_str, inst_str, vol_str, eff_str) = format_cell_parts(cell);
 
-            if is_cursor && mode == EditorMode::Insert {
-                // Insert mode: highlight the active sub-column distinctly
-                let active = theme.insert_cursor_style();
-                let inactive = theme.insert_inactive_style();
+            if is_cursor
+                && (mode == EditorMode::Insert || mode == EditorMode::Normal)
+                && !is_playback_row
+            {
+                // Insert/Normal mode: highlight only the active sub-column
+                let (active, inactive) = if mode == EditorMode::Insert {
+                    (theme.insert_cursor_style(), theme.insert_inactive_style())
+                } else {
+                    (theme.highlight_style(), theme.normal_inactive_style())
+                };
                 let (ns, is, vs, es) = match sub_column {
                     SubColumn::Note => (active, inactive, inactive, inactive),
                     SubColumn::Instrument => (inactive, active, inactive, inactive),
@@ -459,7 +465,7 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 row_spans.push(Span::styled(" ", inactive));
                 row_spans.push(Span::styled(eff_str, es));
             } else {
-                // Determine the base style for override situations (playback, cursor, visual, muted)
+                // Determine the base style for override situations (playback, cursor+playback, visual, muted)
                 let override_style = if is_cursor && is_playback_row {
                     Some(
                         Style::default()
@@ -467,8 +473,6 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                             .bg(Color::LightGreen)
                             .add_modifier(Modifier::BOLD),
                     )
-                } else if is_cursor {
-                    Some(theme.highlight_style())
                 } else if is_visual_selected {
                     Some(theme.visual_selection_style())
                 } else if is_playback_row {
@@ -485,7 +489,7 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 };
 
                 if let Some(cell_style) = override_style {
-                    // Uniform style for special states (cursor, playback, visual, muted)
+                    // Uniform style for special states (playback, visual, muted)
                     let cell_text = format!("{} {} {} {}", note_str, inst_str, vol_str, eff_str);
                     row_spans.push(Span::styled(cell_text, cell_style));
                 } else {

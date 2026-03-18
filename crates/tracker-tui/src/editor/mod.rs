@@ -148,9 +148,18 @@ pub struct Editor {
     clipboard: Option<Clipboard>,
     /// Current hex digit entry position for the effect column (0=command, 1=param_hi, 2=param_lo).
     effect_digit_position: u8,
+    /// Current hex digit entry position for the Instrument sub-column (0=hi nibble, 1=lo nibble).
+    instrument_digit_pos: u8,
+    /// Current hex digit entry position for the Volume sub-column (0=hi nibble, 1=lo nibble).
+    volume_digit_pos: u8,
 }
 
 impl Editor {
+    /// Get a reference to the clipboard contents.
+    pub fn get_clipboard(&self) -> Option<&Clipboard> {
+        self.clipboard.as_ref()
+    }
+
     /// Create a new editor wrapping the given pattern.
     pub fn new(pattern: Pattern) -> Self {
         Self {
@@ -166,6 +175,8 @@ impl Editor {
             visual_anchor: None,
             clipboard: None,
             effect_digit_position: 0,
+            instrument_digit_pos: 0,
+            volume_digit_pos: 0,
         }
     }
 
@@ -322,33 +333,39 @@ impl Editor {
     /// moves by sub-column first, then wraps to previous channel.
     pub fn move_left(&mut self) {
         self.effect_digit_position = 0;
-        if self.mode == EditorMode::Insert {
-            if self.sub_column != SubColumn::Note {
-                self.sub_column = self.sub_column.prev();
-            } else if self.cursor_channel > 0 {
-                self.cursor_channel -= 1;
-                self.sub_column = SubColumn::Effect;
-            }
-        } else {
-            self.cursor_channel = self.cursor_channel.saturating_sub(1);
+        if self.sub_column != SubColumn::Note {
+            self.sub_column = self.sub_column.prev();
+        } else if self.cursor_channel > 0 {
+            self.cursor_channel -= 1;
+            self.sub_column = SubColumn::Effect;
         }
     }
 
-    /// Move cursor right. In Normal mode, moves by channel. In Insert mode,
-    /// moves by sub-column first, then wraps to next channel.
+    /// Move cursor right by sub-column, wrapping to the next channel after Effect.
     pub fn move_right(&mut self) {
         self.effect_digit_position = 0;
         let max_ch = self.pattern.num_channels().saturating_sub(1);
-        if self.mode == EditorMode::Insert {
-            if self.sub_column != SubColumn::Effect {
-                self.sub_column = self.sub_column.next();
-            } else if self.cursor_channel < max_ch {
-                self.cursor_channel += 1;
-                self.sub_column = SubColumn::Note;
-            }
+        if self.sub_column != SubColumn::Effect {
+            self.sub_column = self.sub_column.next();
         } else if self.cursor_channel < max_ch {
             self.cursor_channel += 1;
+            self.sub_column = SubColumn::Note;
         }
+    }
+
+    /// Move cursor to the next channel (track), keeping the sub-column.
+    pub fn next_channel(&mut self) {
+        let max_ch = self.pattern.num_channels().saturating_sub(1);
+        if self.cursor_channel < max_ch {
+            self.cursor_channel += 1;
+        }
+        self.effect_digit_position = 0;
+    }
+
+    /// Move cursor to the previous channel (track), keeping the sub-column.
+    pub fn prev_channel(&mut self) {
+        self.cursor_channel = self.cursor_channel.saturating_sub(1);
+        self.effect_digit_position = 0;
     }
 
     /// Move cursor up by a page (PAGE_SIZE rows).
@@ -553,6 +570,60 @@ impl Editor {
     /// Reset the effect digit entry position to 0.
     pub fn reset_effect_digit_position(&mut self) {
         self.effect_digit_position = 0;
+    }
+
+    /// Enter a hex digit for the Instrument sub-column (2 nibbles = 1 byte, 0x00–0xFF).
+    /// First digit sets the high nibble, second sets the low nibble and advances the row.
+    /// Only works in Insert mode on the Instrument sub-column.
+    pub fn enter_instrument_digit(&mut self, digit: u8) {
+        if self.mode != EditorMode::Insert || self.sub_column != SubColumn::Instrument {
+            return;
+        }
+        let digit = digit & 0x0F;
+        self.save_history();
+        if let Some(cell) = self
+            .pattern
+            .get_cell_mut(self.cursor_row, self.cursor_channel)
+        {
+            let current = cell.instrument.unwrap_or(0);
+            let new_val = if self.instrument_digit_pos == 0 {
+                (digit << 4) | (current & 0x0F)
+            } else {
+                (current & 0xF0) | digit
+            };
+            cell.instrument = Some(new_val);
+            self.instrument_digit_pos = (self.instrument_digit_pos + 1) % 2;
+            if self.instrument_digit_pos == 0 {
+                self.advance_row();
+            }
+        }
+    }
+
+    /// Enter a hex digit for the Volume sub-column (2 nibbles = 1 byte, 0x00–0xFF).
+    /// First digit sets the high nibble, second sets the low nibble and advances the row.
+    /// Only works in Insert mode on the Volume sub-column.
+    pub fn enter_volume_digit(&mut self, digit: u8) {
+        if self.mode != EditorMode::Insert || self.sub_column != SubColumn::Volume {
+            return;
+        }
+        let digit = digit & 0x0F;
+        self.save_history();
+        if let Some(cell) = self
+            .pattern
+            .get_cell_mut(self.cursor_row, self.cursor_channel)
+        {
+            let current = cell.volume.unwrap_or(0);
+            let new_val = if self.volume_digit_pos == 0 {
+                (digit << 4) | (current & 0x0F)
+            } else {
+                (current & 0xF0) | digit
+            };
+            cell.volume = Some(new_val);
+            self.volume_digit_pos = (self.volume_digit_pos + 1) % 2;
+            if self.volume_digit_pos == 0 {
+                self.advance_row();
+            }
+        }
     }
 
     /// Delete (clear) the current cell.
@@ -780,11 +851,6 @@ impl Editor {
             }
         }
     }
-
-    /// Get a reference to the clipboard.
-    pub fn clipboard(&self) -> Option<&Clipboard> {
-        self.clipboard.as_ref()
-    }
 }
 
 #[cfg(test)]
@@ -879,31 +945,59 @@ mod tests {
     #[test]
     fn test_move_left_normal_mode() {
         let mut editor = test_editor();
+        // move_left retreats sub-column, not channel
+        editor.sub_column = SubColumn::Effect;
+        editor.move_left();
+        assert_eq!(editor.sub_column(), SubColumn::Volume);
+        assert_eq!(editor.cursor_channel(), 0);
+    }
+
+    #[test]
+    fn test_move_left_wraps_to_prev_channel() {
+        let mut editor = test_editor();
         editor.cursor_channel = 2;
+        // at Note sub-column, moving left wraps to Effect of previous channel
         editor.move_left();
         assert_eq!(editor.cursor_channel(), 1);
+        assert_eq!(editor.sub_column(), SubColumn::Effect);
     }
 
     #[test]
     fn test_move_left_at_zero() {
         let mut editor = test_editor();
+        // at channel 0, Note sub-column — can't go further left
         editor.move_left();
         assert_eq!(editor.cursor_channel(), 0);
+        assert_eq!(editor.sub_column(), SubColumn::Note);
     }
 
     #[test]
     fn test_move_right_normal_mode() {
         let mut editor = test_editor();
+        // move_right advances sub-column, not channel
+        assert_eq!(editor.sub_column(), SubColumn::Note);
         editor.move_right();
-        assert_eq!(editor.cursor_channel(), 1);
+        assert_eq!(editor.sub_column(), SubColumn::Instrument);
+        assert_eq!(editor.cursor_channel(), 0);
     }
 
     #[test]
-    fn test_move_right_at_max_channel() {
+    fn test_move_right_wraps_to_next_channel() {
+        let mut editor = test_editor();
+        editor.sub_column = SubColumn::Effect;
+        editor.move_right();
+        assert_eq!(editor.cursor_channel(), 1);
+        assert_eq!(editor.sub_column(), SubColumn::Note);
+    }
+
+    #[test]
+    fn test_move_right_at_max_channel_effect() {
         let mut editor = test_editor();
         editor.cursor_channel = 3;
+        editor.sub_column = SubColumn::Effect;
         editor.move_right();
         assert_eq!(editor.cursor_channel(), 3);
+        assert_eq!(editor.sub_column(), SubColumn::Effect);
     }
 
     #[test]
@@ -1334,7 +1428,7 @@ mod tests {
         editor.cursor_row = 0;
         editor.enter_normal_mode();
         editor.copy();
-        let cb = editor.clipboard().unwrap();
+        let cb = editor.get_clipboard().unwrap();
         assert_eq!(cb.dimensions(), (1, 1));
         assert!(cb.cells()[0][0].note.is_some());
     }
@@ -1352,7 +1446,7 @@ mod tests {
         editor.enter_visual_mode();
         editor.cursor_row = 1;
         editor.copy();
-        let cb = editor.clipboard().unwrap();
+        let cb = editor.get_clipboard().unwrap();
         assert_eq!(cb.dimensions(), (2, 1));
         // First cell should have C-4
         match cb.cells()[0][0].note {
@@ -1457,7 +1551,7 @@ mod tests {
         // Cell should be cleared
         assert!(editor.pattern().get_cell(0, 0).unwrap().is_empty());
         // Clipboard should have the note
-        let cb = editor.clipboard().unwrap();
+        let cb = editor.get_clipboard().unwrap();
         assert!(cb.cells()[0][0].note.is_some());
     }
 
@@ -1476,7 +1570,7 @@ mod tests {
         assert!(editor.pattern().get_cell(0, 0).unwrap().is_empty());
         assert!(editor.pattern().get_cell(1, 0).unwrap().is_empty());
         // Clipboard should have both notes
-        let cb = editor.clipboard().unwrap();
+        let cb = editor.get_clipboard().unwrap();
         assert_eq!(cb.dimensions(), (2, 1));
     }
 
