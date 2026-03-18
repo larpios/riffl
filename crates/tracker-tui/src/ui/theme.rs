@@ -4,28 +4,48 @@ use ratatui::style::{Color, Modifier, Style};
 /// Available built-in themes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ThemeKind {
+    /// Catppuccin Latte — warm, creamy light theme
+    CatppuccinLatte,
+    /// Catppuccin Frappé — cool medium-dark
+    CatppuccinFrappe,
+    /// Catppuccin Macchiato — deeper dark
+    CatppuccinMacchiato,
+    /// Catppuccin Mocha — darkest Catppuccin (default)
     #[default]
-    Dark,
     CatppuccinMocha,
+    /// Nord — cool arctic palette
     Nord,
+    /// Dark — classic terminal dark (raw colors)
+    Dark,
 }
 
 impl ThemeKind {
     pub fn name(self) -> &'static str {
         match self {
-            Self::Dark => "dark",
+            Self::CatppuccinLatte => "latte",
+            Self::CatppuccinFrappe => "frappe",
+            Self::CatppuccinMacchiato => "macchiato",
             Self::CatppuccinMocha => "mocha",
             Self::Nord => "nord",
+            Self::Dark => "dark",
         }
     }
 
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_ascii_lowercase().as_str() {
-            "dark" | "default" => Some(Self::Dark),
+            "latte" | "catppuccin-latte" | "cappuccino" => Some(Self::CatppuccinLatte),
+            "frappe" | "catppuccin-frappe" => Some(Self::CatppuccinFrappe),
+            "macchiato" | "catppuccin-macchiato" => Some(Self::CatppuccinMacchiato),
             "mocha" | "catppuccin" | "catppuccin-mocha" => Some(Self::CatppuccinMocha),
             "nord" => Some(Self::Nord),
+            "dark" | "default" => Some(Self::Dark),
             _ => None,
         }
+    }
+
+    /// All available theme names, for display in help / error messages.
+    pub fn all_names() -> &'static [&'static str] {
+        &["latte", "frappe", "macchiato", "mocha", "nord", "dark"]
     }
 }
 
@@ -73,9 +93,12 @@ pub struct Theme {
 impl Theme {
     pub fn from_kind(kind: ThemeKind) -> Self {
         match kind {
-            ThemeKind::Dark => Self::dark(),
+            ThemeKind::CatppuccinLatte => Self::catppuccin_latte(),
+            ThemeKind::CatppuccinFrappe => Self::catppuccin_frappe(),
+            ThemeKind::CatppuccinMacchiato => Self::catppuccin_macchiato(),
             ThemeKind::CatppuccinMocha => Self::catppuccin_mocha(),
             ThemeKind::Nord => Self::nord(),
+            ThemeKind::Dark => Self::dark(),
         }
     }
 
@@ -107,6 +130,153 @@ impl Theme {
             status_warning: Color::Yellow,
             status_error: Color::Red,
             status_info: Color::Cyan,
+        }
+    }
+
+    // ── Catppuccin Latte ────────────────────────────────────────────────────
+    pub fn catppuccin_latte() -> Self {
+        // https://github.com/catppuccin/catppuccin — Latte palette
+        let base = Color::Rgb(239, 241, 245); // #eff1f5
+        let mantle = Color::Rgb(230, 233, 239); // #e6e9ef
+        let surface0 = Color::Rgb(204, 208, 218); // #ccd0da
+        let surface1 = Color::Rgb(188, 192, 204); // #bcc0cc
+        let overlay1 = Color::Rgb(140, 143, 161); // #8c8fa1
+        let text = Color::Rgb(76, 79, 105); // #4c4f69
+        let subtext0 = Color::Rgb(108, 111, 133); // #6c6f85
+        let blue = Color::Rgb(30, 102, 245); // #1e66f5
+        let lavender = Color::Rgb(114, 135, 253); // #7287fd
+        let green = Color::Rgb(64, 160, 43); // #40a02b
+        let yellow = Color::Rgb(223, 142, 29); // #df8e1d
+        let peach = Color::Rgb(254, 100, 11); // #fe640b
+        let red = Color::Rgb(210, 15, 57); // #d20f39
+        let mauve = Color::Rgb(136, 57, 239); // #8839ef
+        let teal = Color::Rgb(23, 146, 153); // #179299
+        let crust = Color::Rgb(220, 224, 232); // #dce0e8
+
+        Self {
+            bg: base,
+            bg_surface: mantle,
+            bg_highlight: surface0,
+            bg_header: mantle,
+            bg_footer: mantle,
+
+            primary: blue,
+            secondary: lavender,
+
+            border: surface1,
+            border_focused: blue,
+
+            text,
+            text_secondary: subtext0,
+            text_dimmed: overlay1,
+
+            cursor_normal_bg: peach,
+            cursor_insert_bg: mauve,
+            cursor_visual_bg: surface1,
+            cursor_fg: crust,
+
+            status_success: green,
+            status_warning: yellow,
+            status_error: red,
+            status_info: teal,
+        }
+    }
+
+    // ── Catppuccin Frappé ───────────────────────────────────────────────────
+    pub fn catppuccin_frappe() -> Self {
+        // https://github.com/catppuccin/catppuccin — Frappé palette
+        let base = Color::Rgb(48, 52, 70); // #303446
+        let mantle = Color::Rgb(41, 44, 60); // #292c3c
+        let surface0 = Color::Rgb(65, 69, 89); // #414559
+        let surface1 = Color::Rgb(81, 87, 109); // #51576d
+        let overlay1 = Color::Rgb(131, 139, 167); // #838ba7
+        let text = Color::Rgb(198, 208, 245); // #c6d0f5
+        let subtext0 = Color::Rgb(165, 173, 206); // #a5adce
+        let blue = Color::Rgb(140, 170, 238); // #8caaee
+        let lavender = Color::Rgb(186, 187, 241); // #babbf1
+        let green = Color::Rgb(166, 209, 137); // #a6d189
+        let yellow = Color::Rgb(229, 200, 144); // #e5c890
+        let peach = Color::Rgb(239, 159, 118); // #ef9f76
+        let red = Color::Rgb(231, 130, 132); // #e78284
+        let mauve = Color::Rgb(202, 158, 230); // #ca9ee6
+        let teal = Color::Rgb(129, 200, 190); // #81c8be
+        let crust = Color::Rgb(35, 38, 52); // #232634
+
+        Self {
+            bg: base,
+            bg_surface: mantle,
+            bg_highlight: surface0,
+            bg_header: mantle,
+            bg_footer: mantle,
+
+            primary: blue,
+            secondary: lavender,
+
+            border: surface1,
+            border_focused: blue,
+
+            text,
+            text_secondary: subtext0,
+            text_dimmed: overlay1,
+
+            cursor_normal_bg: peach,
+            cursor_insert_bg: mauve,
+            cursor_visual_bg: surface1,
+            cursor_fg: crust,
+
+            status_success: green,
+            status_warning: yellow,
+            status_error: red,
+            status_info: teal,
+        }
+    }
+
+    // ── Catppuccin Macchiato ─────────────────────────────────────────────────
+    pub fn catppuccin_macchiato() -> Self {
+        // https://github.com/catppuccin/catppuccin — Macchiato palette
+        let base = Color::Rgb(36, 39, 58); // #24273a
+        let mantle = Color::Rgb(30, 32, 48); // #1e2030
+        let surface0 = Color::Rgb(54, 58, 79); // #363a4f
+        let surface1 = Color::Rgb(73, 77, 100); // #494d64
+        let overlay1 = Color::Rgb(128, 135, 162); // #8087a2
+        let text = Color::Rgb(202, 211, 245); // #cad3f5
+        let subtext0 = Color::Rgb(165, 173, 203); // #a5adcb
+        let blue = Color::Rgb(138, 173, 244); // #8aadf4
+        let lavender = Color::Rgb(183, 189, 248); // #b7bdf8
+        let green = Color::Rgb(166, 218, 149); // #a6da95
+        let yellow = Color::Rgb(238, 212, 159); // #eed49f
+        let peach = Color::Rgb(245, 169, 127); // #f5a97f
+        let red = Color::Rgb(237, 135, 150); // #ed8796
+        let mauve = Color::Rgb(198, 160, 246); // #c6a0f6
+        let teal = Color::Rgb(139, 213, 202); // #8bd5ca
+        let crust = Color::Rgb(24, 25, 38); // #181926
+
+        Self {
+            bg: base,
+            bg_surface: mantle,
+            bg_highlight: surface0,
+            bg_header: mantle,
+            bg_footer: mantle,
+
+            primary: blue,
+            secondary: lavender,
+
+            border: surface1,
+            border_focused: blue,
+
+            text,
+            text_secondary: subtext0,
+            text_dimmed: overlay1,
+
+            cursor_normal_bg: peach,
+            cursor_insert_bg: mauve,
+            cursor_visual_bg: surface1,
+            cursor_fg: crust,
+
+            status_success: green,
+            status_warning: yellow,
+            status_error: red,
+            status_info: teal,
         }
     }
 
@@ -276,7 +446,7 @@ impl Theme {
 
 impl Default for Theme {
     fn default() -> Self {
-        Self::dark()
+        Self::catppuccin_mocha()
     }
 }
 
@@ -285,13 +455,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_theme_default_is_dark() {
-        assert_eq!(Theme::default(), Theme::dark());
+    fn test_theme_default_is_mocha() {
+        assert_eq!(Theme::default(), Theme::catppuccin_mocha());
     }
 
     #[test]
     fn test_from_kind_roundtrip() {
-        for kind in [ThemeKind::Dark, ThemeKind::CatppuccinMocha, ThemeKind::Nord] {
+        for kind in [
+            ThemeKind::CatppuccinLatte,
+            ThemeKind::CatppuccinFrappe,
+            ThemeKind::CatppuccinMacchiato,
+            ThemeKind::CatppuccinMocha,
+            ThemeKind::Nord,
+            ThemeKind::Dark,
+        ] {
             let t = Theme::from_kind(kind);
             assert_eq!(t, Theme::from_kind(kind));
         }
@@ -299,24 +476,36 @@ mod tests {
 
     #[test]
     fn test_theme_kind_from_str() {
-        assert_eq!(ThemeKind::from_str("dark"), Some(ThemeKind::Dark));
-        assert_eq!(
-            ThemeKind::from_str("mocha"),
-            Some(ThemeKind::CatppuccinMocha)
-        );
-        assert_eq!(
-            ThemeKind::from_str("catppuccin-mocha"),
-            Some(ThemeKind::CatppuccinMocha)
-        );
+        assert_eq!(ThemeKind::from_str("latte"), Some(ThemeKind::CatppuccinLatte));
+        assert_eq!(ThemeKind::from_str("cappuccino"), Some(ThemeKind::CatppuccinLatte));
+        assert_eq!(ThemeKind::from_str("frappe"), Some(ThemeKind::CatppuccinFrappe));
+        assert_eq!(ThemeKind::from_str("macchiato"), Some(ThemeKind::CatppuccinMacchiato));
+        assert_eq!(ThemeKind::from_str("mocha"), Some(ThemeKind::CatppuccinMocha));
+        assert_eq!(ThemeKind::from_str("catppuccin-mocha"), Some(ThemeKind::CatppuccinMocha));
         assert_eq!(ThemeKind::from_str("nord"), Some(ThemeKind::Nord));
+        assert_eq!(ThemeKind::from_str("dark"), Some(ThemeKind::Dark));
         assert_eq!(ThemeKind::from_str("unknown"), None);
     }
 
     #[test]
     fn test_theme_kind_name() {
-        assert_eq!(ThemeKind::Dark.name(), "dark");
+        assert_eq!(ThemeKind::CatppuccinLatte.name(), "latte");
+        assert_eq!(ThemeKind::CatppuccinFrappe.name(), "frappe");
+        assert_eq!(ThemeKind::CatppuccinMacchiato.name(), "macchiato");
         assert_eq!(ThemeKind::CatppuccinMocha.name(), "mocha");
         assert_eq!(ThemeKind::Nord.name(), "nord");
+        assert_eq!(ThemeKind::Dark.name(), "dark");
+    }
+
+    #[test]
+    fn test_theme_kind_all_names() {
+        let names = ThemeKind::all_names();
+        assert!(names.contains(&"latte"));
+        assert!(names.contains(&"frappe"));
+        assert!(names.contains(&"macchiato"));
+        assert!(names.contains(&"mocha"));
+        assert!(names.contains(&"nord"));
+        assert!(names.contains(&"dark"));
     }
 
     #[test]
@@ -328,6 +517,28 @@ mod tests {
         assert_eq!(t.status_error, Color::Red);
         assert_eq!(t.cursor_normal_bg, Color::Yellow);
         assert_eq!(t.cursor_insert_bg, Color::LightMagenta);
+    }
+
+    #[test]
+    fn test_latte_theme_has_rgb_colors() {
+        let t = Theme::catppuccin_latte();
+        assert!(matches!(t.bg, Color::Rgb(_, _, _)));
+        assert!(matches!(t.primary, Color::Rgb(_, _, _)));
+        assert!(matches!(t.text, Color::Rgb(_, _, _)));
+    }
+
+    #[test]
+    fn test_frappe_theme_has_rgb_colors() {
+        let t = Theme::catppuccin_frappe();
+        assert!(matches!(t.bg, Color::Rgb(_, _, _)));
+        assert!(matches!(t.primary, Color::Rgb(_, _, _)));
+    }
+
+    #[test]
+    fn test_macchiato_theme_has_rgb_colors() {
+        let t = Theme::catppuccin_macchiato();
+        assert!(matches!(t.bg, Color::Rgb(_, _, _)));
+        assert!(matches!(t.primary, Color::Rgb(_, _, _)));
     }
 
     #[test]
@@ -347,7 +558,7 @@ mod tests {
 
     #[test]
     fn test_style_methods_use_theme_colors() {
-        let t = Theme::dark();
+        let t = Theme::catppuccin_mocha();
         assert_eq!(t.header_style().fg, Some(t.text));
         assert_eq!(t.footer_style().bg, Some(t.bg_footer));
         assert_eq!(t.border_style().fg, Some(t.border));

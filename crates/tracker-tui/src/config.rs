@@ -33,7 +33,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            theme: "dark".to_string(),
+            theme: "mocha".to_string(),
             default_bpm: 125.0,
             default_pattern_rows: 16,
             default_channels: 4,
@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn test_default_config() {
         let c = Config::default();
-        assert_eq!(c.theme, "dark");
+        assert_eq!(c.theme, "mocha");
         assert_eq!(c.default_bpm, 125.0);
         assert_eq!(c.default_pattern_rows, 16);
         assert_eq!(c.default_channels, 4);
@@ -173,9 +173,9 @@ mod tests {
     #[test]
     fn test_theme_kind_resolution() {
         let mut c = Config::default();
-        assert_eq!(c.theme_kind(), ThemeKind::Dark);
-        c.theme = "mocha".to_string();
         assert_eq!(c.theme_kind(), ThemeKind::CatppuccinMocha);
+        c.theme = "latte".to_string();
+        assert_eq!(c.theme_kind(), ThemeKind::CatppuccinLatte);
         c.theme = "nord".to_string();
         assert_eq!(c.theme_kind(), ThemeKind::Nord);
         c.theme = "unknown".to_string();

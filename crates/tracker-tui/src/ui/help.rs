@@ -120,6 +120,7 @@ fn right_column(theme: &Theme) -> Vec<Line<'static>> {
         key("Ctrl+O", "Load project", theme),
         key("Ctrl+F", "Load sample / MOD", theme),
         key("Ctrl+E", "Export audio", theme),
+        key(":theme <name>", "Switch theme", theme),
         blank(),
         section("LIVE / SCRIPT", theme),
         key("Ctrl+L", "Toggle Live mode", theme),

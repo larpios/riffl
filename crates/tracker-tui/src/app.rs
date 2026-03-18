@@ -443,9 +443,32 @@ impl App {
         self.command_mode = false;
         self.command_input.clear();
 
-        // Parse "bpm N" or "t N" or "tempo N"
+        // Parse "bpm N" or "t N" or "tempo N" or "theme NAME"
         let parts: Vec<&str> = cmd.splitn(2, ' ').collect();
         let is_bpm_cmd = matches!(parts[0], "bpm" | "t" | "tempo");
+        let is_theme_cmd = parts[0] == "theme";
+
+        if is_theme_cmd {
+            if let Some(name) = parts.get(1).map(|s| s.trim()) {
+                if let Some(kind) = crate::ui::theme::ThemeKind::from_str(name) {
+                    self.theme = crate::ui::theme::Theme::from_kind(kind);
+                    self.config.theme = kind.name().to_string();
+                } else {
+                    let available = crate::ui::theme::ThemeKind::all_names().join(", ");
+                    self.open_modal(Modal::error(
+                        "Unknown theme".to_string(),
+                        format!("Available themes: {available}"),
+                    ));
+                }
+            } else {
+                let available = crate::ui::theme::ThemeKind::all_names().join(", ");
+                self.open_modal(Modal::error(
+                    "Usage: :theme <name>".to_string(),
+                    format!("Available themes: {available}"),
+                ));
+            }
+            return;
+        }
 
         if is_bpm_cmd {
             if let Some(val) = parts.get(1).and_then(|s| s.trim().parse::<f64>().ok()) {
