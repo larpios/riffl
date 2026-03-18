@@ -124,6 +124,9 @@ pub struct App {
     /// Whether help overlay is shown
     pub show_help: bool,
 
+    /// Scroll offset for the help overlay (in lines)
+    pub help_scroll: u16,
+
     /// Timestamp of the last update call (for delta time calculation)
     last_update: Instant,
 
@@ -226,6 +229,7 @@ impl App {
             script_engine: ScriptEngine::new(),
             live_mode: false,
             show_help: false,
+            help_scroll: 0,
             last_update: Instant::now(),
             pending_key: None,
             is_dirty: false,

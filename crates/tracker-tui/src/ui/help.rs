@@ -8,15 +8,19 @@ use ratatui::{
 
 use super::theme::Theme;
 
-/// Render help/cheatsheet overlay — two-column layout
-pub fn render_help(frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme) {
-    let help_area = super::layout::create_centered_rect(area, 84, 80);
+/// Render help/cheatsheet overlay — two-column scrollable layout.
+/// `scroll` is the vertical scroll offset in lines.
+pub fn render_help(frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme, scroll: u16) {
+    let help_area = super::layout::create_centered_rect(area, 84, 85);
     frame.render_widget(Clear, help_area);
 
+    let title = format!(
+        " KEYBOARD SHORTCUTS  (j/k scroll · ?/Esc close) "
+    );
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.info_color()))
-        .title(" KEYBOARD SHORTCUTS  (? or Esc to close) ")
+        .title(title)
         .title_alignment(Alignment::Center);
 
     let inner = block.inner(help_area);
@@ -28,8 +32,14 @@ pub fn render_help(frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(inner);
 
-    frame.render_widget(Paragraph::new(left_column(theme)), cols[0]);
-    frame.render_widget(Paragraph::new(right_column(theme)), cols[1]);
+    frame.render_widget(
+        Paragraph::new(left_column(theme)).scroll((scroll, 0)),
+        cols[0],
+    );
+    frame.render_widget(
+        Paragraph::new(right_column(theme)).scroll((scroll, 0)),
+        cols[1],
+    );
 }
 
 fn section(label: &str, theme: &Theme) -> Line<'static> {

@@ -148,10 +148,29 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         return;
     }
 
-    // If help overlay is open, Esc or ? closes it
+    // If help overlay is open, handle navigation and close
     if app.show_help {
-        if matches!(key.code, KeyCode::Esc | KeyCode::Char('?')) {
-            app.show_help = false;
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') => {
+                app.show_help = false;
+                app.help_scroll = 0;
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                app.help_scroll = app.help_scroll.saturating_add(1);
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                app.help_scroll = app.help_scroll.saturating_sub(1);
+            }
+            KeyCode::PageDown => {
+                app.help_scroll = app.help_scroll.saturating_add(10);
+            }
+            KeyCode::PageUp => {
+                app.help_scroll = app.help_scroll.saturating_sub(10);
+            }
+            KeyCode::Home | KeyCode::Char('g') => {
+                app.help_scroll = 0;
+            }
+            _ => {}
         }
         return;
     }
@@ -428,7 +447,10 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
 
         // Application
         Action::Quit => app.quit(),
-        Action::ToggleHelp => app.show_help = !app.show_help,
+        Action::ToggleHelp => {
+            app.show_help = !app.show_help;
+            app.help_scroll = 0; // always start from the top
+        }
         Action::OpenModal => app.open_test_modal(),
         Action::OpenFileBrowser => app.open_file_browser(),
         Action::Cancel => {

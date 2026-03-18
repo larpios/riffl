@@ -119,7 +119,7 @@ pub fn render(frame: &mut Frame, app: &App) {
 
     // Render help overlay on top if active
     if app.show_help {
-        render_help(frame, full_area, &app.theme);
+        render_help(frame, full_area, &app.theme, app.help_scroll);
     }
 
     // Render which-key popup when a chord is pending
