@@ -397,18 +397,31 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         // Row number in hex (tracker convention)
         // Playback row is highlighted when playing OR paused (to show where playback is)
         let is_playback_row = is_playing_or_paused && row_idx == playback_row;
-        let row_num_style = if is_playback_row {
-            Style::default()
-                .fg(Color::Black)
-                .bg(theme.success_color())
-                .add_modifier(Modifier::BOLD)
-        } else if row_idx.is_multiple_of(4) {
-            Style::default().fg(theme.primary)
+        let (row_prefix, row_num_style) = if is_playback_row {
+            (
+                "▶ ",
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(theme.success_color())
+                    .add_modifier(Modifier::BOLD),
+            )
+        } else if row_idx % 16 == 0 {
+            (
+                "│ ",
+                Style::default()
+                    .fg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
+            )
+        } else if row_idx % 4 == 0 {
+            ("· ", Style::default().fg(theme.primary))
         } else {
-            Style::default().fg(theme.text_secondary)
+            ("  ", Style::default().fg(theme.text_secondary))
         };
 
-        row_spans.push(Span::styled(format!("  {:02X}  ", row_idx), row_num_style));
+        row_spans.push(Span::styled(
+            format!("{}{:02X}  ", row_prefix, row_idx),
+            row_num_style,
+        ));
 
         // Cells for each visible channel
         let mode = app.editor.mode();
@@ -493,25 +506,44 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     let cell_text = format!("{} {} {} {}", note_str, inst_str, vol_str, eff_str);
                     row_spans.push(Span::styled(cell_text, cell_style));
                 } else {
-                    // Normal state: color-code each sub-column for visual clarity
-                    let is_empty = cell.is_none_or(|c| c.is_empty());
-                    let base = if is_empty {
-                        Style::default().fg(theme.text_dimmed)
-                    } else {
-                        Style::default().fg(theme.text)
-                    };
+                    // Normal state: color-code each sub-column distinctly
+                    let dimmed = Style::default().fg(theme.text_dimmed);
+                    let has_note = note_str != "---" && note_str != "===";
+                    let is_note_off = note_str == "===";
+                    let has_inst = inst_str != "..";
+                    let has_vol = vol_str != "..";
                     let has_effect = eff_str != "...";
+
+                    let note_style = if is_note_off {
+                        Style::default()
+                            .fg(theme.error_color())
+                            .add_modifier(Modifier::BOLD)
+                    } else if has_note {
+                        Style::default().fg(theme.primary)
+                    } else {
+                        dimmed
+                    };
+                    let inst_style = if has_inst {
+                        Style::default().fg(Color::Yellow)
+                    } else {
+                        dimmed
+                    };
+                    let vol_style = if has_vol {
+                        Style::default().fg(Color::Magenta)
+                    } else {
+                        dimmed
+                    };
                     let eff_style = if has_effect {
                         Style::default().fg(theme.warning_color())
                     } else {
-                        Style::default().fg(theme.text_dimmed)
+                        dimmed
                     };
-                    row_spans.push(Span::styled(note_str, base));
-                    row_spans.push(Span::styled(" ", base));
-                    row_spans.push(Span::styled(inst_str, base));
-                    row_spans.push(Span::styled(" ", base));
-                    row_spans.push(Span::styled(vol_str, base));
-                    row_spans.push(Span::styled(" ", base));
+                    row_spans.push(Span::styled(note_str, note_style));
+                    row_spans.push(Span::styled(" ", dimmed));
+                    row_spans.push(Span::styled(inst_str, inst_style));
+                    row_spans.push(Span::styled(" ", dimmed));
+                    row_spans.push(Span::styled(vol_str, vol_style));
+                    row_spans.push(Span::styled(" ", dimmed));
                     row_spans.push(Span::styled(eff_str, eff_style));
                 }
             }
@@ -755,6 +787,20 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     match mode {
         EditorMode::Normal => {}
         EditorMode::Insert => {
+            footer_spans.push(Span::styled(
+                format!("Oct:{}", app.editor.current_octave()),
+                Style::default().fg(theme.warning_color()),
+            ));
+            footer_spans.push(Span::raw(" "));
+            footer_spans.push(Span::styled(
+                format!("Ins:{:02X}", app.editor.current_instrument()),
+                Style::default().fg(Color::Yellow),
+            ));
+            footer_spans.push(Span::raw(" "));
+            footer_spans.push(Span::styled(
+                format!("Stp:{}", app.editor.step_size()),
+                Style::default().fg(Color::Cyan),
+            ));
             if app.editor.sub_column() == SubColumn::Effect {
                 let cell = app
                     .editor
@@ -764,6 +810,7 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     .and_then(|c| c.first_effect())
                     .map(|e| e.mnemonic())
                     .unwrap_or("---");
+                footer_spans.push(Span::raw(" "));
                 footer_spans.push(Span::styled(
                     format!("Eff:{}", mnemonic),
                     Style::default().fg(theme.warning_color()),
@@ -779,14 +826,20 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     format!("[{}]", pos_label),
                     Style::default().fg(theme.info_color()),
                 ));
-            } else {
-                footer_spans.push(Span::styled(
-                    format!("Oct:{}", app.editor.current_octave()),
-                    Style::default().fg(theme.warning_color()),
-                ));
             }
         }
         EditorMode::Visual => {}
+    }
+
+    // Step size (always visible — affects note entry row advance)
+    if mode == EditorMode::Normal {
+        footer_spans.extend([
+            Span::raw("  "),
+            Span::styled(
+                format!("Stp:{}", app.editor.step_size()),
+                Style::default().fg(Color::Cyan),
+            ),
+        ]);
     }
 
     // Help hint

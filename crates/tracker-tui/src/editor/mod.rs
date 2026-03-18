@@ -152,6 +152,8 @@ pub struct Editor {
     instrument_digit_pos: u8,
     /// Current hex digit entry position for the Volume sub-column (0=hi nibble, 1=lo nibble).
     volume_digit_pos: u8,
+    /// Number of rows to advance after entering a note/event (step size, default 1).
+    step_size: usize,
 }
 
 impl Editor {
@@ -177,6 +179,7 @@ impl Editor {
             effect_digit_position: 0,
             instrument_digit_pos: 0,
             volume_digit_pos: 0,
+            step_size: 1,
         }
     }
 
@@ -309,14 +312,32 @@ impl Editor {
     }
 
     /// Advance cursor down after note/effect entry in Insert mode.
-    /// Appends a new row if already at the last row.
+    /// Advances by `step_size` rows; does not extend the pattern past its end.
     fn advance_row(&mut self) {
-        let last = self.pattern.num_rows().saturating_sub(1);
-        if self.cursor_row >= last {
-            self.pattern.insert_row(self.pattern.num_rows());
-        }
-        self.cursor_row += 1;
+        let num_rows = self.pattern.num_rows();
+        let next = (self.cursor_row + self.step_size).min(num_rows.saturating_sub(1));
+        self.cursor_row = next;
         self.effect_digit_position = 0;
+    }
+
+    /// Get the current step size (rows advanced after each note entry).
+    pub fn step_size(&self) -> usize {
+        self.step_size
+    }
+
+    /// Set the step size (0–8).
+    pub fn set_step_size(&mut self, step: usize) {
+        self.step_size = step.min(8);
+    }
+
+    /// Increase step size by 1 (max 8).
+    pub fn step_up(&mut self) {
+        self.step_size = (self.step_size + 1).min(8);
+    }
+
+    /// Decrease step size by 1 (min 0).
+    pub fn step_down(&mut self) {
+        self.step_size = self.step_size.saturating_sub(1);
     }
 
     /// Move down in Insert mode, extending the pattern if at the last row.
@@ -661,16 +682,30 @@ impl Editor {
         }
     }
 
-    /// Parse a character as a note pitch (A-G) for note entry.
+    /// Parse a character as a note pitch for note entry.
+    ///
+    /// Lowercase letters (a–g) produce natural pitches.
+    /// Uppercase letters produce sharps where they exist:
+    ///   C→C#, D→D#, F→F#, G→G#, A→A#
+    ///   E and B have no common sharp so they map to natural E/B.
     pub fn char_to_pitch(c: char) -> Option<Pitch> {
-        match c.to_ascii_uppercase() {
-            'C' => Some(Pitch::C),
-            'D' => Some(Pitch::D),
-            'E' => Some(Pitch::E),
-            'F' => Some(Pitch::F),
-            'G' => Some(Pitch::G),
-            'A' => Some(Pitch::A),
+        match c {
+            // Lowercase: natural pitches
+            'a' => Some(Pitch::A),
+            'b' => Some(Pitch::B),
+            'c' => Some(Pitch::C),
+            'd' => Some(Pitch::D),
+            'e' => Some(Pitch::E),
+            'f' => Some(Pitch::F),
+            'g' => Some(Pitch::G),
+            // Uppercase: sharps (E# and B# are enharmonic to F and C, use natural)
+            'A' => Some(Pitch::ASharp),
             'B' => Some(Pitch::B),
+            'C' => Some(Pitch::CSharp),
+            'D' => Some(Pitch::DSharp),
+            'E' => Some(Pitch::E),
+            'F' => Some(Pitch::FSharp),
+            'G' => Some(Pitch::GSharp),
             _ => None,
         }
     }
@@ -1164,10 +1199,20 @@ mod tests {
 
     #[test]
     fn test_char_to_pitch() {
+        // Lowercase = natural
         assert_eq!(Editor::char_to_pitch('c'), Some(Pitch::C));
-        assert_eq!(Editor::char_to_pitch('C'), Some(Pitch::C));
-        assert_eq!(Editor::char_to_pitch('G'), Some(Pitch::G));
+        assert_eq!(Editor::char_to_pitch('g'), Some(Pitch::G));
         assert_eq!(Editor::char_to_pitch('a'), Some(Pitch::A));
+        // Uppercase = sharp (where applicable)
+        assert_eq!(Editor::char_to_pitch('C'), Some(Pitch::CSharp));
+        assert_eq!(Editor::char_to_pitch('D'), Some(Pitch::DSharp));
+        assert_eq!(Editor::char_to_pitch('F'), Some(Pitch::FSharp));
+        assert_eq!(Editor::char_to_pitch('G'), Some(Pitch::GSharp));
+        assert_eq!(Editor::char_to_pitch('A'), Some(Pitch::ASharp));
+        // E and B have no common sharp, map to natural
+        assert_eq!(Editor::char_to_pitch('E'), Some(Pitch::E));
+        assert_eq!(Editor::char_to_pitch('B'), Some(Pitch::B));
+        // Non-note characters
         assert_eq!(Editor::char_to_pitch('x'), None);
         assert_eq!(Editor::char_to_pitch('1'), None);
     }
@@ -1333,14 +1378,15 @@ mod tests {
     // --- Edge Cases ---
 
     #[test]
-    fn test_enter_note_at_last_row_extends() {
+    fn test_enter_note_at_last_row_stays() {
+        // Pattern length is fixed; cursor clamps at last row after entry
         let mut editor = Editor::new(Pattern::new(2, 1));
         editor.enter_insert_mode();
         editor.cursor_row = 1;
         editor.enter_note(Pitch::C);
-        // Should extend the pattern and advance cursor
-        assert_eq!(editor.pattern().num_rows(), 3);
-        assert_eq!(editor.cursor_row(), 2);
+        // Pattern does NOT grow; cursor stays at last row
+        assert_eq!(editor.pattern().num_rows(), 2);
+        assert_eq!(editor.cursor_row(), 1);
     }
 
     // --- Next Track (Tab) Tests ---

@@ -87,10 +87,15 @@ fn left_column(theme: &Theme) -> Vec<Line<'static>> {
         key("G", "Go to row 0", theme),
         blank(),
         section("INSERT MODE", theme),
-        key("A–G", "Enter note", theme),
+        key("a–g", "Enter natural note (C D E F G A B)", theme),
+        key("A–G (shift)", "Enter sharp (C# D# F# G# A#)", theme),
+        key("` (backtick)", "Enter note-off (===)", theme),
         key("0–9", "Set octave", theme),
-        key("0–F  (effect col)", "Enter hex digit", theme),
-        key("===  (note off)", "Enter note-off", theme),
+        key("0–F  (inst/vol/eff)", "Enter hex digit", theme),
+        blank(),
+        section("STEP SIZE", theme),
+        key("{ / }", "Step -1 / +1", theme),
+        key(":step N", "Set step to N (0–8)", theme),
     ]
 }
 

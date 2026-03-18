@@ -34,6 +34,13 @@ pub enum Action {
     Cut,
     Redo,
 
+    // Note-off entry
+    EnterNoteOff,
+
+    // Step size
+    StepUp,
+    StepDown,
+
     // Octave navigation
     OctaveUp,
     OctaveDown,
@@ -226,6 +233,10 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         KeyCode::Char('(') => Action::OctaveDown,
         KeyCode::Char(')') => Action::OctaveUp,
 
+        // Step size (braces: { = smaller step, } = larger step)
+        KeyCode::Char('{') => Action::StepDown,
+        KeyCode::Char('}') => Action::StepUp,
+
         // Go to row (Shift+G), quantize
         KeyCode::Char('G') => Action::GoToRow,
         KeyCode::Char('Q') => Action::Quantize,
@@ -290,8 +301,11 @@ fn map_insert_mode(key: KeyEvent) -> Action {
         // Escape returns to Normal mode
         KeyCode::Esc => Action::EnterNormalMode,
 
-        // Note entry (a-g lowercase; A-F uppercase; G uppercase = GoToRow)
-        KeyCode::Char(c @ ('a'..='g' | 'A'..='F')) => Action::EnterNote(c),
+        // Note-off (backtick)
+        KeyCode::Char('`') => Action::EnterNoteOff,
+
+        // Note entry: lowercase a-g = natural, uppercase A-G = sharp equivalent
+        KeyCode::Char(c @ ('a'..='g' | 'A'..='G')) => Action::EnterNote(c),
 
         // Octave setting (0-9)
         KeyCode::Char(c @ '0'..='9') => Action::SetOctave(c as u8 - b'0'),
@@ -299,9 +313,6 @@ fn map_insert_mode(key: KeyEvent) -> Action {
         // Octave jump (parenthesis)
         KeyCode::Char('(') => Action::OctaveDown,
         KeyCode::Char(')') => Action::OctaveUp,
-
-        // Go to row (Shift+G in insert mode too)
-        KeyCode::Char('G') => Action::GoToRow,
 
         // Navigation still works in Insert mode
         KeyCode::Left => Action::MoveLeft,

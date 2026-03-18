@@ -462,6 +462,19 @@ impl App {
             return;
         }
 
+        // :step N — set row advance step size
+        if parts[0] == "step" {
+            if let Some(val) = parts.get(1).and_then(|s| s.trim().parse::<usize>().ok()) {
+                self.editor.set_step_size(val);
+            } else {
+                self.open_modal(Modal::error(
+                    "Invalid step".to_string(),
+                    "Usage: :step <0-8>".to_string(),
+                ));
+            }
+            return;
+        }
+
         match cmd.as_str() {
             "w" => self.save_project(),
             "wq" | "x" => {

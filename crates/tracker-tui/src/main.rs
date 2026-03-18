@@ -280,7 +280,13 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                 app.mark_dirty();
             }
         }
+        Action::EnterNoteOff => {
+            app.editor.enter_note_off();
+            app.mark_dirty();
+        }
         Action::SetOctave(oct) => app.editor.set_octave(oct),
+        Action::StepUp => app.editor.step_up(),
+        Action::StepDown => app.editor.step_down(),
 
         // Clipboard
         Action::Copy => app.editor.copy(),
