@@ -486,6 +486,9 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                             .bg(Color::LightGreen)
                             .add_modifier(Modifier::BOLD),
                     )
+                } else if is_cursor && mode == EditorMode::Visual {
+                    // Cursor within (or at the edge of) a visual selection: show it distinctly
+                    Some(theme.visual_cursor_style())
                 } else if is_visual_selected {
                     Some(theme.visual_selection_style())
                 } else if is_playback_row {
@@ -798,63 +801,63 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     if app.is_code_editor_active() {
         // No pattern-editor context in code editor mode
     } else {
-    match mode {
-        EditorMode::Normal => {}
-        EditorMode::Insert => {
-            footer_spans.push(Span::styled(
-                format!("Oct:{}", app.editor.current_octave()),
-                Style::default().fg(theme.warning_color()),
-            ));
-            footer_spans.push(Span::raw(" "));
-            footer_spans.push(Span::styled(
-                format!("Ins:{:02X}", app.editor.current_instrument()),
-                Style::default().fg(Color::Yellow),
-            ));
-            footer_spans.push(Span::raw(" "));
-            footer_spans.push(Span::styled(
-                format!("Stp:{}", app.editor.step_size()),
-                Style::default().fg(Color::Cyan),
-            ));
-            if app.editor.sub_column() == SubColumn::Effect {
-                let cell = app
-                    .editor
-                    .pattern()
-                    .get_cell(app.editor.cursor_row(), app.editor.cursor_channel());
-                let mnemonic = cell
-                    .and_then(|c| c.first_effect())
-                    .map(|e| e.mnemonic())
-                    .unwrap_or("---");
-                footer_spans.push(Span::raw(" "));
+        match mode {
+            EditorMode::Normal => {}
+            EditorMode::Insert => {
                 footer_spans.push(Span::styled(
-                    format!("Eff:{}", mnemonic),
+                    format!("Oct:{}", app.editor.current_octave()),
                     Style::default().fg(theme.warning_color()),
                 ));
-                let pos = app.editor.effect_digit_position();
-                let pos_label = match pos {
-                    0 => "cmd",
-                    1 => "hi",
-                    _ => "lo",
-                };
                 footer_spans.push(Span::raw(" "));
                 footer_spans.push(Span::styled(
-                    format!("[{}]", pos_label),
-                    Style::default().fg(theme.info_color()),
+                    format!("Ins:{:02X}", app.editor.current_instrument()),
+                    Style::default().fg(Color::Yellow),
                 ));
+                footer_spans.push(Span::raw(" "));
+                footer_spans.push(Span::styled(
+                    format!("Stp:{}", app.editor.step_size()),
+                    Style::default().fg(Color::Cyan),
+                ));
+                if app.editor.sub_column() == SubColumn::Effect {
+                    let cell = app
+                        .editor
+                        .pattern()
+                        .get_cell(app.editor.cursor_row(), app.editor.cursor_channel());
+                    let mnemonic = cell
+                        .and_then(|c| c.first_effect())
+                        .map(|e| e.mnemonic())
+                        .unwrap_or("---");
+                    footer_spans.push(Span::raw(" "));
+                    footer_spans.push(Span::styled(
+                        format!("Eff:{}", mnemonic),
+                        Style::default().fg(theme.warning_color()),
+                    ));
+                    let pos = app.editor.effect_digit_position();
+                    let pos_label = match pos {
+                        0 => "cmd",
+                        1 => "hi",
+                        _ => "lo",
+                    };
+                    footer_spans.push(Span::raw(" "));
+                    footer_spans.push(Span::styled(
+                        format!("[{}]", pos_label),
+                        Style::default().fg(theme.info_color()),
+                    ));
+                }
             }
+            EditorMode::Visual => {}
         }
-        EditorMode::Visual => {}
-    }
 
-    // Step size (always visible — affects note entry row advance)
-    if mode == EditorMode::Normal {
-        footer_spans.extend([
-            Span::raw("  "),
-            Span::styled(
-                format!("Stp:{}", app.editor.step_size()),
-                Style::default().fg(Color::Cyan),
-            ),
-        ]);
-    }
+        // Step size (always visible — affects note entry row advance)
+        if mode == EditorMode::Normal {
+            footer_spans.extend([
+                Span::raw("  "),
+                Span::styled(
+                    format!("Stp:{}", app.editor.step_size()),
+                    Style::default().fg(Color::Cyan),
+                ),
+            ]);
+        }
     } // end else (not code editor)
 
     // Help hint

@@ -84,7 +84,7 @@ impl Theme {
         Self {
             bg: Color::Reset,
             bg_surface: Color::Reset,
-            bg_highlight: Color::Yellow,
+            bg_highlight: Color::DarkGray,
             bg_header: Color::Reset,
             bg_footer: Color::DarkGray,
 
@@ -257,6 +257,14 @@ impl Theme {
 
     pub fn visual_selection_style(&self) -> Style {
         Style::default().fg(self.text).bg(self.cursor_visual_bg)
+    }
+
+    /// Style for the cursor cell while in Visual mode (distinct from the rest of the selection).
+    pub fn visual_cursor_style(&self) -> Style {
+        Style::default()
+            .fg(self.cursor_fg)
+            .bg(self.cursor_normal_bg)
+            .add_modifier(Modifier::BOLD)
     }
 
     pub fn text_style(&self) -> Style {
