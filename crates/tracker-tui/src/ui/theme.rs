@@ -149,7 +149,7 @@ impl Theme {
 
             cursor_normal_bg: peach,
             cursor_insert_bg: mauve,
-            cursor_visual_bg: Color::Rgb(69, 71, 90), // surface1
+            cursor_visual_bg: blue, // #89b4fa — clearly distinct from surface0 bg_highlight
             cursor_fg: crust,
 
             status_success: green,
@@ -194,7 +194,7 @@ impl Theme {
 
             cursor_normal_bg: aurora_yellow,
             cursor_insert_bg: aurora_orange,
-            cursor_visual_bg: polar2,
+            cursor_visual_bg: frost3, // #81a1c1 — clearly distinct from polar2 bg_highlight
             cursor_fg: polar0,
 
             status_success: aurora_green,
@@ -260,10 +260,12 @@ impl Theme {
     }
 
     /// Style for the cursor cell while in Visual mode (distinct from the rest of the selection).
+    /// Uses reversed colors relative to the selection: bg=text, fg=cursor_visual_bg.
+    /// This makes the cursor pop out of the selection without clashing with Normal/Insert cursors.
     pub fn visual_cursor_style(&self) -> Style {
         Style::default()
-            .fg(self.cursor_fg)
-            .bg(self.cursor_normal_bg)
+            .fg(self.cursor_visual_bg)
+            .bg(self.text)
             .add_modifier(Modifier::BOLD)
     }
 
