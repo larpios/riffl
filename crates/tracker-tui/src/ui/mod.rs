@@ -34,6 +34,12 @@ use help::render_help;
 pub fn render(frame: &mut Frame, app: &App) {
     let full_area = frame.area();
 
+    // Fill entire frame with theme background so Catppuccin/Nord bg colors are visible
+    frame.render_widget(
+        Block::default().style(Style::default().bg(app.theme.bg)),
+        full_area,
+    );
+
     // Create main layout with header (3 lines), content (flexible), and footer (1 line)
     let (header_area, content_area, footer_area) = layout::create_main_layout(full_area, 3, 1);
 
@@ -477,6 +483,24 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 row_spans.push(Span::styled(vol_str, vs));
                 row_spans.push(Span::styled(" ", inactive));
                 row_spans.push(Span::styled(eff_str, es));
+            } else if is_cursor && mode == EditorMode::Visual && !is_playback_row {
+                // Visual mode cursor: active sub-column gets visual_cursor_style,
+                // inactive sub-columns get visual_selection_style — same granularity as Normal mode
+                let cur = theme.visual_cursor_style();
+                let sel = theme.visual_selection_style();
+                let (ns, is, vs, es) = match sub_column {
+                    SubColumn::Note => (cur, sel, sel, sel),
+                    SubColumn::Instrument => (sel, cur, sel, sel),
+                    SubColumn::Volume => (sel, sel, cur, sel),
+                    SubColumn::Effect => (sel, sel, sel, cur),
+                };
+                row_spans.push(Span::styled(note_str, ns));
+                row_spans.push(Span::styled(" ", sel));
+                row_spans.push(Span::styled(inst_str, is));
+                row_spans.push(Span::styled(" ", sel));
+                row_spans.push(Span::styled(vol_str, vs));
+                row_spans.push(Span::styled(" ", sel));
+                row_spans.push(Span::styled(eff_str, es));
             } else {
                 // Determine the base style for override situations (playback, cursor+playback, visual, muted)
                 let override_style = if is_cursor && is_playback_row {
@@ -486,9 +510,6 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                             .bg(Color::LightGreen)
                             .add_modifier(Modifier::BOLD),
                     )
-                } else if is_cursor && mode == EditorMode::Visual {
-                    // Cursor within (or at the edge of) a visual selection: show it distinctly
-                    Some(theme.visual_cursor_style())
                 } else if is_visual_selected {
                     Some(theme.visual_selection_style())
                 } else if is_playback_row {

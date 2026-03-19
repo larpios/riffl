@@ -54,6 +54,13 @@ fn main() -> Result<()> {
     // Create and initialize app
     let mut app = App::new();
     app.set_sample_dirs(sample_dirs);
+
+    // Apply config: set theme from config file (or default "mocha")
+    let theme_kind = config.theme_kind();
+    app.theme_kind = theme_kind;
+    app.theme = crate::ui::theme::Theme::from_kind(theme_kind);
+    app.config = config;
+
     app.init()?;
 
     // Run the application

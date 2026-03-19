@@ -149,7 +149,7 @@ impl Theme {
 
             cursor_normal_bg: peach,
             cursor_insert_bg: mauve,
-            cursor_visual_bg: blue, // #89b4fa — clearly distinct from surface0 bg_highlight
+            cursor_visual_bg: surface1, // #45475a — selection bg (nvim Catppuccin uses surface1 for Visual)
             cursor_fg: crust,
 
             status_success: green,
@@ -260,12 +260,12 @@ impl Theme {
     }
 
     /// Style for the cursor cell while in Visual mode (distinct from the rest of the selection).
-    /// Uses reversed colors relative to the selection: bg=text, fg=cursor_visual_bg.
-    /// This makes the cursor pop out of the selection without clashing with Normal/Insert cursors.
+    /// Uses cursor_insert_bg (e.g. mauve in Catppuccin) so it stands out from both the
+    /// surface1 selection bg and the normal/insert cursors, while staying theme-consistent.
     pub fn visual_cursor_style(&self) -> Style {
         Style::default()
-            .fg(self.cursor_visual_bg)
-            .bg(self.text)
+            .fg(self.cursor_fg)
+            .bg(self.cursor_insert_bg)
             .add_modifier(Modifier::BOLD)
     }
 
