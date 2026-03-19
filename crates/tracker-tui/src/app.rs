@@ -797,6 +797,41 @@ impl App {
         Ok(idx)
     }
 
+    /// Preview the currently selected sample in the sample browser.
+    /// Loads and plays it at natural pitch without adding it to the instrument list.
+    pub fn preview_selected_sample(&mut self) -> Result<(), String> {
+        let path = self
+            .sample_browser
+            .selected_path()
+            .filter(|_| self.sample_browser.selected_is_file())
+            .ok_or_else(|| "No file selected".to_string())?
+            .to_path_buf();
+
+        let output_sample_rate = self
+            .audio_engine
+            .as_ref()
+            .map(|e| e.sample_rate())
+            .unwrap_or(44100);
+
+        let sample = load_sample(&path, output_sample_rate)
+            .map_err(|e| format!("Failed to load: {e}"))?;
+
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.trigger_preview(Arc::new(sample));
+        } else {
+            return Err("Failed to lock mixer".to_string());
+        }
+
+        // Ensure audio engine is running so the preview is audible
+        if let Some(ref mut engine) = self.audio_engine {
+            if !engine.is_playing() {
+                let _ = engine.start();
+            }
+        }
+
+        Ok(())
+    }
+
     /// Import a ProTracker .mod file, replacing the current song.
     /// Returns Ok(()) on success, or an error message.
     pub fn import_mod_file(&mut self, path: &std::path::Path) -> Result<(), String> {

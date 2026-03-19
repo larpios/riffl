@@ -76,6 +76,10 @@ pub struct Mixer {
     effect_processor: TrackerEffectProcessor,
     /// Send/return bus system for effects routing.
     bus_system: BusSystem,
+    /// One-shot preview sample (e.g. audition from browser). Independent of pattern voices.
+    preview_sample: Option<Arc<Sample>>,
+    /// Current read position (in frames) within the preview sample.
+    preview_pos: f64,
 }
 
 impl Mixer {
@@ -116,6 +120,8 @@ impl Mixer {
             channel_strips,
             effect_processor: TrackerEffectProcessor::new(num_channels, output_sample_rate),
             bus_system,
+            preview_sample: None,
+            preview_pos: 0.0,
         }
     }
 
@@ -269,6 +275,10 @@ impl Mixer {
     /// # Arguments
     /// * `output` - Mutable slice of f32 samples to fill (stereo interleaved: L, R, L, R, ...)
     pub fn render(&mut self, output: &mut [f32]) {
+        let num_frames = output.len() / 2;
+
+        // Wrap main voice rendering in a block so borrows are released before preview.
+        {
         let channel_strips = &mut self.channel_strips;
         let bus_system = &mut self.bus_system;
         let effect_processor = &mut self.effect_processor;
@@ -280,7 +290,6 @@ impl Mixer {
             *sample = 0.0;
         }
 
-        let num_frames = output.len() / 2;
         bus_system.clear_all(num_frames);
         let num_buses = bus_system.num_buses();
 
@@ -430,11 +439,56 @@ impl Mixer {
         }
 
         bus_system.process_and_mix(output, num_frames);
+        } // end main voice block — field borrows released
+
+        // Preview voice: renders a one-shot sample directly into output,
+        // bypassing channel strips (no mute/solo/pan, preview volume = 0.7).
+        let preview_done = if let Some(ref pv) = self.preview_sample {
+            let pv_rate = pv.sample_rate() as f64 / self.output_sample_rate as f64;
+            let pv_frames = pv.frame_count();
+            let pv_channels = pv.channels() as usize;
+            let pv_data = pv.data();
+            let mut done = false;
+            for frame in 0..num_frames {
+                let pos = self.preview_pos as usize;
+                if pos >= pv_frames {
+                    done = true;
+                    break;
+                }
+                let l = pv_data[pos * pv_channels];
+                let r = if pv_channels > 1 {
+                    pv_data[pos * pv_channels + 1]
+                } else {
+                    l
+                };
+                output[frame * 2] += l * 0.7;
+                output[frame * 2 + 1] += r * 0.7;
+                self.preview_pos += pv_rate;
+            }
+            done
+        } else {
+            false
+        };
+        if preview_done {
+            self.preview_sample = None;
+        }
 
         // Clamp output to [-1.0, 1.0] to prevent clipping distortion
         for sample in output.iter_mut() {
             *sample = sample.clamp(-1.0, 1.0);
         }
+    }
+
+    /// Trigger a one-shot preview of the given sample at its natural pitch.
+    /// The preview plays at the sample's recorded rate, bypassing pattern voices.
+    pub fn trigger_preview(&mut self, sample: Arc<Sample>) {
+        self.preview_pos = 0.0;
+        self.preview_sample = Some(sample);
+    }
+
+    /// Stop any currently playing preview.
+    pub fn stop_preview(&mut self) {
+        self.preview_sample = None;
     }
 
     /// Get the number of currently active voices.

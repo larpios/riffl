@@ -276,7 +276,7 @@ pub fn render_sample_browser(
     let nav_hint = if at_root_list {
         "  l/Enter: browse dir  ·  j/k: navigate"
     } else {
-        "  l/Enter: enter dir  ·  Enter: load  ·  h: up  ·  j/k: navigate"
+        "  Space: preview  ·  Enter: load  ·  l: enter dir  ·  h: up  ·  j/k: navigate"
     };
 
     let block = Block::default()

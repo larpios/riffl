@@ -945,6 +945,14 @@ fn handle_sample_browser_key(app: &mut App, key: KeyEvent) -> bool {
             true
         }
 
+        // Preview selected file (Space = audition without loading)
+        KeyCode::Char(' ') => {
+            if app.sample_browser.selected_is_file() {
+                let _ = app.preview_selected_sample();
+            }
+            true
+        }
+
         _ => false,
     }
 }
