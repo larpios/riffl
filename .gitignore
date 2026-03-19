@@ -12,3 +12,7 @@ Auto\ Run\ Docs/
 # Dolt database files (added by bd init)
 .dolt/
 *.db
+
+.beads
+.claude*
+.rtk
