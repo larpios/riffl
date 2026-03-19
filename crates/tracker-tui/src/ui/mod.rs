@@ -405,14 +405,14 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     .bg(theme.success_color())
                     .add_modifier(Modifier::BOLD),
             )
-        } else if row_idx % 16 == 0 {
+        } else if row_idx.is_multiple_of(16) {
             (
                 "│ ",
                 Style::default()
                     .fg(theme.primary)
                     .add_modifier(Modifier::BOLD),
             )
-        } else if row_idx % 4 == 0 {
+        } else if row_idx.is_multiple_of(4) {
             ("· ", Style::default().fg(theme.primary))
         } else {
             ("  ", Style::default().fg(theme.text_secondary))
@@ -772,18 +772,32 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let cursor_channel = app.editor.cursor_channel();
 
     let key_style = Style::default().fg(theme.success_color());
+    // When code editor is active, show its mode; otherwise show pattern editor mode.
+    let (mode_label, mode_bg) = if app.is_code_editor_active() {
+        if app.code_editor.insert_mode {
+            ("INSERT", theme.warning_color())
+        } else {
+            ("NORMAL", theme.primary)
+        }
+    } else {
+        (mode.label(), theme.primary)
+    };
     let mode_style = Style::default()
         .fg(Color::Black)
-        .bg(theme.primary)
+        .bg(mode_bg)
         .add_modifier(Modifier::BOLD);
 
     let mut footer_spans = vec![
         Span::raw(" "),
-        Span::styled(format!(" {} ", mode.label()), mode_style),
+        Span::styled(format!(" {} ", mode_label), mode_style),
         Span::raw(" "),
     ];
 
     // Show context-specific state indicators (not a cheatsheet — press ? for that)
+    // Only for pattern editor — skip when code editor is active.
+    if app.is_code_editor_active() {
+        // No pattern-editor context in code editor mode
+    } else {
     match mode {
         EditorMode::Normal => {}
         EditorMode::Insert => {
@@ -841,6 +855,7 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             ),
         ]);
     }
+    } // end else (not code editor)
 
     // Help hint
     footer_spans.extend([

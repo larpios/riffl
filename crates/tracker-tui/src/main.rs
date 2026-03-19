@@ -190,10 +190,8 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
     // If the sample browser view is active, handle browser-specific keys.
     // Unhandled keys fall through to normal processing so view switching,
     // command mode, help, transport, etc. all continue to work.
-    if app.current_view == AppView::SampleBrowser {
-        if handle_sample_browser_key(app, key) {
-            return;
-        }
+    if app.current_view == AppView::SampleBrowser && handle_sample_browser_key(app, key) {
+        return;
     }
 
     // If code editor is active, handle code editor input first

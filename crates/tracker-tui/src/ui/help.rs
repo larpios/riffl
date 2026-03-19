@@ -14,9 +14,7 @@ pub fn render_help(frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme
     let help_area = super::layout::create_centered_rect(area, 84, 85);
     frame.render_widget(Clear, help_area);
 
-    let title = format!(
-        " KEYBOARD SHORTCUTS  (j/k scroll · ?/Esc close) "
-    );
+    let title = " KEYBOARD SHORTCUTS  (j/k scroll · ?/Esc close) ";
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.info_color()))

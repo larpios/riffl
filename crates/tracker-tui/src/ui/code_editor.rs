@@ -499,15 +499,32 @@ fn render_editor_panel(frame: &mut Frame, area: Rect, editor: &CodeEditor, theme
         theme.border_style()
     };
 
-    let mode_label = if editor.insert_mode {
-        " INSERT "
+    let (mode_label, mode_style) = if editor.insert_mode {
+        (
+            " INSERT ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(theme.warning_color())
+                .add_modifier(Modifier::BOLD),
+        )
     } else {
-        " NORMAL "
+        (
+            " NORMAL ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(theme.primary)
+                .add_modifier(Modifier::BOLD),
+        )
     };
+    let title = Line::from(vec![
+        Span::raw(" Code Editor (Rhai) "),
+        Span::styled(mode_label, mode_style),
+        Span::raw(" "),
+    ]);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(border_style)
-        .title(format!(" Code Editor (Rhai) {} ", mode_label))
+        .title(title)
         .title_alignment(Alignment::Left);
 
     let inner = block.inner(area);
