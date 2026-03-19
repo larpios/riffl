@@ -21,6 +21,7 @@ pub mod code_editor;
 pub mod export_dialog;
 pub mod file_browser;
 pub mod help;
+pub mod instrument_editor;
 pub mod instrument_list;
 pub mod layout;
 pub mod modal;
@@ -73,14 +74,51 @@ pub fn render(frame: &mut Frame, app: &App) {
                 );
             }
             AppView::InstrumentList => {
-                instrument_list::render_instrument_list(
-                    frame,
-                    content_area,
-                    &app.song,
-                    &app.loaded_samples(),
-                    &app.theme,
-                    app.instrument_selection(),
-                );
+                // If an instrument is selected, split: list on top, editor below.
+                if let Some(idx) = app.instrument_selection() {
+                    if idx < app.song.instruments.len() {
+                        let chunks = ratatui::layout::Layout::default()
+                            .direction(ratatui::layout::Direction::Vertical)
+                            .constraints([
+                                ratatui::layout::Constraint::Percentage(55),
+                                ratatui::layout::Constraint::Percentage(45),
+                            ])
+                            .split(content_area);
+                        instrument_list::render_instrument_list(
+                            frame,
+                            chunks[0],
+                            &app.song,
+                            &app.loaded_samples(),
+                            &app.theme,
+                            Some(idx),
+                        );
+                        instrument_editor::render_instrument_editor(
+                            frame,
+                            chunks[1],
+                            &app.song.instruments[idx],
+                            &app.inst_editor,
+                            &app.theme,
+                        );
+                    } else {
+                        instrument_list::render_instrument_list(
+                            frame,
+                            content_area,
+                            &app.song,
+                            &app.loaded_samples(),
+                            &app.theme,
+                            app.instrument_selection(),
+                        );
+                    }
+                } else {
+                    instrument_list::render_instrument_list(
+                        frame,
+                        content_area,
+                        &app.song,
+                        &app.loaded_samples(),
+                        &app.theme,
+                        app.instrument_selection(),
+                    );
+                }
             }
             AppView::CodeEditor => {
                 code_editor::render_code_editor(frame, content_area, &app.code_editor, &app.theme);

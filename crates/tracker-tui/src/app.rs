@@ -15,6 +15,7 @@ use crate::ui::arrangement::ArrangementView;
 use crate::ui::code_editor::CodeEditor;
 use crate::ui::export_dialog::ExportDialog;
 use crate::ui::file_browser::FileBrowser;
+use crate::ui::instrument_editor::InstrumentEditorState;
 use crate::ui::modal::Modal;
 use crate::ui::sample_browser::SampleBrowser;
 use crate::ui::theme::{Theme, ThemeKind};
@@ -144,6 +145,9 @@ pub struct App {
 
     /// Current command-line input buffer
     pub command_input: String,
+
+    /// Instrument editor panel state (shown below the instrument list)
+    pub inst_editor: InstrumentEditorState,
 }
 
 impl App {
@@ -241,6 +245,7 @@ impl App {
             pending_quit: false,
             command_mode: false,
             command_input: String::new(),
+            inst_editor: InstrumentEditorState::default(),
         }
     }
 
@@ -995,6 +1000,63 @@ impl App {
             }
         }
         false
+    }
+
+    /// Set the name of the selected instrument.
+    pub fn set_instrument_name(&mut self, name: String) {
+        if let Some(idx) = self.instrument_selection {
+            if idx < self.song.instruments.len() {
+                if !name.is_empty() {
+                    self.song.instruments[idx].name = name.clone();
+                    if idx < self.instrument_names.len() {
+                        self.instrument_names[idx] = name;
+                    }
+                    self.mark_dirty();
+                }
+            }
+        }
+    }
+
+    /// Adjust volume of the selected instrument by `delta` percentage points (clamped 0..=100).
+    pub fn adjust_instrument_volume(&mut self, delta: i32) {
+        if let Some(idx) = self.instrument_selection {
+            if idx < self.song.instruments.len() {
+                let current_pct = (self.song.instruments[idx].volume * 100.0).round() as i32;
+                let new_pct = (current_pct + delta).clamp(0, 100);
+                self.song.instruments[idx].volume = new_pct as f32 / 100.0;
+                self.sync_mixer_instruments();
+                self.mark_dirty();
+            }
+        }
+    }
+
+    /// Adjust the base note of the selected instrument by `semitones`.
+    pub fn adjust_instrument_base_note(&mut self, semitones: i32) {
+        if let Some(idx) = self.instrument_selection {
+            if idx < self.song.instruments.len() {
+                let current_midi = self.song.instruments[idx].base_note.midi_note() as i32;
+                let new_midi = (current_midi + semitones).clamp(0, 127) as u8;
+                if let Some(pitch) = Pitch::from_semitone(new_midi % 12) {
+                    let octave = new_midi / 12;
+                    self.song.instruments[idx].base_note = Note::simple(pitch, octave);
+                    self.sync_mixer_instruments();
+                    self.mark_dirty();
+                }
+            }
+        }
+    }
+
+    /// Adjust the finetune of the selected instrument by `delta` (clamped -8..=7).
+    pub fn adjust_instrument_finetune(&mut self, delta: i32) {
+        if let Some(idx) = self.instrument_selection {
+            if idx < self.song.instruments.len() {
+                let current = self.song.instruments[idx].finetune as i32;
+                let new_val = (current + delta).clamp(-8, 7) as i8;
+                self.song.instruments[idx].finetune = new_val;
+                self.sync_mixer_instruments();
+                self.mark_dirty();
+            }
+        }
     }
 
     /// Select instrument for use in pattern editor.

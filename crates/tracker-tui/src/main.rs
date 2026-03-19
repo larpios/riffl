@@ -201,6 +201,13 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    // If instrument editor panel is focused, handle its input first
+    if app.current_view == AppView::InstrumentList && app.inst_editor.focused {
+        if handle_instrument_editor_key(app, key) {
+            return;
+        }
+    }
+
     // If code editor is active, handle code editor input first
     if app.is_code_editor_active() {
         handle_code_editor_key(app, key);
@@ -270,6 +277,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::MoveLeft => app.editor.move_left(),
         Action::MoveDown => {
             if app.current_view == AppView::InstrumentList {
+                app.inst_editor.unfocus();
                 app.instrument_selection_down();
             } else if app.current_view == AppView::PatternList {
                 app.pattern_selection_down();
@@ -281,6 +289,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         }
         Action::MoveUp => {
             if app.current_view == AppView::InstrumentList {
+                app.inst_editor.unfocus();
                 app.instrument_selection_up();
             } else if app.current_view == AppView::PatternList {
                 app.pattern_selection_up();
@@ -469,7 +478,11 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             } else if app.has_modal() {
                 app.close_modal();
             } else if app.current_view == AppView::InstrumentList {
-                app.select_instrument();
+                if app.instrument_selection().is_some() {
+                    app.inst_editor.focus();
+                } else {
+                    app.select_instrument();
+                }
             } else if app.current_view == AppView::PatternList {
                 app.select_pattern();
             }
@@ -495,11 +508,10 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             }
         }
         Action::EditInstrument => {
-            if app.current_view == AppView::InstrumentList {
-                app.open_modal(ui::modal::Modal::info(
-                    "Edit Instrument".to_string(),
-                    "Volume/Base Note editing coming soon.".to_string(),
-                ));
+            if app.current_view == AppView::InstrumentList
+                && app.instrument_selection().is_some()
+            {
+                app.inst_editor.focus();
             }
         }
         Action::SelectInstrument => {
@@ -532,6 +544,92 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
 
         Action::None => {}
     }
+}
+
+/// Handle keys when the instrument editor panel is focused.
+/// Returns true if the key was consumed.
+fn handle_instrument_editor_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
+    use crossterm::event::{KeyCode, KeyModifiers};
+    use crate::ui::instrument_editor::InstrumentField;
+
+    if !app.inst_editor.focused {
+        return false;
+    }
+
+    // Text-edit mode for Name field
+    if app.inst_editor.text_editing {
+        match key.code {
+            KeyCode::Enter => {
+                if let Some(new_name) = app.inst_editor.finish_text_edit() {
+                    app.set_instrument_name(new_name);
+                }
+                return true;
+            }
+            KeyCode::Esc => {
+                app.inst_editor.cancel_text_edit();
+                return true;
+            }
+            KeyCode::Backspace => {
+                app.inst_editor.input_buffer.pop();
+                return true;
+            }
+            KeyCode::Char(c)
+                if key.modifiers == KeyModifiers::NONE
+                    || key.modifiers == KeyModifiers::SHIFT =>
+            {
+                app.inst_editor.input_buffer.push(c);
+                return true;
+            }
+            _ => return true, // Swallow all other keys while text-editing
+        }
+    }
+
+    // Normal editor navigation
+    match key.code {
+        KeyCode::Tab => {
+            app.inst_editor.next_field();
+            return true;
+        }
+        KeyCode::BackTab => {
+            app.inst_editor.prev_field();
+            return true;
+        }
+        KeyCode::Esc => {
+            app.inst_editor.unfocus();
+            return true;
+        }
+        KeyCode::Char('e') | KeyCode::Enter => {
+            if app.inst_editor.field == InstrumentField::Name {
+                if let Some(idx) = app.instrument_selection() {
+                    if idx < app.song.instruments.len() {
+                        let name = app.song.instruments[idx].name.clone();
+                        app.inst_editor.start_text_edit(&name);
+                    }
+                }
+            }
+            return true;
+        }
+        KeyCode::Char('+') | KeyCode::Char('=') => {
+            match app.inst_editor.field {
+                InstrumentField::Volume => app.adjust_instrument_volume(5),
+                InstrumentField::BaseNote => app.adjust_instrument_base_note(1),
+                InstrumentField::Finetune => app.adjust_instrument_finetune(1),
+                InstrumentField::Name => {}
+            }
+            return true;
+        }
+        KeyCode::Char('-') => {
+            match app.inst_editor.field {
+                InstrumentField::Volume => app.adjust_instrument_volume(-5),
+                InstrumentField::BaseNote => app.adjust_instrument_base_note(-1),
+                InstrumentField::Finetune => app.adjust_instrument_finetune(-1),
+                InstrumentField::Name => {}
+            }
+            return true;
+        }
+        _ => {}
+    }
+    false
 }
 
 fn handle_code_editor_key(app: &mut App, key: KeyEvent) {
