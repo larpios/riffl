@@ -534,6 +534,34 @@ impl App {
             return;
         }
 
+        // :w filename — save as a new/specific file
+        if parts[0] == "w" && parts.len() == 2 {
+            let path = PathBuf::from(parts[1].trim());
+            let current_pos = self.transport.arrangement_position();
+            self.flush_editor_pattern(current_pos);
+            match project::save_project(&path, &self.song) {
+                Ok(()) => {
+                    self.project_path = Some(path.clone());
+                    self.is_dirty = false;
+                    self.open_modal(Modal::info(
+                        "Project Saved".to_string(),
+                        format!("Saved to: {}", path.display()),
+                    ));
+                }
+                Err(e) => {
+                    self.open_modal(Modal::error("Save Failed".to_string(), format!("{}", e)));
+                }
+            }
+            return;
+        }
+
+        // :e filename — open/load a project file
+        if parts[0] == "e" && parts.len() == 2 {
+            let path = PathBuf::from(parts[1].trim());
+            self.load_project(&path);
+            return;
+        }
+
         match cmd.as_str() {
             "w" => self.save_project(),
             "wq" | "x" => {
