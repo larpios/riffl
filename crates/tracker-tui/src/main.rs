@@ -607,6 +607,7 @@ fn handle_code_editor_key(app: &mut App, key: KeyEvent) {
                 // Command mode
                 KeyCode::Char(':') => {
                     app.command_mode = true;
+                    app.command_input.clear();
                     return;
                 }
                 // Escape in normal mode: leave code editor (same as before)

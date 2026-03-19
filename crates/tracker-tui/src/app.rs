@@ -18,7 +18,7 @@ use crate::ui::file_browser::FileBrowser;
 use crate::ui::modal::Modal;
 use crate::ui::sample_browser::SampleBrowser;
 use crate::ui::theme::{Theme, ThemeKind};
-use tracker_core::audio::{load_sample, AudioEngine, Mixer, Sample};
+use tracker_core::audio::{load_sample, AudioEngine, Mixer, Sample, TransportCommand};
 use tracker_core::dsl::engine::ScriptEngine;
 use tracker_core::export;
 use tracker_core::pattern::note::Pitch;
@@ -174,9 +174,17 @@ impl App {
             output_sample_rate,
         )));
 
-        // Create transport and sync with pattern size
+        // Create a song with the demo pattern in its pool
+        let mut song = Song::new("Untitled", 125.0);
+
+        // Create transport synced to song BPM and pattern size
         let mut transport = Transport::new();
         transport.set_num_rows(pattern.num_rows());
+        transport.set_bpm(song.bpm);
+        // Sync mixer effect processor tempo with the song BPM
+        if let Ok(mut m) = mixer.lock() {
+            m.update_tempo(song.bpm);
+        }
 
         let editor = Editor::new(pattern.clone());
 
@@ -186,9 +194,6 @@ impl App {
                 output_sample_rate,
             ),
         ));
-
-        // Create a song with the demo pattern in its pool
-        let mut song = Song::new("Untitled", 125.0);
         song.patterns[0] = pattern;
 
         use tracker_core::song::Instrument;
@@ -302,9 +307,11 @@ impl App {
                 if row == 0 && self.live_mode {
                     self.execute_script();
                 }
-                if let Ok(mut mixer) = self.mixer.lock() {
-                    mixer.tick(row, self.editor.pattern());
-                }
+                let transport_cmds = if let Ok(mut mixer) = self.mixer.lock() {
+                    mixer.tick(row, self.editor.pattern())
+                } else {
+                    Vec::new()
+                };
                 if let Ok(mut gm) = self.glicol_mixer.lock() {
                     // Primitive Glicol trigger: if there's a note on channel 0, play it
                     if let Some(r) = self.editor.pattern().get_row(row) {
@@ -322,6 +329,7 @@ impl App {
                         }
                     }
                 }
+                self.apply_effect_transport_commands(transport_cmds);
             }
             AdvanceResult::PatternChange {
                 arrangement_pos,
@@ -333,9 +341,11 @@ impl App {
                 if self.live_mode {
                     self.execute_script();
                 }
-                if let Ok(mut mixer) = self.mixer.lock() {
-                    mixer.tick(row, self.editor.pattern());
-                }
+                let transport_cmds = if let Ok(mut mixer) = self.mixer.lock() {
+                    mixer.tick(row, self.editor.pattern())
+                } else {
+                    Vec::new()
+                };
                 if let Ok(mut gm) = self.glicol_mixer.lock() {
                     // Primitive Glicol trigger: if there's a note on channel 0, play it
                     if let Some(r) = self.editor.pattern().get_row(row) {
@@ -353,6 +363,7 @@ impl App {
                         }
                     }
                 }
+                self.apply_effect_transport_commands(transport_cmds);
             }
             AdvanceResult::Stopped => {
                 // Handled below in was_playing check
@@ -379,6 +390,42 @@ impl App {
         }
 
         Ok(())
+    }
+
+    /// Apply transport commands produced by effect processing (Fxx, Bxx, Dxx).
+    ///
+    /// These commands are returned by `mixer.tick()` when pattern effects fire:
+    /// - `SetBpm`: Update tempo on both transport and mixer effect processor.
+    /// - `PositionJump (Bxx)`: Jump to arrangement position; loads new pattern in Song mode.
+    /// - `PatternBreak (Dxx)`: Advance to next arrangement entry at the given row.
+    fn apply_effect_transport_commands(&mut self, commands: Vec<TransportCommand>) {
+        for cmd in commands {
+            match cmd {
+                TransportCommand::SetBpm(bpm) => {
+                    let clamped = bpm.clamp(20.0, 999.0);
+                    self.transport.set_bpm(clamped);
+                    self.song.bpm = clamped;
+                    if let Ok(mut mixer) = self.mixer.lock() {
+                        mixer.update_tempo(clamped);
+                    }
+                }
+                TransportCommand::PositionJump(pos) => {
+                    let old_pos = self.transport.arrangement_position();
+                    if self.transport.jump_to_arrangement_position(pos) && pos != old_pos {
+                        self.flush_editor_pattern(old_pos);
+                        self.load_arrangement_pattern(pos);
+                    }
+                }
+                TransportCommand::PatternBreak(row) => {
+                    let old_pos = self.transport.arrangement_position();
+                    if self.transport.pattern_break(row) {
+                        let new_pos = self.transport.arrangement_position();
+                        self.flush_editor_pattern(old_pos);
+                        self.load_arrangement_pattern(new_pos);
+                    }
+                }
+            }
+        }
     }
 
     pub fn flush_editor_pattern(&mut self, arrangement_pos: usize) {
@@ -456,6 +503,9 @@ impl App {
                 let clamped = val.clamp(20.0, 999.0);
                 self.transport.set_bpm(clamped);
                 self.song.bpm = clamped;
+                if let Ok(mut mixer) = self.mixer.lock() {
+                    mixer.update_tempo(clamped);
+                }
                 self.mark_dirty();
             } else {
                 self.open_modal(Modal::error(
@@ -564,6 +614,11 @@ impl App {
     /// Adjust BPM by a delta value
     pub fn adjust_bpm(&mut self, delta: f64) {
         self.transport.adjust_bpm(delta);
+        let new_bpm = self.transport.bpm();
+        self.song.bpm = new_bpm;
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.update_tempo(new_bpm);
+        }
     }
 
     /// Toggle loop mode on/off
@@ -1207,6 +1262,10 @@ impl App {
                 }
 
                 self.song = song;
+                self.transport.set_bpm(self.song.bpm);
+                if let Ok(mut mixer) = self.mixer.lock() {
+                    mixer.update_tempo(self.song.bpm);
+                }
                 self.sync_mixer_instruments();
                 self.project_path = Some(path.to_path_buf());
                 self.is_dirty = false;

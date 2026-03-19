@@ -313,6 +313,28 @@ impl Transport {
         }
     }
 
+    /// Jump to the next arrangement position at a specific row (PatternBreak Dxx).
+    ///
+    /// Advances the arrangement position by one and sets the starting row to `row`.
+    /// Wraps to position 0 if at the last arrangement slot (when looping).
+    /// Returns true if the jump was applied, false if the arrangement has only one slot.
+    pub fn pattern_break(&mut self, row: usize) -> bool {
+        let next_pos = self.arrangement_position + 1;
+        let next_pos = if next_pos >= self.arrangement_length {
+            if self.loop_enabled {
+                0
+            } else {
+                return false;
+            }
+        } else {
+            next_pos
+        };
+        self.arrangement_position = next_pos;
+        self.current_row = row.min(self.num_rows.saturating_sub(1));
+        self.tick_accumulator = 0.0;
+        true
+    }
+
     /// Check if the transport is currently playing
     pub fn is_playing(&self) -> bool {
         self.state == TransportState::Playing
@@ -809,5 +831,53 @@ mod tests {
         assert_eq!(transport.advance(spr), AdvanceResult::Row(1));
         assert_eq!(transport.advance(spr), AdvanceResult::Stopped);
         assert!(transport.is_stopped());
+    }
+
+    #[test]
+    fn test_pattern_break_advances_arrangement_position() {
+        let mut transport = Transport::new();
+        transport.set_num_rows(16);
+        transport.set_arrangement_length(3);
+
+        assert!(transport.pattern_break(4));
+        assert_eq!(transport.arrangement_position(), 1);
+        assert_eq!(transport.current_row(), 4);
+    }
+
+    #[test]
+    fn test_pattern_break_wraps_with_loop() {
+        let mut transport = Transport::new();
+        transport.set_num_rows(16);
+        transport.set_arrangement_length(2);
+        transport.jump_to_arrangement_position(1);
+
+        // At last position, loop enabled → wraps to 0
+        assert!(transport.pattern_break(0));
+        assert_eq!(transport.arrangement_position(), 0);
+        assert_eq!(transport.current_row(), 0);
+    }
+
+    #[test]
+    fn test_pattern_break_fails_no_loop_at_end() {
+        let mut transport = Transport::new();
+        transport.set_num_rows(16);
+        transport.set_arrangement_length(2);
+        transport.set_loop_enabled(false);
+        transport.jump_to_arrangement_position(1);
+
+        // At last position, loop disabled → returns false
+        assert!(!transport.pattern_break(0));
+        assert_eq!(transport.arrangement_position(), 1); // unchanged
+    }
+
+    #[test]
+    fn test_pattern_break_clamps_row_to_num_rows() {
+        let mut transport = Transport::new();
+        transport.set_num_rows(8);
+        transport.set_arrangement_length(2);
+
+        // Row 99 should be clamped to num_rows - 1 = 7
+        assert!(transport.pattern_break(99));
+        assert_eq!(transport.current_row(), 7);
     }
 }

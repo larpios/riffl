@@ -182,9 +182,18 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             KeyCode::Char('S') => Action::ToggleSolo,
             // '+' key (Shift+'=' on US keyboards) for BPM up
             KeyCode::Char('+') => Action::BpmUp,
+            // ':' (Shift+';' on US keyboards) — command mode
+            // Some terminals on Windows report ':' with SHIFT modifier
+            KeyCode::Char(':') => Action::EnterCommandMode,
             // Transpose by semitone
             KeyCode::Up => Action::TransposeUp,
             KeyCode::Down => Action::TransposeDown,
+            // Uppercase shortcuts also need to work when SHIFT is reported
+            KeyCode::Char('G') => Action::GoToRow,
+            KeyCode::Char('Q') => Action::Quantize,
+            KeyCode::Char('T') => Action::AddTrack,
+            KeyCode::Char('D') => Action::DeleteTrack,
+            KeyCode::Char('C') => Action::CloneTrack,
             _ => Action::None,
         };
     }
@@ -363,6 +372,8 @@ fn map_visual_mode(key: KeyEvent) -> Action {
         return match key.code {
             KeyCode::Up => Action::TransposeUp,
             KeyCode::Down => Action::TransposeDown,
+            // ':' (Shift+';') — command mode, same as Normal mode
+            KeyCode::Char(':') => Action::EnterCommandMode,
             _ => Action::None,
         };
     }

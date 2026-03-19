@@ -1169,6 +1169,7 @@ const COMMANDS: &[(&str, &str)] = &[
     ("bpm <n>", "set tempo (20–999)"),
     ("t <n>", "set tempo (shorthand)"),
     ("tempo <n>", "set tempo"),
+    ("step <n>", "set row advance step (0–8)"),
 ];
 
 /// Render command-line autocomplete suggestions above the footer.
