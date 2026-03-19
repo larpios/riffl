@@ -80,6 +80,8 @@ pub struct Mixer {
     preview_sample: Option<Arc<Sample>>,
     /// Current read position (in frames) within the preview sample.
     preview_pos: f64,
+    /// Playback rate for the preview voice (accounts for pitch + sample/output rate ratio).
+    preview_rate: f64,
 }
 
 impl Mixer {
@@ -122,6 +124,7 @@ impl Mixer {
             bus_system,
             preview_sample: None,
             preview_pos: 0.0,
+            preview_rate: 1.0,
         }
     }
 
@@ -444,7 +447,7 @@ impl Mixer {
         // Preview voice: renders a one-shot sample directly into output,
         // bypassing channel strips (no mute/solo/pan, preview volume = 0.7).
         let preview_done = if let Some(ref pv) = self.preview_sample {
-            let pv_rate = pv.sample_rate() as f64 / self.output_sample_rate as f64;
+            let pv_rate = self.preview_rate;
             let pv_frames = pv.frame_count();
             let pv_channels = pv.channels() as usize;
             let pv_data = pv.data();
@@ -479,10 +482,12 @@ impl Mixer {
         }
     }
 
-    /// Trigger a one-shot preview of the given sample at its natural pitch.
-    /// The preview plays at the sample's recorded rate, bypassing pattern voices.
-    pub fn trigger_preview(&mut self, sample: Arc<Sample>) {
+    /// Trigger a one-shot preview of the given sample.
+    /// `playback_rate` = `(target_freq / base_freq) * (sample_rate / output_sample_rate)`.
+    /// For natural pitch use `sample.sample_rate() as f64 / output_sample_rate as f64`.
+    pub fn trigger_preview(&mut self, sample: Arc<Sample>, playback_rate: f64) {
         self.preview_pos = 0.0;
+        self.preview_rate = playback_rate;
         self.preview_sample = Some(sample);
     }
 

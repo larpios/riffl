@@ -309,8 +309,13 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         // Note entry (Insert mode)
         Action::EnterNote(c) => {
             if let Some(pitch) = Editor::char_to_pitch(c) {
+                let octave = app.editor.current_octave();
                 app.editor.enter_note(pitch);
                 app.mark_dirty();
+                // Preview the note through the current instrument's sample
+                if app.current_view == AppView::PatternEditor {
+                    app.preview_note_pitch(pitch, octave);
+                }
             }
         }
         Action::EnterNoteOff => {

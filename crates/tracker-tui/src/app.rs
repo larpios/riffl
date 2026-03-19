@@ -797,6 +797,47 @@ impl App {
         Ok(idx)
     }
 
+    /// Preview a note pitch through the current instrument's sample.
+    /// Called when the user enters a note in Insert mode.
+    pub fn preview_note_pitch(&mut self, pitch: Pitch, octave: u8) {
+        let note = Note::simple(pitch, octave);
+        let target_freq = note.frequency();
+
+        // Find the sample for the current instrument
+        let inst_idx = self.editor.current_instrument() as usize;
+        let sample = {
+            let mixer = match self.mixer.lock() {
+                Ok(m) => m,
+                Err(_) => return,
+            };
+            mixer.samples().get(inst_idx).cloned()
+        };
+
+        let sample = match sample {
+            Some(s) => s,
+            None => return,
+        };
+
+        let output_sample_rate = self
+            .audio_engine
+            .as_ref()
+            .map(|e| e.sample_rate())
+            .unwrap_or(44100);
+
+        let base_freq = sample.base_frequency();
+        let rate = (target_freq / base_freq) * (sample.sample_rate() as f64 / output_sample_rate as f64);
+
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.trigger_preview(sample, rate);
+        }
+
+        if let Some(ref mut engine) = self.audio_engine {
+            if !engine.is_playing() {
+                let _ = engine.start();
+            }
+        }
+    }
+
     /// Preview the currently selected sample in the sample browser.
     /// Loads and plays it at natural pitch without adding it to the instrument list.
     pub fn preview_selected_sample(&mut self) -> Result<(), String> {
@@ -817,7 +858,9 @@ impl App {
             .map_err(|e| format!("Failed to load: {e}"))?;
 
         if let Ok(mut mixer) = self.mixer.lock() {
-            mixer.trigger_preview(Arc::new(sample));
+            // Natural pitch: play at sample's recorded rate
+            let rate = sample.sample_rate() as f64 / output_sample_rate as f64;
+            mixer.trigger_preview(Arc::new(sample), rate);
         } else {
             return Err("Failed to lock mixer".to_string());
         }
