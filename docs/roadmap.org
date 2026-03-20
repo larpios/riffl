@@ -167,8 +167,8 @@
   These are blocking for real composition use. Should be done before
   the Renoise-level instrument system.
 
-** TODO Better Keybindings for Entering Notes
-Follow other trackers' model, like =a= for C, =w= for C#. But don't blindly follow this model, research first
+** DONE Better Keybindings for Entering Notes
+FT2/IT piano keyboard layout: =a=C =w=C# =s=D =e=D# =d=E =f=F =t=F# =g=G =y=G# =h=A =u=A# =j=B =k=C+1oct
 
 ** DONE r — Replace-Once Mode
    Like vim's =r=: press =r=, type one note, cursor stays, mode stays Normal.

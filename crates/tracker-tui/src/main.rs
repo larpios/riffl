@@ -325,8 +325,14 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                     app.editor.replace_cell_note_off();
                     app.mark_dirty();
                 }
-                crossterm::event::KeyCode::Char(c @ ('a'..='g' | 'A'..='G')) => {
-                    if let Some(pitch) = Editor::char_to_pitch(c) {
+                crossterm::event::KeyCode::Char(c)
+                    if matches!(
+                        c,
+                        'a' | 'w' | 's' | 'e' | 'd' | 'f' | 't' | 'g' | 'y' | 'h' | 'u' | 'j'
+                            | 'k'
+                    ) =>
+                {
+                    if let Some((pitch, _oct_offset)) = Editor::piano_key_to_pitch(c) {
                         let octave = app.editor.current_octave();
                         app.editor.replace_once(pitch);
                         app.mark_dirty();
@@ -415,11 +421,12 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::EnterNormalMode => app.editor.enter_normal_mode(),
         Action::EnterVisualMode => app.editor.enter_visual_mode(),
 
-        // Note entry (Insert mode)
+        // Note entry (Insert mode) — piano keyboard layout
         Action::EnterNote(c) => {
-            if let Some(pitch) = Editor::char_to_pitch(c) {
-                let octave = app.editor.current_octave();
-                app.editor.enter_note(pitch);
+            if let Some((pitch, oct_offset)) = Editor::piano_key_to_pitch(c) {
+                let base_octave = app.editor.current_octave();
+                let octave = (base_octave as i8 + oct_offset).clamp(0, 9) as u8;
+                app.editor.enter_note_with_octave(pitch, octave);
                 app.mark_dirty();
                 // Preview the note through the current instrument's sample
                 if app.current_view == AppView::PatternEditor {
