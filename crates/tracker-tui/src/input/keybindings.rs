@@ -111,6 +111,11 @@ pub enum Action {
     OpenBpmPrompt,
     TapTempo,
 
+    // Loop region
+    SetLoopStart,
+    SetLoopEnd,
+    ToggleLoopRegion,
+
     // Application
     Quit,
     Confirm,
@@ -146,11 +151,22 @@ pub fn map_key_to_action(key: KeyEvent, mode: EditorMode) -> Action {
 }
 
 fn map_normal_mode(key: KeyEvent) -> Action {
-    // Handle Ctrl+Shift modified bindings (transpose by octave)
+    // Handle Ctrl+Shift modified bindings
     if key.modifiers == KeyModifiers::CONTROL | KeyModifiers::SHIFT {
         return match key.code {
             KeyCode::Up => Action::TransposeOctaveUp,
             KeyCode::Down => Action::TransposeOctaveDown,
+            // Toggle loop region active (Ctrl+Shift+L)
+            KeyCode::Char('l') | KeyCode::Char('L') => Action::ToggleLoopRegion,
+            _ => Action::None,
+        };
+    }
+
+    // Handle Alt modified bindings
+    if key.modifiers == KeyModifiers::ALT {
+        return match key.code {
+            KeyCode::Char('[') => Action::SetLoopStart,
+            KeyCode::Char(']') => Action::SetLoopEnd,
             _ => Action::None,
         };
     }
