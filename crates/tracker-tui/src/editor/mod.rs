@@ -533,6 +533,29 @@ impl Editor {
         self.advance_row();
     }
 
+    /// Replace the note at the cursor without advancing the cursor (r replace-once).
+    /// Pushes an undo snapshot before the change.
+    pub fn replace_once(&mut self, pitch: Pitch) {
+        self.save_history();
+        let note = Note::new(pitch, self.current_octave, 100, self.current_instrument);
+        self.pattern.set_cell(
+            self.cursor_row,
+            self.cursor_channel,
+            Cell::with_note(NoteEvent::On(note)),
+        );
+        // cursor_row intentionally NOT advanced
+    }
+
+    /// Replace the current cell with a note-off without advancing the cursor.
+    pub fn replace_cell_note_off(&mut self) {
+        self.save_history();
+        self.pattern.set_cell(
+            self.cursor_row,
+            self.cursor_channel,
+            Cell::with_note(NoteEvent::Off),
+        );
+    }
+
     /// Set the current octave (0-9). Used when typing a digit in Insert mode.
     pub fn set_octave(&mut self, octave: u8) {
         if octave <= 9 {
