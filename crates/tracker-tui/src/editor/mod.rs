@@ -533,6 +533,21 @@ impl Editor {
         self.advance_row();
     }
 
+    /// Enter a note-cut event at the current cursor position.
+    /// Hard-silences the voice immediately (no envelope release, displayed as ^^^).
+    pub fn enter_note_cut(&mut self) {
+        if self.mode != EditorMode::Insert {
+            return;
+        }
+        self.save_history();
+        self.pattern.set_cell(
+            self.cursor_row,
+            self.cursor_channel,
+            Cell::with_note(NoteEvent::Cut),
+        );
+        self.advance_row();
+    }
+
     /// Replace the note at the cursor without advancing the cursor (r replace-once).
     /// Pushes an undo snapshot before the change.
     pub fn replace_once(&mut self, pitch: Pitch) {
@@ -1197,6 +1212,23 @@ mod tests {
         editor.enter_note_off();
         let cell = editor.pattern().get_cell(0, 0).unwrap();
         assert_eq!(cell.note, Some(NoteEvent::Off));
+    }
+
+    #[test]
+    fn test_enter_note_cut() {
+        let mut editor = test_editor();
+        editor.enter_insert_mode();
+        editor.enter_note_cut();
+        let cell = editor.pattern().get_cell(0, 0).unwrap();
+        assert_eq!(cell.note, Some(NoteEvent::Cut));
+    }
+
+    #[test]
+    fn test_enter_note_cut_in_normal_mode_does_nothing() {
+        let mut editor = test_editor();
+        // mode is Normal by default
+        editor.enter_note_cut();
+        assert!(editor.pattern().get_cell(0, 0).unwrap().is_empty());
     }
 
     #[test]

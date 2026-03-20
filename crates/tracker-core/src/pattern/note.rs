@@ -244,13 +244,15 @@ impl fmt::Display for NoteOff {
     }
 }
 
-/// A note event that can be either a note-on or note-off.
+/// A note event that can be either a note-on, note-off, or note-cut.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NoteEvent {
     /// A note-on event with pitch, octave, velocity, and instrument.
     On(Note),
     /// A note-off event that stops the current note on the channel.
     Off,
+    /// A note-cut event that immediately hard-silences the voice (no release).
+    Cut,
 }
 
 impl fmt::Display for NoteEvent {
@@ -258,6 +260,7 @@ impl fmt::Display for NoteEvent {
         match self {
             NoteEvent::On(note) => write!(f, "{}", note),
             NoteEvent::Off => write!(f, "==="),
+            NoteEvent::Cut => write!(f, "^^^"),
         }
     }
 }
@@ -389,6 +392,19 @@ mod tests {
 
         let off = NoteEvent::Off;
         assert_eq!(format!("{}", off), "===");
+
+        let cut = NoteEvent::Cut;
+        assert_eq!(format!("{}", cut), "^^^");
+    }
+
+    #[test]
+    fn test_note_event_cut_display() {
+        assert_eq!(format!("{}", NoteEvent::Cut), "^^^");
+    }
+
+    #[test]
+    fn test_note_event_cut_distinct_from_off() {
+        assert_ne!(NoteEvent::Cut, NoteEvent::Off);
     }
 
     #[test]
