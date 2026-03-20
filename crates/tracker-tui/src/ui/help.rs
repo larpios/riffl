@@ -127,6 +127,8 @@ fn right_column(theme: &Theme) -> Vec<Line<'static>> {
         key("Enter  (stopped)", "Play from cursor row", theme),
         key("= / -", "BPM up / down", theme),
         key(":bpm <n>", "Set BPM directly", theme),
+        key("Ctrl+B", "BPM inline prompt", theme),
+        key("t  (Normal)", "Tap tempo (≥2 taps)", theme),
         key("[ / ]", "Prev / Next pattern", theme),
         key("Shift+P", "Toggle Pattern / Song", theme),
         key("Shift+L", "Toggle loop", theme),

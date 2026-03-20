@@ -224,10 +224,13 @@
    Select a range → =I= to linearly interpolate volume or pitch between the
    first and last non-empty cell. Smooth automation without manual hex entry.
 
-** TODO BPM Inline Edit
+** DONE BPM Inline Edit
    BPM is visible in the status bar but only editable via =:bpm N= command.
    Add =T= or =Ctrl+B= to open a quick BPM prompt.
    Bonus: tap-tempo (tap a key N times to set BPM from the interval).
+   Implemented: =Ctrl+B= opens inline BPM prompt (pre-populated with current BPM,
+   Enter applies, Esc cancels). =t= in Normal mode does tap-tempo — records tap
+   timestamps, averages intervals over last 3 seconds, applies BPM after ≥2 taps.
 
 ** TODO :tutor — Interactive Tutorial / Cheat Sheet
    =:tutor= opens a navigable in-app reference covering:

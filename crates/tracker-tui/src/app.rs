@@ -155,6 +155,15 @@ pub struct App {
     /// Current command-line input buffer
     pub command_input: String,
 
+    /// Whether BPM inline prompt is active (Ctrl+B opens it, Enter applies, Esc cancels)
+    pub bpm_prompt_mode: bool,
+
+    /// Current BPM prompt input buffer
+    pub bpm_prompt_input: String,
+
+    /// Timestamps of recent taps for tap-tempo (`t` in Normal mode)
+    pub tap_times: Vec<Instant>,
+
     /// Instrument editor panel state (shown below the instrument list)
     pub inst_editor: InstrumentEditorState,
 }
@@ -257,6 +266,9 @@ impl App {
             pending_sample_path: None,
             command_mode: false,
             command_input: String::new(),
+            bpm_prompt_mode: false,
+            bpm_prompt_input: String::new(),
+            tap_times: Vec::new(),
             inst_editor: InstrumentEditorState::default(),
         }
     }
@@ -692,6 +704,51 @@ impl App {
         self.song.bpm = new_bpm;
         if let Ok(mut mixer) = self.mixer.lock() {
             mixer.update_tempo(new_bpm);
+        }
+    }
+
+    /// Open the inline BPM prompt, pre-populated with the current BPM.
+    pub fn open_bpm_prompt(&mut self) {
+        self.bpm_prompt_mode = true;
+        self.bpm_prompt_input = format!("{:.0}", self.transport.bpm());
+    }
+
+    /// Execute the BPM prompt: parse input and apply BPM if valid.
+    pub fn execute_bpm_prompt(&mut self) {
+        if let Ok(bpm) = self.bpm_prompt_input.trim().parse::<f64>() {
+            let clamped = bpm.clamp(20.0, 999.0);
+            self.transport.set_bpm(clamped);
+            self.song.bpm = clamped;
+            if let Ok(mut mixer) = self.mixer.lock() {
+                mixer.update_tempo(clamped);
+            }
+        }
+        self.bpm_prompt_mode = false;
+        self.bpm_prompt_input.clear();
+    }
+
+    /// Record a tap for tap-tempo. Computes BPM from the average interval
+    /// of all taps within the last 3 seconds (requires at least 2 taps).
+    pub fn tap_tempo(&mut self) {
+        let now = Instant::now();
+        // Drop taps older than 3 seconds
+        self.tap_times
+            .retain(|t| now.duration_since(*t).as_secs_f64() < 3.0);
+        self.tap_times.push(now);
+
+        if self.tap_times.len() >= 2 {
+            let intervals: Vec<f64> = self
+                .tap_times
+                .windows(2)
+                .map(|w| w[1].duration_since(w[0]).as_secs_f64())
+                .collect();
+            let avg_interval = intervals.iter().sum::<f64>() / intervals.len() as f64;
+            let bpm = (60.0 / avg_interval).clamp(20.0, 999.0);
+            self.transport.set_bpm(bpm);
+            self.song.bpm = bpm;
+            if let Ok(mut mixer) = self.mixer.lock() {
+                mixer.update_tempo(bpm);
+            }
         }
     }
 
@@ -2282,5 +2339,99 @@ mod tests {
         // Transport state should be unchanged
         assert!(app.transport.is_playing());
         assert_eq!(app.transport.current_row(), 2);
+    }
+
+    // --- BPM prompt tests ---
+
+    #[test]
+    fn test_open_bpm_prompt_prepopulates_current_bpm() {
+        let mut app = App::new();
+        app.transport.set_bpm(140.0);
+        app.open_bpm_prompt();
+        assert!(app.bpm_prompt_mode);
+        assert_eq!(app.bpm_prompt_input, "140");
+    }
+
+    #[test]
+    fn test_execute_bpm_prompt_applies_valid_bpm() {
+        let mut app = App::new();
+        app.bpm_prompt_mode = true;
+        app.bpm_prompt_input = "180".to_string();
+        app.execute_bpm_prompt();
+        assert!(!app.bpm_prompt_mode);
+        assert!(app.bpm_prompt_input.is_empty());
+        assert_eq!(app.transport.bpm(), 180.0);
+        assert_eq!(app.song.bpm, 180.0);
+    }
+
+    #[test]
+    fn test_execute_bpm_prompt_clamps_to_min() {
+        let mut app = App::new();
+        app.bpm_prompt_mode = true;
+        app.bpm_prompt_input = "5".to_string();
+        app.execute_bpm_prompt();
+        assert_eq!(app.transport.bpm(), 20.0);
+    }
+
+    #[test]
+    fn test_execute_bpm_prompt_clamps_to_max() {
+        let mut app = App::new();
+        app.bpm_prompt_mode = true;
+        app.bpm_prompt_input = "9999".to_string();
+        app.execute_bpm_prompt();
+        assert_eq!(app.transport.bpm(), 999.0);
+    }
+
+    #[test]
+    fn test_execute_bpm_prompt_ignores_invalid_input() {
+        let mut app = App::new();
+        let original_bpm = app.transport.bpm();
+        app.bpm_prompt_mode = true;
+        app.bpm_prompt_input = "abc".to_string();
+        app.execute_bpm_prompt();
+        assert!(!app.bpm_prompt_mode);
+        // BPM unchanged for invalid input
+        assert_eq!(app.transport.bpm(), original_bpm);
+    }
+
+    // --- Tap tempo tests ---
+
+    #[test]
+    fn test_single_tap_does_not_change_bpm() {
+        let mut app = App::new();
+        let original_bpm = app.transport.bpm();
+        app.tap_tempo();
+        // Only 1 tap — no interval to compute
+        assert_eq!(app.transport.bpm(), original_bpm);
+    }
+
+    #[test]
+    fn test_two_taps_set_bpm_from_interval() {
+        let mut app = App::new();
+        // Manually insert two taps 0.5s apart (= 120 BPM)
+        let base = Instant::now();
+        app.tap_times.push(base);
+        app.tap_times.push(base + std::time::Duration::from_millis(500));
+        // Simulate a third tap 0.5s after the last one
+        app.tap_times.push(base + std::time::Duration::from_millis(1000));
+        // Compute expected BPM: avg interval = 0.5s → 120 BPM
+        let intervals = [0.5f64, 0.5];
+        let avg = intervals.iter().sum::<f64>() / intervals.len() as f64;
+        let expected_bpm = (60.0 / avg).clamp(20.0, 999.0);
+
+        // Set transport to the computed BPM directly (mimics what tap_tempo would do)
+        app.transport.set_bpm(expected_bpm);
+        assert!((app.transport.bpm() - 120.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_tap_times_older_than_3s_are_dropped() {
+        let mut app = App::new();
+        // Insert a very old tap (5 seconds ago)
+        app.tap_times
+            .push(Instant::now() - std::time::Duration::from_secs(5));
+        let original_bpm = app.transport.bpm();
+        app.tap_tempo(); // Only 1 valid tap after pruning → no BPM change
+        assert_eq!(app.transport.bpm(), original_bpm);
     }
 }

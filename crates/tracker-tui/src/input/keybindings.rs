@@ -107,6 +107,10 @@ pub enum Action {
     ToggleLiveMode,
     ToggleFollowMode,
 
+    // BPM
+    OpenBpmPrompt,
+    TapTempo,
+
     // Application
     Quit,
     Confirm,
@@ -165,6 +169,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             KeyCode::Char('\\') => Action::ToggleSplitView,
             KeyCode::Char('t') => Action::OpenTemplates,
             KeyCode::Char('l') => Action::ToggleLiveMode,
+            KeyCode::Char('b') => Action::OpenBpmPrompt,
             KeyCode::Enter => Action::ExecuteScript,
             KeyCode::Delete => Action::DeleteRow,
             _ => Action::None,
@@ -283,6 +288,9 @@ fn map_normal_mode(key: KeyEvent) -> Action {
 
         // Follow mode
         KeyCode::Char('f') => Action::ToggleFollowMode,
+
+        // BPM tap-tempo
+        KeyCode::Char('t') => Action::TapTempo,
 
         // Application
         KeyCode::Char('m') => Action::OpenModal,
