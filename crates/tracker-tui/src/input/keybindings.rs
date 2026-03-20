@@ -302,7 +302,8 @@ fn map_insert_mode(key: KeyEvent) -> Action {
         };
     }
 
-    if key.modifiers != KeyModifiers::NONE {
+    // Allow SHIFT through — uppercase A-G enters sharps, octave parens, etc.
+    if key.modifiers != KeyModifiers::NONE && key.modifiers != KeyModifiers::SHIFT {
         return Action::None;
     }
 
@@ -405,8 +406,8 @@ fn map_visual_mode(key: KeyEvent) -> Action {
         // Interpolate
         KeyCode::Char('i') => Action::Interpolate,
 
-        // Delete selection
-        KeyCode::Char('x') | KeyCode::Delete => Action::DeleteCell,
+        // Delete/cut selection (mirrors 'd' — both cut in Visual mode)
+        KeyCode::Char('x') | KeyCode::Delete => Action::Cut,
 
         _ => Action::None,
     }
@@ -714,7 +715,7 @@ mod tests {
     #[test]
     fn test_visual_mode_delete() {
         let x = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
-        assert_eq!(map_key_to_action(x, EditorMode::Visual), Action::DeleteCell);
+        assert_eq!(map_key_to_action(x, EditorMode::Visual), Action::Cut);
     }
 
     // --- Utility Function Tests ---

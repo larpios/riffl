@@ -8,6 +8,13 @@ use ratatui::{
 
 use super::theme::Theme;
 
+/// Total line count of the taller help column. Used to cap scroll offset.
+pub fn content_line_count() -> u16 {
+    left_column(&Theme::default())
+        .len()
+        .max(right_column(&Theme::default()).len()) as u16
+}
+
 /// Render help/cheatsheet overlay — two-column scrollable layout.
 /// `scroll` is the vertical scroll offset in lines.
 pub fn render_help(frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme, scroll: u16) {

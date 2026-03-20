@@ -282,166 +282,166 @@ impl Mixer {
 
         // Wrap main voice rendering in a block so borrows are released before preview.
         {
-        let channel_strips = &mut self.channel_strips;
-        let bus_system = &mut self.bus_system;
-        let effect_processor = &mut self.effect_processor;
-        let voices = &mut self.voices;
-        let samples = &self.samples;
+            let channel_strips = &mut self.channel_strips;
+            let bus_system = &mut self.bus_system;
+            let effect_processor = &mut self.effect_processor;
+            let voices = &mut self.voices;
+            let samples = &self.samples;
 
-        // Clear the buffer first
-        for sample in output.iter_mut() {
-            *sample = 0.0;
-        }
+            // Clear the buffer first
+            for sample in output.iter_mut() {
+                *sample = 0.0;
+            }
 
-        bus_system.clear_all(num_frames);
-        let num_buses = bus_system.num_buses();
+            bus_system.clear_all(num_frames);
+            let num_buses = bus_system.num_buses();
 
-        for (ch, voice_slot) in voices.iter_mut().enumerate() {
-            let voice = match voice_slot {
-                Some(v) if v.active => v,
-                _ => continue,
-            };
+            for (ch, voice_slot) in voices.iter_mut().enumerate() {
+                let voice = match voice_slot {
+                    Some(v) if v.active => v,
+                    _ => continue,
+                };
 
-            let sample = match samples.get(voice.sample_index) {
-                Some(s) => s,
-                None => {
+                let sample = match samples.get(voice.sample_index) {
+                    Some(s) => s,
+                    None => {
+                        voice.active = false;
+                        continue;
+                    }
+                };
+
+                let sample_data = sample.data();
+                let sample_channels = sample.channels() as usize;
+                let sample_frames = sample.frame_count();
+
+                if sample_frames == 0 {
                     voice.active = false;
                     continue;
                 }
-            };
 
-            let sample_data = sample.data();
-            let sample_channels = sample.channels() as usize;
-            let sample_frames = sample.frame_count();
+                let strip = &mut channel_strips[ch];
 
-            if sample_frames == 0 {
-                voice.active = false;
-                continue;
-            }
+                for frame in 0..num_frames {
+                    let render_state = effect_processor.voice_render_state(ch);
 
-            let strip = &mut channel_strips[ch];
+                    let src_frame = voice.position as usize;
 
-            for frame in 0..num_frames {
-                let render_state = effect_processor.voice_render_state(ch);
-
-                let src_frame = voice.position as usize;
-
-                use crate::audio::sample::LoopMode;
-                match sample.loop_mode {
-                    LoopMode::NoLoop => {
-                        if src_frame >= sample_frames {
-                            voice.active = false;
-                            break;
-                        }
-                    }
-                    LoopMode::Forward => {
-                        if src_frame > sample.loop_end {
-                            let loop_len = (sample.loop_end - sample.loop_start + 1) as f64;
-                            voice.position -= loop_len;
-                        }
-                    }
-                    LoopMode::PingPong => {
-                        if voice.loop_direction > 0.0 && src_frame > sample.loop_end {
-                            voice.loop_direction = -1.0;
-                            voice.position = sample.loop_end as f64;
-                        } else if voice.loop_direction < 0.0 && src_frame < sample.loop_start {
-                            voice.loop_direction = 1.0;
-                            voice.position = sample.loop_start as f64;
-                        }
-                    }
-                }
-
-                // Final safety check for buffer access
-                let src_frame = voice.position as usize;
-                if src_frame >= sample_frames {
-                    voice.active = false;
-                    break;
-                }
-
-                let effective_rate =
-                    voice.playback_rate * render_state.pitch_ratio * voice.loop_direction;
-
-                // Read sample data with linear interpolation
-                let (left, right) = {
-                    let pos_floor = voice.position.floor() as usize;
-                    let frac = (voice.position - pos_floor as f64) as f32;
-                    let next_frame = {
-                        let next = pos_floor + 1;
-                        match sample.loop_mode {
-                            LoopMode::NoLoop => next,
-                            LoopMode::Forward => {
-                                if next > sample.loop_end {
-                                    sample.loop_start
-                                } else {
-                                    next
-                                }
+                    use crate::audio::sample::LoopMode;
+                    match sample.loop_mode {
+                        LoopMode::NoLoop => {
+                            if src_frame >= sample_frames {
+                                voice.active = false;
+                                break;
                             }
-                            LoopMode::PingPong => {
-                                // For ping-pong, if we're at the boundary, the interpolation
-                                // should go towards the next position based on loop_direction.
-                                if voice.loop_direction > 0.0 {
+                        }
+                        LoopMode::Forward => {
+                            if src_frame > sample.loop_end {
+                                let loop_len = (sample.loop_end - sample.loop_start + 1) as f64;
+                                voice.position -= loop_len;
+                            }
+                        }
+                        LoopMode::PingPong => {
+                            if voice.loop_direction > 0.0 && src_frame > sample.loop_end {
+                                voice.loop_direction = -1.0;
+                                voice.position = sample.loop_end as f64;
+                            } else if voice.loop_direction < 0.0 && src_frame < sample.loop_start {
+                                voice.loop_direction = 1.0;
+                                voice.position = sample.loop_start as f64;
+                            }
+                        }
+                    }
+
+                    // Final safety check for buffer access
+                    let src_frame = voice.position as usize;
+                    if src_frame >= sample_frames {
+                        voice.active = false;
+                        break;
+                    }
+
+                    let effective_rate =
+                        voice.playback_rate * render_state.pitch_ratio * voice.loop_direction;
+
+                    // Read sample data with linear interpolation
+                    let (left, right) = {
+                        let pos_floor = voice.position.floor() as usize;
+                        let frac = (voice.position - pos_floor as f64) as f32;
+                        let next_frame = {
+                            let next = pos_floor + 1;
+                            match sample.loop_mode {
+                                LoopMode::NoLoop => next,
+                                LoopMode::Forward => {
                                     if next > sample.loop_end {
-                                        sample.loop_end
+                                        sample.loop_start
                                     } else {
                                         next
                                     }
-                                } else {
-                                    // Reverse direction: frac is effectively the distance from pos_floor.
-                                    // But position is decreasing.
-                                    // Actually, linear interpolation usually assumes pos1 + (pos2-pos1)*frac.
-                                    // If we're moving backwards, frac is the distance from the lower integer.
-                                    if pos_floor > sample.loop_start {
-                                        pos_floor - 1
+                                }
+                                LoopMode::PingPong => {
+                                    // For ping-pong, if we're at the boundary, the interpolation
+                                    // should go towards the next position based on loop_direction.
+                                    if voice.loop_direction > 0.0 {
+                                        if next > sample.loop_end {
+                                            sample.loop_end
+                                        } else {
+                                            next
+                                        }
                                     } else {
-                                        sample.loop_start
+                                        // Reverse direction: frac is effectively the distance from pos_floor.
+                                        // But position is decreasing.
+                                        // Actually, linear interpolation usually assumes pos1 + (pos2-pos1)*frac.
+                                        // If we're moving backwards, frac is the distance from the lower integer.
+                                        if pos_floor > sample.loop_start {
+                                            pos_floor - 1
+                                        } else {
+                                            sample.loop_start
+                                        }
                                     }
                                 }
                             }
-                        }
+                        };
+
+                        let get_stereo = |f: usize| {
+                            if f >= sample_frames {
+                                (0.0, 0.0)
+                            } else if sample_channels >= 2 {
+                                let idx = f * sample_channels;
+                                (sample_data[idx], sample_data[idx + 1])
+                            } else {
+                                (sample_data[f], sample_data[f])
+                            }
+                        };
+
+                        let (l1, r1) = get_stereo(pos_floor);
+                        let (l2, r2) = get_stereo(next_frame);
+
+                        (l1 + (l2 - l1) * frac, r1 + (r2 - r1) * frac)
                     };
 
-                    let get_stereo = |f: usize| {
-                        if f >= sample_frames {
-                            (0.0, 0.0)
-                        } else if sample_channels >= 2 {
-                            let idx = f * sample_channels;
-                            (sample_data[idx], sample_data[idx + 1])
-                        } else {
-                            (sample_data[f], sample_data[f])
+                    let effect_gain = render_state.gain.unwrap_or(1.0);
+                    let (left_gain, right_gain) = strip.next_gains();
+
+                    let out_idx = frame * 2;
+                    let post_l = left * voice.velocity_gain * effect_gain * left_gain;
+                    let post_r = right * voice.velocity_gain * effect_gain * right_gain;
+
+                    output[out_idx] += post_l;
+                    output[out_idx + 1] += post_r;
+
+                    for bus_idx in 0..num_buses {
+                        let send_level = strip.next_send_level(bus_idx);
+                        if send_level > 0.0001 {
+                            bus_system.accumulate(bus_idx, frame, post_l, post_r, send_level);
                         }
-                    };
-
-                    let (l1, r1) = get_stereo(pos_floor);
-                    let (l2, r2) = get_stereo(next_frame);
-
-                    (l1 + (l2 - l1) * frac, r1 + (r2 - r1) * frac)
-                };
-
-                let effect_gain = render_state.gain.unwrap_or(1.0);
-                let (left_gain, right_gain) = strip.next_gains();
-
-                let out_idx = frame * 2;
-                let post_l = left * voice.velocity_gain * effect_gain * left_gain;
-                let post_r = right * voice.velocity_gain * effect_gain * right_gain;
-
-                output[out_idx] += post_l;
-                output[out_idx + 1] += post_r;
-
-                for bus_idx in 0..num_buses {
-                    let send_level = strip.next_send_level(bus_idx);
-                    if send_level > 0.0001 {
-                        bus_system.accumulate(bus_idx, frame, post_l, post_r, send_level);
                     }
+
+                    voice.position += effective_rate;
+
+                    // Advance frame-level effect modulations
+                    effect_processor.advance_frame(ch);
                 }
-
-                voice.position += effective_rate;
-
-                // Advance frame-level effect modulations
-                effect_processor.advance_frame(ch);
             }
-        }
 
-        bus_system.process_and_mix(output, num_frames);
+            bus_system.process_and_mix(output, num_frames);
         } // end main voice block — field borrows released
 
         // Preview voice: renders a one-shot sample directly into output,

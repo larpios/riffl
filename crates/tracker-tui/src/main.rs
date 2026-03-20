@@ -137,15 +137,64 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
     // If a modal is open, handle modal-specific input first
     if app.has_modal() {
         match key.code {
-            // Quit confirmation: y = yes quit, n/Esc = cancel
-            KeyCode::Char('y') if app.pending_quit => {
+            // Quit confirmation: Enter = quit, Esc = cancel
+            KeyCode::Enter if app.pending_quit => {
                 app.close_modal();
                 app.force_quit();
             }
-            KeyCode::Char('n') | KeyCode::Esc if app.pending_quit => {
+            KeyCode::Esc if app.pending_quit => {
                 app.pending_quit = false;
                 app.close_modal();
             }
+
+            // Sample action menu: load as new instrument
+            KeyCode::Char('l') if app.pending_sample_path.is_some() => {
+                let path = app.pending_sample_path.take().unwrap();
+                app.close_modal();
+                match app.load_sample_from_path(&path) {
+                    Ok(idx) => {
+                        let name = app
+                            .instrument_names()
+                            .get(idx)
+                            .cloned()
+                            .unwrap_or_else(|| "sample".to_string());
+                        app.open_modal(ui::modal::Modal::info(
+                            "Sample Loaded".to_string(),
+                            format!("Loaded '{}' as instrument {:02X}", name, idx),
+                        ));
+                    }
+                    Err(e) => {
+                        app.open_modal(ui::modal::Modal::error("Load Failed".to_string(), e));
+                    }
+                }
+            }
+
+            // Sample action menu: assign to currently selected instrument
+            KeyCode::Char('a') if app.pending_sample_path.is_some() => {
+                if let Some(inst_idx) = app.instrument_selection() {
+                    let path = app.pending_sample_path.take().unwrap();
+                    app.close_modal();
+                    match app.assign_sample_to_instrument(&path, inst_idx) {
+                        Ok(()) => {
+                            app.open_modal(ui::modal::Modal::info(
+                                "Sample Assigned".to_string(),
+                                format!("Assigned to instrument {:02X}", inst_idx),
+                            ));
+                        }
+                        Err(e) => {
+                            app.open_modal(ui::modal::Modal::error("Assign Failed".to_string(), e));
+                        }
+                    }
+                }
+                // If no instrument selected, do nothing (stay in menu)
+            }
+
+            // Sample action menu: cancel
+            KeyCode::Esc if app.pending_sample_path.is_some() => {
+                app.pending_sample_path = None;
+                app.close_modal();
+            }
+
             // Dismiss any other modal
             KeyCode::Enter | KeyCode::Esc | KeyCode::Char(' ') => {
                 app.close_modal();
@@ -157,19 +206,26 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
 
     // If help overlay is open, handle navigation and close
     if app.show_help {
+        // Compute max scroll: content lines minus visible inner height (85% of terminal - 2 borders)
+        let max_scroll = {
+            let content = ui::help::content_line_count();
+            let term_rows = crossterm::terminal::size().map(|(_, h)| h).unwrap_or(24);
+            let visible = ((term_rows as u32 * 85 / 100) as u16).saturating_sub(2);
+            content.saturating_sub(visible)
+        };
         match key.code {
             KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') => {
                 app.show_help = false;
                 app.help_scroll = 0;
             }
             KeyCode::Char('j') | KeyCode::Down => {
-                app.help_scroll = app.help_scroll.saturating_add(1);
+                app.help_scroll = app.help_scroll.saturating_add(1).min(max_scroll);
             }
             KeyCode::Char('k') | KeyCode::Up => {
                 app.help_scroll = app.help_scroll.saturating_sub(1);
             }
             KeyCode::PageDown => {
-                app.help_scroll = app.help_scroll.saturating_add(10);
+                app.help_scroll = app.help_scroll.saturating_add(10).min(max_scroll);
             }
             KeyCode::PageUp => {
                 app.help_scroll = app.help_scroll.saturating_sub(10);
@@ -513,9 +569,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             }
         }
         Action::EditInstrument => {
-            if app.current_view == AppView::InstrumentList
-                && app.instrument_selection().is_some()
-            {
+            if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
                 app.inst_editor.focus();
             }
         }
@@ -554,8 +608,8 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
 /// Handle keys when the instrument editor panel is focused.
 /// Returns true if the key was consumed.
 fn handle_instrument_editor_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
-    use crossterm::event::{KeyCode, KeyModifiers};
     use crate::ui::instrument_editor::InstrumentField;
+    use crossterm::event::{KeyCode, KeyModifiers};
 
     if !app.inst_editor.focused {
         return false;
@@ -579,8 +633,7 @@ fn handle_instrument_editor_key(app: &mut App, key: crossterm::event::KeyEvent) 
                 return true;
             }
             KeyCode::Char(c)
-                if key.modifiers == KeyModifiers::NONE
-                    || key.modifiers == KeyModifiers::SHIFT =>
+                if key.modifiers == KeyModifiers::NONE || key.modifiers == KeyModifiers::SHIFT =>
             {
                 app.inst_editor.input_buffer.push(c);
                 return true;
@@ -895,17 +948,16 @@ fn handle_sample_browser_key(app: &mut App, key: KeyEvent) -> bool {
         // Load file or enter directory
         KeyCode::Enter => {
             if app.sample_browser.selected_is_file() {
-                let is_mod = app
-                    .sample_browser
-                    .selected_path()
-                    .and_then(|p| p.extension())
-                    .and_then(|e| e.to_str())
-                    .map(|e| e.eq_ignore_ascii_case("mod"))
-                    .unwrap_or(false);
+                let path = app.sample_browser.selected_path().map(|p| p.to_path_buf());
+                if let Some(path) = path {
+                    let ext = path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .unwrap_or("")
+                        .to_ascii_lowercase();
 
-                if is_mod {
-                    let path = app.sample_browser.selected_path().map(|p| p.to_path_buf());
-                    if let Some(path) = path {
+                    if ext == "mod" {
+                        // MOD files always import the whole song — no choice needed.
                         match app.import_mod_file(&path) {
                             Ok(()) => {
                                 let name = path
@@ -925,23 +977,28 @@ fn handle_sample_browser_key(app: &mut App, key: KeyEvent) -> bool {
                                 ));
                             }
                         }
-                    }
-                } else {
-                    match app.load_sample_from_browser() {
-                        Ok(idx) => {
-                            let name = app
-                                .instrument_names()
-                                .get(idx)
-                                .cloned()
-                                .unwrap_or_else(|| "sample".to_string());
-                            app.open_modal(ui::modal::Modal::info(
-                                "Sample Loaded".to_string(),
-                                format!("Loaded '{name}' as instrument {:02X}", idx),
-                            ));
-                        }
-                        Err(e) => {
-                            app.open_modal(ui::modal::Modal::error("Load Failed".to_string(), e));
-                        }
+                    } else {
+                        // Show an action menu so the user can choose what to do.
+                        let filename = path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("sample")
+                            .to_string();
+
+                        let assign_line = app
+                            .instrument_selection()
+                            .and_then(|i| {
+                                app.song.instruments.get(i).map(|inst| {
+                                    format!("\n  [a]  Assign to '{}' (slot {:02X})", inst.name, i)
+                                })
+                            })
+                            .unwrap_or_default();
+
+                        let message =
+                            format!("'{filename}'\n\n  [l]  Load as new instrument{assign_line}");
+
+                        app.pending_sample_path = Some(path);
+                        app.open_modal(ui::modal::Modal::menu("Load Sample".to_string(), message));
                     }
                 }
             } else {
