@@ -332,7 +332,7 @@ fn map_insert_mode(key: KeyEvent) -> Action {
         };
     }
 
-    // Allow SHIFT through — uppercase A-G enters sharps, octave parens, etc.
+    // Allow SHIFT through for shifted symbol keys (parentheses, tilde, etc.).
     if key.modifiers != KeyModifiers::NONE && key.modifiers != KeyModifiers::SHIFT {
         return Action::None;
     }
@@ -344,8 +344,12 @@ fn map_insert_mode(key: KeyEvent) -> Action {
         // Note-off (tilde)
         KeyCode::Char('~') => Action::EnterNoteOff,
 
-        // Note entry: lowercase a-g = natural, uppercase A-G = sharp equivalent
-        KeyCode::Char(c @ ('a'..='g' | 'A'..='G')) => Action::EnterNote(c),
+        // Piano keyboard layout (FT2/IT tracker style):
+        //   Lower row (white keys): a=C  s=D  d=E  f=F  g=G  h=A  j=B  k=C+1oct
+        //   Upper row (black keys): w=C# e=D#     t=F# y=G# u=A#
+        KeyCode::Char(
+            c @ ('a' | 'w' | 's' | 'e' | 'd' | 'f' | 't' | 'g' | 'y' | 'h' | 'u' | 'j' | 'k'),
+        ) => Action::EnterNote(c),
 
         // Octave setting (0-9)
         KeyCode::Char(c @ '0'..='9') => Action::SetOctave(c as u8 - b'0'),
@@ -645,21 +649,43 @@ mod tests {
 
     #[test]
     fn test_insert_mode_note_entry() {
+        // Piano keyboard layout — lower row (white keys)
+        let a = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+        let s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE);
+        let h = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
+        let k = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
+        // Piano keyboard layout — upper row (black keys)
+        let w = KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE);
+        let t = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE);
+        assert_eq!(
+            map_key_to_action(a, EditorMode::Insert),
+            Action::EnterNote('a')
+        );
+        assert_eq!(
+            map_key_to_action(s, EditorMode::Insert),
+            Action::EnterNote('s')
+        );
+        assert_eq!(
+            map_key_to_action(h, EditorMode::Insert),
+            Action::EnterNote('h')
+        );
+        assert_eq!(
+            map_key_to_action(k, EditorMode::Insert),
+            Action::EnterNote('k')
+        );
+        assert_eq!(
+            map_key_to_action(w, EditorMode::Insert),
+            Action::EnterNote('w')
+        );
+        assert_eq!(
+            map_key_to_action(t, EditorMode::Insert),
+            Action::EnterNote('t')
+        );
+        // Old a-g alphabetical note keys (b, c) should NOT trigger note entry
+        let b = KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE);
         let c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE);
-        let g = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE);
-        let a_upper = KeyEvent::new(KeyCode::Char('A'), KeyModifiers::NONE);
-        assert_eq!(
-            map_key_to_action(c, EditorMode::Insert),
-            Action::EnterNote('c')
-        );
-        assert_eq!(
-            map_key_to_action(g, EditorMode::Insert),
-            Action::EnterNote('g')
-        );
-        assert_eq!(
-            map_key_to_action(a_upper, EditorMode::Insert),
-            Action::EnterNote('A')
-        );
+        assert_eq!(map_key_to_action(b, EditorMode::Insert), Action::None);
+        assert_eq!(map_key_to_action(c, EditorMode::Insert), Action::None);
     }
 
     #[test]

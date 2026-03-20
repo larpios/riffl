@@ -503,20 +503,11 @@ impl Editor {
         }
     }
 
-    /// Enter a note pitch at the current cursor position.
+    /// Enter a note pitch at the current cursor position using the current octave.
     /// Only works in Insert mode on the Note sub-column.
     pub fn enter_note(&mut self, pitch: Pitch) {
-        if self.mode != EditorMode::Insert {
-            return;
-        }
-        self.save_history();
-        let note = Note::new(pitch, self.current_octave, 100, self.current_instrument);
-        self.pattern.set_cell(
-            self.cursor_row,
-            self.cursor_channel,
-            Cell::with_note(NoteEvent::On(note)),
-        );
-        self.advance_row();
+        let octave = self.current_octave;
+        self.enter_note_with_octave(pitch, octave);
     }
 
     /// Enter a note-off event at the current cursor position.
@@ -720,32 +711,49 @@ impl Editor {
         }
     }
 
-    /// Parse a character as a note pitch for note entry.
+    /// Map a piano keyboard key to a pitch and octave offset.
     ///
-    /// Lowercase letters (a–g) produce natural pitches.
-    /// Uppercase letters produce sharps where they exist:
-    ///   C→C#, D→D#, F→F#, G→G#, A→A#
-    ///   E and B have no common sharp so they map to natural E/B.
-    pub fn char_to_pitch(c: char) -> Option<Pitch> {
+    /// Implements the standard FT2/IT tracker layout:
+    ///   Lower row (white keys): a=C, s=D, d=E, f=F, g=G, h=A, j=B, k=C+1oct
+    ///   Upper row (black keys): w=C#, e=D#, t=F#, y=G#, u=A#
+    ///
+    /// Returns `(pitch, octave_offset)` where `octave_offset` is +1 for `k` (C in the
+    /// next octave) and 0 for all other keys.
+    pub fn piano_key_to_pitch(c: char) -> Option<(Pitch, i8)> {
         match c {
-            // Lowercase: natural pitches
-            'a' => Some(Pitch::A),
-            'b' => Some(Pitch::B),
-            'c' => Some(Pitch::C),
-            'd' => Some(Pitch::D),
-            'e' => Some(Pitch::E),
-            'f' => Some(Pitch::F),
-            'g' => Some(Pitch::G),
-            // Uppercase: sharps (E# and B# are enharmonic to F and C, use natural)
-            'A' => Some(Pitch::ASharp),
-            'B' => Some(Pitch::B),
-            'C' => Some(Pitch::CSharp),
-            'D' => Some(Pitch::DSharp),
-            'E' => Some(Pitch::E),
-            'F' => Some(Pitch::FSharp),
-            'G' => Some(Pitch::GSharp),
+            // Lower row — white keys
+            'a' => Some((Pitch::C, 0)),
+            's' => Some((Pitch::D, 0)),
+            'd' => Some((Pitch::E, 0)),
+            'f' => Some((Pitch::F, 0)),
+            'g' => Some((Pitch::G, 0)),
+            'h' => Some((Pitch::A, 0)),
+            'j' => Some((Pitch::B, 0)),
+            'k' => Some((Pitch::C, 1)), // C in the next octave
+            // Upper row — black keys
+            'w' => Some((Pitch::CSharp, 0)),
+            'e' => Some((Pitch::DSharp, 0)),
+            't' => Some((Pitch::FSharp, 0)),
+            'y' => Some((Pitch::GSharp, 0)),
+            'u' => Some((Pitch::ASharp, 0)),
             _ => None,
         }
+    }
+
+    /// Enter a note at the current cursor position with an explicit octave.
+    /// Only works in Insert mode on the Note sub-column.
+    pub fn enter_note_with_octave(&mut self, pitch: Pitch, octave: u8) {
+        if self.mode != EditorMode::Insert {
+            return;
+        }
+        self.save_history();
+        let note = Note::new(pitch, octave, 100, self.current_instrument);
+        self.pattern.set_cell(
+            self.cursor_row,
+            self.cursor_channel,
+            Cell::with_note(NoteEvent::On(note)),
+        );
+        self.advance_row();
     }
 
     /// Clamp cursor positions to valid bounds (useful after pattern resize).
@@ -1253,23 +1261,28 @@ mod tests {
     }
 
     #[test]
-    fn test_char_to_pitch() {
-        // Lowercase = natural
-        assert_eq!(Editor::char_to_pitch('c'), Some(Pitch::C));
-        assert_eq!(Editor::char_to_pitch('g'), Some(Pitch::G));
-        assert_eq!(Editor::char_to_pitch('a'), Some(Pitch::A));
-        // Uppercase = sharp (where applicable)
-        assert_eq!(Editor::char_to_pitch('C'), Some(Pitch::CSharp));
-        assert_eq!(Editor::char_to_pitch('D'), Some(Pitch::DSharp));
-        assert_eq!(Editor::char_to_pitch('F'), Some(Pitch::FSharp));
-        assert_eq!(Editor::char_to_pitch('G'), Some(Pitch::GSharp));
-        assert_eq!(Editor::char_to_pitch('A'), Some(Pitch::ASharp));
-        // E and B have no common sharp, map to natural
-        assert_eq!(Editor::char_to_pitch('E'), Some(Pitch::E));
-        assert_eq!(Editor::char_to_pitch('B'), Some(Pitch::B));
-        // Non-note characters
-        assert_eq!(Editor::char_to_pitch('x'), None);
-        assert_eq!(Editor::char_to_pitch('1'), None);
+    fn test_piano_key_to_pitch() {
+        // Lower row — white keys
+        assert_eq!(Editor::piano_key_to_pitch('a'), Some((Pitch::C, 0)));
+        assert_eq!(Editor::piano_key_to_pitch('s'), Some((Pitch::D, 0)));
+        assert_eq!(Editor::piano_key_to_pitch('d'), Some((Pitch::E, 0)));
+        assert_eq!(Editor::piano_key_to_pitch('f'), Some((Pitch::F, 0)));
+        assert_eq!(Editor::piano_key_to_pitch('g'), Some((Pitch::G, 0)));
+        assert_eq!(Editor::piano_key_to_pitch('h'), Some((Pitch::A, 0)));
+        assert_eq!(Editor::piano_key_to_pitch('j'), Some((Pitch::B, 0)));
+        // k = C in next octave
+        assert_eq!(Editor::piano_key_to_pitch('k'), Some((Pitch::C, 1)));
+        // Upper row — black keys
+        assert_eq!(Editor::piano_key_to_pitch('w'), Some((Pitch::CSharp, 0)));
+        assert_eq!(Editor::piano_key_to_pitch('e'), Some((Pitch::DSharp, 0)));
+        assert_eq!(Editor::piano_key_to_pitch('t'), Some((Pitch::FSharp, 0)));
+        assert_eq!(Editor::piano_key_to_pitch('y'), Some((Pitch::GSharp, 0)));
+        assert_eq!(Editor::piano_key_to_pitch('u'), Some((Pitch::ASharp, 0)));
+        // Non-piano keys
+        assert_eq!(Editor::piano_key_to_pitch('c'), None);
+        assert_eq!(Editor::piano_key_to_pitch('b'), None);
+        assert_eq!(Editor::piano_key_to_pitch('x'), None);
+        assert_eq!(Editor::piano_key_to_pitch('1'), None);
     }
 
     // --- Delete/Clear Tests ---
