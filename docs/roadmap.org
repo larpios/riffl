@@ -167,6 +167,9 @@
   These are blocking for real composition use. Should be done before
   the Renoise-level instrument system.
 
+** TODO Better Keybindings for Entering Notes
+Follow other trackers' model, like /A/ for C, /W/ for C#. But don't blindly follow this model, research first
+
 ** TODO r — Replace-Once Mode
    Like vim's =r=: press =r=, type one note, cursor stays, mode stays Normal.
    No persistent insert, no step advance. Useful for fixing individual cells.
@@ -176,11 +179,11 @@
    Decouple play-start position from the edit cursor.
    Arrangement view needs the same: set playhead by moving cursor + Enter.
 
-** TODO Loop Region
-   Set loop start/end rows (=[= / =]= keys, or Ctrl+L).
-   Visual markers in the pattern row gutter.
-   Transport respects loop during playback; toggle with =Ctrl+L= or similar.
-   Per-pattern, not global.
+** DONE Loop Region
+   Set loop start/end rows (=Alt+[= / =Alt+]=).
+   Visual markers in the pattern row gutter: =[= start, =]= end, =¦= interior rows.
+   Transport wraps at loop end back to loop start during playback.
+   Toggle active with =Ctrl+Shift+L=. Footer shows =LOP HH-HH= pill when set.
 
 ** DONE Follow Mode
    Toggle =f= in Normal mode: edit cursor chases the playhead during playback.

@@ -449,6 +449,12 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         // Row number in hex (tracker convention)
         // Playback row is highlighted when playing OR paused (to show where playback is)
         let is_playback_row = is_playing_or_paused && row_idx == playback_row;
+        let loop_region = app.transport.loop_region();
+        let loop_active = app.transport.loop_region_active();
+        let is_loop_start = loop_region.is_some_and(|(s, _)| s == row_idx);
+        let is_loop_end = loop_region.is_some_and(|(_, e)| e == row_idx);
+        let is_in_loop = loop_active
+            && loop_region.is_some_and(|(s, e)| row_idx > s && row_idx < e);
         let (row_prefix, row_num_style) = if is_playback_row {
             (
                 "▶ ",
@@ -457,6 +463,18 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     .bg(theme.success_color())
                     .add_modifier(Modifier::BOLD),
             )
+        } else if is_loop_start && is_loop_end {
+            // Single-row loop region
+            let c = if loop_active { theme.warning_color() } else { theme.text_secondary };
+            ("◈ ", Style::default().fg(c).add_modifier(Modifier::BOLD))
+        } else if is_loop_start {
+            let c = if loop_active { theme.warning_color() } else { theme.text_secondary };
+            ("[ ", Style::default().fg(c).add_modifier(Modifier::BOLD))
+        } else if is_loop_end {
+            let c = if loop_active { theme.warning_color() } else { theme.text_secondary };
+            ("] ", Style::default().fg(c).add_modifier(Modifier::BOLD))
+        } else if is_in_loop {
+            ("¦ ", Style::default().fg(theme.warning_color()))
         } else if row_idx.is_multiple_of(16) {
             (
                 "│ ",
@@ -902,6 +920,8 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                         ("x", "del"),
                         ("y/p", "copy"),
                         ("[/]", "pat"),
+                        ("A-[/]", "loop"),
+                        ("^⇧L", "loop on/off"),
                         ("f", "follow"),
                         ("t", "tap bpm"),
                         ("^B", "set bpm"),
@@ -1003,6 +1023,31 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 Style::default()
                     .fg(Color::Black)
                     .bg(theme.success_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]);
+    }
+
+    // Loop region indicator
+    if let Some((loop_start, loop_end)) = app.transport.loop_region() {
+        let (label, bg) = if app.transport.loop_region_active() {
+            (
+                format!(" LOP {:02X}-{:02X} ", loop_start, loop_end),
+                theme.warning_color(),
+            )
+        } else {
+            (
+                format!(" lop {:02X}-{:02X} ", loop_start, loop_end),
+                theme.text_secondary,
+            )
+        };
+        footer_spans.extend([
+            Span::raw(" "),
+            Span::styled(
+                label,
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(bg)
                     .add_modifier(Modifier::BOLD),
             ),
         ]);

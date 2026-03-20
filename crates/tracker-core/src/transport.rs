@@ -62,6 +62,12 @@ pub struct Transport {
 
     /// Length of the arrangement sequence (set by App)
     arrangement_length: usize,
+
+    /// Loop region: (start_row, end_row) inclusive. None = no loop region set.
+    loop_region: Option<(usize, usize)>,
+
+    /// Whether the loop region is enforced during playback
+    loop_region_active: bool,
 }
 
 /// Minimum allowed BPM
@@ -84,6 +90,8 @@ impl Transport {
             tick_accumulator: 0.0,
             num_rows: 64,
             arrangement_length: 1,
+            loop_region: None,
+            loop_region_active: false,
         }
     }
 
@@ -111,6 +119,22 @@ impl Transport {
             }
 
             let next_row = self.current_row + 1;
+
+            // Loop region takes precedence: wrap at loop_end back to loop_start
+            if self.loop_region_active {
+                if let Some((loop_start, loop_end)) = self.loop_region {
+                    let loop_end = loop_end.min(self.num_rows.saturating_sub(1));
+                    let loop_start = loop_start.min(loop_end);
+                    if self.current_row >= loop_end {
+                        self.current_row = loop_start;
+                        return AdvanceResult::Row(loop_start);
+                    } else {
+                        self.current_row = next_row;
+                        return AdvanceResult::Row(next_row);
+                    }
+                }
+            }
+
             if next_row >= self.num_rows {
                 // End of current pattern — behavior depends on playback mode
                 match self.playback_mode {
@@ -284,6 +308,43 @@ impl Transport {
     /// Toggle loop mode
     pub fn toggle_loop(&mut self) {
         self.loop_enabled = !self.loop_enabled;
+    }
+
+    /// Set the loop region (start and end row, inclusive).
+    /// start is clamped to [0, num_rows-1] and end is clamped to [start, num_rows-1].
+    pub fn set_loop_region(&mut self, start: usize, end: usize) {
+        let start = start.min(self.num_rows.saturating_sub(1));
+        let end = end.clamp(start, self.num_rows.saturating_sub(1));
+        self.loop_region = Some((start, end));
+    }
+
+    /// Clear the loop region (deactivates loop region as a side effect)
+    pub fn clear_loop_region(&mut self) {
+        self.loop_region = None;
+        self.loop_region_active = false;
+    }
+
+    /// Get the loop region (start, end) if set
+    pub fn loop_region(&self) -> Option<(usize, usize)> {
+        self.loop_region
+    }
+
+    /// Whether the loop region is currently active (enforced during playback)
+    pub fn loop_region_active(&self) -> bool {
+        self.loop_region_active
+    }
+
+    /// Toggle whether the loop region is active.
+    /// Has no effect if no loop region is set.
+    pub fn toggle_loop_region_active(&mut self) {
+        if self.loop_region.is_some() {
+            self.loop_region_active = !self.loop_region_active;
+        }
+    }
+
+    /// Set loop region active state directly
+    pub fn set_loop_region_active(&mut self, active: bool) {
+        self.loop_region_active = active && self.loop_region.is_some();
     }
 
     /// Set the number of rows in the current pattern
@@ -930,5 +991,97 @@ mod tests {
         transport.play_from(32);
         assert!(transport.is_playing());
         assert_eq!(transport.current_row(), 32);
+    }
+
+    // --- Loop region tests ---
+
+    #[test]
+    fn test_loop_region_set_and_get() {
+        let mut transport = Transport::new();
+        transport.set_num_rows(16);
+        assert!(transport.loop_region().is_none());
+
+        transport.set_loop_region(4, 8);
+        assert_eq!(transport.loop_region(), Some((4, 8)));
+    }
+
+    #[test]
+    fn test_loop_region_clear() {
+        let mut transport = Transport::new();
+        transport.set_num_rows(16);
+        transport.set_loop_region(2, 6);
+        transport.set_loop_region_active(true);
+        transport.clear_loop_region();
+        assert!(transport.loop_region().is_none());
+        assert!(!transport.loop_region_active());
+    }
+
+    #[test]
+    fn test_loop_region_toggle_active_only_when_region_set() {
+        let mut transport = Transport::new();
+        transport.set_num_rows(16);
+        // No region set — toggle should be a no-op
+        transport.toggle_loop_region_active();
+        assert!(!transport.loop_region_active());
+
+        // Set region then toggle
+        transport.set_loop_region(0, 7);
+        transport.toggle_loop_region_active();
+        assert!(transport.loop_region_active());
+        transport.toggle_loop_region_active();
+        assert!(!transport.loop_region_active());
+    }
+
+    #[test]
+    fn test_loop_region_wraps_playback_at_end() {
+        let mut transport = Transport::new();
+        transport.set_bpm(120.0);
+        transport.set_num_rows(16);
+        transport.set_loop_region(2, 4);
+        transport.set_loop_region_active(true);
+        transport.play_from(2);
+
+        let spr = 0.125;
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(3));
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(4));
+        // At loop end (4), next advance should wrap back to loop start (2)
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(2));
+        assert!(transport.is_playing());
+        assert_eq!(transport.current_row(), 2);
+    }
+
+    #[test]
+    fn test_loop_region_inactive_does_not_affect_advance() {
+        let mut transport = Transport::new();
+        transport.set_bpm(120.0);
+        transport.set_num_rows(8);
+        transport.set_loop_region(2, 4);
+        // loop_region_active is false by default
+        transport.set_loop_enabled(true);
+        transport.play();
+
+        let spr = 0.125;
+        // Should advance normally past row 4, looping at num_rows
+        for _ in 0..7 {
+            transport.advance(spr);
+        }
+        assert_eq!(transport.current_row(), 7);
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(0)); // Normal pattern wrap
+    }
+
+    #[test]
+    fn test_loop_region_clamped_to_num_rows() {
+        let mut transport = Transport::new();
+        transport.set_num_rows(8);
+        transport.set_loop_region(3, 99); // end beyond num_rows
+        assert_eq!(transport.loop_region(), Some((3, 7))); // clamped to 7
+    }
+
+    #[test]
+    fn test_loop_region_start_after_end_swapped() {
+        let mut transport = Transport::new();
+        transport.set_num_rows(16);
+        transport.set_loop_region(10, 4); // start > end — end clamped up to start
+        assert_eq!(transport.loop_region(), Some((10, 10))); // both become start
     }
 }

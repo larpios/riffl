@@ -554,6 +554,11 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::OpenBpmPrompt => app.open_bpm_prompt(),
         Action::TapTempo => app.tap_tempo(),
 
+        // Loop region
+        Action::SetLoopStart => app.set_loop_start(),
+        Action::SetLoopEnd => app.set_loop_end(),
+        Action::ToggleLoopRegion => app.toggle_loop_region_active(),
+
         // View switching
         Action::SwitchView(view) => app.set_view(view),
 

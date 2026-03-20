@@ -757,6 +757,42 @@ impl App {
         self.transport.toggle_loop();
     }
 
+    /// Set the loop region start to the current cursor row.
+    /// If end is already set and is before the new start, it's updated to equal start.
+    /// Activates the loop region automatically once both start and end are set.
+    pub fn set_loop_start(&mut self) {
+        let row = self.editor.cursor_row();
+        let end = self
+            .transport
+            .loop_region()
+            .map(|(_, e)| e)
+            .unwrap_or(row);
+        let end = end.max(row);
+        self.transport.set_loop_region(row, end);
+        self.transport.set_loop_region_active(true);
+    }
+
+    /// Set the loop region end to the current cursor row.
+    /// If start is after the new end, the start is updated to equal end.
+    /// Activates the loop region automatically once both start and end are set.
+    pub fn set_loop_end(&mut self) {
+        let row = self.editor.cursor_row();
+        let start = self
+            .transport
+            .loop_region()
+            .map(|(s, _)| s)
+            .unwrap_or(row);
+        let start = start.min(row);
+        self.transport.set_loop_region(start, row);
+        self.transport.set_loop_region_active(true);
+    }
+
+    /// Toggle the loop region active state.
+    /// Has no effect if no loop region is set.
+    pub fn toggle_loop_region_active(&mut self) {
+        self.transport.toggle_loop_region_active();
+    }
+
     /// Toggle between pattern and song playback modes
     pub fn toggle_playback_mode(&mut self) {
         self.transport.toggle_playback_mode();
@@ -2433,5 +2469,69 @@ mod tests {
         let original_bpm = app.transport.bpm();
         app.tap_tempo(); // Only 1 valid tap after pruning → no BPM change
         assert_eq!(app.transport.bpm(), original_bpm);
+    }
+
+    // --- Loop region tests ---
+
+    #[test]
+    fn test_set_loop_start_sets_region_and_activates() {
+        let mut app = App::new();
+        app.editor.go_to_row(4);
+        app.set_loop_start();
+        let region = app.transport.loop_region();
+        assert!(region.is_some());
+        assert_eq!(region.unwrap().0, 4); // start = cursor row
+        assert!(app.transport.loop_region_active());
+    }
+
+    #[test]
+    fn test_set_loop_end_sets_region_and_activates() {
+        let mut app = App::new();
+        app.editor.go_to_row(8);
+        app.set_loop_end();
+        let region = app.transport.loop_region();
+        assert!(region.is_some());
+        assert_eq!(region.unwrap().1, 8); // end = cursor row
+        assert!(app.transport.loop_region_active());
+    }
+
+    #[test]
+    fn test_set_loop_start_then_end_gives_correct_region() {
+        let mut app = App::new();
+        app.editor.go_to_row(4);
+        app.set_loop_start();
+        app.editor.go_to_row(12);
+        app.set_loop_end();
+        assert_eq!(app.transport.loop_region(), Some((4, 12)));
+        assert!(app.transport.loop_region_active());
+    }
+
+    #[test]
+    fn test_set_loop_end_before_start_adjusts_start() {
+        let mut app = App::new();
+        app.editor.go_to_row(8);
+        app.set_loop_start();
+        // Move cursor before the start and set end there
+        app.editor.go_to_row(3);
+        app.set_loop_end();
+        let region = app.transport.loop_region();
+        assert!(region.is_some());
+        let (s, e) = region.unwrap();
+        assert!(s <= e); // region must be valid
+        assert_eq!(e, 3);
+    }
+
+    #[test]
+    fn test_toggle_loop_region_active() {
+        let mut app = App::new();
+        app.editor.go_to_row(0);
+        app.set_loop_start();
+        app.editor.go_to_row(7);
+        app.set_loop_end();
+        assert!(app.transport.loop_region_active()); // auto-activated
+        app.toggle_loop_region_active();
+        assert!(!app.transport.loop_region_active());
+        app.toggle_loop_region_active();
+        assert!(app.transport.loop_region_active());
     }
 }
