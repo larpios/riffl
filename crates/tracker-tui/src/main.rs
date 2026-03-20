@@ -296,7 +296,33 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         }
     }
 
-    // Chord handling for Normal mode (e.g. dd = delete row)
+    // Replace-once state: r was pressed, intercept the next key
+    if app.pending_replace {
+        app.pending_replace = false;
+        if app.editor.sub_column() == SubColumn::Note {
+            match key.code {
+                crossterm::event::KeyCode::Esc => {} // cancel silently
+                crossterm::event::KeyCode::Char('`') => {
+                    app.editor.replace_cell_note_off();
+                    app.mark_dirty();
+                }
+                crossterm::event::KeyCode::Char(c @ ('a'..='g' | 'A'..='G')) => {
+                    if let Some(pitch) = Editor::char_to_pitch(c) {
+                        let octave = app.editor.current_octave();
+                        app.editor.replace_once(pitch);
+                        app.mark_dirty();
+                        if app.current_view == AppView::PatternEditor {
+                            app.preview_note_pitch(pitch, octave);
+                        }
+                    }
+                }
+                _ => {} // any other key: cancel silently
+            }
+        }
+        return;
+    }
+
+    // Chord handling for Normal mode (e.g. dd = delete row, gg = go to top)
     if app.editor.mode() == EditorMode::Normal
         && key.modifiers == crossterm::event::KeyModifiers::NONE
     {
@@ -308,14 +334,22 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                         app.mark_dirty();
                         return;
                     }
+                    ('g', 'g') => {
+                        app.editor.go_to_row(0);
+                        return;
+                    }
                     _ => {
                         // Not a recognized chord — fall through with the new key
                     }
                 }
             }
-            // 'd' starts a chord; consume and wait for next key
+            // 'd' and 'g' start chords; consume and wait for next key
             if c == 'd' {
                 app.pending_key = Some('d');
+                return;
+            }
+            if c == 'g' {
+                app.pending_key = Some('g');
                 return;
             }
         } else {
@@ -420,7 +454,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::OctaveDown => app.editor.octave_down(),
 
         // Go to row (basic - jumps to row 0 for now, could be enhanced with input)
-        Action::GoToRow => app.editor.go_to_row(0),
+        Action::GoToRow => app.editor.go_to_row(usize::MAX),
 
         // Quantize
         Action::Quantize => {
@@ -564,7 +598,12 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             }
         }
         Action::RenameInstrument => {
-            if app.current_view == AppView::InstrumentList {
+            if app.current_view == AppView::PatternEditor
+                && app.editor.mode() == EditorMode::Normal
+                && app.editor.sub_column() == SubColumn::Note
+            {
+                app.pending_replace = true;
+            } else if app.current_view == AppView::InstrumentList {
                 app.open_modal(ui::modal::Modal::info(
                     "Rename Instrument".to_string(),
                     "Enter new name in the terminal.".to_string(),

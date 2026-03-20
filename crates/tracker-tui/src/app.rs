@@ -134,6 +134,9 @@ pub struct App {
     /// Pending first key of a two-key chord (e.g. 'd' waiting for 'dd')
     pub pending_key: Option<char>,
 
+    /// Whether r (replace-once) mode is pending: next note key replaces current cell without advancing cursor
+    pub pending_replace: bool,
+
     /// Whether the project has unsaved changes
     pub is_dirty: bool,
 
@@ -244,6 +247,7 @@ impl App {
             help_scroll: 0,
             last_update: Instant::now(),
             pending_key: None,
+            pending_replace: false,
             is_dirty: false,
             pending_quit: false,
             pending_sample_path: None,
