@@ -92,12 +92,19 @@ pub fn render(frame: &mut Frame, app: &App) {
                             &app.theme,
                             Some(idx),
                         );
+                        let sample = {
+                            let samples = app.loaded_samples();
+                            app.song.instruments[idx]
+                                .sample_index
+                                .and_then(|si| samples.get(si).cloned())
+                        };
                         instrument_editor::render_instrument_editor(
                             frame,
                             chunks[1],
                             &app.song.instruments[idx],
                             &app.inst_editor,
                             &app.theme,
+                            sample.as_deref(),
                         );
                     } else {
                         instrument_list::render_instrument_list(

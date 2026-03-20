@@ -14,6 +14,7 @@ use ratatui::{
     Frame,
 };
 
+use tracker_core::audio::sample::Sample;
 use tracker_core::song::Instrument;
 
 use crate::ui::theme::Theme;
@@ -138,14 +139,148 @@ impl InstrumentEditorState {
     }
 }
 
+/// Build a 2-row waveform visualization from sample data.
+///
+/// Each character cell uses `▀`, `▄`, or `█` to show positive and negative
+/// peak amplitudes within a time window. Returns two `Line`s (top row, bottom row).
+/// Loop start/end positions are marked with dim vertical-bar characters.
+fn build_waveform(sample: &Sample, width: usize, theme: &Theme) -> [Line<'static>; 2] {
+    let data = sample.data();
+    let channels = sample.channels() as usize;
+    let frame_count = sample.frame_count();
+
+    if frame_count == 0 || width == 0 || channels == 0 {
+        let dash = "─".repeat(width);
+        let s = Style::default().fg(theme.text_dimmed);
+        return [
+            Line::from(Span::styled(dash.clone(), s)),
+            Line::from(Span::styled(dash, s)),
+        ];
+    }
+
+    // Precompute per-column peak positive and peak negative amplitudes.
+    let mut peaks: Vec<(f32, f32)> = Vec::with_capacity(width);
+    for col in 0..width {
+        let start_frame = (col * frame_count) / width;
+        let end_frame = ((col + 1) * frame_count / width)
+            .max(start_frame + 1)
+            .min(frame_count);
+
+        let mut peak_pos: f32 = 0.0;
+        let mut peak_neg: f32 = 0.0;
+        for frame_idx in start_frame..end_frame {
+            // Use left channel only (index 0 of each interleaved frame).
+            let v = data[frame_idx * channels];
+            if v > peak_pos {
+                peak_pos = v;
+            }
+            if -v > peak_neg {
+                peak_neg = -v;
+            }
+        }
+        peaks.push((peak_pos, peak_neg));
+    }
+
+    // Loop marker column positions (if the sample has loop points).
+    let loop_start_col = if sample.loop_mode != tracker_core::audio::sample::LoopMode::NoLoop {
+        Some(sample.loop_start * width / frame_count.max(1))
+    } else {
+        None
+    };
+    let loop_end_col = if sample.loop_mode != tracker_core::audio::sample::LoopMode::NoLoop {
+        Some(sample.loop_end * width / frame_count.max(1))
+    } else {
+        None
+    };
+
+    let wf_style = Style::default().fg(theme.primary);
+    let loop_style = Style::default().fg(theme.text_secondary);
+    let center_style = Style::default().fg(theme.text_dimmed);
+
+    // Threshold below which we treat the signal as silence at that level.
+    const THRESH: f32 = 0.03;
+
+    let mut top_styles: Vec<(String, Style)> = Vec::new();
+    let mut bot_styles: Vec<(String, Style)> = Vec::new();
+
+    for col in 0..width {
+        let (peak_pos, peak_neg) = peaks[col];
+        let is_loop_marker = loop_start_col == Some(col) || loop_end_col == Some(col);
+
+        if is_loop_marker {
+            // Vertical bar for loop points overrides waveform.
+            top_styles.push(("│".to_string(), loop_style));
+            bot_styles.push(("│".to_string(), loop_style));
+            continue;
+        }
+
+        // Top row: upper half = positive peak > 0.5, lower half = positive peak > THRESH.
+        let top_upper = peak_pos > 0.5;
+        let top_lower = peak_pos > THRESH;
+        let top_ch = match (top_upper, top_lower) {
+            (true, _) => '█',
+            (false, true) => '▄',
+            _ => '─',
+        };
+        let top_style = if top_upper || top_lower {
+            wf_style
+        } else {
+            center_style
+        };
+
+        // Bottom row: upper half = negative peak > THRESH, lower half = negative peak > 0.5.
+        let bot_upper = peak_neg > THRESH;
+        let bot_lower = peak_neg > 0.5;
+        let bot_ch = match (bot_upper, bot_lower) {
+            (_, true) => '█',
+            (true, false) => '▀',
+            _ => '─',
+        };
+        let bot_style = if bot_upper || bot_lower {
+            wf_style
+        } else {
+            center_style
+        };
+
+        top_styles.push((top_ch.to_string(), top_style));
+        bot_styles.push((bot_ch.to_string(), bot_style));
+    }
+
+    // Coalesce consecutive runs of the same style for efficiency.
+    fn coalesce(parts: Vec<(String, Style)>) -> Line<'static> {
+        let mut spans: Vec<Span<'static>> = Vec::new();
+        let mut cur_text = String::new();
+        let mut cur_style = Style::default();
+        for (text, style) in parts {
+            if style == cur_style {
+                cur_text.push_str(&text);
+            } else {
+                if !cur_text.is_empty() {
+                    spans.push(Span::styled(cur_text.clone(), cur_style));
+                }
+                cur_text = text;
+                cur_style = style;
+            }
+        }
+        if !cur_text.is_empty() {
+            spans.push(Span::styled(cur_text, cur_style));
+        }
+        Line::from(spans)
+    }
+
+    [coalesce(top_styles), coalesce(bot_styles)]
+}
+
 /// Render the instrument editor panel for `instrument`.
 /// `area` is the panel's allocated rect.
+/// `sample` is the audio sample assigned to this instrument (if loaded).
 pub fn render_instrument_editor(
     frame: &mut Frame,
     area: ratatui::layout::Rect,
     instrument: &Instrument,
     state: &InstrumentEditorState,
     theme: &Theme,
+    sample: Option<&Sample>,
 ) {
     let title = format!(" Edit: {} ", instrument.name);
     let border_style = if state.focused {
@@ -188,9 +323,7 @@ pub fn render_instrument_editor(
     lines.push(Line::from(""));
 
     // ── Name ─────────────────────────────────────────────────────────
-    let name_value = if state.focused
-        && state.field == InstrumentField::Name
-        && state.text_editing
+    let name_value = if state.focused && state.field == InstrumentField::Name && state.text_editing
     {
         format!("{}▌", state.input_buffer)
     } else {
@@ -273,10 +406,7 @@ pub fn render_instrument_editor(
             label_style(InstrumentField::Finetune),
         ),
         Span::raw("  "),
-        Span::styled(
-            format!("{:+2}", ft),
-            field_style(InstrumentField::Finetune),
-        ),
+        Span::styled(format!("{:+2}", ft), field_style(InstrumentField::Finetune)),
         Span::raw("   "),
         Span::styled(
             format!("({:+.1} cents)", cents),
@@ -305,15 +435,45 @@ pub fn render_instrument_editor(
         Span::raw("  "),
         Span::styled(sample_str, Style::default().fg(theme.text_dimmed)),
         Span::raw("   "),
-        Span::styled(
-            "Ctrl+F: assign",
-            Style::default().fg(theme.text_dimmed),
-        ),
+        Span::styled("Ctrl+F: assign", Style::default().fg(theme.text_dimmed)),
     ]));
+
+    // ── Waveform ──────────────────────────────────────────────────────
+    // Show a 2-row waveform if we have sample data and enough space.
+    // We need at least 4 more rows: 1 blank + 1 header + 2 waveform rows.
+    let content_lines_before_waveform = lines.len();
+    let visible = inner.height as usize;
+    let waveform_rows = 4; // blank + label + top + bottom
+    let hints_rows = 2; // blank + hints line
+    let has_waveform_space = visible >= content_lines_before_waveform + waveform_rows + hints_rows;
+
+    if let Some(s) = sample.filter(|s| !s.is_empty() && has_waveform_space) {
+        lines.push(Line::from(""));
+
+        // Duration label, e.g. "0.42s · 44100Hz · mono"
+        let ch_str = if s.channels() == 1 { "mono" } else { "stereo" };
+        let dur_str = format!("{:.2}s · {}Hz · {}", s.duration(), s.sample_rate(), ch_str,);
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled("Waveform  ", Style::default().fg(theme.text_secondary)),
+            Span::styled(dur_str, Style::default().fg(theme.text_dimmed)),
+        ]));
+
+        // Waveform area width = inner width minus 2-char left indent.
+        let wf_width = (inner.width as usize).saturating_sub(2);
+        let [top_row, bot_row] = build_waveform(s, wf_width, theme);
+
+        let mut top_spans = vec![Span::raw("  ")];
+        top_spans.extend(top_row.spans);
+        lines.push(Line::from(top_spans));
+
+        let mut bot_spans = vec![Span::raw("  ")];
+        bot_spans.extend(bot_row.spans);
+        lines.push(Line::from(bot_spans));
+    }
 
     // Pad and show key hints at the bottom
     let content_lines = lines.len();
-    let visible = inner.height as usize;
     for _ in content_lines..visible.saturating_sub(2) {
         lines.push(Line::from(""));
     }
@@ -383,8 +543,61 @@ mod tests {
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         terminal
             .draw(|frame| {
-                render_instrument_editor(frame, frame.area(), &inst, &state, &theme);
+                render_instrument_editor(frame, frame.area(), &inst, &state, &theme, None);
             })
             .unwrap();
+    }
+
+    #[test]
+    fn test_render_with_sample_no_panic() {
+        use tracker_core::audio::sample::Sample;
+
+        let inst = make_inst();
+        let state = InstrumentEditorState::default();
+        let theme = Theme::default();
+
+        // Sine wave — gives non-trivial waveform with positive and negative peaks.
+        let data: Vec<f32> = (0..4410)
+            .map(|i| (i as f32 * std::f32::consts::TAU * 440.0 / 44100.0).sin())
+            .collect();
+        let sample = Sample::new(data, 44100, 1, Some("sine".to_string()));
+
+        let backend = ratatui::backend::TestBackend::new(80, 40);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| {
+                render_instrument_editor(frame, frame.area(), &inst, &state, &theme, Some(&sample));
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_build_waveform_empty_sample() {
+        use tracker_core::audio::sample::Sample;
+        let theme = Theme::default();
+        let sample = Sample::default();
+        let [top, bot] = build_waveform(&sample, 40, &theme);
+        // Should return dash lines for empty sample.
+        assert!(!top.spans.is_empty());
+        assert!(!bot.spans.is_empty());
+    }
+
+    #[test]
+    fn test_build_waveform_sine() {
+        use tracker_core::audio::sample::Sample;
+        let theme = Theme::default();
+        let data: Vec<f32> = (0..4410)
+            .map(|i| (i as f32 * std::f32::consts::TAU * 440.0 / 44100.0).sin())
+            .collect();
+        let sample = Sample::new(data, 44100, 1, None);
+        let [top, bot] = build_waveform(&sample, 60, &theme);
+        // Both rows must be non-empty and contain waveform content.
+        let top_text: String = top.spans.iter().map(|s| s.content.as_ref()).collect();
+        let bot_text: String = bot.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(top_text.chars().count(), 60);
+        assert_eq!(bot_text.chars().count(), 60);
+        // A sine wave has both positive and negative peaks — should see █ in both rows.
+        assert!(top_text.contains('█') || top_text.contains('▄'));
+        assert!(bot_text.contains('█') || bot_text.contains('▀'));
     }
 }
