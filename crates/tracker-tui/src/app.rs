@@ -762,11 +762,7 @@ impl App {
     /// Activates the loop region automatically once both start and end are set.
     pub fn set_loop_start(&mut self) {
         let row = self.editor.cursor_row();
-        let end = self
-            .transport
-            .loop_region()
-            .map(|(_, e)| e)
-            .unwrap_or(row);
+        let end = self.transport.loop_region().map(|(_, e)| e).unwrap_or(row);
         let end = end.max(row);
         self.transport.set_loop_region(row, end);
         self.transport.set_loop_region_active(true);
@@ -777,11 +773,7 @@ impl App {
     /// Activates the loop region automatically once both start and end are set.
     pub fn set_loop_end(&mut self) {
         let row = self.editor.cursor_row();
-        let start = self
-            .transport
-            .loop_region()
-            .map(|(s, _)| s)
-            .unwrap_or(row);
+        let start = self.transport.loop_region().map(|(s, _)| s).unwrap_or(row);
         let start = start.min(row);
         self.transport.set_loop_region(start, row);
         self.transport.set_loop_region_active(true);
@@ -2447,9 +2439,11 @@ mod tests {
         // Manually insert two taps 0.5s apart (= 120 BPM)
         let base = Instant::now();
         app.tap_times.push(base);
-        app.tap_times.push(base + std::time::Duration::from_millis(500));
+        app.tap_times
+            .push(base + std::time::Duration::from_millis(500));
         // Simulate a third tap 0.5s after the last one
-        app.tap_times.push(base + std::time::Duration::from_millis(1000));
+        app.tap_times
+            .push(base + std::time::Duration::from_millis(1000));
         // Compute expected BPM: avg interval = 0.5s → 120 BPM
         let intervals = [0.5f64, 0.5];
         let avg = intervals.iter().sum::<f64>() / intervals.len() as f64;
