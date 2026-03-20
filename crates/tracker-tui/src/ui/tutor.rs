@@ -76,8 +76,14 @@ fn effect_row(cmd: &str, param: &str, name: &str, desc: &str, theme: &Theme) -> 
                 .fg(theme.warning_color())
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(format!("{:<8}", param), Style::default().fg(theme.success_color())),
-        Span::styled(format!("{:<14}", name), Style::default().fg(theme.text).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            format!("{:<12}", param),
+            Style::default().fg(theme.success_color()),
+        ),
+        Span::styled(
+            format!("{:<14}", name),
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
+        ),
         Span::styled(desc.to_string(), Style::default().fg(theme.text_dimmed)),
     ])
 }
@@ -113,35 +119,71 @@ fn tutor_content(theme: &Theme) -> Vec<Line<'static>> {
     lines.push(blank());
     lines.push(section("WELCOME TO RIFFL", theme));
     lines.push(blank());
-    lines.push(text("Riffl is a Rust-based music tracker inspired by FastTracker 2, Impulse Tracker,", theme));
-    lines.push(text("and modern live-coding tools. It uses a grid-based pattern editor where rows", theme));
-    lines.push(text("are steps in time and columns are tracks (channels).", theme));
+    lines.push(text(
+        "Riffl is a Rust-based music tracker inspired by FastTracker 2, Impulse Tracker,",
+        theme,
+    ));
+    lines.push(text(
+        "and modern live-coding tools. It uses a grid-based pattern editor where rows",
+        theme,
+    ));
+    lines.push(text(
+        "are steps in time and columns are tracks (channels).",
+        theme,
+    ));
     lines.push(blank());
-    lines.push(text("Each cell can hold: a Note, an Instrument number, a Volume, and an Effect.", theme));
-    lines.push(text("Type  :tutor  at any time to return here.  Press q or Esc to close.", theme));
+    lines.push(text(
+        "Each cell can hold: a Note, an Instrument number, a Volume, and an Effect.",
+        theme,
+    ));
+    lines.push(text(
+        "Type  :tutor  at any time to return here.  Press q or Esc to close.",
+        theme,
+    ));
     lines.push(blank());
 
     // ── Modes ────────────────────────────────────────────────────────────────
     lines.push(section("MODES", theme));
     lines.push(blank());
     lines.push(subsection("Normal mode  (default)", theme));
-    lines.push(text("Navigate the pattern with h/j/k/l or arrow keys. Execute commands with :", theme));
-    lines.push(text("Press i to enter Insert mode, v to enter Visual mode.", theme));
+    lines.push(text(
+        "Navigate the pattern with h/j/k/l or arrow keys. Execute commands with :",
+        theme,
+    ));
+    lines.push(text(
+        "Press i to enter Insert mode, v to enter Visual mode.",
+        theme,
+    ));
     lines.push(blank());
     lines.push(subsection("Insert mode  (i)", theme));
-    lines.push(text("Type notes using the piano keyboard layout (see NOTE ENTRY below).", theme));
-    lines.push(text("Type hex digits to fill instrument, volume, and effect columns.", theme));
+    lines.push(text(
+        "Type notes using the piano keyboard layout (see NOTE ENTRY below).",
+        theme,
+    ));
+    lines.push(text(
+        "Type hex digits to fill instrument, volume, and effect columns.",
+        theme,
+    ));
     lines.push(text("Press Esc to return to Normal mode.", theme));
     lines.push(blank());
     lines.push(subsection("Visual mode  (v)", theme));
-    lines.push(text("Extend a selection with h/j/k/l, then copy/paste/delete the selection.", theme));
+    lines.push(text(
+        "Extend a selection with h/j/k/l, then copy/paste/delete the selection.",
+        theme,
+    ));
     lines.push(text("Press Esc to return to Normal mode.", theme));
     lines.push(blank());
 
     // ── Note entry ───────────────────────────────────────────────────────────
-    lines.push(section("NOTE ENTRY  (Insert mode — piano keyboard layout)", theme));
+    lines.push(section(
+        "NOTE ENTRY  (Insert mode — piano keyboard layout)",
+        theme,
+    ));
     lines.push(blank());
-    lines.push(text("The keyboard maps to piano keys.  Bottom row = white keys, top row = black.", theme));
+    lines.push(text(
+        "The keyboard maps to piano keys.  Bottom row = white keys, top row = black.",
+        theme,
+    ));
     lines.push(blank());
     lines.push(text("  Top row (black keys):", theme));
     lines.push(blank());
@@ -170,54 +212,174 @@ fn tutor_content(theme: &Theme) -> Vec<Line<'static>> {
     lines.push(key("{ / }", "Decrease / increase step size", theme));
     lines.push(key(":step N", "Set step size to N rows (0–8)", theme));
     lines.push(blank());
-    lines.push(text("  Octave is shown in the status bar. Adjust it before entering notes.", theme));
+    lines.push(text(
+        "  Octave is shown in the status bar. Adjust it before entering notes.",
+        theme,
+    ));
     lines.push(blank());
 
     // ── Pattern columns ──────────────────────────────────────────────────────
     lines.push(section("PATTERN COLUMNS", theme));
     lines.push(blank());
-    lines.push(text("Each cell in the pattern grid has four sub-columns:", theme));
+    lines.push(text(
+        "Each cell in the pattern grid has four sub-columns:",
+        theme,
+    ));
     lines.push(blank());
     lines.push(key("NOTE", "e.g. C-4  D#5  ===  ^^^", theme));
-    lines.push(key("INST  (2 hex digits)", "Instrument number 00–FF", theme));
-    lines.push(key("VOL   (2 hex digits)", "Volume override 00–40 (40 = full)", theme));
-    lines.push(key("EFF   (1 + 2 hex)", "Effect command + parameter", theme));
+    lines.push(key(
+        "INST  (2 hex digits)",
+        "Instrument number 00–FF",
+        theme,
+    ));
+    lines.push(key(
+        "VOL   (2 hex digits)",
+        "Volume override 00–40 (40 = full)",
+        theme,
+    ));
+    lines.push(key(
+        "EFF   (1 + 2 hex)",
+        "Effect command + parameter",
+        theme,
+    ));
     lines.push(blank());
-    lines.push(text("Navigate sub-columns with h / l (left/right within a cell).", theme));
-    lines.push(text("Navigate tracks (channels) with Tab / Shift+Tab.", theme));
+    lines.push(text(
+        "Navigate sub-columns with h / l (left/right within a cell).",
+        theme,
+    ));
+    lines.push(text(
+        "Navigate tracks (channels) with Tab / Shift+Tab.",
+        theme,
+    ));
     lines.push(blank());
 
     // ── Effect table ─────────────────────────────────────────────────────────
     lines.push(section("EFFECT TABLE", theme));
     lines.push(blank());
-    lines.push(text("Effects are entered in the last sub-column of each cell.", theme));
-    lines.push(text("Format: Cxx  where C = command nibble (0–F), xx = parameter byte.", theme));
+    lines.push(text(
+        "Effects are entered in the last sub-column of each cell.",
+        theme,
+    ));
+    lines.push(text(
+        "Format: Cxx  where C = command nibble (0–F), xx = parameter byte.",
+        theme,
+    ));
     lines.push(blank());
-    lines.push(Line::from(vec![
-        Span::styled(
-            "    CMD   PARAM   NAME          DESCRIPTION",
-            Style::default().fg(theme.text_dimmed).add_modifier(Modifier::BOLD),
-        ),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        "    CMD   PARAM   NAME          DESCRIPTION",
+        Style::default()
+            .fg(theme.text_dimmed)
+            .add_modifier(Modifier::BOLD),
+    )]));
     lines.push(Line::from(Span::styled(
         "    ─────────────────────────────────────────────────────────────────────",
         Style::default().fg(theme.text_dimmed),
     )));
-    lines.push(effect_row("0xy", "x,y", "Arpeggio", "Cycle base note → +x semitones → +y semitones per tick", theme));
-    lines.push(effect_row("1xx", "speed", "Pitch Up", "Slide pitch up by xx units per row", theme));
-    lines.push(effect_row("2xx", "speed", "Pitch Down", "Slide pitch down by xx units per row", theme));
-    lines.push(effect_row("3xx", "speed", "Portamento", "Slide smoothly to the new note at speed xx", theme));
-    lines.push(effect_row("4xy", "x=spd,y=dep", "Vibrato", "Oscillate pitch — speed x, depth y", theme));
-    lines.push(effect_row("5xy", "x=up,y=dn", "Porta+VolSlide", "Portamento-to-note + volume slide simultaneously", theme));
-    lines.push(effect_row("6xy", "x=up,y=dn", "Vib+VolSlide", "Vibrato + volume slide simultaneously", theme));
-    lines.push(effect_row("7xy", "x=spd,y=dep", "Tremolo", "Oscillate amplitude — speed x, depth y", theme));
-    lines.push(effect_row("9xx", "offset", "Sample Offset", "Start sample playback at xx × 256 samples", theme));
-    lines.push(effect_row("Axy", "x=up,y=dn", "Volume Slide", "Raise volume by x or lower by y each tick", theme));
-    lines.push(effect_row("Bxx", "pos", "Position Jump", "Jump to arrangement position xx", theme));
-    lines.push(effect_row("Cxx", "vol", "Set Volume", "Set channel volume to xx (00–40)", theme));
-    lines.push(effect_row("Dxx", "row", "Pattern Break", "Jump to row xx of the next pattern", theme));
-    lines.push(effect_row("Exy", "x=cmd,y=val", "Extended", "Sub-commands: E1y=fine up, E2y=fine down, ECy=note cut at tick y, EBy=loop", theme));
-    lines.push(effect_row("Fxx", "val", "Set Speed/BPM", "xx < 20: set ticks-per-row (speed);  xx ≥ 20: set BPM", theme));
+    lines.push(effect_row(
+        "0xy",
+        "x,y",
+        "Arpeggio",
+        "Cycle base note → +x semitones → +y semitones per tick",
+        theme,
+    ));
+    lines.push(effect_row(
+        "1xx",
+        "speed",
+        "Pitch Up",
+        "Slide pitch up by xx units per row",
+        theme,
+    ));
+    lines.push(effect_row(
+        "2xx",
+        "speed",
+        "Pitch Down",
+        "Slide pitch down by xx units per row",
+        theme,
+    ));
+    lines.push(effect_row(
+        "3xx",
+        "speed",
+        "Portamento",
+        "Slide smoothly to the new note at speed xx",
+        theme,
+    ));
+    lines.push(effect_row(
+        "4xy",
+        "x=spd,y=dep",
+        "Vibrato",
+        "Oscillate pitch — speed x, depth y",
+        theme,
+    ));
+    lines.push(effect_row(
+        "5xy",
+        "x=up,y=dn",
+        "Porta+VolSlide",
+        "Portamento-to-note + volume slide simultaneously",
+        theme,
+    ));
+    lines.push(effect_row(
+        "6xy",
+        "x=up,y=dn",
+        "Vib+VolSlide",
+        "Vibrato + volume slide simultaneously",
+        theme,
+    ));
+    lines.push(effect_row(
+        "7xy",
+        "x=spd,y=dep",
+        "Tremolo",
+        "Oscillate amplitude — speed x, depth y",
+        theme,
+    ));
+    lines.push(effect_row(
+        "9xx",
+        "offset",
+        "Sample Offset",
+        "Start sample playback at xx × 256 samples",
+        theme,
+    ));
+    lines.push(effect_row(
+        "Axy",
+        "x=up,y=dn",
+        "Volume Slide",
+        "Raise volume by x or lower by y each tick",
+        theme,
+    ));
+    lines.push(effect_row(
+        "Bxx",
+        "pos",
+        "Position Jump",
+        "Jump to arrangement position xx",
+        theme,
+    ));
+    lines.push(effect_row(
+        "Cxx",
+        "vol",
+        "Set Volume",
+        "Set channel volume to xx (00–40)",
+        theme,
+    ));
+    lines.push(effect_row(
+        "Dxx",
+        "row",
+        "Pattern Break",
+        "Jump to row xx of the next pattern",
+        theme,
+    ));
+    lines.push(effect_row(
+        "Exy",
+        "x=cmd,y=val",
+        "Extended",
+        "Sub-commands: E1y=fine up, E2y=fine down, ECy=note cut at tick y, EBy=loop",
+        theme,
+    ));
+    lines.push(effect_row(
+        "Fxx",
+        "val",
+        "Set Speed/BPM",
+        "xx < 20: set ticks-per-row (speed);  xx ≥ 20: set BPM",
+        theme,
+    ));
     lines.push(blank());
 
     // ── Commands ─────────────────────────────────────────────────────────────
@@ -244,7 +406,11 @@ fn tutor_content(theme: &Theme) -> Vec<Line<'static>> {
     lines.push(key("gg  (chord)", "Go to row 0", theme));
     lines.push(key("( )", "Octave down / up", theme));
     lines.push(key("1 – 6", "Switch view (1=Pattern, 2=Arrange, …)", theme));
-    lines.push(key("Ctrl+\\", "Toggle split-view (pattern + code editor)", theme));
+    lines.push(key(
+        "Ctrl+\\",
+        "Toggle split-view (pattern + code editor)",
+        theme,
+    ));
     lines.push(blank());
 
     // ── Editing ──────────────────────────────────────────────────────────────
@@ -255,10 +421,22 @@ fn tutor_content(theme: &Theme) -> Vec<Line<'static>> {
     lines.push(key("dd  (chord)", "Delete current row", theme));
     lines.push(key("u  /  Ctrl+R", "Undo / Redo", theme));
     lines.push(key("y  /  p", "Copy / Paste cell", theme));
-    lines.push(key("Ctrl+C  /  Ctrl+V", "Copy / Paste (alternative)", theme));
+    lines.push(key(
+        "Ctrl+C  /  Ctrl+V",
+        "Copy / Paste (alternative)",
+        theme,
+    ));
     lines.push(key("Ctrl+X", "Cut cell", theme));
-    lines.push(key("Shift+Up/Down", "Transpose selection +/- semitone", theme));
-    lines.push(key("Ctrl+Shift+Up/Down", "Transpose selection +/- octave", theme));
+    lines.push(key(
+        "Shift+Up/Down",
+        "Transpose selection +/- semitone",
+        theme,
+    ));
+    lines.push(key(
+        "Ctrl+Shift+Up/Down",
+        "Transpose selection +/- octave",
+        theme,
+    ));
     lines.push(blank());
 
     // ── Tracks ───────────────────────────────────────────────────────────────
@@ -279,13 +457,21 @@ fn tutor_content(theme: &Theme) -> Vec<Line<'static>> {
     lines.push(key("Enter  (when stopped)", "Play from cursor row", theme));
     lines.push(key("=  /  -", "BPM +1 / -1", theme));
     lines.push(key("Ctrl+B", "BPM inline prompt", theme));
-    lines.push(key("t  (Normal mode)", "Tap tempo (≥2 taps average)", theme));
+    lines.push(key(
+        "t  (Normal mode)",
+        "Tap tempo (≥2 taps average)",
+        theme,
+    ));
     lines.push(key("[  /  ]", "Previous / next pattern", theme));
     lines.push(key("Shift+P", "Toggle Pattern / Song playback mode", theme));
-    lines.push(key("f", "Toggle follow mode (cursor tracks playhead)", theme));
+    lines.push(key(
+        "f",
+        "Toggle follow mode (cursor tracks playhead)",
+        theme,
+    ));
     lines.push(key("Alt+[", "Set loop start at cursor row", theme));
     lines.push(key("Alt+]", "Set loop end at cursor row", theme));
-    lines.push(key("Shift+L", "Toggle loop region on / off", theme));
+    lines.push(key("Ctrl+Shift+L", "Toggle loop region on / off", theme));
     lines.push(blank());
 
     // ── Views ────────────────────────────────────────────────────────────────
@@ -329,11 +515,18 @@ fn tutor_content(theme: &Theme) -> Vec<Line<'static>> {
     // ── Live / Script ────────────────────────────────────────────────────────
     lines.push(section("LIVE / SCRIPT", theme));
     lines.push(blank());
-    lines.push(key("Ctrl+L", "Toggle live mode (scripts re-run each loop)", theme));
+    lines.push(key(
+        "Ctrl+L",
+        "Toggle live mode (scripts re-run each loop)",
+        theme,
+    ));
     lines.push(key("Ctrl+Enter", "Execute current script", theme));
     lines.push(key("Ctrl+T", "Open script templates", theme));
     lines.push(blank());
-    lines.push(text("Live mode is shown as  LIVE  in the header bar.", theme));
+    lines.push(text(
+        "Live mode is shown as  LIVE  in the header bar.",
+        theme,
+    ));
     lines.push(blank());
 
     lines
