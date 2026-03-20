@@ -209,7 +209,7 @@ pub fn render_modal(frame: &mut Frame, area: Rect, modal: &Modal, theme: &Theme)
         .border_style(Style::default().fg(modal.border_color(theme)))
         .title(format!(" {} ", modal.title))
         .title_alignment(Alignment::Center)
-        .style(Style::default().bg(Color::Black));
+        .style(Style::default().bg(theme.bg_surface));
 
     // Calculate inner area for content
     let inner_area = block.inner(modal_area);

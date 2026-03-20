@@ -68,6 +68,12 @@ pub struct Theme {
     pub status_warning: Color,
     pub status_error: Color,
     pub status_info: Color,
+
+    // Pattern grid cell sub-column colors
+    pub note_color: Color,
+    pub inst_color: Color,
+    pub vol_color: Color,
+    pub eff_color: Color,
 }
 
 impl Theme {
@@ -107,6 +113,11 @@ impl Theme {
             status_warning: Color::Yellow,
             status_error: Color::Red,
             status_info: Color::Cyan,
+
+            note_color: Color::Cyan,
+            inst_color: Color::Yellow,
+            vol_color: Color::Magenta,
+            eff_color: Color::LightYellow,
         }
     }
 
@@ -156,6 +167,11 @@ impl Theme {
             status_warning: yellow,
             status_error: red,
             status_info: teal,
+
+            note_color: blue,
+            inst_color: yellow,
+            vol_color: mauve,
+            eff_color: peach,
         }
     }
 
@@ -201,6 +217,11 @@ impl Theme {
             status_warning: aurora_yellow,
             status_error: aurora_red,
             status_info: frost0,
+
+            note_color: frost1,
+            inst_color: aurora_yellow,
+            vol_color: aurora_orange,
+            eff_color: aurora_green,
         }
     }
 
@@ -360,6 +381,23 @@ mod tests {
         let t = Theme::nord();
         assert!(matches!(t.bg, Color::Rgb(_, _, _)));
         assert!(matches!(t.primary, Color::Rgb(_, _, _)));
+    }
+
+    #[test]
+    fn test_theme_has_cell_colors() {
+        for t in [Theme::dark(), Theme::catppuccin_mocha(), Theme::nord()] {
+            let _ = t.note_color;
+            let _ = t.inst_color;
+            let _ = t.vol_color;
+            let _ = t.eff_color;
+        }
+    }
+
+    #[test]
+    fn test_dark_theme_cell_colors() {
+        let t = Theme::dark();
+        assert_eq!(t.inst_color, Color::Yellow);
+        assert_eq!(t.vol_color, Color::Magenta);
     }
 
     #[test]

@@ -201,7 +201,7 @@ pub fn render_export_dialog(
         .border_style(Style::default().fg(border_color))
         .title(title)
         .title_alignment(Alignment::Center)
-        .style(Style::default().bg(Color::Black));
+        .style(Style::default().bg(theme.bg_surface));
 
     let inner_area = block.inner(dialog_area);
     frame.render_widget(block, dialog_area);
