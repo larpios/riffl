@@ -349,10 +349,11 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let is_playing_or_paused = app.transport.is_playing() || app.transport.is_paused();
     let playback_row = app.transport.current_row();
 
+    let pat_idx = app.transport.arrangement_position();
     let content_block = Block::default()
         .borders(Borders::ALL)
         .border_style(theme.border_style())
-        .title(" Pattern Editor ")
+        .title(format!(" Pattern {:02} ", pat_idx))
         .title_alignment(Alignment::Left);
 
     let inner = content_block.inner(area);
@@ -484,7 +485,7 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             let is_track_inaudible = !pattern.is_channel_audible(ch);
 
             let separator_style = if is_playback_row {
-                Style::default().fg(Color::Black).bg(Color::Green)
+                Style::default().fg(theme.cursor_fg).bg(theme.success_color())
             } else {
                 Style::default().fg(theme.text_dimmed)
             };
@@ -551,8 +552,8 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 let override_style = if is_cursor && is_playback_row {
                     Some(
                         Style::default()
-                            .fg(Color::Black)
-                            .bg(Color::LightGreen)
+                            .fg(theme.cursor_fg)
+                            .bg(theme.success_color())
                             .add_modifier(Modifier::BOLD),
                     )
                 } else if is_visual_selected {
@@ -560,8 +561,8 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 } else if is_playback_row {
                     Some(
                         Style::default()
-                            .fg(Color::Black)
-                            .bg(Color::Green)
+                            .fg(theme.cursor_fg)
+                            .bg(theme.success_color())
                             .add_modifier(Modifier::BOLD),
                     )
                 } else if is_track_muted || (any_soloed && is_track_inaudible) {
@@ -593,17 +594,17 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                         dimmed
                     };
                     let inst_style = if has_inst {
-                        Style::default().fg(Color::Yellow)
+                        Style::default().fg(theme.inst_color)
                     } else {
                         dimmed
                     };
                     let vol_style = if has_vol {
-                        Style::default().fg(Color::Magenta)
+                        Style::default().fg(theme.vol_color)
                     } else {
                         dimmed
                     };
                     let eff_style = if has_effect {
-                        Style::default().fg(theme.warning_color())
+                        Style::default().fg(theme.eff_color)
                     } else {
                         dimmed
                     };
@@ -617,7 +618,7 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 }
             }
             let trailing_style = if is_playback_row {
-                Style::default().bg(Color::Green)
+                Style::default().bg(theme.success_color())
             } else {
                 Style::default()
             };
@@ -842,7 +843,10 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
     let key_style = Style::default().fg(theme.success_color());
     // When code editor is active, show its mode; otherwise show pattern editor mode.
-    let (mode_label, mode_bg) = if app.is_code_editor_active() {
+    // pending_replace overrides to show REPLACE mode pill.
+    let (mode_label, mode_bg) = if app.pending_replace {
+        ("REPLACE", theme.cursor_normal_bg)
+    } else if app.is_code_editor_active() {
         if app.code_editor.insert_mode {
             ("INSERT", theme.warning_color())
         } else {
@@ -868,7 +872,40 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         // No pattern-editor context in code editor mode
     } else {
         match mode {
-            EditorMode::Normal => {}
+            EditorMode::Normal => {
+                let hints: &[(&str, &str)] = match app.current_view {
+                    AppView::PatternEditor => &[
+                        ("Space", "play"),
+                        ("i", "insert"),
+                        ("v", "select"),
+                        ("x", "del"),
+                        ("y/p", "copy"),
+                        ("[/]", "pat"),
+                    ],
+                    AppView::InstrumentList => &[
+                        ("j/k", "nav"),
+                        ("Enter", "edit"),
+                        ("n", "new"),
+                        ("d", "del"),
+                    ],
+                    AppView::SampleBrowser => &[
+                        ("j/k", "nav"),
+                        ("Space", "preview"),
+                        ("l", "enter"),
+                        ("h", "up"),
+                    ],
+                    AppView::PatternList => &[
+                        ("j/k", "nav"),
+                        ("Enter", "load"),
+                        ("c", "clone"),
+                    ],
+                    _ => &[],
+                };
+                for (k, desc) in hints {
+                    footer_spans.push(Span::styled(*k, key_style));
+                    footer_spans.push(Span::raw(format!(":{} ", desc)));
+                }
+            }
             EditorMode::Insert => {
                 footer_spans.push(Span::styled(
                     format!("Oct:{}", app.editor.current_octave()),
@@ -1308,7 +1345,10 @@ fn render_command_completions(frame: &mut Frame, footer_area: ratatui::layout::R
 }
 
 /// Which-key descriptions for pending chords.
-const WHICH_KEY_ENTRIES: &[(&str, &str, &str)] = &[("d", "d", "delete row")];
+const WHICH_KEY_ENTRIES: &[(&str, &str, &str)] = &[
+    ("d", "d", "dd  delete row"),
+    ("g", "g", "gg  go to top"),
+];
 
 /// Render a which-key popup showing completions for the current pending key.
 fn render_which_key(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {

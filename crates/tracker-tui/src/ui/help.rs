@@ -26,7 +26,8 @@ pub fn render_help(frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.info_color()))
         .title(title)
-        .title_alignment(Alignment::Center);
+        .title_alignment(Alignment::Center)
+        .style(Style::default().bg(theme.bg_surface));
 
     let inner = block.inner(help_area);
     frame.render_widget(block, help_area);
@@ -37,12 +38,17 @@ pub fn render_help(frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(inner);
 
+    let col_style = Style::default().fg(theme.text).bg(theme.bg_surface);
     frame.render_widget(
-        Paragraph::new(left_column(theme)).scroll((scroll, 0)),
+        Paragraph::new(left_column(theme))
+            .scroll((scroll, 0))
+            .style(col_style),
         cols[0],
     );
     frame.render_widget(
-        Paragraph::new(right_column(theme)).scroll((scroll, 0)),
+        Paragraph::new(right_column(theme))
+            .scroll((scroll, 0))
+            .style(col_style),
         cols[1],
     );
 }
