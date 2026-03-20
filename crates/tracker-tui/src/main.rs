@@ -223,6 +223,39 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    // If tutor view is open, handle navigation and close
+    if app.show_tutor {
+        let max_scroll = {
+            let content = ui::tutor::content_line_count();
+            let term_rows = crossterm::terminal::size().map(|(_, h)| h).unwrap_or(24);
+            let visible = ((term_rows as u32 * 92 / 100) as u16).saturating_sub(2);
+            content.saturating_sub(visible)
+        };
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                app.show_tutor = false;
+                app.tutor_scroll = 0;
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                app.tutor_scroll = app.tutor_scroll.saturating_add(1).min(max_scroll);
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                app.tutor_scroll = app.tutor_scroll.saturating_sub(1);
+            }
+            KeyCode::PageDown => {
+                app.tutor_scroll = app.tutor_scroll.saturating_add(10).min(max_scroll);
+            }
+            KeyCode::PageUp => {
+                app.tutor_scroll = app.tutor_scroll.saturating_sub(10);
+            }
+            KeyCode::Home | KeyCode::Char('g') => {
+                app.tutor_scroll = 0;
+            }
+            _ => {}
+        }
+        return;
+    }
+
     // If help overlay is open, handle navigation and close
     if app.show_help {
         // Compute max scroll: content lines minus visible inner height (85% of terminal - 2 borders)

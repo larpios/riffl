@@ -137,6 +137,12 @@ pub struct App {
     /// Whether r (replace-once) mode is pending: next note key replaces current cell without advancing cursor
     pub pending_replace: bool,
 
+    /// Whether the tutor view is open (opened with :tutor)
+    pub show_tutor: bool,
+
+    /// Scroll offset for the tutor view (in lines)
+    pub tutor_scroll: u16,
+
     /// Whether follow mode is active: edit cursor chases playhead during playback
     pub follow_mode: bool,
 
@@ -260,6 +266,8 @@ impl App {
             last_update: Instant::now(),
             pending_key: None,
             pending_replace: false,
+            show_tutor: false,
+            tutor_scroll: 0,
             follow_mode: false,
             is_dirty: false,
             pending_quit: false,
@@ -601,6 +609,10 @@ impl App {
             }
             "q" => self.quit(),
             "q!" => self.force_quit(),
+            "tutor" => {
+                self.show_tutor = true;
+                self.tutor_scroll = 0;
+            }
             _ => {
                 self.open_modal(Modal::error(
                     "Unknown command".to_string(),
@@ -2527,5 +2539,31 @@ mod tests {
         assert!(!app.transport.loop_region_active());
         app.toggle_loop_region_active();
         assert!(app.transport.loop_region_active());
+    }
+
+    // --- Tutor view tests ---
+
+    #[test]
+    fn test_tutor_starts_hidden() {
+        let app = App::new();
+        assert!(!app.show_tutor);
+        assert_eq!(app.tutor_scroll, 0);
+    }
+
+    #[test]
+    fn test_execute_command_tutor_opens_view() {
+        let mut app = App::new();
+        app.command_mode = true;
+        app.command_input = "tutor".to_string();
+        app.execute_command();
+        assert!(app.show_tutor, "show_tutor should be true after :tutor");
+        assert_eq!(app.tutor_scroll, 0, "scroll should reset to 0");
+        assert!(!app.command_mode, "command mode should be exited");
+    }
+
+    #[test]
+    fn test_tutor_content_has_lines() {
+        let count = crate::ui::tutor::content_line_count();
+        assert!(count > 20, "tutor should have at least 20 lines of content");
     }
 }

@@ -237,16 +237,15 @@ FT2/IT piano keyboard layout: =a=C =w=C# =s=D =e=D# =d=E =f=F =t=F# =g=G =y=G# =
    Enter applies, Esc cancels). =t= in Normal mode does tap-tempo — records tap
    timestamps, averages intervals over last 3 seconds, applies BPM after ≥2 taps.
 
-** TODO :tutor — Interactive Tutorial / Cheat Sheet
+** DONE :tutor — Interactive Tutorial / Cheat Sheet
    =:tutor= opens a navigable in-app reference covering:
    - All keybindings (Normal, Insert, Visual modes)
    - How to enter notes, note-off, note-cut, effects
    - How to use the sample browser (including the non-obvious Space/Enter split)
    - Transport controls and playback shortcuts
    - Effect command reference (0xy, 9xx, Exy table)
-   Structured as a scrollable help view (view 7 or modal overlay).
-   This is the single biggest discoverability win — right now none of this
-   is findable without reading the source.
+   Implemented as a full-screen scrollable overlay. j/k scroll, q/Esc close.
+   Piano keyboard layout and all effects documented inline.
 
 ** TODO Sample Browser Overhaul
    Current browser only reads =sample_dirs= from config
