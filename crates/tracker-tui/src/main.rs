@@ -132,6 +132,25 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    // Pattern length prompt mode: handle inline length input
+    if app.len_prompt_mode {
+        match key.code {
+            KeyCode::Enter => app.execute_len_prompt(),
+            KeyCode::Esc => {
+                app.len_prompt_mode = false;
+                app.len_prompt_input.clear();
+            }
+            KeyCode::Backspace => {
+                app.len_prompt_input.pop();
+            }
+            KeyCode::Char(c @ '0'..='9') if key.modifiers == KeyModifiers::NONE => {
+                app.len_prompt_input.push(c);
+            }
+            _ => {}
+        }
+        return;
+    }
+
     // Command mode: handle line input
     if app.command_mode {
         match key.code {
@@ -596,6 +615,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         // BPM
         Action::OpenBpmPrompt => app.open_bpm_prompt(),
         Action::TapTempo => app.tap_tempo(),
+
+        // Pattern length
+        Action::OpenLenPrompt => app.open_len_prompt(),
 
         // Loop region
         Action::SetLoopStart => app.set_loop_start(),
