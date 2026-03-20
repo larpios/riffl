@@ -449,6 +449,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                 app.pattern_selection_down();
             } else if app.editor.mode() == EditorMode::Insert {
                 app.editor.extend_down();
+                app.apply_draw_note();
             } else {
                 app.editor.move_down();
             }
@@ -478,6 +479,12 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                 let base_octave = app.editor.current_octave();
                 let octave = (base_octave as i8 + oct_offset).clamp(0, 9) as u8;
                 app.editor.enter_note_with_octave(pitch, octave);
+                // Capture as draw_note for draw mode repeat
+                {
+                    use tracker_core::pattern::note::{NoteEvent, Note};
+                    let inst = app.editor.current_instrument();
+                    app.draw_note = Some(NoteEvent::On(Note::new(pitch, octave, 100, inst)));
+                }
                 app.mark_dirty();
                 // Preview the note through the current instrument's sample
                 if app.current_view == AppView::PatternEditor {
@@ -623,6 +630,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::SetLoopStart => app.set_loop_start(),
         Action::SetLoopEnd => app.set_loop_end(),
         Action::ToggleLoopRegion => app.toggle_loop_region_active(),
+
+        // Draw mode
+        Action::ToggleDrawMode => app.toggle_draw_mode(),
 
         // View switching
         Action::SwitchView(view) => app.set_view(view),

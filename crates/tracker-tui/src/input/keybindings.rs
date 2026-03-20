@@ -121,6 +121,9 @@ pub enum Action {
     SetLoopEnd,
     ToggleLoopRegion,
 
+    // Draw mode
+    ToggleDrawMode,
+
     // Application
     Quit,
     Confirm,
@@ -382,6 +385,9 @@ fn map_insert_mode(key: KeyEvent) -> Action {
 
         // Insert a new row at cursor
         KeyCode::Insert => Action::InsertRow,
+
+        // Draw mode toggle
+        KeyCode::Char('D') => Action::ToggleDrawMode,
 
         _ => Action::None,
     }

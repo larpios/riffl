@@ -1074,6 +1074,20 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         ]);
     }
 
+    // Draw mode indicator
+    if app.draw_mode {
+        footer_spans.extend([
+            Span::raw(" "),
+            Span::styled(
+                " DRW ",
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(theme.success_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]);
+    }
+
     // Loop region indicator
     if let Some((loop_start, loop_end)) = app.transport.loop_region() {
         let (label, bg) = if app.transport.loop_region_active() {

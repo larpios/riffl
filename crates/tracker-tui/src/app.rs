@@ -22,7 +22,7 @@ use crate::ui::theme::{Theme, ThemeKind};
 use tracker_core::audio::{load_sample, AudioEngine, Mixer, Sample, TransportCommand};
 use tracker_core::dsl::engine::ScriptEngine;
 use tracker_core::export;
-use tracker_core::pattern::note::Pitch;
+use tracker_core::pattern::note::{NoteEvent, Pitch};
 use tracker_core::pattern::{Note, Pattern};
 use tracker_core::project;
 use tracker_core::song::{Instrument, Song};
@@ -176,6 +176,12 @@ pub struct App {
     /// Timestamps of recent taps for tap-tempo (`t` in Normal mode)
     pub tap_times: Vec<Instant>,
 
+    /// Whether draw mode is active: cursor-down auto-repeats the last entered note
+    pub draw_mode: bool,
+
+    /// The last note entered in Insert mode, replayed on each cursor-down when draw_mode is on
+    pub draw_note: Option<NoteEvent>,
+
     /// Instrument editor panel state (shown below the instrument list)
     pub inst_editor: InstrumentEditorState,
 }
@@ -285,6 +291,8 @@ impl App {
             len_prompt_mode: false,
             len_prompt_input: String::new(),
             tap_times: Vec::new(),
+            draw_mode: false,
+            draw_note: None,
             inst_editor: InstrumentEditorState::default(),
         }
     }
@@ -829,6 +837,28 @@ impl App {
     /// Has no effect if no loop region is set.
     pub fn toggle_loop_region_active(&mut self) {
         self.transport.toggle_loop_region_active();
+    }
+
+    /// Toggle draw mode on/off.
+    pub fn toggle_draw_mode(&mut self) {
+        self.draw_mode = !self.draw_mode;
+    }
+
+    /// Write draw_note at the current cursor position (no cursor advance).
+    /// No-op if draw_mode is false or draw_note is None.
+    pub fn apply_draw_note(&mut self) {
+        if !self.draw_mode {
+            return;
+        }
+        if let Some(note_event) = self.draw_note {
+            use tracker_core::pattern::row::Cell;
+            let row = self.editor.cursor_row();
+            let ch = self.editor.cursor_channel();
+            self.editor
+                .pattern_mut()
+                .set_cell(row, ch, Cell::with_note(note_event));
+            self.mark_dirty();
+        }
     }
 
     /// Toggle between pattern and song playback modes
@@ -2638,6 +2668,70 @@ mod tests {
         assert!(!app.transport.loop_region_active());
         app.toggle_loop_region_active();
         assert!(app.transport.loop_region_active());
+    }
+
+    // --- Draw mode tests ---
+
+    #[test]
+    fn test_draw_mode_starts_inactive() {
+        let app = App::new();
+        assert!(!app.draw_mode);
+        assert!(app.draw_note.is_none());
+    }
+
+    #[test]
+    fn test_toggle_draw_mode() {
+        let mut app = App::new();
+        app.toggle_draw_mode();
+        assert!(app.draw_mode);
+        app.toggle_draw_mode();
+        assert!(!app.draw_mode);
+    }
+
+    #[test]
+    fn test_apply_draw_note_writes_to_cursor() {
+        use tracker_core::pattern::note::NoteEvent;
+        let mut app = App::new();
+        app.draw_mode = true;
+        app.draw_note = Some(NoteEvent::On(Note::simple(Pitch::C, 4)));
+        app.editor.go_to_row(2);
+        app.apply_draw_note();
+        let cell = app.editor.pattern().get_cell(2, 0);
+        assert!(cell.is_some());
+        assert_eq!(
+            cell.unwrap().note,
+            Some(NoteEvent::On(Note::simple(Pitch::C, 4)))
+        );
+    }
+
+    #[test]
+    fn test_apply_draw_note_noop_when_mode_off() {
+        use tracker_core::pattern::note::NoteEvent;
+        let mut app = App::new();
+        app.draw_mode = false;
+        app.draw_note = Some(NoteEvent::On(Note::simple(Pitch::C, 4)));
+        app.editor.go_to_row(2);
+        app.apply_draw_note();
+        let cell = app.editor.pattern().get_cell(2, 0);
+        // Row 2 should be empty (no note written)
+        assert!(
+            cell.is_none() || cell.unwrap().note.is_none(),
+            "apply_draw_note should be a no-op when draw_mode is false"
+        );
+    }
+
+    #[test]
+    fn test_apply_draw_note_noop_when_note_none() {
+        let mut app = App::new();
+        app.draw_mode = true;
+        app.draw_note = None;
+        app.editor.go_to_row(2);
+        app.apply_draw_note();
+        let cell = app.editor.pattern().get_cell(2, 0);
+        assert!(
+            cell.is_none() || cell.unwrap().note.is_none(),
+            "apply_draw_note should be a no-op when draw_note is None"
+        );
     }
 
     // --- Tutor view tests ---
