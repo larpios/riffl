@@ -19,3 +19,4 @@ Auto\ Run\ Docs/
 node_modules
 .ralph
 .mcp.json
+.agents
