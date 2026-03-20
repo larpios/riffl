@@ -12,6 +12,12 @@ use super::track::{any_track_soloed, Track};
 /// Default number of rows in a pattern.
 pub const DEFAULT_ROWS: usize = 64;
 
+/// Minimum allowed row count per pattern.
+pub const MIN_ROW_COUNT: usize = 16;
+
+/// Maximum allowed row count per pattern.
+pub const MAX_ROW_COUNT: usize = 512;
+
 /// Default number of channels in a pattern.
 pub const DEFAULT_CHANNELS: usize = 8;
 
@@ -47,6 +53,26 @@ impl Pattern {
     /// Get the number of rows in this pattern.
     pub fn num_rows(&self) -> usize {
         self.rows.len()
+    }
+
+    /// Get the row count (alias for num_rows).
+    pub fn row_count(&self) -> usize {
+        self.rows.len()
+    }
+
+    /// Set the row count, clamped to [MIN_ROW_COUNT, MAX_ROW_COUNT].
+    ///
+    /// Growing appends empty rows; shrinking truncates trailing rows.
+    pub fn set_row_count(&mut self, count: usize) {
+        let count = count.clamp(MIN_ROW_COUNT, MAX_ROW_COUNT);
+        let current = self.rows.len();
+        if count > current {
+            for _ in current..count {
+                self.rows.push(new_row(self.channels));
+            }
+        } else if count < current {
+            self.rows.truncate(count);
+        }
     }
 
     /// Get the number of channels in this pattern.
@@ -590,5 +616,67 @@ mod tests {
         for i in 0..16 {
             assert!(pat.is_channel_audible(i));
         }
+    }
+
+    // --- row_count / set_row_count tests ---
+
+    #[test]
+    fn test_row_count_alias_for_num_rows() {
+        let pat = Pattern::new(32, 4);
+        assert_eq!(pat.row_count(), 32);
+        assert_eq!(pat.row_count(), pat.num_rows());
+    }
+
+    #[test]
+    fn test_set_row_count_grow() {
+        let mut pat = Pattern::new(16, 4);
+        pat.set_row_count(64);
+        assert_eq!(pat.num_rows(), 64);
+        // New rows should be empty
+        assert!(pat.get_cell(63, 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_set_row_count_shrink() {
+        let mut pat = Pattern::new(64, 4);
+        pat.set_note(10, 0, Note::simple(Pitch::C, 4));
+        pat.set_note(50, 0, Note::simple(Pitch::E, 4));
+        pat.set_row_count(32);
+        assert_eq!(pat.num_rows(), 32);
+        // Row 10 preserved
+        assert!(!pat.get_cell(10, 0).unwrap().is_empty());
+        // Rows >= 32 gone
+        assert!(pat.get_cell(32, 0).is_none());
+    }
+
+    #[test]
+    fn test_set_row_count_noop() {
+        let mut pat = Pattern::new(32, 4);
+        pat.set_row_count(32);
+        assert_eq!(pat.num_rows(), 32);
+    }
+
+    #[test]
+    fn test_set_row_count_clamp_min() {
+        let mut pat = Pattern::new(64, 4);
+        pat.set_row_count(1); // below MIN_ROW_COUNT=16
+        assert_eq!(pat.num_rows(), MIN_ROW_COUNT);
+    }
+
+    #[test]
+    fn test_set_row_count_clamp_max() {
+        let mut pat = Pattern::new(64, 4);
+        pat.set_row_count(9999); // above MAX_ROW_COUNT=512
+        assert_eq!(pat.num_rows(), MAX_ROW_COUNT);
+    }
+
+    #[test]
+    fn test_set_row_count_preserves_channels() {
+        let mut pat = Pattern::new(16, 6);
+        pat.set_row_count(32);
+        assert_eq!(pat.num_channels(), 6);
+        // New rows should have the same number of channels
+        assert!(pat.get_cell(31, 5).is_some());
+        assert!(pat.get_cell(31, 6).is_none());
     }
 }

@@ -871,6 +871,27 @@ fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
 fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let theme = &app.theme;
 
+    // Pattern length prompt mode: show inline length input
+    if app.len_prompt_mode {
+        let input_style = Style::default().fg(theme.text);
+        let label_style = Style::default()
+            .fg(Color::Black)
+            .bg(theme.info_color())
+            .add_modifier(Modifier::BOLD);
+        let line = Line::from(vec![
+            Span::styled(" LEN ", label_style),
+            Span::raw(" "),
+            Span::styled(app.len_prompt_input.clone(), input_style),
+            Span::styled("█", Style::default().fg(theme.primary)),
+            Span::styled(
+                "  Enter:apply  Esc:cancel  (16–512)",
+                Style::default().fg(theme.text_secondary),
+            ),
+        ]);
+        frame.render_widget(ratatui::widgets::Paragraph::new(line), area);
+        return;
+    }
+
     // BPM prompt mode: show inline BPM input
     if app.bpm_prompt_mode {
         let bpm_style = Style::default().fg(theme.text);
@@ -953,6 +974,7 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                         ("f", "follow"),
                         ("t", "tap bpm"),
                         ("^B", "set bpm"),
+                        ("^P", "set len"),
                     ],
                     AppView::InstrumentList => &[
                         ("j/k", "nav"),
@@ -1073,6 +1095,21 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     .fg(Color::Black)
                     .bg(bg)
                     .add_modifier(Modifier::BOLD),
+            ),
+        ]);
+    }
+
+    // Pattern length indicator (always visible in pattern-related views)
+    if matches!(
+        app.current_view,
+        AppView::PatternEditor | AppView::PatternList
+    ) {
+        let row_count = app.editor.pattern().row_count();
+        footer_spans.extend([
+            Span::raw("  "),
+            Span::styled(
+                format!("Len:{}", row_count),
+                Style::default().fg(theme.info_color()),
             ),
         ]);
     }

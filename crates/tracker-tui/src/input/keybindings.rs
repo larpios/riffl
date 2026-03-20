@@ -113,6 +113,9 @@ pub enum Action {
     OpenBpmPrompt,
     TapTempo,
 
+    // Pattern length
+    OpenLenPrompt,
+
     // Loop region
     SetLoopStart,
     SetLoopEnd,
@@ -188,6 +191,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             KeyCode::Char('t') => Action::OpenTemplates,
             KeyCode::Char('l') => Action::ToggleLiveMode,
             KeyCode::Char('b') => Action::OpenBpmPrompt,
+            KeyCode::Char('p') => Action::OpenLenPrompt,
             KeyCode::Enter => Action::ExecuteScript,
             KeyCode::Delete => Action::DeleteRow,
             _ => Action::None,

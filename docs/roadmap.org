@@ -214,10 +214,11 @@ FT2/IT piano keyboard layout: =a=C =w=C# =s=D =e=D# =d=E =f=F =t=F# =g=G =y=G# =
    (FT2 uses =1=, IT/Renoise use =~= or a dedicated key).
    Fix: rebind to =~= or =1=, add to help screen and `:tutor`.
 
-** TODO Per-Pattern Row Count
+** DONE Per-Pattern Row Count
    Not locked to the global default. Each =Pattern= stores its own row count
    (16–512). Transport handles variable-length patterns in the arrangement.
    Essential for mixing short fills with long sections.
+   =Ctrl+P= opens inline length prompt; =Len:N= shown in footer.
 
 ** TODO Draw Mode
    Hold =d= + note key to repeat-fill rows while held, or toggle draw mode

@@ -167,6 +167,12 @@ pub struct App {
     /// Current BPM prompt input buffer
     pub bpm_prompt_input: String,
 
+    /// Whether pattern length inline prompt is active (Ctrl+P opens it)
+    pub len_prompt_mode: bool,
+
+    /// Current pattern length prompt input buffer
+    pub len_prompt_input: String,
+
     /// Timestamps of recent taps for tap-tempo (`t` in Normal mode)
     pub tap_times: Vec<Instant>,
 
@@ -276,6 +282,8 @@ impl App {
             command_input: String::new(),
             bpm_prompt_mode: false,
             bpm_prompt_input: String::new(),
+            len_prompt_mode: false,
+            len_prompt_input: String::new(),
             tap_times: Vec::new(),
             inst_editor: InstrumentEditorState::default(),
         }
@@ -737,6 +745,32 @@ impl App {
         }
         self.bpm_prompt_mode = false;
         self.bpm_prompt_input.clear();
+    }
+
+    /// Open the inline pattern length prompt, pre-populated with current row count.
+    pub fn open_len_prompt(&mut self) {
+        self.len_prompt_mode = true;
+        self.len_prompt_input = format!("{}", self.editor.pattern().row_count());
+    }
+
+    /// Execute the pattern length prompt: parse input and resize pattern if valid.
+    pub fn execute_len_prompt(&mut self) {
+        if let Ok(n) = self.len_prompt_input.trim().parse::<usize>() {
+            use tracker_core::pattern::pattern::{MAX_ROW_COUNT, MIN_ROW_COUNT};
+            let clamped = n.clamp(MIN_ROW_COUNT, MAX_ROW_COUNT);
+            self.editor.pattern_mut().set_row_count(clamped);
+            self.transport.set_num_rows(clamped);
+            // Clamp cursor if it's now past end of pattern
+            let cursor = self.editor.cursor_row();
+            if cursor >= clamped {
+                self.editor.go_to_row(clamped.saturating_sub(1));
+            }
+            // Flush to song so the change persists on pattern switch
+            let pos = self.transport.arrangement_position();
+            self.flush_editor_pattern(pos);
+        }
+        self.len_prompt_mode = false;
+        self.len_prompt_input.clear();
     }
 
     /// Record a tap for tap-tempo. Computes BPM from the average interval
@@ -2432,6 +2466,71 @@ mod tests {
         assert!(!app.bpm_prompt_mode);
         // BPM unchanged for invalid input
         assert_eq!(app.transport.bpm(), original_bpm);
+    }
+
+    // --- Pattern length prompt tests ---
+
+    #[test]
+    fn test_open_len_prompt_prepopulates_current_row_count() {
+        let mut app = App::new();
+        let current_len = app.editor.pattern().row_count();
+        app.open_len_prompt();
+        assert!(app.len_prompt_mode);
+        assert_eq!(app.len_prompt_input, format!("{}", current_len));
+    }
+
+    #[test]
+    fn test_execute_len_prompt_resizes_pattern_and_transport() {
+        let mut app = App::new();
+        app.len_prompt_mode = true;
+        app.len_prompt_input = "32".to_string();
+        app.execute_len_prompt();
+        assert!(!app.len_prompt_mode);
+        assert_eq!(app.editor.pattern().row_count(), 32);
+        assert_eq!(app.transport.num_rows(), 32);
+    }
+
+    #[test]
+    fn test_execute_len_prompt_clamps_to_min() {
+        let mut app = App::new();
+        app.len_prompt_mode = true;
+        app.len_prompt_input = "4".to_string(); // below 16
+        app.execute_len_prompt();
+        assert_eq!(app.editor.pattern().row_count(), 16);
+        assert_eq!(app.transport.num_rows(), 16);
+    }
+
+    #[test]
+    fn test_execute_len_prompt_clamps_to_max() {
+        let mut app = App::new();
+        app.len_prompt_mode = true;
+        app.len_prompt_input = "9999".to_string(); // above 512
+        app.execute_len_prompt();
+        assert_eq!(app.editor.pattern().row_count(), 512);
+        assert_eq!(app.transport.num_rows(), 512);
+    }
+
+    #[test]
+    fn test_execute_len_prompt_ignores_invalid_input() {
+        let mut app = App::new();
+        let original = app.editor.pattern().row_count();
+        app.len_prompt_mode = true;
+        app.len_prompt_input = "abc".to_string();
+        app.execute_len_prompt();
+        assert!(!app.len_prompt_mode);
+        // Row count unchanged for invalid input
+        assert_eq!(app.editor.pattern().row_count(), original);
+    }
+
+    #[test]
+    fn test_execute_len_prompt_flushes_to_song() {
+        let mut app = App::new();
+        app.len_prompt_mode = true;
+        app.len_prompt_input = "48".to_string();
+        app.execute_len_prompt();
+        // The song's pattern 0 should also be updated
+        let pat_idx = app.song.arrangement[app.transport.arrangement_position()];
+        assert_eq!(app.song.patterns[pat_idx].row_count(), 48);
     }
 
     // --- Tap tempo tests ---
