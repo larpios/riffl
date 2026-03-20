@@ -28,8 +28,10 @@ pub mod modal;
 pub mod pattern_list;
 pub mod sample_browser;
 pub mod theme;
+pub mod tutor;
 
 use help::render_help;
+use tutor::render_tutor;
 
 /// Render the application UI
 pub fn render(frame: &mut Frame, app: &App) {
@@ -171,6 +173,11 @@ pub fn render(frame: &mut Frame, app: &App) {
     // Render help overlay on top if active
     if app.show_help {
         render_help(frame, full_area, &app.theme, app.help_scroll);
+    }
+
+    // Render tutor view on top if active
+    if app.show_tutor {
+        render_tutor(frame, full_area, &app.theme, app.tutor_scroll);
     }
 
     // Render which-key popup when a chord is pending
