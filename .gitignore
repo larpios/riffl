@@ -17,3 +17,5 @@ Auto\ Run\ Docs/
 .claude*
 .rtk
 node_modules
+.ralph
+.mcp.json
