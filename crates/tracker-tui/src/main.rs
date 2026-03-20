@@ -529,6 +529,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::ExecuteScript => app.execute_script(),
         Action::OpenTemplates => app.code_editor.toggle_templates(),
         Action::ToggleLiveMode => app.toggle_live_mode(),
+        Action::ToggleFollowMode => app.follow_mode = !app.follow_mode,
 
         // View switching
         Action::SwitchView(view) => app.set_view(view),

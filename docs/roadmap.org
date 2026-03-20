@@ -182,9 +182,11 @@
    Transport respects loop during playback; toggle with =Ctrl+L= or similar.
    Per-pattern, not global.
 
-** TODO Follow Mode
+** DONE Follow Mode
    Toggle =f= in Normal mode: edit cursor chases the playhead during playback.
    Without this, you can't see what's playing while it plays.
+   Implemented: =follow_mode= field on App, wired in =update()= on AdvanceResult::Row.
+   =FOL= pill shown in footer when active.
 
 ** TODO Transpose Selection
    Shift selected notes by semitone (=Shift+Up= / =Shift+Down=) or octave

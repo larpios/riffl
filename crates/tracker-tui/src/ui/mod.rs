@@ -881,6 +881,7 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                         ("x", "del"),
                         ("y/p", "copy"),
                         ("[/]", "pat"),
+                        ("f", "follow"),
                     ],
                     AppView::InstrumentList => &[
                         ("j/k", "nav"),
@@ -969,6 +970,20 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         Span::styled("?", key_style),
         Span::raw(" help"),
     ]);
+
+    // Follow mode indicator
+    if app.follow_mode {
+        footer_spans.extend([
+            Span::raw(" "),
+            Span::styled(
+                " FOL ",
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(theme.success_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]);
+    }
 
     // View indicator
     let view_label = if app.split_view {
