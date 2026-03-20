@@ -453,8 +453,8 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         let loop_active = app.transport.loop_region_active();
         let is_loop_start = loop_region.is_some_and(|(s, _)| s == row_idx);
         let is_loop_end = loop_region.is_some_and(|(_, e)| e == row_idx);
-        let is_in_loop = loop_active
-            && loop_region.is_some_and(|(s, e)| row_idx > s && row_idx < e);
+        let is_in_loop =
+            loop_active && loop_region.is_some_and(|(s, e)| row_idx > s && row_idx < e);
         let (row_prefix, row_num_style) = if is_playback_row {
             (
                 "▶ ",
@@ -465,13 +465,25 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             )
         } else if is_loop_start && is_loop_end {
             // Single-row loop region
-            let c = if loop_active { theme.warning_color() } else { theme.text_secondary };
+            let c = if loop_active {
+                theme.warning_color()
+            } else {
+                theme.text_secondary
+            };
             ("◈ ", Style::default().fg(c).add_modifier(Modifier::BOLD))
         } else if is_loop_start {
-            let c = if loop_active { theme.warning_color() } else { theme.text_secondary };
+            let c = if loop_active {
+                theme.warning_color()
+            } else {
+                theme.text_secondary
+            };
             ("[ ", Style::default().fg(c).add_modifier(Modifier::BOLD))
         } else if is_loop_end {
-            let c = if loop_active { theme.warning_color() } else { theme.text_secondary };
+            let c = if loop_active {
+                theme.warning_color()
+            } else {
+                theme.text_secondary
+            };
             ("] ", Style::default().fg(c).add_modifier(Modifier::BOLD))
         } else if is_in_loop {
             ("¦ ", Style::default().fg(theme.warning_color()))
@@ -503,7 +515,9 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             let is_track_inaudible = !pattern.is_channel_audible(ch);
 
             let separator_style = if is_playback_row {
-                Style::default().fg(theme.cursor_fg).bg(theme.success_color())
+                Style::default()
+                    .fg(theme.cursor_fg)
+                    .bg(theme.success_color())
             } else {
                 Style::default().fg(theme.text_dimmed)
             };
@@ -945,11 +959,7 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                         ("l", "enter"),
                         ("h", "up"),
                     ],
-                    AppView::PatternList => &[
-                        ("j/k", "nav"),
-                        ("Enter", "load"),
-                        ("c", "clone"),
-                    ],
+                    AppView::PatternList => &[("j/k", "nav"), ("Enter", "load"), ("c", "clone")],
                     _ => &[],
                 };
                 for (k, desc) in hints {
@@ -1441,10 +1451,8 @@ fn render_command_completions(frame: &mut Frame, footer_area: ratatui::layout::R
 }
 
 /// Which-key descriptions for pending chords.
-const WHICH_KEY_ENTRIES: &[(&str, &str, &str)] = &[
-    ("d", "d", "dd  delete row"),
-    ("g", "g", "gg  go to top"),
-];
+const WHICH_KEY_ENTRIES: &[(&str, &str, &str)] =
+    &[("d", "d", "dd  delete row"), ("g", "g", "gg  go to top")];
 
 /// Render a which-key popup showing completions for the current pending key.
 fn render_which_key(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {

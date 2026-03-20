@@ -328,8 +328,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                 crossterm::event::KeyCode::Char(c)
                     if matches!(
                         c,
-                        'a' | 'w' | 's' | 'e' | 'd' | 'f' | 't' | 'g' | 'y' | 'h' | 'u' | 'j'
-                            | 'k'
+                        'a' | 'w' | 's' | 'e' | 'd' | 'f' | 't' | 'g' | 'y' | 'h' | 'u' | 'j' | 'k'
                     ) =>
                 {
                     if let Some((pitch, _oct_offset)) = Editor::piano_key_to_pitch(c) {
