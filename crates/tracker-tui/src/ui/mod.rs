@@ -825,6 +825,27 @@ fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
 fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let theme = &app.theme;
 
+    // BPM prompt mode: show inline BPM input
+    if app.bpm_prompt_mode {
+        let bpm_style = Style::default().fg(theme.text);
+        let label_style = Style::default()
+            .fg(Color::Black)
+            .bg(theme.warning_color())
+            .add_modifier(Modifier::BOLD);
+        let line = Line::from(vec![
+            Span::styled(" BPM ", label_style),
+            Span::raw(" "),
+            Span::styled(app.bpm_prompt_input.clone(), bpm_style),
+            Span::styled("█", Style::default().fg(theme.primary)),
+            Span::styled(
+                "  Enter:apply  Esc:cancel",
+                Style::default().fg(theme.text_secondary),
+            ),
+        ]);
+        frame.render_widget(ratatui::widgets::Paragraph::new(line), area);
+        return;
+    }
+
     // Command mode: show command line input instead of normal footer
     if app.command_mode {
         let cmd_style = Style::default().fg(theme.text);
@@ -882,6 +903,8 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                         ("y/p", "copy"),
                         ("[/]", "pat"),
                         ("f", "follow"),
+                        ("t", "tap bpm"),
+                        ("^B", "set bpm"),
                     ],
                     AppView::InstrumentList => &[
                         ("j/k", "nav"),

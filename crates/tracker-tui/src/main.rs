@@ -113,6 +113,25 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
 fn handle_key_event(app: &mut App, key: KeyEvent) {
     use crossterm::event::{KeyCode, KeyModifiers};
 
+    // BPM prompt mode: handle inline BPM input
+    if app.bpm_prompt_mode {
+        match key.code {
+            KeyCode::Enter => app.execute_bpm_prompt(),
+            KeyCode::Esc => {
+                app.bpm_prompt_mode = false;
+                app.bpm_prompt_input.clear();
+            }
+            KeyCode::Backspace => {
+                app.bpm_prompt_input.pop();
+            }
+            KeyCode::Char(c @ '0'..='9') if key.modifiers == KeyModifiers::NONE => {
+                app.bpm_prompt_input.push(c);
+            }
+            _ => {}
+        }
+        return;
+    }
+
     // Command mode: handle line input
     if app.command_mode {
         match key.code {
@@ -530,6 +549,10 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::OpenTemplates => app.code_editor.toggle_templates(),
         Action::ToggleLiveMode => app.toggle_live_mode(),
         Action::ToggleFollowMode => app.follow_mode = !app.follow_mode,
+
+        // BPM
+        Action::OpenBpmPrompt => app.open_bpm_prompt(),
+        Action::TapTempo => app.tap_tempo(),
 
         // View switching
         Action::SwitchView(view) => app.set_view(view),
