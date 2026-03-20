@@ -208,7 +208,7 @@ Follow other trackers' model, like =a= for C, =w= for C#. But don't blindly foll
    Also wire =ECx= extended effect (tick-delayed cut) in the mixer render.
    Key to enter note-cut: =Del= in Insert mode (=Backspace= still deletes cell).
 
-** TODO Note Off Is Not Discoverable
+** DONE Note Off Is Not Discoverable
    Note-off is currently bound to =`= (backtick) in Insert mode. This is
    not documented anywhere in the UI and differs from every tracker convention
    (FT2 uses =1=, IT/Renoise use =~= or a dedicated key).
