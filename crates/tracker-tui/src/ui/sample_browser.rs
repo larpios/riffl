@@ -281,6 +281,41 @@ fn scan_entries(dir: &Path) -> Vec<BrowserEntry> {
     dirs
 }
 
+/// Build the window title for the sample browser.
+///
+/// Shows `" Sample Browser / {root_name} "` when at the configured root,
+/// `" Sample Browser / {root_name}/{rel} "` when inside it, and
+/// `" Sample Browser / {dir_name} "` when navigated above all roots
+/// (using only `file_name()` to avoid an absolute-path double-slash).
+fn browser_title(browser: &SampleBrowser) -> String {
+    match browser.current_dir() {
+        None => " Sample Browser ".to_string(),
+        Some(cur) => {
+            let path_str = browser
+                .current_root()
+                .and_then(|root| {
+                    let root_name = root.file_name()?.to_str()?;
+                    let rel = cur.strip_prefix(root).ok()?.to_str()?;
+                    if rel.is_empty() {
+                        // Exactly at the configured root — show just the root name.
+                        Some(root_name.to_string())
+                    } else {
+                        Some(format!("{root_name}/{rel}"))
+                    }
+                })
+                .unwrap_or_else(|| {
+                    // Navigated above all configured roots.  Use file_name() to
+                    // avoid an absolute path producing a double-slash in the title.
+                    cur.file_name()
+                        .and_then(|n| n.to_str())
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| cur.display().to_string())
+                });
+            format!(" Sample Browser / {path_str} ")
+        }
+    }
+}
+
 /// Render the sample browser view.
 pub fn render_sample_browser(
     frame: &mut Frame,
@@ -288,28 +323,7 @@ pub fn render_sample_browser(
     browser: &SampleBrowser,
     theme: &Theme,
 ) {
-    let title = match browser.current_dir() {
-        None => " Sample Browser ".to_string(),
-        Some(cur) => {
-            // Try to show relative path from the configured root we entered;
-            // if we've navigated above it, fall back to the full absolute path.
-            let path_str = browser
-                .current_root()
-                .and_then(|root| cur.strip_prefix(root).ok())
-                .and_then(|p| p.to_str())
-                .filter(|s| !s.is_empty())
-                .map(|rel| {
-                    let root_name = browser
-                        .current_root()
-                        .and_then(|r| r.file_name())
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("?");
-                    format!("{root_name}/{rel}")
-                })
-                .unwrap_or_else(|| cur.display().to_string());
-            format!(" Sample Browser / {path_str} ")
-        }
-    };
+    let title = browser_title(browser);
 
     let at_root_list = browser.at_roots();
     let nav_hint = if at_root_list {
@@ -625,6 +639,69 @@ mod tests {
         b.enter_dir();
         assert!(b.selected_is_file());
         fs::remove_dir_all(&dir).ok();
+    }
+
+    // --- browser_title ---
+
+    #[test]
+    fn test_title_at_root_list() {
+        let dir = make_dir("title_list");
+        let b = SampleBrowser::new(vec![dir.clone()]);
+        assert_eq!(browser_title(&b), " Sample Browser ");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn test_title_at_configured_root_no_double_slash() {
+        let base = make_dir("title_root_base");
+        let root = base.join("Music");
+        fs::create_dir_all(&root).unwrap();
+
+        let mut b = SampleBrowser::new(vec![root.clone()]);
+        b.enter_dir();
+        assert_eq!(b.current_dir(), Some(root.as_path()));
+
+        let title = browser_title(&b);
+        assert_eq!(title, " Sample Browser / Music ", "title at root: {title:?}");
+        assert!(!title.contains("/ /"), "no double-slash: {title:?}");
+
+        fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn test_title_inside_root() {
+        let base = make_dir("title_inside_base");
+        let root = base.join("Sounds");
+        let sub = root.join("kicks");
+        fs::create_dir_all(&sub).unwrap();
+
+        let mut b = SampleBrowser::new(vec![root.clone()]);
+        b.enter_dir(); // → root
+        b.enter_dir(); // → sub (first subdir is "kicks")
+
+        let title = browser_title(&b);
+        assert!(title.contains("Sounds/kicks"), "relative path: {title:?}");
+        assert!(!title.contains("/ /"), "no double-slash: {title:?}");
+
+        fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn test_title_above_root_no_double_slash() {
+        let grandparent = make_dir("title_gp");
+        let parent = grandparent.join("parent_dir");
+        let root = parent.join("project");
+        fs::create_dir_all(&root).unwrap();
+
+        let mut b = SampleBrowser::new(vec![root.clone()]);
+        b.enter_dir(); // → root
+        b.go_up(); // → parent (above configured root)
+
+        let title = browser_title(&b);
+        assert!(!title.contains("/ /"), "no double-slash when above root: {title:?}");
+        assert!(title.contains("parent_dir"), "shows dir name: {title:?}");
+
+        fs::remove_dir_all(&grandparent).ok();
     }
 
     #[test]
