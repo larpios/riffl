@@ -341,8 +341,8 @@ fn map_insert_mode(key: KeyEvent) -> Action {
         // Escape returns to Normal mode
         KeyCode::Esc => Action::EnterNormalMode,
 
-        // Note-off (backtick)
-        KeyCode::Char('`') => Action::EnterNoteOff,
+        // Note-off (tilde)
+        KeyCode::Char('~') => Action::EnterNoteOff,
 
         // Note entry: lowercase a-g = natural, uppercase A-G = sharp equivalent
         KeyCode::Char(c @ ('a'..='g' | 'A'..='G')) => Action::EnterNote(c),

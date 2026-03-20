@@ -321,7 +321,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         if app.editor.sub_column() == SubColumn::Note {
             match key.code {
                 crossterm::event::KeyCode::Esc => {} // cancel silently
-                crossterm::event::KeyCode::Char('`') => {
+                crossterm::event::KeyCode::Char('~') => {
                     app.editor.replace_cell_note_off();
                     app.mark_dirty();
                 }
