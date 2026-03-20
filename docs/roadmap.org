@@ -188,10 +188,13 @@
    Implemented: =follow_mode= field on App, wired in =update()= on AdvanceResult::Row.
    =FOL= pill shown in footer when active.
 
-** TODO Transpose Selection
+** DONE Transpose Selection
    Shift selected notes by semitone (=Shift+Up= / =Shift+Down=) or octave
-   (=Ctrl+Up= / =Ctrl+Down=). Works on visual selection or current cell.
+   (=Ctrl+Shift+Up= / =Ctrl+Shift+Down=). Works on visual selection or current cell.
    Core YTPMV workflow — remapping chops to pitches constantly.
+   Implemented: =transpose_selection(semitones)= on =Editor=. Normal and Visual
+   modes both handled. Five unit tests covering single-cell, selection, empty
+   cells, out-of-range clamping, and undo.
 
 ** TODO Note Cut (^^^) Distinct from Note Off (===)
    Add =NoteEvent::Cut= variant. Displays as =^^^=. Hard-silences the voice
