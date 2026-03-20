@@ -1085,9 +1085,15 @@ fn handle_sample_browser_key(app: &mut App, key: KeyEvent) -> bool {
             true
         }
 
-        // Go up a directory
+        // Go up a directory (escapes past configured root into real filesystem)
         KeyCode::Char('h') | KeyCode::Left | KeyCode::Backspace => {
             app.sample_browser.go_up();
+            true
+        }
+
+        // Jump back to the roots list from anywhere in the filesystem
+        KeyCode::Char('~') => {
+            app.sample_browser.reset_to_roots();
             true
         }
 

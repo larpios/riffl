@@ -86,6 +86,10 @@ pub struct App {
     /// Path to the current project file (None if unsaved)
     pub project_path: Option<PathBuf>,
 
+    /// Configured sample directories (from config / CLI).
+    /// Stored so we can rebuild browser roots when the project path changes.
+    configured_sample_dirs: Vec<PathBuf>,
+
     /// Currently active top-level view
     pub current_view: AppView,
 
@@ -261,6 +265,7 @@ impl App {
             instrument_selection: None,
             pattern_selection: None,
             project_path: None,
+            configured_sample_dirs: Vec::new(),
             current_view: AppView::PatternEditor,
             theme_kind: ThemeKind::Nord,
             theme: Theme::from_kind(ThemeKind::Nord),
@@ -930,11 +935,33 @@ impl App {
 
     /// Set the sample directories used by both the overlay file browser and the dedicated view.
     pub fn set_sample_dirs(&mut self, dirs: Vec<std::path::PathBuf>) {
-        // Overlay file browser uses the first dir as its starting point
-        if let Some(first) = dirs.first() {
+        self.configured_sample_dirs = dirs;
+        self.refresh_browser_roots();
+    }
+
+    /// Rebuild browser roots from configured dirs plus any project-relative samples dir.
+    ///
+    /// Call this after changing `project_path` or `configured_sample_dirs`.
+    pub(crate) fn refresh_browser_roots(&mut self) {
+        // Overlay file browser uses the first configured dir as its starting point
+        if let Some(first) = self.configured_sample_dirs.first() {
             self.file_browser = FileBrowser::new(first);
         }
-        self.sample_browser.set_roots(dirs);
+        self.sample_browser
+            .set_roots(self.configured_sample_dirs.clone());
+
+        // Auto-add <project_dir>/samples/ if it exists and isn't already a root
+        if let Some(proj_dir) = self
+            .project_path
+            .as_ref()
+            .and_then(|p| p.parent())
+            .map(|p| p.to_path_buf())
+        {
+            let samples_dir = proj_dir.join("samples");
+            if samples_dir.is_dir() {
+                self.sample_browser.add_auto_root(samples_dir);
+            }
+        }
     }
 
     /// Open the file browser overlay
@@ -1712,6 +1739,8 @@ impl App {
                 self.is_dirty = false;
                 self.arrangement_view = ArrangementView::new();
                 self.transport.stop();
+                // Auto-detect project-relative samples dir
+                self.refresh_browser_roots();
 
                 if missing_samples.is_empty() {
                     self.open_modal(Modal::info(
@@ -2758,5 +2787,48 @@ mod tests {
     fn test_tutor_content_has_lines() {
         let count = crate::ui::tutor::content_line_count();
         assert!(count > 20, "tutor should have at least 20 lines of content");
+    }
+
+    #[test]
+    fn test_project_samples_dir_auto_added_to_browser() {
+        let dir = std::env::temp_dir().join("riffl_app_proj_samples");
+        std::fs::create_dir_all(&dir).unwrap();
+        let samples_dir = dir.join("samples");
+        std::fs::create_dir_all(&samples_dir).unwrap();
+
+        let mut app = App::new();
+        // Simulate a loaded project whose directory contains ./samples/
+        app.project_path = Some(dir.join("test.trs"));
+        app.refresh_browser_roots();
+
+        let has_samples = app
+            .sample_browser
+            .entries()
+            .iter()
+            .any(|e| e.path == samples_dir);
+        assert!(has_samples, "project-relative samples/ should be auto-added as a root");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn test_project_samples_dir_not_added_when_missing() {
+        let dir = std::env::temp_dir().join("riffl_app_proj_no_samples");
+        std::fs::create_dir_all(&dir).unwrap();
+        // No samples/ subdir created here
+
+        let mut app = App::new();
+        app.project_path = Some(dir.join("test.trs"));
+        app.refresh_browser_roots();
+
+        let samples_dir = dir.join("samples");
+        let has_samples = app
+            .sample_browser
+            .entries()
+            .iter()
+            .any(|e| e.path == samples_dir);
+        assert!(!has_samples, "should not add samples/ root when directory doesn't exist");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

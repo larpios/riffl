@@ -2,8 +2,10 @@
 //!
 //! Supports multiple configured root directories. When more than one root is
 //! configured, the browser opens at a "roots list" showing all of them.
-//! Pressing Enter/l enters a root or subdirectory; h returns up, stopping at
-//! the roots list. Pressing Enter on an audio file loads it as an instrument.
+//! Pressing Enter/l enters a root or subdirectory; h navigates up — going
+//! above a configured root escapes into the real filesystem all the way to /.
+//! Press ~ to jump back to the roots list from anywhere.
+//! Pressing Enter on an audio file loads it as an instrument.
 
 use std::path::{Path, PathBuf};
 
@@ -25,6 +27,8 @@ pub struct BrowserEntry {
     pub name: String,
     pub path: PathBuf,
     pub is_dir: bool,
+    /// True when this root entry comes from the configured (pinned) roots list.
+    pub is_pinned: bool,
 }
 
 /// Internal navigation state.
@@ -32,11 +36,11 @@ pub struct BrowserEntry {
 enum BrowserMode {
     /// Showing the list of root directories.
     Roots,
-    /// Navigating inside a root.
+    /// Navigating inside a directory (may be above the configured root).
     InDir {
-        /// Which root we entered.
+        /// The configured root we originally entered (kept for display/context).
         root: PathBuf,
-        /// Currently displayed directory (may equal root or be a subdir).
+        /// Currently displayed directory (may be above `root`).
         current: PathBuf,
     },
 }
@@ -44,6 +48,9 @@ enum BrowserMode {
 /// State for the dedicated sample browser view.
 #[derive(Debug, Clone)]
 pub struct SampleBrowser {
+    /// Configured (pinned) roots — set via [`new`] / [`set_roots`].
+    pinned_roots: Vec<PathBuf>,
+    /// All roots, including auto-detected ones added via [`add_auto_root`].
     roots: Vec<PathBuf>,
     mode: BrowserMode,
     entries: Vec<BrowserEntry>,
@@ -52,9 +59,10 @@ pub struct SampleBrowser {
 
 impl SampleBrowser {
     /// Create a new sample browser with the given root directories.
-    /// If exactly one root is given, starts inside it directly.
+    /// All supplied roots are treated as "pinned" (configured).
     pub fn new(roots: Vec<PathBuf>) -> Self {
         let mut browser = Self {
+            pinned_roots: roots.clone(),
             roots,
             mode: BrowserMode::Roots,
             entries: Vec::new(),
@@ -64,12 +72,25 @@ impl SampleBrowser {
         browser
     }
 
-    /// Replace all roots. Resets to the roots list (or directly into the single root).
+    /// Replace all configured (pinned) roots. Resets to the roots list.
+    /// Any previously added auto-roots are discarded.
     pub fn set_roots(&mut self, roots: Vec<PathBuf>) {
+        self.pinned_roots = roots.clone();
         self.roots = roots;
         self.mode = BrowserMode::Roots;
         self.selected = 0;
         self.refresh_entries();
+    }
+
+    /// Add a non-pinned (auto-detected) root directory.
+    /// Has no effect if the path is already present.
+    pub fn add_auto_root(&mut self, path: PathBuf) {
+        if !self.roots.contains(&path) {
+            self.roots.push(path);
+            if matches!(self.mode, BrowserMode::Roots) {
+                self.refresh_entries();
+            }
+        }
     }
 
     /// Move selection up.
@@ -101,7 +122,7 @@ impl SampleBrowser {
                 };
             }
             BrowserMode::InDir { root, .. } => {
-                // Entering a subdir within the current root
+                // Entering a subdir — keep root for context
                 self.mode = BrowserMode::InDir {
                     root: root.clone(),
                     current: entry.path.clone(),
@@ -113,16 +134,19 @@ impl SampleBrowser {
         true
     }
 
-    /// Navigate up. From a root's top returns to the roots list.
-    /// From the roots list does nothing.
+    /// Navigate up one directory level.
+    ///
+    /// Unlike the old behaviour this **does not stop at the configured root
+    /// boundary** — pressing `h` past a configured root continues up the
+    /// real filesystem, stopping only at the filesystem root (no parent).
+    /// To return to the virtual roots list call [`reset_to_roots`].
     pub fn go_up(&mut self) {
         match &self.mode {
-            BrowserMode::Roots => {}
+            BrowserMode::Roots => {} // already at top-level roots list
             BrowserMode::InDir { root, current } => {
-                if current == root {
-                    // At top of this root — return to roots list
-                    self.mode = BrowserMode::Roots;
-                } else if let Some(parent) = current.parent() {
+                // Navigate to parent regardless of whether we're at the
+                // configured root boundary — stop only at filesystem root.
+                if let Some(parent) = current.parent() {
                     let parent = parent.to_path_buf();
                     let root = root.clone();
                     self.mode = BrowserMode::InDir {
@@ -130,8 +154,16 @@ impl SampleBrowser {
                         current: parent,
                     };
                 }
+                // If current.parent() is None we're at / — stay put.
             }
         }
+        self.selected = 0;
+        self.refresh_entries();
+    }
+
+    /// Jump back to the roots list from anywhere in the filesystem.
+    pub fn reset_to_roots(&mut self) {
+        self.mode = BrowserMode::Roots;
         self.selected = 0;
         self.refresh_entries();
     }
@@ -174,7 +206,7 @@ impl SampleBrowser {
         }
     }
 
-    /// The root we're currently browsing inside (None when at roots list).
+    /// The configured root we originally entered (None when at roots list).
     pub fn current_root(&self) -> Option<&Path> {
         match &self.mode {
             BrowserMode::Roots => None,
@@ -183,6 +215,7 @@ impl SampleBrowser {
     }
 
     fn refresh_entries(&mut self) {
+        let pinned = &self.pinned_roots;
         self.entries = match &self.mode {
             BrowserMode::Roots => self
                 .roots
@@ -195,6 +228,7 @@ impl SampleBrowser {
                         .to_string(),
                     path: p.clone(),
                     is_dir: true,
+                    is_pinned: pinned.contains(p),
                 })
                 .collect(),
             BrowserMode::InDir { current, .. } => scan_entries(current),
@@ -227,6 +261,7 @@ fn scan_entries(dir: &Path) -> Vec<BrowserEntry> {
                 name,
                 path,
                 is_dir: true,
+                is_pinned: false,
             });
         } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
             if AUDIO_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
@@ -234,6 +269,7 @@ fn scan_entries(dir: &Path) -> Vec<BrowserEntry> {
                     name,
                     path,
                     is_dir: false,
+                    is_pinned: false,
                 });
             }
         }
@@ -255,20 +291,23 @@ pub fn render_sample_browser(
     let title = match browser.current_dir() {
         None => " Sample Browser ".to_string(),
         Some(cur) => {
-            // Show path relative to the root we entered
-            let rel = browser
+            // Try to show relative path from the configured root we entered;
+            // if we've navigated above it, fall back to the full absolute path.
+            let path_str = browser
                 .current_root()
                 .and_then(|root| cur.strip_prefix(root).ok())
                 .and_then(|p| p.to_str())
                 .filter(|s| !s.is_empty())
-                .map(|s| format!("/{s}"))
-                .unwrap_or_default();
-            let root_name = browser
-                .current_root()
-                .and_then(|r| r.file_name())
-                .and_then(|n| n.to_str())
-                .unwrap_or("?");
-            format!(" Sample Browser / {root_name}{rel} ")
+                .map(|rel| {
+                    let root_name = browser
+                        .current_root()
+                        .and_then(|r| r.file_name())
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("?");
+                    format!("{root_name}/{rel}")
+                })
+                .unwrap_or_else(|| cur.display().to_string());
+            format!(" Sample Browser / {path_str} ")
         }
     };
 
@@ -276,7 +315,7 @@ pub fn render_sample_browser(
     let nav_hint = if at_root_list {
         "  l/Enter: browse dir  ·  j/k: navigate"
     } else {
-        "  Space: preview  ·  Enter: load  ·  l: enter dir  ·  h: up  ·  j/k: navigate"
+        "  Space: preview  ·  Enter: load  ·  l: enter dir  ·  h: up  ·  ~: roots  ·  j/k: navigate"
     };
 
     let block = Block::default()
@@ -309,8 +348,9 @@ pub fn render_sample_browser(
 
             let label = if entry.is_dir {
                 if at_root_list {
-                    // Show full path for roots
-                    format!("  {}", entry.path.display())
+                    // Pinned (configured) roots get a star marker.
+                    let pin = if entry.is_pinned { "★ " } else { "  " };
+                    format!("  {pin}{}", entry.path.display())
                 } else {
                     format!("  [{}]", entry.name)
                 }
@@ -355,16 +395,152 @@ mod tests {
         let dir = make_dir("single");
         fs::write(dir.join("kick.wav"), b"x").unwrap();
         let b = SampleBrowser::new(vec![dir.clone()]);
-        // With one root, starts in root list (user still chooses to enter)
-        // Actually: we always start at roots list regardless of count
+        // Always starts at the roots list
         assert!(b.at_roots());
         fs::remove_dir_all(&dir).ok();
     }
 
+    // --- Root escape behaviour ---
+
     #[test]
-    fn test_enter_root_and_go_up() {
-        let dir = make_dir("enter_up");
+    fn test_go_up_escapes_past_configured_root() {
+        let base = make_dir("escape_base");
+        let root = base.join("project_dir");
+        fs::create_dir_all(&root).unwrap();
+
+        let mut b = SampleBrowser::new(vec![root.clone()]);
+        assert!(b.at_roots());
+
+        // Enter the configured root
+        assert!(b.enter_dir());
+        assert!(!b.at_roots());
+        assert_eq!(b.current_dir(), Some(root.as_path()));
+
+        // go_up should navigate to the parent of the root, NOT back to roots list
+        b.go_up();
+        assert!(!b.at_roots(), "should still be in InDir, not back at roots list");
+        assert_eq!(b.current_dir(), Some(base.as_path()));
+
+        fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn test_go_up_two_levels_above_root() {
+        let grandparent = make_dir("gp");
+        let parent = grandparent.join("parent");
+        let root = parent.join("root");
+        fs::create_dir_all(&root).unwrap();
+
+        let mut b = SampleBrowser::new(vec![root.clone()]);
+        b.enter_dir();
+        assert_eq!(b.current_dir(), Some(root.as_path()));
+
+        b.go_up(); // → parent
+        assert_eq!(b.current_dir(), Some(parent.as_path()));
+
+        b.go_up(); // → grandparent
+        assert_eq!(b.current_dir(), Some(grandparent.as_path()));
+
+        assert!(!b.at_roots());
+
+        fs::remove_dir_all(&grandparent).ok();
+    }
+
+    // --- reset_to_roots ---
+
+    #[test]
+    fn test_reset_to_roots_from_indir() {
+        let dir = make_dir("reset_indir");
+        let mut b = SampleBrowser::new(vec![dir.clone()]);
+        b.enter_dir();
+        assert!(!b.at_roots());
+
+        b.reset_to_roots();
+        assert!(b.at_roots());
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn test_reset_to_roots_when_already_at_roots() {
+        let dir = make_dir("reset_already");
+        let mut b = SampleBrowser::new(vec![dir.clone()]);
+        assert!(b.at_roots());
+        b.reset_to_roots(); // should be a no-op
+        assert!(b.at_roots());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    // --- Pinned roots ---
+
+    #[test]
+    fn test_configured_root_is_pinned() {
+        let dir = make_dir("pinned_flag");
+        let b = SampleBrowser::new(vec![dir.clone()]);
+        assert!(b.at_roots());
+        assert_eq!(b.entries().len(), 1);
+        assert!(b.entries()[0].is_pinned, "configured root should be pinned");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn test_auto_root_not_pinned() {
+        let configured = make_dir("auto_configured");
+        let auto = make_dir("auto_detected");
+
+        let mut b = SampleBrowser::new(vec![configured.clone()]);
+        b.add_auto_root(auto.clone());
+
+        assert!(b.at_roots());
+        assert_eq!(b.entries().len(), 2);
+
+        let conf_entry = b.entries().iter().find(|e| e.path == configured).unwrap();
+        let auto_entry = b.entries().iter().find(|e| e.path == auto).unwrap();
+
+        assert!(conf_entry.is_pinned, "configured root should be pinned");
+        assert!(!auto_entry.is_pinned, "auto-detected root should not be pinned");
+
+        fs::remove_dir_all(&configured).ok();
+        fs::remove_dir_all(&auto).ok();
+    }
+
+    #[test]
+    fn test_add_auto_root_dedup() {
+        let dir = make_dir("auto_dedup");
+        let mut b = SampleBrowser::new(vec![dir.clone()]);
+        b.add_auto_root(dir.clone());
+        assert_eq!(b.entries().len(), 1, "should not add duplicate root");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn test_set_roots_clears_auto_roots() {
+        let a = make_dir("setroots_a");
+        let auto = make_dir("setroots_auto");
+        let b_dir = make_dir("setroots_b");
+
+        let mut b = SampleBrowser::new(vec![a.clone()]);
+        b.add_auto_root(auto.clone());
+        assert_eq!(b.entries().len(), 2);
+
+        // set_roots discards the auto root
+        b.set_roots(vec![b_dir.clone()]);
+        assert_eq!(b.entries().len(), 1);
+        assert_eq!(b.entries()[0].path, b_dir);
+
+        fs::remove_dir_all(&a).ok();
+        fs::remove_dir_all(&auto).ok();
+        fs::remove_dir_all(&b_dir).ok();
+    }
+
+    // --- Existing behaviour preserved ---
+
+    #[test]
+    fn test_enter_root_and_reset_to_roots() {
+        let dir = make_dir("enter_reset");
         fs::write(dir.join("kick.wav"), b"x").unwrap();
+        let parent = dir.parent().unwrap().to_path_buf();
+
         let mut b = SampleBrowser::new(vec![dir.clone()]);
         assert!(b.at_roots());
 
@@ -373,12 +549,13 @@ mod tests {
         assert!(!b.at_roots());
         assert_eq!(b.current_dir(), Some(dir.as_path()));
 
-        // Go up returns to roots list
+        // go_up navigates to parent of configured root (root escape)
         b.go_up();
-        assert!(b.at_roots());
+        assert!(!b.at_roots());
+        assert_eq!(b.current_dir(), Some(parent.as_path()));
 
-        // Go up again is a no-op
-        b.go_up();
+        // reset_to_roots returns to roots list
+        b.reset_to_roots();
         assert!(b.at_roots());
 
         fs::remove_dir_all(&dir).ok();
@@ -400,12 +577,18 @@ mod tests {
 
         assert_eq!(b.current_dir(), Some(sub.as_path()));
 
-        // go up returns to root (not roots list)
+        // go up returns to root dir
         b.go_up();
         assert_eq!(b.current_dir(), Some(dir.as_path()));
 
-        // go up again returns to roots list
+        // go up again escapes past the configured root boundary
         b.go_up();
+        let expected_parent = dir.parent().unwrap();
+        assert_eq!(b.current_dir(), Some(expected_parent));
+        assert!(!b.at_roots());
+
+        // reset_to_roots() returns to roots list
+        b.reset_to_roots();
         assert!(b.at_roots());
 
         fs::remove_dir_all(&dir).ok();

@@ -220,10 +220,13 @@ FT2/IT piano keyboard layout: =a=C =w=C# =s=D =e=D# =d=E =f=F =t=F# =g=G =y=G# =
    Essential for mixing short fills with long sections.
    =Ctrl+P= opens inline length prompt; =Len:N= shown in footer.
 
-** TODO Draw Mode
+** DONE Draw Mode
    Hold =d= + note key to repeat-fill rows while held, or toggle draw mode
    where cursor auto-advances and repeats the last entered note.
    Speeds up drum pattern entry dramatically.
+   Implemented: =draw_mode: bool= + =draw_note: Option<NoteEvent>= on App.
+   =D= in Insert mode toggles draw mode. Cursor movement (j/down) when active
+   auto-repeats last placed note. DRW pill shown in footer. Commit 57e92eee.
 
 ** DONE Note Interpolation
    Select a range → =I= to linearly interpolate volume or pitch between the
@@ -251,9 +254,10 @@ FT2/IT piano keyboard layout: =a=C =w=C# =s=D =e=D# =d=E =f=F =t=F# =g=G =y=G# =
 ** TODO Sample Browser Overhaul
    Current browser only reads =sample_dirs= from config
    (default: =~/.config/riffl/samples=). Needed:
-   - =./samples/= relative to the open project file (auto-added if exists)
-   - Filesystem root escape — navigate to =/= or =~= and browse freely
-   - Configured roots remain as "pinned" entries in the root list
+   - [DONE] =./samples/= relative to the open project file (auto-added if exists)
+   - [DONE] Filesystem root escape — navigate to =/= or =~= and browse freely;
+     =h= navigates up past configured roots; =~= jumps back to the roots list
+   - [DONE] Configured roots remain as "pinned" (★) entries in the root list
    Favourites / bookmarks: mark a dir with =b=, persist to config, shown at
    top of root list.
    Waveform panel: show waveform for selected file (lazy-load on selection).
