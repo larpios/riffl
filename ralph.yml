@@ -20,15 +20,15 @@ event_loop:
 #   specs_dir: ".ralph/specs/"
 
 # Custom hats for multi-agent workflows:
-# hats:
-#   builder:
-#     name: "Builder"
-#     triggers: ["build.task"]
-#     publishes: ["build.done", "build.blocked"]
-#
-#   reviewer:
-#     name: "Reviewer"
-#     triggers: ["review.request"]
-#     publishes: ["review.approved", "review.changes_requested"]
+hats:
+  builder:
+    name: "Builder"
+    triggers: ["build.task"]
+    publishes: ["build.done", "build.blocked"]
+
+  reviewer:
+    name: "Reviewer"
+    triggers: ["review.request"]
+    publishes: ["review.approved", "review.changes_requested"]
 
 # Create PROMPT.md with your task, then run: ralph run

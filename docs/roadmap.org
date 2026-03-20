@@ -170,14 +170,15 @@
 ** TODO Better Keybindings for Entering Notes
 Follow other trackers' model, like /A/ for C, /W/ for C#. But don't blindly follow this model, research first
 
-** TODO r — Replace-Once Mode
+** DONE r — Replace-Once Mode
    Like vim's =r=: press =r=, type one note, cursor stays, mode stays Normal.
    No persistent insert, no step advance. Useful for fixing individual cells.
+   Implemented: commit e813a24c.
 
-** TODO Play From Cursor
+** DONE Play From Cursor
    =Enter= (while stopped) starts playback from the current cursor row, not row 0.
    Decouple play-start position from the edit cursor.
-   Arrangement view needs the same: set playhead by moving cursor + Enter.
+   Implemented: =transport.play_from(row)= + =App::play_from_cursor()= + =Enter= in PatternEditor (stopped). Commit ea27f43c.
 
 ** DONE Loop Region
    Set loop start/end rows (=Alt+[= / =Alt+]=).
@@ -223,9 +224,10 @@ Follow other trackers' model, like /A/ for C, /W/ for C#. But don't blindly foll
    where cursor auto-advances and repeats the last entered note.
    Speeds up drum pattern entry dramatically.
 
-** TODO Note Interpolation
+** DONE Note Interpolation
    Select a range → =I= to linearly interpolate volume or pitch between the
    first and last non-empty cell. Smooth automation without manual hex entry.
+   Implemented: =interpolate_selection()= on =Editor=, wired to =I= in Visual mode.
 
 ** DONE BPM Inline Edit
    BPM is visible in the status bar but only editable via =:bpm N= command.
