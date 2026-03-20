@@ -33,9 +33,9 @@
     Upper nibble = speed, lower = depth. Same waveform table as vibrato.
     State needed: tremolo_phase, tremolo_speed, tremolo_depth, tremolo_waveform.
 
-*** TODO 9xx — Sample Offset
+*** DONE 9xx — Sample Offset
     Start sample playback at offset (xx * 256) frames into the sample.
-    Needs Voice to accept an initial position override on note-on.
+    Implemented: Voice.with_position() sets initial position at note-on.
 
 *** TODO Exy — Extended Effects (command 0xE, sub-command in upper param nibble)
     The E-effects share a single command slot; sub-command is param >> 4.
@@ -85,29 +85,22 @@
 
 ** Sample Features
 
-*** TODO Loop Points
-    Add =loop_start: Option<usize>= and =loop_end: Option<usize>= to =Sample=.
-    Mixer render loop must check loop bounds and wrap =voice.position= instead
-    of deactivating the voice when it reaches the end.
-    Three modes: no loop, forward loop, ping-pong loop.
+*** DONE Loop Points
+    =loop_start=, =loop_end=, =loop_mode= (NoLoop/Forward/PingPong) exist on
+    =Sample=. Mixer render wraps =voice.position= at loop bounds.
 
-*** TODO Sample Finetune
-    Add =finetune: i8= (-8..+7, ProTracker convention) to =Instrument= in song.rs.
-    Wire into playback rate calculation in mixer tick:
-    =playback_rate *= 2.0_f64.powf(finetune as f64 / 12.0 / 8.0)=
-    E5x effect should be able to override this per-row.
+*** DONE Sample Finetune
+    =finetune: i8= on =Instrument=. Wired into playback rate in mixer tick.
+    Editable in the instrument editor panel (Tab to Finetune field, +/-).
 
-*** TODO Sample Default Volume
-    =Instrument= already has volume in the instrument editor state; make sure
-    it is wired to =velocity_gain= as a multiplier at note-on time.
+*** DONE Sample Default Volume
+    =volume: f32= on =Instrument=. Applied as multiplier at note-on.
 
 ** File Format
 
-*** TODO MOD Import
-    Parse Amiga .mod files (15- and 31-sample variants) into Song.
-    Crate candidates: =mod-rs= or implement minimal parser (format is simple).
-    Maps: sample data → Sample, instruments → Instrument, patterns → Pattern,
-    arrangement → Song arrangement.
+*** DONE MOD Import
+    Minimal .mod parser implemented in =mod_import.rs=.
+    Maps sample data, instruments, patterns, and arrangement.
 
 *** TODO MOD Export
     Serialise Song back to .mod (lossy — only ProTracker-compatible features survive).
@@ -166,6 +159,95 @@
    Global undo stack covering instrument edits, arrangement changes, etc.
    (Pattern-level undo already exists in Editor.)
 
+* Milestone 2.5 — Pattern Editor & Transport Essentials
+  :PROPERTIES:
+  :STATUS: in-progress
+  :END:
+
+  These are blocking for real composition use. Should be done before
+  the Renoise-level instrument system.
+
+** TODO r — Replace-Once Mode
+   Like vim's =r=: press =r=, type one note, cursor stays, mode stays Normal.
+   No persistent insert, no step advance. Useful for fixing individual cells.
+
+** TODO Play From Cursor
+   =Enter= (while stopped) starts playback from the current cursor row, not row 0.
+   Decouple play-start position from the edit cursor.
+   Arrangement view needs the same: set playhead by moving cursor + Enter.
+
+** TODO Loop Region
+   Set loop start/end rows (=[= / =]= keys, or Ctrl+L).
+   Visual markers in the pattern row gutter.
+   Transport respects loop during playback; toggle with =Ctrl+L= or similar.
+   Per-pattern, not global.
+
+** TODO Follow Mode
+   Toggle =f= in Normal mode: edit cursor chases the playhead during playback.
+   Without this, you can't see what's playing while it plays.
+
+** TODO Transpose Selection
+   Shift selected notes by semitone (=Shift+Up= / =Shift+Down=) or octave
+   (=Ctrl+Up= / =Ctrl+Down=). Works on visual selection or current cell.
+   Core YTPMV workflow — remapping chops to pitches constantly.
+
+** TODO Note Cut (^^^) Distinct from Note Off (===)
+   Add =NoteEvent::Cut= variant. Displays as =^^^=. Hard-silences the voice
+   immediately (no envelope release). Currently =NoteEvent::Off= (===) does
+   the same thing because there are no envelopes yet, but the distinction
+   will matter once envelopes land.
+   Also wire =ECx= extended effect (tick-delayed cut) in the mixer render.
+   Key to enter note-cut: suggest =~= or =Del= in Insert mode.
+
+** TODO Note Off Is Not Discoverable
+   Note-off is currently bound to =`= (backtick) in Insert mode. This is
+   not documented anywhere in the UI and differs from every tracker convention
+   (FT2 uses =1=, IT/Renoise use =~= or a dedicated key).
+   Fix: rebind to =~= or =1=, add to help screen and `:tutor`.
+
+** TODO Per-Pattern Row Count
+   Not locked to the global default. Each =Pattern= stores its own row count
+   (16–512). Transport handles variable-length patterns in the arrangement.
+   Essential for mixing short fills with long sections.
+
+** TODO Draw Mode
+   Hold =d= + note key to repeat-fill rows while held, or toggle draw mode
+   where cursor auto-advances and repeats the last entered note.
+   Speeds up drum pattern entry dramatically.
+
+** TODO Note Interpolation
+   Select a range → =I= to linearly interpolate volume or pitch between the
+   first and last non-empty cell. Smooth automation without manual hex entry.
+
+** TODO BPM Inline Edit
+   BPM is visible in the status bar but only editable via =:bpm N= command.
+   Add =T= or =Ctrl+B= to open a quick BPM prompt.
+   Bonus: tap-tempo (tap a key N times to set BPM from the interval).
+
+** TODO :tutor — Interactive Tutorial / Cheat Sheet
+   =:tutor= opens a navigable in-app reference covering:
+   - All keybindings (Normal, Insert, Visual modes)
+   - How to enter notes, note-off, note-cut, effects
+   - How to use the sample browser (including the non-obvious Space/Enter split)
+   - Transport controls and playback shortcuts
+   - Effect command reference (0xy, 9xx, Exy table)
+   Structured as a scrollable help view (view 7 or modal overlay).
+   This is the single biggest discoverability win — right now none of this
+   is findable without reading the source.
+
+** TODO Sample Browser Overhaul
+   Current browser only reads =sample_dirs= from config
+   (default: =~/.config/riffl/samples=). Needed:
+   - =./samples/= relative to the open project file (auto-added if exists)
+   - Filesystem root escape — navigate to =/= or =~= and browse freely
+   - Configured roots remain as "pinned" entries in the root list
+   Favourites / bookmarks: mark a dir with =b=, persist to config, shown at
+   top of root list.
+   Waveform panel: show waveform for selected file (lazy-load on selection).
+   During Space preview: live playback cursor through waveform, time display.
+   Preview toggle: Space = play/stop (currently Space always restarts).
+   Scrub preview start: Left/Right while previewing to set start offset.
+
 * Milestone 3 — Quality-of-Life / Usability
   :PROPERTIES:
   :STATUS: planned
@@ -178,7 +260,8 @@
 
 ** TODO Visual Feedback
    - Per-channel VU meters in the pattern view
-   - Waveform preview in instrument list
+   - Waveform preview in instrument list (2-row oscilloscope already in
+     instrument editor; extend to list view thumbnail)
    - Spectrum analyser on master output (optional, can be toggled)
 
 ** TODO Pattern Clone / Duplicate / Merge
