@@ -629,6 +629,30 @@ impl App {
         }
     }
 
+    /// Start playback from the current editor cursor row.
+    ///
+    /// Implements "Play From Cursor": if the transport is stopped or paused,
+    /// playback begins at the row the edit cursor is on rather than row 0.
+    /// If already playing, this is a no-op (use toggle_play to pause/resume).
+    pub fn play_from_cursor(&mut self) {
+        if self.transport.is_playing() {
+            return;
+        }
+        let start_row = self.editor.cursor_row();
+        self.transport
+            .set_arrangement_length(self.song.arrangement.len());
+        if self.transport.playback_mode() == PlaybackMode::Song {
+            self.load_arrangement_pattern(self.transport.arrangement_position());
+        }
+        self.transport.play_from(start_row);
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.tick(self.transport.current_row(), self.editor.pattern());
+        }
+        if let Some(ref mut engine) = self.audio_engine {
+            let _ = engine.start();
+        }
+    }
+
     /// Stop playback and reset position to row 0
     pub fn stop(&mut self) {
         self.transport.stop();

@@ -181,6 +181,18 @@ impl Transport {
         }
     }
 
+    /// Start playback from the given row index (clamped to valid range).
+    ///
+    /// Unlike `play()`, this always begins at the specified row regardless of
+    /// current state — useful for "Play From Cursor" where the user wants
+    /// playback to begin at the edit cursor position.
+    pub fn play_from(&mut self, start_row: usize) {
+        let clamped = start_row.min(self.num_rows.saturating_sub(1));
+        self.current_row = clamped;
+        self.tick_accumulator = 0.0;
+        self.state = TransportState::Playing;
+    }
+
     /// Stop playback and reset position to the beginning
     pub fn stop(&mut self) {
         self.state = TransportState::Stopped;
@@ -879,5 +891,44 @@ mod tests {
         // Row 99 should be clamped to num_rows - 1 = 7
         assert!(transport.pattern_break(99));
         assert_eq!(transport.current_row(), 7);
+    }
+
+    #[test]
+    fn test_play_from_starts_at_given_row() {
+        let mut transport = Transport::new();
+        transport.set_num_rows(64);
+        transport.play_from(16);
+        assert!(transport.is_playing());
+        assert_eq!(transport.current_row(), 16);
+    }
+
+    #[test]
+    fn test_play_from_clamps_to_last_row() {
+        let mut transport = Transport::new();
+        transport.set_num_rows(16);
+        transport.play_from(999);
+        assert!(transport.is_playing());
+        assert_eq!(transport.current_row(), 15);
+    }
+
+    #[test]
+    fn test_play_from_zero_behaves_like_play() {
+        let mut transport = Transport::new();
+        transport.set_num_rows(64);
+        transport.play_from(0);
+        assert!(transport.is_playing());
+        assert_eq!(transport.current_row(), 0);
+    }
+
+    #[test]
+    fn test_play_from_overrides_paused_position() {
+        let mut transport = Transport::new();
+        transport.set_num_rows(64);
+        transport.play();
+        transport.pause();
+        // play_from should override the paused position and start playing
+        transport.play_from(32);
+        assert!(transport.is_playing());
+        assert_eq!(transport.current_row(), 32);
     }
 }

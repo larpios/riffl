@@ -117,7 +117,8 @@ fn left_column(theme: &Theme) -> Vec<Line<'static>> {
 fn right_column(theme: &Theme) -> Vec<Line<'static>> {
     vec![
         section("TRANSPORT", theme),
-        key("Space", "Play / Stop", theme),
+        key("Space", "Play / Pause", theme),
+        key("Enter  (stopped)", "Play from cursor row", theme),
         key("= / -", "BPM up / down", theme),
         key(":bpm <n>", "Set BPM directly", theme),
         key("[ / ]", "Prev / Next pattern", theme),

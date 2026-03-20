@@ -538,6 +538,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                 app.force_quit();
             } else if app.has_modal() {
                 app.close_modal();
+            } else if app.current_view == AppView::PatternEditor && app.transport.is_stopped() {
+                // Play From Cursor: Enter while stopped starts playback at the cursor row
+                app.play_from_cursor();
             } else if app.current_view == AppView::InstrumentList {
                 if app.instrument_selection().is_some() {
                     app.inst_editor.focus();
