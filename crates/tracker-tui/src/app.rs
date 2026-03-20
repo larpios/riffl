@@ -137,6 +137,9 @@ pub struct App {
     /// Whether r (replace-once) mode is pending: next note key replaces current cell without advancing cursor
     pub pending_replace: bool,
 
+    /// Whether follow mode is active: edit cursor chases playhead during playback
+    pub follow_mode: bool,
+
     /// Whether the project has unsaved changes
     pub is_dirty: bool,
 
@@ -248,6 +251,7 @@ impl App {
             last_update: Instant::now(),
             pending_key: None,
             pending_replace: false,
+            follow_mode: false,
             is_dirty: false,
             pending_quit: false,
             pending_sample_path: None,
@@ -317,6 +321,9 @@ impl App {
 
         match advance_result {
             AdvanceResult::Row(row) => {
+                if self.follow_mode {
+                    self.editor.go_to_row(row);
+                }
                 if row == 0 && self.live_mode {
                     self.execute_script();
                 }
@@ -350,7 +357,9 @@ impl App {
             } => {
                 self.flush_editor_pattern(old_arrangement_pos);
                 self.load_arrangement_pattern(arrangement_pos);
-
+                if self.follow_mode {
+                    self.editor.go_to_row(row);
+                }
                 if self.live_mode {
                     self.execute_script();
                 }

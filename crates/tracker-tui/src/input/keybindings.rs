@@ -105,6 +105,7 @@ pub enum Action {
     ExecuteScript,
     OpenTemplates,
     ToggleLiveMode,
+    ToggleFollowMode,
 
     // Application
     Quit,
@@ -279,6 +280,9 @@ fn map_normal_mode(key: KeyEvent) -> Action {
 
         // Pattern management (when in PatternList view)
         KeyCode::Char('c') => Action::ClonePattern,
+
+        // Follow mode
+        KeyCode::Char('f') => Action::ToggleFollowMode,
 
         // Application
         KeyCode::Char('m') => Action::OpenModal,
