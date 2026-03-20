@@ -431,6 +431,10 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             app.editor.enter_note_off();
             app.mark_dirty();
         }
+        Action::EnterNoteCut => {
+            app.editor.enter_note_cut();
+            app.mark_dirty();
+        }
         Action::SetOctave(oct) => app.editor.set_octave(oct),
         Action::StepUp => app.editor.step_up(),
         Action::StepDown => app.editor.step_down(),

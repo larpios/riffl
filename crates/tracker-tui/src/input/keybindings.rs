@@ -36,6 +36,8 @@ pub enum Action {
 
     // Note-off entry
     EnterNoteOff,
+    // Note-cut entry (hard-silence, ^^^)
+    EnterNoteCut,
 
     // Step size
     StepUp,
@@ -366,8 +368,9 @@ fn map_insert_mode(key: KeyEvent) -> Action {
         // Space for play/pause even in insert mode
         KeyCode::Char(' ') => Action::TogglePlay,
 
-        // Delete current cell
-        KeyCode::Delete | KeyCode::Backspace => Action::DeleteCell,
+        // Del enters a note-cut (^^^); Backspace deletes the cell
+        KeyCode::Delete => Action::EnterNoteCut,
+        KeyCode::Backspace => Action::DeleteCell,
 
         // Insert a new row at cursor
         KeyCode::Insert => Action::InsertRow,
@@ -702,9 +705,10 @@ mod tests {
     fn test_insert_mode_delete() {
         let del = KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE);
         let bs = KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE);
+        // Del enters a note-cut (^^^); Backspace deletes the cell
         assert_eq!(
             map_key_to_action(del, EditorMode::Insert),
-            Action::DeleteCell
+            Action::EnterNoteCut
         );
         assert_eq!(
             map_key_to_action(bs, EditorMode::Insert),

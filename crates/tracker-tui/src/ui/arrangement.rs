@@ -127,6 +127,9 @@ fn pattern_preview(pattern: &tracker_core::pattern::Pattern) -> String {
                     Some(NoteEvent::Off) => {
                         notes.push("===".to_string());
                     }
+                    Some(NoteEvent::Cut) => {
+                        notes.push("^^^".to_string());
+                    }
                     None => {}
                 }
             }

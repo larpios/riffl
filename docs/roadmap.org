@@ -168,7 +168,7 @@
   the Renoise-level instrument system.
 
 ** TODO Better Keybindings for Entering Notes
-Follow other trackers' model, like /A/ for C, /W/ for C#. But don't blindly follow this model, research first
+Follow other trackers' model, like =a= for C, =w= for C#. But don't blindly follow this model, research first
 
 ** DONE r — Replace-Once Mode
    Like vim's =r=: press =r=, type one note, cursor stays, mode stays Normal.
@@ -200,13 +200,13 @@ Follow other trackers' model, like /A/ for C, /W/ for C#. But don't blindly foll
    modes both handled. Five unit tests covering single-cell, selection, empty
    cells, out-of-range clamping, and undo.
 
-** TODO Note Cut (^^^) Distinct from Note Off (===)
+** DONE Note Cut (^^^) Distinct from Note Off (===)
    Add =NoteEvent::Cut= variant. Displays as =^^^=. Hard-silences the voice
    immediately (no envelope release). Currently =NoteEvent::Off= (===) does
    the same thing because there are no envelopes yet, but the distinction
    will matter once envelopes land.
    Also wire =ECx= extended effect (tick-delayed cut) in the mixer render.
-   Key to enter note-cut: suggest =~= or =Del= in Insert mode.
+   Key to enter note-cut: =Del= in Insert mode (=Backspace= still deletes cell).
 
 ** TODO Note Off Is Not Discoverable
    Note-off is currently bound to =`= (backtick) in Insert mode. This is

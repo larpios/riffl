@@ -596,13 +596,18 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 } else {
                     // Normal state: color-code each sub-column distinctly
                     let dimmed = Style::default().fg(theme.text_dimmed);
-                    let has_note = note_str != "---" && note_str != "===";
+                    let has_note = note_str != "---" && note_str != "===" && note_str != "^^^";
                     let is_note_off = note_str == "===";
+                    let is_note_cut = note_str == "^^^";
                     let has_inst = inst_str != "..";
                     let has_vol = vol_str != "..";
                     let has_effect = eff_str != "...";
 
-                    let note_style = if is_note_off {
+                    let note_style = if is_note_cut {
+                        Style::default()
+                            .fg(theme.warning_color())
+                            .add_modifier(Modifier::BOLD)
+                    } else if is_note_off {
                         Style::default()
                             .fg(theme.error_color())
                             .add_modifier(Modifier::BOLD)
@@ -662,6 +667,7 @@ fn format_cell_parts(
             let note_str = match &cell.note {
                 Some(NoteEvent::On(note)) => note.display_str(),
                 Some(NoteEvent::Off) => "===".to_string(),
+                Some(NoteEvent::Cut) => "^^^".to_string(),
                 None => "---".to_string(),
             };
             let inst_str = match cell.instrument {
@@ -692,6 +698,7 @@ fn format_cell_display(cell: &tracker_core::pattern::row::Cell) -> String {
     let note_str = match &cell.note {
         Some(NoteEvent::On(note)) => note.display_str(),
         Some(NoteEvent::Off) => "===".to_string(),
+        Some(NoteEvent::Cut) => "^^^".to_string(),
         None => "---".to_string(),
     };
 
@@ -1136,6 +1143,12 @@ mod tests {
     fn test_format_cell_note_off() {
         let cell = tracker_core::pattern::row::Cell::with_note(NoteEvent::Off);
         assert_eq!(format_cell_display(&cell), "=== .. .. ...");
+    }
+
+    #[test]
+    fn test_format_cell_note_cut() {
+        let cell = tracker_core::pattern::row::Cell::with_note(NoteEvent::Cut);
+        assert_eq!(format_cell_display(&cell), "^^^ .. .. ...");
     }
 
     #[test]
