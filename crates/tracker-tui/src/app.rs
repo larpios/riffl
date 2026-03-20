@@ -5,7 +5,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
@@ -140,6 +140,9 @@ pub struct App {
     /// Whether a quit confirmation is pending (user pressed q with unsaved changes)
     pub pending_quit: bool,
 
+    /// Path of a sample the user selected in the browser but hasn't confirmed an action for yet.
+    pub pending_sample_path: Option<PathBuf>,
+
     /// Whether vim command-line mode is active (`:` was pressed)
     pub command_mode: bool,
 
@@ -243,6 +246,7 @@ impl App {
             pending_key: None,
             is_dirty: false,
             pending_quit: false,
+            pending_sample_path: None,
             command_mode: false,
             command_input: String::new(),
             inst_editor: InstrumentEditorState::default(),
@@ -467,7 +471,7 @@ impl App {
             self.pending_quit = true;
             self.open_modal(Modal::confirmation(
                 "Unsaved Changes".to_string(),
-                "Quit without saving? (y=yes, n/Esc=no)".to_string(),
+                "Quit without saving?".to_string(),
             ));
             return;
         }
@@ -822,7 +826,77 @@ impl App {
         self.sync_mixer_instruments();
 
         self.instrument_names.push(name);
+        self.mark_dirty();
         Ok(idx)
+    }
+
+    /// Load a sample from an explicit path and add it as a new instrument.
+    ///
+    /// Used by the sample browser action menu ("Load as new instrument").
+    pub fn load_sample_from_path(&mut self, path: &Path) -> Result<usize, String> {
+        let output_sample_rate = self
+            .audio_engine
+            .as_ref()
+            .map(|e| e.sample_rate())
+            .unwrap_or(44100);
+
+        let sample =
+            load_sample(path, output_sample_rate).map_err(|e| format!("Failed to load: {e}"))?;
+
+        let name = sample.name().unwrap_or("unknown").to_string();
+
+        let idx = if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.add_sample(Arc::new(sample))
+        } else {
+            return Err("Failed to lock mixer".to_string());
+        };
+
+        use tracker_core::song::Instrument;
+        let mut instrument = Instrument::new(&name);
+        instrument.sample_index = Some(idx);
+        instrument.sample_path = Some(path.display().to_string());
+        self.song.instruments.push(instrument);
+        self.sync_mixer_instruments();
+        self.instrument_names.push(name);
+        self.mark_dirty();
+        Ok(idx)
+    }
+
+    /// Assign a sample file to an existing instrument slot, replacing its current sample.
+    ///
+    /// Loads the audio from `path` into the mixer and updates the instrument's
+    /// `sample_index` and `sample_path`. The instrument name is preserved.
+    pub fn assign_sample_to_instrument(
+        &mut self,
+        path: &Path,
+        inst_idx: usize,
+    ) -> Result<(), String> {
+        let output_sample_rate = self
+            .audio_engine
+            .as_ref()
+            .map(|e| e.sample_rate())
+            .unwrap_or(44100);
+
+        let sample =
+            load_sample(path, output_sample_rate).map_err(|e| format!("Failed to load: {e}"))?;
+
+        let sample_idx = if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.add_sample(Arc::new(sample))
+        } else {
+            return Err("Failed to lock mixer".to_string());
+        };
+
+        let inst = self
+            .song
+            .instruments
+            .get_mut(inst_idx)
+            .ok_or_else(|| format!("Instrument slot {inst_idx:02X} does not exist"))?;
+
+        inst.sample_index = Some(sample_idx);
+        inst.sample_path = Some(path.display().to_string());
+        self.sync_mixer_instruments();
+        self.mark_dirty();
+        Ok(())
     }
 
     /// Preview a note pitch through the current instrument's sample.
@@ -853,7 +927,8 @@ impl App {
             .unwrap_or(44100);
 
         let base_freq = sample.base_frequency();
-        let rate = (target_freq / base_freq) * (sample.sample_rate() as f64 / output_sample_rate as f64);
+        let rate =
+            (target_freq / base_freq) * (sample.sample_rate() as f64 / output_sample_rate as f64);
 
         if let Ok(mut mixer) = self.mixer.lock() {
             mixer.trigger_preview(sample, rate);
@@ -882,8 +957,8 @@ impl App {
             .map(|e| e.sample_rate())
             .unwrap_or(44100);
 
-        let sample = load_sample(&path, output_sample_rate)
-            .map_err(|e| format!("Failed to load: {e}"))?;
+        let sample =
+            load_sample(&path, output_sample_rate).map_err(|e| format!("Failed to load: {e}"))?;
 
         if let Ok(mut mixer) = self.mixer.lock() {
             // Natural pitch: play at sample's recorded rate

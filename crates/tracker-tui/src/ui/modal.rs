@@ -25,8 +25,12 @@ pub enum ModalType {
     Warning,
     /// Error message
     Error,
-    /// Confirmation dialog requiring user choice
+    /// Confirmation dialog: Enter = confirm, Esc = cancel
     Confirmation,
+    /// Action menu: options are shown in the message body as `[key]  label`.
+    /// The footer shows "Esc: cancel". Key routing is handled by the caller
+    /// via `pending_*` state in App.
+    Menu,
 }
 
 /// Modal dialog state
@@ -150,7 +154,8 @@ impl Modal {
             ModalType::Info => theme.info_color(),
             ModalType::Warning => theme.warning_color(),
             ModalType::Error => theme.error_color(),
-            ModalType::Confirmation => theme.success_color(),
+            ModalType::Confirmation => theme.warning_color(),
+            ModalType::Menu => theme.primary,
         }
     }
 
@@ -165,6 +170,11 @@ impl Modal {
         Style::default()
             .fg(self.border_color(theme))
             .add_modifier(Modifier::BOLD)
+    }
+
+    /// Create a menu modal. Options are rendered in the message body as `[key]  label` lines.
+    pub fn menu(title: String, message: String) -> Self {
+        Self::new(title, message, ModalType::Menu)
     }
 }
 
@@ -222,21 +232,24 @@ pub fn render_modal(frame: &mut Frame, area: Rect, modal: &Modal, theme: &Theme)
     let footer_text = match modal.modal_type {
         ModalType::Confirmation => {
             vec![
-                Span::styled("y", Style::default().fg(theme.success_color())),
-                Span::raw(" = yes  "),
-                Span::styled("n", Style::default().fg(theme.error_color())),
-                Span::raw(" / "),
+                Span::styled("Enter", Style::default().fg(theme.success_color())),
+                Span::raw(": confirm   "),
                 Span::styled("Esc", Style::default().fg(theme.error_color())),
-                Span::raw(" = no"),
+                Span::raw(": cancel"),
+            ]
+        }
+        ModalType::Menu => {
+            vec![
+                Span::styled("Esc", Style::default().fg(theme.error_color())),
+                Span::raw(": cancel"),
             ]
         }
         _ => {
             vec![
-                Span::raw("Press "),
-                Span::styled("ESC", Style::default().fg(theme.success_color())),
-                Span::raw(" or "),
                 Span::styled("Enter", Style::default().fg(theme.success_color())),
-                Span::raw(" to close"),
+                Span::raw(": ok   "),
+                Span::styled("Esc", Style::default().fg(theme.error_color())),
+                Span::raw(": close"),
             ]
         }
     };
@@ -327,7 +340,7 @@ mod tests {
         );
         assert_eq!(
             Modal::confirmation("".to_string(), "".to_string()).border_color(&theme),
-            Color::Green
+            Color::Yellow
         );
     }
 
