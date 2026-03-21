@@ -11,7 +11,24 @@ use crate::audio::sample::Sample;
 use crate::pattern::note::NoteEvent;
 use crate::pattern::pattern::Pattern;
 use crate::pattern::track::Track;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+
+fn f32_to_u32_bits(f: f32) -> u32 {
+    f.to_bits()
+}
+
+fn u32_bits_to_f32(bits: u32) -> f32 {
+    f32::from_bits(bits)
+}
+
+fn atomic_max_f32(atomic: &AtomicU32, new_val: f32) {
+    let new_bits = f32_to_u32_bits(new_val);
+    let old_bits = atomic.load(Ordering::Relaxed);
+    if new_bits > old_bits {
+        atomic.store(new_bits, Ordering::Relaxed);
+    }
+}
 
 /// State for a single voice playing a sample.
 #[derive(Debug, Clone)]
@@ -97,6 +114,9 @@ pub struct Mixer {
     preview_pos: f64,
     /// Playback rate for the preview voice (accounts for pitch + sample/output rate ratio).
     preview_rate: f64,
+    /// Per-channel peak levels for VU meters (left, right) as atomic u32 bit patterns.
+    /// Updated during render(), read by UI thread.
+    channel_levels: Vec<(AtomicU32, AtomicU32)>,
 }
 
 impl Mixer {
@@ -129,6 +149,10 @@ impl Mixer {
             })
             .collect();
 
+        let channel_levels: Vec<(AtomicU32, AtomicU32)> = (0..num_channels)
+            .map(|_| (AtomicU32::new(0), AtomicU32::new(0)))
+            .collect();
+
         Self {
             samples,
             instruments,
@@ -142,6 +166,7 @@ impl Mixer {
             preview_sample: None,
             preview_pos: 0.0,
             preview_rate: 1.0,
+            channel_levels,
         }
     }
 
@@ -542,6 +567,10 @@ impl Mixer {
                     output[out_idx] += post_l;
                     output[out_idx + 1] += post_r;
 
+                    let (peak_l, peak_r) = &self.channel_levels[ch];
+                    atomic_max_f32(peak_l, post_l.abs());
+                    atomic_max_f32(peak_r, post_r.abs());
+
                     for bus_idx in 0..num_buses {
                         let send_level = strip.next_send_level(bus_idx);
                         if send_level > 0.0001 {
@@ -729,6 +758,41 @@ impl Mixer {
         self.channel_strips
             .get(channel)
             .is_some_and(ChannelStrip::is_silent)
+    }
+
+    /// Get the peak level for a channel (left, right).
+    /// Returns (0.0, 0.0) for invalid channel indices.
+    pub fn get_channel_level(&self, channel: usize) -> (f32, f32) {
+        self.channel_levels
+            .get(channel)
+            .map(|(l, r)| {
+                (
+                    u32_bits_to_f32(l.load(Ordering::Relaxed)),
+                    u32_bits_to_f32(r.load(Ordering::Relaxed)),
+                )
+            })
+            .unwrap_or((0.0, 0.0))
+    }
+
+    /// Reset all channel levels to zero.
+    pub fn reset_channel_levels(&mut self) {
+        for (l, r) in &self.channel_levels {
+            l.store(0u32, Ordering::Relaxed);
+            r.store(0u32, Ordering::Relaxed);
+        }
+    }
+
+    /// Decay all channel levels by the given factor (0.0 to 1.0).
+    /// Called from the UI update loop for visual smoothing.
+    pub fn decay_channel_levels(&mut self, decay_factor: f32) {
+        for (l, r) in &self.channel_levels {
+            let current_l = u32_bits_to_f32(l.load(Ordering::Relaxed));
+            let current_r = u32_bits_to_f32(r.load(Ordering::Relaxed));
+            let decayed_l = current_l * decay_factor;
+            let decayed_r = current_r * decay_factor;
+            l.store(f32_to_u32_bits(decayed_l), Ordering::Relaxed);
+            r.store(f32_to_u32_bits(decayed_r), Ordering::Relaxed);
+        }
     }
 }
 
@@ -1833,5 +1897,142 @@ mod tests {
         // Position should have been reset at frame 1836 and then advanced for (2000-1836) = 164 frames
         // So pos2 should be ~164 * rate. Without retrigger, it would be ~2000 * rate.
         assert!(pos2 < pos1);
+    }
+
+    // --- VU Meter Tests ---
+
+    #[test]
+    fn test_mixer_channel_levels_initialized_to_zero() {
+        let sample = make_test_sample(44100, 0.25);
+        let mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
+
+        for ch in 0..4 {
+            let (l, r) = mixer.get_channel_level(ch);
+            assert_eq!(l, 0.0, "Channel {} left should be 0 initially", ch);
+            assert_eq!(r, 0.0, "Channel {} right should be 0 initially", ch);
+        }
+    }
+
+    #[test]
+    fn test_mixer_channel_levels_invalid_channel() {
+        let sample = make_test_sample(44100, 0.25);
+        let mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
+
+        let (l, r) = mixer.get_channel_level(99);
+        assert_eq!(l, 0.0);
+        assert_eq!(r, 0.0);
+    }
+
+    #[test]
+    fn test_mixer_render_tracks_peak_levels() {
+        let sample = Sample::new(vec![0.8f32; 4410], 44100, 1, Some("test".to_string()));
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
+
+        let mut pattern = Pattern::new(16, 4);
+        pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
+
+        mixer.tick(0, &pattern);
+
+        let mut output = vec![0.0f32; 512];
+        mixer.render(&mut output);
+
+        let (l, r) = mixer.get_channel_level(0);
+        assert!(l > 0.0, "Channel 0 left peak should be > 0, got {}", l);
+        assert!(r > 0.0, "Channel 0 right peak should be > 0, got {}", r);
+    }
+
+    #[test]
+    fn test_mixer_render_peak_levels_accumulate() {
+        let sample = Sample::new(vec![0.5f32; 4410], 44100, 1, Some("test".to_string()));
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
+
+        let mut pattern = Pattern::new(16, 4);
+        pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+
+        mixer.tick(0, &pattern);
+
+        let mut output = vec![0.0f32; 256];
+        mixer.render(&mut output);
+        let (l1, _) = mixer.get_channel_level(0);
+
+        mixer.render(&mut output);
+        let (l2, _) = mixer.get_channel_level(0);
+
+        assert_eq!(
+            l1, l2,
+            "Peak should remain the same across renders without new audio"
+        );
+    }
+
+    #[test]
+    fn test_mixer_reset_channel_levels() {
+        let sample = Sample::new(vec![0.8f32; 4410], 44100, 1, Some("test".to_string()));
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
+
+        let mut pattern = Pattern::new(16, 4);
+        pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
+
+        mixer.tick(0, &pattern);
+
+        let mut output = vec![0.0f32; 512];
+        mixer.render(&mut output);
+
+        let (l, _r) = mixer.get_channel_level(0);
+        assert!(l > 0.0);
+
+        mixer.reset_channel_levels();
+
+        let (l, r) = mixer.get_channel_level(0);
+        assert_eq!(l, 0.0, "Left peak should be reset to 0");
+        assert_eq!(r, 0.0, "Right peak should be reset to 0");
+    }
+
+    #[test]
+    fn test_mixer_decay_channel_levels() {
+        let sample = Sample::new(vec![0.8f32; 4410], 44100, 1, Some("test".to_string()));
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
+
+        let mut pattern = Pattern::new(16, 4);
+        pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
+
+        mixer.tick(0, &pattern);
+
+        let mut output = vec![0.0f32; 512];
+        mixer.render(&mut output);
+
+        let (l, _) = mixer.get_channel_level(0);
+        assert!(l > 0.0);
+
+        mixer.decay_channel_levels(0.5);
+
+        let (l2, _) = mixer.get_channel_level(0);
+        assert!(
+            (l2 - l * 0.5).abs() < 0.001,
+            "Peak should decay to 50%, got {} expected ~{}",
+            l2,
+            l * 0.5
+        );
+    }
+
+    #[test]
+    fn test_mixer_decay_to_zero() {
+        let sample = Sample::new(vec![0.8f32; 4410], 44100, 1, Some("test".to_string()));
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
+
+        let mut pattern = Pattern::new(16, 4);
+        pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
+
+        mixer.tick(0, &pattern);
+
+        let mut output = vec![0.0f32; 512];
+        mixer.render(&mut output);
+
+        // 20 iterations of 0.9 decay = 0.9^20 ≈ 0.12 of original
+        for _ in 0..20 {
+            mixer.decay_channel_levels(0.9);
+        }
+
+        let (l, _) = mixer.get_channel_level(0);
+        assert!(l < 0.1, "Peak should decay to less than 10%, got {}", l);
     }
 }
