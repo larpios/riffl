@@ -17,10 +17,9 @@ Riffl is an ambitious music tracker blending the structured pattern workflow of 
 - **Issue Tracking:** ALWAYS use **bd (beads)** for ALL task/issue tracking. Do NOT use markdown TODOs.
 - **Atomic Commits:** Follow conventional commits after each task.
 - **Token Efficiency:** Use `rtk` to delegate commands (cargo, git, etc).
-- **Documentation:** ALWAYS update [docs/roadmap.org](docs/roadmap.org) when milestones or tasks change.
+- **Documentation:** ALWAYS update [docs/ROADMAP.org](docs/ROADMAP.org) when milestones or tasks change.
 
 ## 🔍 Navigation
-- **Architecture & Roadmap:** [docs/roadmap.org](docs/roadmap.org)
-- **Project Structure:** [conductor/index.md](conductor/index.md)
+- **Architecture & Roadmap:** [docs/ROADMAP.org](docs/ROADMAP.org)
 - **Dev Guidelines:** [AGENTS.md](AGENTS.md)
 - **Testing:** [ACCEPTANCE_TEST.md](ACCEPTANCE_TEST.md)
