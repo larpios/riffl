@@ -20,15 +20,15 @@
    ProTracker has 10 top-level effects + 14 extended (Exy) sub-effects.
    We implement 9 of the top-level ones. Missing:
 
-*** TODO 5xy — Tone Portamento + Volume Slide
+*** DONE 5xy — Tone Portamento + Volume Slide
     Combine effect 3 (portamento-to-note) and A (volume slide) in one column.
     Param: same nibble split as Axy (upper = slide up, lower = slide down).
 
-*** TODO 6xy — Vibrato + Volume Slide
+*** DONE 6xy — Vibrato + Volume Slide
     Combine effect 4 (vibrato) and A (volume slide).
     Continues vibrato from previous row while sliding volume.
 
-*** TODO 7xy — Tremolo
+*** DONE 7xy — Tremolo
     Periodic volume modulation (analogous to vibrato but on amplitude).
     Upper nibble = speed, lower = depth. Same waveform table as vibrato.
     State needed: tremolo_phase, tremolo_speed, tremolo_depth, tremolo_waveform.
@@ -37,50 +37,50 @@
     Start sample playback at offset (xx * 256) frames into the sample.
     Implemented: Voice.with_position() sets initial position at note-on.
 
-*** TODO Exy — Extended Effects (command 0xE, sub-command in upper param nibble)
+*** DONE Exy — Extended Effects (command 0xE, sub-command in upper param nibble)
     The E-effects share a single command slot; sub-command is param >> 4.
 
-**** TODO E1x — Fine Portamento Up
+**** DONE E1x — Fine Portamento Up
      Like 1xx but applied once per row (not per tick). Param = semitones * 16.
 
-**** TODO E2x — Fine Portamento Down
+**** DONE E2x — Fine Portamento Down
      Like 2xx but applied once per row.
 
-**** TODO E3x — Glissando Control
+**** DONE E3x — Glissando Control
      Toggle whether tone portamento (3xx) snaps to nearest semitone.
      E30 = smooth, E31 = glissando (semitone steps).
 
-**** TODO E4x — Set Vibrato Waveform
+**** DONE E4x — Set Vibrato Waveform
      0=sine (default), 1=ramp-down, 2=square, 3=random.
      Waveform table used by 4xy and 6xy.
 
-**** TODO E5x — Set Finetune
+**** DONE E5x — Set Finetune
      Override instrument finetune for the current channel on this row.
      Param range 0–F maps to -8..+7 (ProTracker convention).
 
-**** TODO E6x — Pattern Loop
+**** DONE E6x — Pattern Loop
      E60 = set loop start point; E6x (x>0) = loop x times back to start.
      State needed per-channel: loop_start_row, loop_count.
 
-**** TODO E7x — Set Tremolo Waveform
+**** DONE E7x — Set Tremolo Waveform
      Same waveform options as E4x, applies to 7xy tremolo.
 
-**** TODO E9x — Retrigger Note
+**** DONE E9x — Retrigger Note
      Re-trigger the current sample every x ticks within the row.
 
-**** TODO EAx — Fine Volume Slide Up
+**** DONE EAx — Fine Volume Slide Up
      Like Ax0 but applied once per row.
 
-**** TODO EBx — Fine Volume Slide Down
+**** DONE EBx — Fine Volume Slide Down
      Like A0x but applied once per row.
 
-**** TODO ECx — Note Cut
+**** DONE ECx — Note Cut
      Set volume to 0 after x ticks within the row (sample keeps playing silently).
 
-**** TODO EDx — Note Delay
+**** DONE EDx — Note Delay
      Delay note trigger by x ticks within the row.
 
-**** TODO EEx — Pattern Delay
+**** DONE EEx — Pattern Delay
      Delay advancing to the next row by x extra row-lengths.
 
 ** Sample Features

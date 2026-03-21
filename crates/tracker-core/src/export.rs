@@ -10,6 +10,7 @@ use hound::{SampleFormat, WavSpec, WavWriter};
 
 use std::sync::Arc;
 
+use crate::audio::effect_processor::TransportCommand;
 use crate::audio::mixer::Mixer;
 use crate::audio::sample::Sample;
 use crate::song::Song;
@@ -51,9 +52,6 @@ impl Default for ExportConfig {
     }
 }
 
-/// Rows per beat constant (same as transport.rs).
-const ROWS_PER_BEAT: f64 = 4.0;
-
 /// Export a song to a WAV file.
 ///
 /// Performs offline rendering by processing the entire song arrangement
@@ -88,9 +86,16 @@ where
     );
     mixer.update_tempo(song.bpm);
 
-    // Calculate frames per row based on BPM
-    let seconds_per_row = 60.0 / song.bpm / ROWS_PER_BEAT;
-    let frames_per_row = (seconds_per_row * config.sample_rate as f64).round() as usize;
+    let mut current_bpm = song.bpm;
+    let mut current_speed = 6u8;
+
+    // Calculate frames per row based on BPM and speed
+    let get_frames_per_row = |bpm: f64, speed: u8| -> usize {
+        let seconds_per_row = (2.5 / bpm) * speed as f64;
+        (seconds_per_row * config.sample_rate as f64).round() as usize
+    };
+
+    let mut frames_per_row = get_frames_per_row(current_bpm, current_speed);
 
     // Stereo interleaved buffer for one row of audio
     let mut row_buffer = vec![0.0f32; frames_per_row * 2];
@@ -127,7 +132,26 @@ where
 
         for row in 0..num_rows {
             // Process the row (trigger notes, apply effects)
-            let _transport_cmds = mixer.tick(row, pattern);
+            let transport_cmds = mixer.tick(row, pattern);
+            for cmd in transport_cmds {
+                match cmd {
+                    TransportCommand::SetBpm(bpm) => {
+                        current_bpm = bpm;
+                        mixer.update_tempo(bpm);
+                        frames_per_row = get_frames_per_row(current_bpm, current_speed);
+                        row_buffer = vec![0.0f32; frames_per_row * 2];
+                    }
+                    TransportCommand::SetSpeed(speed) => {
+                        current_speed = speed;
+                        mixer.set_speed(speed);
+                        // Update tempo because it depends on speed
+                        mixer.update_tempo(current_bpm);
+                        frames_per_row = get_frames_per_row(current_bpm, current_speed);
+                        row_buffer = vec![0.0f32; frames_per_row * 2];
+                    }
+                    _ => {} // Other commands not yet supported in offline export
+                }
+            }
 
             // Render audio for this row
             row_buffer.iter_mut().for_each(|s| *s = 0.0);
@@ -174,7 +198,7 @@ fn wav_spec(config: &ExportConfig) -> WavSpec {
 
 /// Calculate the expected duration of a song in seconds.
 pub fn song_duration(song: &Song) -> f64 {
-    let seconds_per_row = 60.0 / song.bpm / ROWS_PER_BEAT;
+    let seconds_per_row = (2.5 / song.bpm) * 6.0;
     let total_rows: usize = song
         .arrangement
         .iter()
@@ -585,7 +609,7 @@ mod tests {
         // Duration at 140 BPM: 64 rows * (60 / 140 / 4) = 64 * ~0.10714 ≈ 6.857s
         let num_frames = reader.len() / spec.channels as u32;
         let duration = num_frames as f64 / spec.sample_rate as f64;
-        let expected = 64.0 * (60.0 / 140.0 / 4.0);
+        let expected = 64.0 * ((2.5 / 140.0) * 6.0);
         assert!(
             (duration - expected).abs() < 0.1,
             "Expected ~{:.2}s duration at 140 BPM, got {:.2}s",

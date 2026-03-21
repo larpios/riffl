@@ -488,6 +488,12 @@ impl App {
                         mixer.update_tempo(clamped);
                     }
                 }
+                TransportCommand::SetSpeed(speed) => {
+                    self.transport.set_speed(speed);
+                    if let Ok(mut mixer) = self.mixer.lock() {
+                        mixer.set_speed(speed);
+                    }
+                }
                 TransportCommand::PositionJump(pos) => {
                     let old_pos = self.transport.arrangement_position();
                     if self.transport.jump_to_arrangement_position(pos) && pos != old_pos {
@@ -502,6 +508,30 @@ impl App {
                         self.flush_editor_pattern(old_pos);
                         self.load_arrangement_pattern(new_pos);
                     }
+                }
+                TransportCommand::PatternLoop(sub_param) => {
+                    if sub_param == 0 {
+                        // E60: set loop point
+                        self.transport
+                            .set_pattern_loop_row(Some(self.transport.current_row()));
+                    } else if self.transport.pattern_loop_count() == 0 {
+                        // E6x (x>0): start looping if not already looping
+                        self.transport.set_pattern_loop_count(sub_param);
+                        if let Some(target) = self.transport.trigger_pattern_loop() {
+                            if self.follow_mode {
+                                self.editor.go_to_row(target);
+                            }
+                        }
+                    } else if let Some(target) = self.transport.trigger_pattern_loop() {
+                        // E6x (x>0): continue looping
+                        if self.follow_mode {
+                            self.editor.go_to_row(target);
+                        }
+                    }
+                }
+                TransportCommand::PatternDelay(delay) => {
+                    // EEx: pattern delay
+                    self.transport.set_pattern_delay(delay);
                 }
             }
         }
@@ -2382,7 +2412,7 @@ mod tests {
         app.transport.play();
 
         // Advance through all rows to trigger the loop
-        let spr = 60.0 / 120.0 / 4.0; // seconds per row at 120 BPM
+        let spr = (2.5 / 120.0) * 6.0; // seconds per row at 120 BPM
         app.transport.advance(spr); // Row 1
         app.last_update = Instant::now();
         app.transport.advance(spr); // Row 2
@@ -2431,7 +2461,7 @@ mod tests {
         app.transport.play();
 
         // Advance through all rows to trigger the loop
-        let spr = 60.0 / 120.0 / 4.0;
+        let spr = (2.5 / 120.0) * 6.0;
         app.transport.advance(spr); // Row 1
         app.transport.advance(spr); // Row 2
         app.transport.advance(spr); // Row 3
@@ -2570,7 +2600,7 @@ mod tests {
         app.transport.play();
 
         // Advance through all rows without executing script
-        let spr = 60.0 / 120.0 / 4.0;
+        let spr = (2.5 / 120.0) * 6.0;
         app.transport.advance(spr); // Row 1
         app.transport.advance(spr); // Row 2
         app.transport.advance(spr); // Row 3
@@ -2608,7 +2638,7 @@ mod tests {
         app.transport.play();
 
         // Advance a few rows
-        let spr = 60.0 / 120.0 / 4.0;
+        let spr = (2.5 / 120.0) * 6.0;
         app.transport.advance(spr); // Row 1
         app.transport.advance(spr); // Row 2
         let row_before = app.transport.current_row();

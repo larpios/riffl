@@ -16,10 +16,16 @@ use crate::pattern::effect::{Effect, EffectType};
 pub enum TransportCommand {
     /// Set the tempo to the given BPM value.
     SetBpm(f64),
+    /// Set the ticks per row (speed).
+    SetSpeed(u8),
     /// Jump to the given arrangement position (Bxx effect).
     PositionJump(usize),
     /// Break to the given row of the next pattern (Dxx effect).
     PatternBreak(usize),
+    /// Pattern loop (E6x): 0 = set loop point, x > 0 = loop x times.
+    PatternLoop(u8),
+    /// Pattern delay (EEx): delay advancing by x extra row-lengths.
+    PatternDelay(u8),
 }
 
 /// Output from the effect processor for a single channel.
@@ -112,11 +118,21 @@ pub struct ChannelEffectState {
     /// Number of remaining loop repetitions.
     pub pattern_loop_count: u8,
 
+    // --- Sub-row Timing (E9x, ECx, EDx) ---
+    /// Retrigger interval in ticks (E9x).
+    pub retrigger_interval: Option<u8>,
+    /// Tick to cut the note (ECx).
+    pub note_cut_tick: Option<u8>,
+    /// Tick to delay the note trigger (EDx).
+    pub note_delay_tick: Option<u8>,
+
     // --- Frame tracking ---
     /// Frames elapsed within the current row (for sub-row modulation).
     pub row_frame_counter: u32,
     /// Total frames per row (set from BPM and sample rate).
     pub frames_per_row: u32,
+    /// Number of ticks per row (default 6).
+    pub ticks_per_row: u8,
 }
 
 impl Default for ChannelEffectState {
@@ -147,8 +163,12 @@ impl Default for ChannelEffectState {
             finetune_override: None,
             pattern_loop_start_row: None,
             pattern_loop_count: 0,
+            retrigger_interval: None,
+            note_cut_tick: None,
+            note_delay_tick: None,
             row_frame_counter: 0,
             frames_per_row: 6000, // ~125ms at 48kHz (120 BPM default)
+            ticks_per_row: 6,
         }
     }
 }
@@ -158,6 +178,7 @@ impl ChannelEffectState {
     pub fn reset(&mut self) {
         *self = Self {
             frames_per_row: self.frames_per_row,
+            ticks_per_row: self.ticks_per_row,
             ..Self::default()
         };
     }
@@ -173,6 +194,9 @@ impl ChannelEffectState {
         self.volume_slide_down = 0;
         self.sample_offset = None;
         self.finetune_override = None;
+        self.retrigger_interval = None;
+        self.note_cut_tick = None;
+        self.note_delay_tick = None;
         self.row_frame_counter = 0;
     }
 
@@ -415,6 +439,11 @@ impl TrackerEffectProcessor {
                     state.volume_slide_up = up;
                     state.volume_slide_down = down;
 
+                    // Apply volume slide immediately for this row
+                    let current_vol = state.volume_override.unwrap_or(1.0);
+                    let delta = (up as f32 - down as f32) / 64.0;
+                    state.volume_override = Some((current_vol + delta).clamp(0.0, 2.0));
+
                     // Portamento target is handled by new notes triggered on this row
                     if let Some(freq) = note_frequency {
                         state.portamento_target = Some(freq);
@@ -432,6 +461,11 @@ impl TrackerEffectProcessor {
                     let down = effect.param_y();
                     state.volume_slide_up = up;
                     state.volume_slide_down = down;
+
+                    // Apply volume slide immediately for this row
+                    let current_vol = state.volume_override.unwrap_or(1.0);
+                    let delta = (up as f32 - down as f32) / 64.0;
+                    state.volume_override = Some((current_vol + delta).clamp(0.0, 2.0));
                 }
 
                 EffectType::Tremolo => {
@@ -506,11 +540,7 @@ impl TrackerEffectProcessor {
                         }
                         0x6 => {
                             // E6x: Pattern Loop
-                            if sub_param == 0 {
-                                // Set loop point - handled by the transport/mixer
-                            } else {
-                                // Loop x times - handled by the transport/mixer
-                            }
+                            commands.push(TransportCommand::PatternLoop(sub_param));
                         }
                         0x7 => {
                             // E7x: Set Tremolo Waveform
@@ -518,7 +548,7 @@ impl TrackerEffectProcessor {
                         }
                         0x9 => {
                             // E9x: Retrigger Note
-                            // Handled by the mixer frame loop
+                            state.retrigger_interval = Some(sub_param);
                         }
                         0xA => {
                             // EAx: Fine Volume Slide Up
@@ -534,11 +564,15 @@ impl TrackerEffectProcessor {
                         }
                         0xC => {
                             // ECx: Note Cut
-                            // Handled by the mixer frame loop
+                            state.note_cut_tick = Some(sub_param);
                         }
                         0xD => {
                             // EDx: Note Delay
-                            // Handled by the mixer row trigger
+                            state.note_delay_tick = Some(sub_param);
+                        }
+                        0xE => {
+                            // EEx: Pattern Delay
+                            commands.push(TransportCommand::PatternDelay(sub_param));
                         }
                         _ => {}
                     }
@@ -549,9 +583,9 @@ impl TrackerEffectProcessor {
                     // if param >= 0x20, set BPM
                     if effect.param >= 0x20 {
                         commands.push(TransportCommand::SetBpm(effect.param as f64));
+                    } else if effect.param > 0 {
+                        commands.push(TransportCommand::SetSpeed(effect.param));
                     }
-                    // Speed (ticks per row) < 0x20 is not yet implemented
-                    // since we don't have a sub-tick system
                 }
             }
         }
@@ -572,6 +606,15 @@ impl TrackerEffectProcessor {
         state.row_frame_counter += 1;
         state.advance_vibrato(self.sample_rate);
         state.advance_tremolo(self.sample_rate);
+
+        // Advance volume slides
+        if state.volume_slide_up > 0 || state.volume_slide_down > 0 {
+            let current_vol = state.volume_override.unwrap_or(1.0);
+            let delta_per_row =
+                (state.volume_slide_up as f32 - state.volume_slide_down as f32) / 64.0;
+            let delta_per_frame = delta_per_row / state.frames_per_row as f32;
+            state.volume_override = Some((current_vol + delta_per_frame).clamp(0.0, 2.0));
+        }
     }
 
     /// Get the combined pitch ratio for a channel (all pitch effects combined).
@@ -631,11 +674,12 @@ impl TrackerEffectProcessor {
 
     /// Update the frames-per-row value for all channels based on BPM and sample rate.
     pub fn update_tempo(&mut self, bpm: f64) {
-        let rows_per_beat = 4.0;
-        let seconds_per_row = 60.0 / bpm / rows_per_beat;
-        let frames = (seconds_per_row * self.sample_rate as f64) as u32;
         for state in &mut self.channels {
-            state.frames_per_row = frames.max(1);
+            let seconds_per_row = (2.5 / bpm) * state.ticks_per_row as f64;
+            state.frames_per_row = (seconds_per_row * self.sample_rate as f64) as u32;
+            if state.frames_per_row == 0 {
+                state.frames_per_row = 1;
+            }
         }
     }
 
@@ -1033,6 +1077,26 @@ mod tests {
     }
 
     #[test]
+    fn test_process_row_vibrato_volume_slide() {
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
+        // Initial volume
+        proc.process_row(0, &[Effect::from_type(EffectType::SetVolume, 0x40)], None);
+
+        // 6xy: Vibrato + Volume Slide (Up 1, Down 0)
+        let effects = vec![Effect::from_type(EffectType::VibratoVolumeSlide, 0x10)];
+        proc.process_row(0, &effects, None);
+
+        let state = proc.channel_state(0).unwrap();
+        assert!(state.vibrato_active);
+        assert_eq!(state.volume_slide_up, 1);
+        assert_eq!(state.volume_slide_down, 0);
+
+        // Verify immediate volume slide application
+        let vol = proc.volume_override(0).unwrap();
+        assert!((vol - (1.0 + 1.0 / 64.0)).abs() < 0.001);
+    }
+
+    #[test]
     fn test_process_row_tone_portamento_volume_slide() {
         let mut proc = TrackerEffectProcessor::new(4, 48000);
         // Set initial speed and volume
@@ -1043,7 +1107,7 @@ mod tests {
         );
         proc.process_row(0, &[Effect::from_type(EffectType::SetVolume, 0x40)], None);
 
-        // 5xy: Porta + Vol Slide
+        // 5xy: Porta + Vol Slide (Up 1, Down 0)
         let effects = vec![Effect::from_type(
             EffectType::TonePortamentoVolumeSlide,
             0x10,
@@ -1053,6 +1117,34 @@ mod tests {
         let state = proc.channel_state(0).unwrap();
         assert_eq!(state.portamento_speed, 1.0);
         assert_eq!(state.volume_slide_up, 1);
+
+        // Verify immediate volume slide application
+        let vol = proc.volume_override(0).unwrap();
+        assert!((vol - (1.0 + 1.0 / 64.0)).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_advance_frame_volume_slide() {
+        let mut proc = TrackerEffectProcessor::new(1, 48000);
+        proc.update_tempo(120.0); // 6000 frames per row
+
+        // Initial volume
+        proc.process_row(0, &[Effect::from_type(EffectType::SetVolume, 0x40)], None);
+
+        // Set volume slide (Up 1, Down 0)
+        let effects = vec![Effect::from_type(EffectType::VolumeSlide, 0x10)];
+        proc.process_row(0, &effects, None);
+
+        let vol_after_row = proc.volume_override(0).unwrap();
+
+        // Advance one frame
+        proc.advance_frame(0);
+
+        let vol_after_frame = proc.volume_override(0).unwrap();
+
+        // Each frame should slide by (up-down)/64 / frames_per_row
+        let expected_delta = (1.0 / 64.0) / 6000.0;
+        assert!((vol_after_frame - (vol_after_row + expected_delta as f32)).abs() < 0.000001);
     }
 
     #[test]
@@ -1161,10 +1253,8 @@ mod tests {
         let effects = vec![Effect::from_type(EffectType::SetSpeed, 0x06)]; // Speed, not BPM
         let cmds = proc.process_row(0, &effects, None);
 
-        assert!(
-            cmds.is_empty(),
-            "Speed values < 0x20 should not generate BPM command"
-        );
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0], TransportCommand::SetSpeed(6));
     }
 
     #[test]
@@ -1331,6 +1421,6 @@ mod tests {
 
         // F1F = speed 31, not BPM (just below boundary)
         let cmds = proc.process_row(0, &[Effect::from_type(EffectType::SetSpeed, 0x1F)], None);
-        assert!(cmds.is_empty());
+        assert_eq!(cmds, vec![TransportCommand::SetSpeed(31)]);
     }
 }
