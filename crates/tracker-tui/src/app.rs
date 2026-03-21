@@ -188,6 +188,18 @@ pub struct App {
 
     /// Instrument editor panel state (shown below the instrument list)
     pub inst_editor: InstrumentEditorState,
+
+    /// Whether the sample browser has an active user-initiated preview.
+    pub browser_preview_active: bool,
+
+    /// Sample data kept for scrubbing (re-trigger from a different offset).
+    browser_preview_sample: Option<Arc<Sample>>,
+
+    /// Playback rate for the current browser preview (sample_rate / output_rate).
+    browser_preview_rate: f64,
+
+    /// Current scrub start offset in sample-native frames.
+    pub browser_preview_offset_frames: usize,
 }
 
 impl App {
@@ -299,6 +311,10 @@ impl App {
             draw_mode: false,
             draw_note: None,
             inst_editor: InstrumentEditorState::default(),
+            browser_preview_active: false,
+            browser_preview_sample: None,
+            browser_preview_rate: 1.0,
+            browser_preview_offset_frames: 0,
         }
     }
 
@@ -1168,6 +1184,7 @@ impl App {
 
     /// Preview the currently selected sample in the sample browser.
     /// Loads and plays it at natural pitch without adding it to the instrument list.
+    /// Starts from `self.browser_preview_offset_frames` so scrubbing is preserved.
     pub fn preview_selected_sample(&mut self) -> Result<(), String> {
         let path = self
             .sample_browser
@@ -1185,13 +1202,23 @@ impl App {
         let sample =
             load_sample(&path, output_sample_rate).map_err(|e| format!("Failed to load: {e}"))?;
 
+        let rate = sample.sample_rate() as f64 / output_sample_rate as f64;
+        let sample = Arc::new(sample);
+
         if let Ok(mut mixer) = self.mixer.lock() {
-            // Natural pitch: play at sample's recorded rate
-            let rate = sample.sample_rate() as f64 / output_sample_rate as f64;
-            mixer.trigger_preview(Arc::new(sample), rate);
+            mixer.trigger_preview_at(
+                Arc::clone(&sample),
+                rate,
+                self.browser_preview_offset_frames,
+            );
         } else {
             return Err("Failed to lock mixer".to_string());
         }
+
+        // Keep sample + rate for scrubbing re-triggers
+        self.browser_preview_sample = Some(sample);
+        self.browser_preview_rate = rate;
+        self.browser_preview_active = true;
 
         // Ensure audio engine is running so the preview is audible
         if let Some(ref mut engine) = self.audio_engine {
@@ -1201,6 +1228,68 @@ impl App {
         }
 
         Ok(())
+    }
+
+    /// Stop any active browser preview.
+    pub fn stop_browser_preview(&mut self) {
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.stop_preview();
+        }
+        self.browser_preview_active = false;
+    }
+
+    /// Toggle browser preview: stop if playing, start from current offset if not.
+    pub fn toggle_browser_preview(&mut self) {
+        let playing = self
+            .mixer
+            .lock()
+            .map(|m| m.is_preview_playing())
+            .unwrap_or(false);
+        if playing {
+            self.stop_browser_preview();
+        } else {
+            let _ = self.preview_selected_sample();
+        }
+    }
+
+    /// Adjust the preview scrub offset and re-trigger from the new position.
+    /// `forward` moves later into the sample; `false` moves earlier.
+    /// Step is 0.25 s in sample-native frames, clamped to [0, sample_length].
+    pub fn scrub_browser_preview(&mut self, forward: bool) {
+        let sample = match self.browser_preview_sample.clone() {
+            Some(s) => s,
+            None => return,
+        };
+        let step = (sample.sample_rate() / 4) as usize; // 0.25 s
+        let max_frame = sample.frame_count().saturating_sub(1);
+
+        if forward {
+            self.browser_preview_offset_frames =
+                (self.browser_preview_offset_frames + step).min(max_frame);
+        } else {
+            self.browser_preview_offset_frames =
+                self.browser_preview_offset_frames.saturating_sub(step);
+        }
+
+        let rate = self.browser_preview_rate;
+        let offset = self.browser_preview_offset_frames;
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.trigger_preview_at(Arc::clone(&sample), rate, offset);
+        }
+        self.browser_preview_active = true;
+
+        if let Some(ref mut engine) = self.audio_engine {
+            if !engine.is_playing() {
+                let _ = engine.start();
+            }
+        }
+    }
+
+    /// Clear browser preview state (called on selection change to reset offset).
+    pub fn reset_browser_preview(&mut self) {
+        self.stop_browser_preview();
+        self.browser_preview_offset_frames = 0;
+        self.browser_preview_sample = None;
     }
 
     /// Import a ProTracker .mod file, replacing the current song.
@@ -2806,7 +2895,10 @@ mod tests {
             .entries()
             .iter()
             .any(|e| e.path == samples_dir);
-        assert!(has_samples, "project-relative samples/ should be auto-added as a root");
+        assert!(
+            has_samples,
+            "project-relative samples/ should be auto-added as a root"
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -2827,8 +2919,40 @@ mod tests {
             .entries()
             .iter()
             .any(|e| e.path == samples_dir);
-        assert!(!has_samples, "should not add samples/ root when directory doesn't exist");
+        assert!(
+            !has_samples,
+            "should not add samples/ root when directory doesn't exist"
+        );
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // --- Browser preview toggle & scrub state ---
+
+    #[test]
+    fn test_browser_preview_inactive_initially() {
+        let app = App::new();
+        assert!(!app.browser_preview_active);
+        assert_eq!(app.browser_preview_offset_frames, 0);
+    }
+
+    #[test]
+    fn test_stop_browser_preview_clears_active() {
+        let mut app = App::new();
+        // Manually set active to simulate a started preview
+        app.browser_preview_active = true;
+        app.stop_browser_preview();
+        assert!(!app.browser_preview_active);
+    }
+
+    #[test]
+    fn test_reset_browser_preview_clears_offset_and_sample() {
+        let mut app = App::new();
+        app.browser_preview_active = true;
+        app.browser_preview_offset_frames = 4410;
+        app.reset_browser_preview();
+        assert!(!app.browser_preview_active);
+        assert_eq!(app.browser_preview_offset_frames, 0);
+        assert!(app.browser_preview_sample.is_none());
     }
 }
