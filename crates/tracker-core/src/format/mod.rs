@@ -24,63 +24,76 @@ pub fn convert_xmrs_module(mut module: xmrs::module::Module) -> Result<FormatDat
 
     let mut out_samples = vec![];
     let mut out_instruments = vec![];
+    let mut inst_to_tracker_inst: Vec<Vec<Option<usize>>> = vec![];
 
     for xm_inst in module.instrument.iter() {
-        let mut inst = Instrument::new(xm_inst.name.clone());
+        let mut sample_map = vec![];
 
         if let InstrumentType::Default(def) = &xm_inst.instr_type {
-            if let Some((_, Some(xm_samp))) = def
-                .sample
-                .iter()
-                .enumerate()
-                .find(|(_, s)| s.as_ref().map_or(false, |x| x.data.is_some()))
-            {
-                let float_data = match xm_samp.data.as_ref().unwrap() {
-                    SampleDataType::Mono8(v) => v.iter().map(|&s| s as f32 / 128.0).collect(),
-                    SampleDataType::Mono16(v) => v.iter().map(|&s| s as f32 / 32768.0).collect(),
-                    SampleDataType::Stereo8(v) => v.iter().map(|&s| s as f32 / 128.0).collect(),
-                    SampleDataType::Stereo16(v) => v.iter().map(|&s| s as f32 / 32768.0).collect(),
-                    SampleDataType::StereoFloat(v) => v.clone(),
-                };
+            sample_map.resize(def.sample.len(), None);
+            for (s_idx, s_opt) in def.sample.iter().enumerate() {
+                if let Some(xm_samp) = s_opt {
+                    if xm_samp.data.is_some() {
+                        let float_data = match xm_samp.data.as_ref().unwrap() {
+                            SampleDataType::Mono8(v) => v.iter().map(|&s| s as f32 / 128.0).collect(),
+                            SampleDataType::Mono16(v) => v.iter().map(|&s| s as f32 / 32768.0).collect(),
+                            SampleDataType::Stereo8(v) => v.iter().map(|&s| s as f32 / 128.0).collect(),
+                            SampleDataType::Stereo16(v) => v.iter().map(|&s| s as f32 / 32768.0).collect(),
+                            SampleDataType::StereoFloat(v) => v.clone(),
+                        };
 
-                let channels = match xm_samp.data.as_ref().unwrap() {
-                    SampleDataType::Mono8(_) | SampleDataType::Mono16(_) => 1,
-                    _ => 2,
-                };
+                        let channels = match xm_samp.data.as_ref().unwrap() {
+                            SampleDataType::Mono8(_) | SampleDataType::Mono16(_) => 1,
+                            _ => 2,
+                        };
 
-                let mut sample = Sample::new(float_data, 8363, channels, Some(xm_samp.name.clone()));
-                sample.volume = xm_samp.volume;
-                sample.finetune = (xm_samp.finetune * 100.0) as i32;
+                        let mut sample = Sample::new(float_data, 8363, channels, Some(xm_samp.name.clone()));
+                        sample.volume = xm_samp.volume;
+                        sample.finetune = (xm_samp.finetune * 100.0) as i32;
 
-                match xm_samp.loop_flag {
-                    LoopType::No => {}
-                    LoopType::Forward => {
-                        sample = sample.with_loop(
-                            LoopMode::Forward,
-                            xm_samp.loop_start as usize,
-                            xm_samp.loop_start as usize
-                                + xm_samp.loop_length.saturating_sub(1) as usize,
-                        );
-                    }
-                    LoopType::PingPong => {
-                        sample = sample.with_loop(
-                            LoopMode::PingPong,
-                            xm_samp.loop_start as usize,
-                            xm_samp.loop_start as usize
-                                + xm_samp.loop_length.saturating_sub(1) as usize,
-                        );
+                        match xm_samp.loop_flag {
+                            LoopType::No => {}
+                            LoopType::Forward => {
+                                sample = sample.with_loop(
+                                    LoopMode::Forward,
+                                    xm_samp.loop_start as usize,
+                                    xm_samp.loop_start as usize
+                                        + xm_samp.loop_length.saturating_sub(1) as usize,
+                                );
+                            }
+                            LoopType::PingPong => {
+                                sample = sample.with_loop(
+                                    LoopMode::PingPong,
+                                    xm_samp.loop_start as usize,
+                                    xm_samp.loop_start as usize
+                                        + xm_samp.loop_length.saturating_sub(1) as usize,
+                                );
+                            }
+                        }
+
+                        let base_note_midi = (48_i32 - xm_samp.relative_pitch as i32).clamp(0, 119) as u8;
+                        sample = sample.with_base_note(base_note_midi);
+
+                        let inst_name = if xm_samp.name.is_empty() {
+                            xm_inst.name.clone()
+                        } else if xm_inst.name.is_empty() {
+                            xm_samp.name.clone()
+                        } else {
+                            format!("{} - {}", xm_inst.name, xm_samp.name)
+                        };
+                        
+                        let mut inst = Instrument::new(inst_name);
+                        inst.sample_index = Some(out_samples.len());
+                        inst.volume = xm_samp.volume;
+
+                        sample_map[s_idx] = Some(out_instruments.len());
+                        out_samples.push(sample);
+                        out_instruments.push(inst);
                     }
                 }
-
-                let base_note_midi = (48_i32 - xm_samp.relative_pitch as i32).clamp(0, 119) as u8;
-                sample = sample.with_base_note(base_note_midi);
-
-                inst.sample_index = Some(out_samples.len());
-                out_samples.push(sample);
-                inst.volume = xm_samp.volume;
             }
         }
-        out_instruments.push(inst);
+        inst_to_tracker_inst.push(sample_map);
     }
     song.instruments = out_instruments;
 
@@ -111,11 +124,26 @@ pub fn convert_xmrs_module(mut module: xmrs::module::Module) -> Result<FormatDat
                     }
                 }
 
-                if let Some(inst_idx) = xm_tu.instrument {
-                    // map 1-based xmrs instruments to 0-based indexing if they are 1-based.
-                    // xmrs instrument field in track unit is 0-based for internal representations?
-                    // Let's keep it exactly as it is given.
-                    cell.instrument = Some(inst_idx.saturating_sub(1) as u8);
+                if let Some(inst_idx_1based) = xm_tu.instrument {
+                    let i = inst_idx_1based.saturating_sub(1) as usize;
+                    if i < module.instrument.len() {
+                        if let InstrumentType::Default(def) = &module.instrument[i].instr_type {
+                            let mut sample_idx = 0;
+                            if let Some(NoteEvent::On(n)) = &cell.note {
+                                let midi_pitch = n.octave as usize * 12 + n.pitch.semitone() as usize;
+                                if midi_pitch < 120 {
+                                    if let Some(s) = def.sample_for_pitch[midi_pitch] {
+                                        sample_idx = s;
+                                    }
+                                }
+                            }
+                            if i < inst_to_tracker_inst.len() && sample_idx < inst_to_tracker_inst[i].len() {
+                                if let Some(mapped_idx) = inst_to_tracker_inst[i][sample_idx] {
+                                    cell.instrument = Some(mapped_idx as u8);
+                                }
+                            }
+                        }
+                    }
                 }
 
                 pat.set_cell(r_idx, c_idx, cell);
