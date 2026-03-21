@@ -300,7 +300,8 @@ impl Mixer {
                                 trigger_frame,
                             });
                         } else {
-                            let mut voice = Voice::new(instrument_idx, playback_rate, velocity_gain);
+                            let mut voice =
+                                Voice::new(instrument_idx, playback_rate, velocity_gain);
                             if let Some(offset) = self.effect_processor.sample_offset(ch) {
                                 voice = voice.with_position(offset as f64);
                             }
@@ -363,11 +364,19 @@ impl Mixer {
                 for frame in 0..num_frames {
                     // Check for pending note trigger for this channel at this frame
                     let mut triggered_now = false;
-                    let current_row_frame = effect_processor.channel_state(ch).unwrap().row_frame_counter;
-                    
-                    if let Some(pos) = self.pending_notes.iter().position(|pn| pn.channel == ch && pn.trigger_frame == current_row_frame) {
+                    let current_row_frame = effect_processor
+                        .channel_state(ch)
+                        .unwrap()
+                        .row_frame_counter;
+
+                    if let Some(pos) = self
+                        .pending_notes
+                        .iter()
+                        .position(|pn| pn.channel == ch && pn.trigger_frame == current_row_frame)
+                    {
                         let pn = self.pending_notes.remove(pos);
-                        let mut voice = Voice::new(pn.sample_index, pn.playback_rate, pn.velocity_gain);
+                        let mut voice =
+                            Voice::new(pn.sample_index, pn.playback_rate, pn.velocity_gain);
                         if let Some(offset) = pn.offset {
                             voice = voice.with_position(offset as f64);
                         }
@@ -385,7 +394,7 @@ impl Mixer {
 
                     let render_state = effect_processor.voice_render_state(ch);
                     let ch_state = effect_processor.channel_state(ch).unwrap();
-                    
+
                     // Sub-row timing logic
                     let frames_per_tick = ch_state.frames_per_row / ch_state.ticks_per_row as u32;
                     let current_tick = ch_state.row_frame_counter / frames_per_tick;
@@ -399,9 +408,14 @@ impl Mixer {
                     }
 
                     // Retrigger (E9x)
-                    if !triggered_now { // Don't retrigger a note that just started
+                    if !triggered_now {
+                        // Don't retrigger a note that just started
                         if let Some(retrigger_interval) = ch_state.retrigger_interval {
-                            if retrigger_interval > 0 && current_tick > 0 && tick_frame == 0 && (current_tick % retrigger_interval as u32 == 0) {
+                            if retrigger_interval > 0
+                                && current_tick > 0
+                                && tick_frame == 0
+                                && current_tick.is_multiple_of(retrigger_interval as u32)
+                            {
                                 voice.position = 0.0;
                             }
                         }
@@ -492,12 +506,10 @@ impl Mixer {
                                         } else {
                                             next
                                         }
+                                    } else if pos_floor > sample.loop_start {
+                                        pos_floor - 1
                                     } else {
-                                        if pos_floor > sample.loop_start {
-                                            pos_floor - 1
-                                        } else {
-                                            sample.loop_start
-                                        }
+                                        sample.loop_start
                                     }
                                 }
                             }
@@ -1732,7 +1744,8 @@ mod tests {
         // trigger_frame = 3 * (5512 / 6) = 3 * 918 = 2754.
         let mut cell = Cell::default();
         cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
-        cell.effects.push(Effect::from_type(EffectType::Extended, 0xD3));
+        cell.effects
+            .push(Effect::from_type(EffectType::Extended, 0xD3));
         pattern.set_cell(0, 0, cell);
 
         mixer.tick(0, &pattern);
@@ -1768,7 +1781,8 @@ mod tests {
         // EC2: Cut after 2 ticks. 2 ticks = 2 * 918 = 1836 frames.
         let mut cell = Cell::default();
         cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
-        cell.effects.push(Effect::from_type(EffectType::Extended, 0xC2));
+        cell.effects
+            .push(Effect::from_type(EffectType::Extended, 0xC2));
         pattern.set_cell(0, 0, cell);
 
         mixer.tick(0, &pattern);
@@ -1799,7 +1813,8 @@ mod tests {
         // E92: Retrigger every 2 ticks. 2 ticks = 1836 frames.
         let mut cell = Cell::default();
         cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
-        cell.effects.push(Effect::from_type(EffectType::Extended, 0x92));
+        cell.effects
+            .push(Effect::from_type(EffectType::Extended, 0x92));
         pattern.set_cell(0, 0, cell);
 
         mixer.tick(0, &pattern);

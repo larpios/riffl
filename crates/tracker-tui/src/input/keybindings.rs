@@ -7,6 +7,269 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::app::AppView;
 use crate::editor::EditorMode;
+use crate::registry::{ActionCategory, ActionMetadata, Keybinding};
+
+/// Registry for discovering keybindings
+pub struct KeybindingRegistry;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct KeyMapping {
+    key: &'static str,
+    action: Action,
+    mode: EditorMode,
+}
+
+const KEY_MAPPINGS: &[KeyMapping] = &[
+    // Normal Mode
+    KeyMapping {
+        key: "h / ←",
+        action: Action::MoveLeft,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "j / ↓",
+        action: Action::MoveDown,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "k / ↑",
+        action: Action::MoveUp,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "l / →",
+        action: Action::MoveRight,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "PgUp",
+        action: Action::PageUp,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "PgDn",
+        action: Action::PageDown,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Tab",
+        action: Action::NextTrack,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "i",
+        action: Action::EnterInsertMode,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "v",
+        action: Action::EnterVisualMode,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "y",
+        action: Action::Copy,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "p",
+        action: Action::Paste,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "x / Del",
+        action: Action::DeleteCell,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ins",
+        action: Action::InsertRow,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "o",
+        action: Action::InsertRowBelow,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "u",
+        action: Action::Undo,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: ":",
+        action: Action::EnterCommandMode,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Space",
+        action: Action::TogglePlay,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "f",
+        action: Action::ToggleFollowMode,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "t",
+        action: Action::TapTempo,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "?",
+        action: Action::ToggleHelp,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "1-6",
+        action: Action::SwitchView(AppView::PatternEditor),
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+C",
+        action: Action::Copy,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+V",
+        action: Action::Paste,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+X",
+        action: Action::Cut,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+R",
+        action: Action::Redo,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+S",
+        action: Action::SaveProject,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+B",
+        action: Action::OpenBpmPrompt,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+P",
+        action: Action::OpenLenPrompt,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Alt+[",
+        action: Action::SetLoopStart,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Alt+]",
+        action: Action::SetLoopEnd,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+Shift+L",
+        action: Action::ToggleLoopRegion,
+        mode: EditorMode::Normal,
+    },
+    // Insert Mode
+    KeyMapping {
+        key: "Esc",
+        action: Action::EnterNormalMode,
+        mode: EditorMode::Insert,
+    },
+    KeyMapping {
+        key: "~",
+        action: Action::EnterNoteOff,
+        mode: EditorMode::Insert,
+    },
+    KeyMapping {
+        key: "a-k",
+        action: Action::EnterNote('a'),
+        mode: EditorMode::Insert,
+    },
+    KeyMapping {
+        key: "0-9",
+        action: Action::SetOctave(0),
+        mode: EditorMode::Insert,
+    },
+    KeyMapping {
+        key: "Backspace",
+        action: Action::DeleteCell,
+        mode: EditorMode::Insert,
+    },
+    KeyMapping {
+        key: "Delete",
+        action: Action::EnterNoteCut,
+        mode: EditorMode::Insert,
+    },
+    KeyMapping {
+        key: "Space",
+        action: Action::TogglePlay,
+        mode: EditorMode::Insert,
+    },
+    KeyMapping {
+        key: "Tab",
+        action: Action::NextTrack,
+        mode: EditorMode::Insert,
+    },
+    // Visual Mode
+    KeyMapping {
+        key: "Esc / v",
+        action: Action::EnterNormalMode,
+        mode: EditorMode::Visual,
+    },
+    KeyMapping {
+        key: "y",
+        action: Action::Copy,
+        mode: EditorMode::Visual,
+    },
+    KeyMapping {
+        key: "p",
+        action: Action::Paste,
+        mode: EditorMode::Visual,
+    },
+    KeyMapping {
+        key: "d / x",
+        action: Action::Cut,
+        mode: EditorMode::Visual,
+    },
+    KeyMapping {
+        key: "i",
+        action: Action::Interpolate,
+        mode: EditorMode::Visual,
+    },
+    KeyMapping {
+        key: "Shift+Up/Down",
+        action: Action::TransposeUp,
+        mode: EditorMode::Visual,
+    },
+    KeyMapping {
+        key: "Ctrl+Shift+Up/Down",
+        action: Action::TransposeOctaveUp,
+        mode: EditorMode::Visual,
+    },
+];
+
+impl KeybindingRegistry {
+    /// Get all available keybindings for a given editor mode
+    pub fn get_bindings_for_mode(mode: EditorMode) -> Vec<Keybinding> {
+        KEY_MAPPINGS
+            .iter()
+            .filter(|m| m.mode == mode)
+            .map(|m| Keybinding {
+                key: m.key.to_string(),
+                action: m.action.name().to_string(),
+                description: m.action.description().to_string(),
+                category: m.action.category(),
+            })
+            .collect()
+    }
+}
 
 /// Actions that can be triggered by keybindings
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -147,6 +410,277 @@ pub enum Action {
 
     /// No action (unmapped key)
     None,
+}
+
+impl ActionMetadata for Action {
+    fn name(&self) -> &str {
+        match self {
+            Action::MoveLeft => "Move Left",
+            Action::MoveDown => "Move Down",
+            Action::MoveUp => "Move Up",
+            Action::MoveRight => "Move Right",
+            Action::PageUp => "Page Up",
+            Action::PageDown => "Page Down",
+            Action::EnterInsertMode => "Insert Mode",
+            Action::EnterNormalMode => "Normal Mode",
+            Action::EnterVisualMode => "Visual Mode",
+            Action::EnterNote(_) => "Enter Note",
+            Action::SetOctave(_) => "Set Octave",
+            Action::Copy => "Copy",
+            Action::Paste => "Paste",
+            Action::Cut => "Cut",
+            Action::Redo => "Redo",
+            Action::EnterNoteOff => "Note Off",
+            Action::EnterNoteCut => "Note Cut",
+            Action::StepUp => "Step Up",
+            Action::StepDown => "Step Down",
+            Action::OctaveUp => "Octave Up",
+            Action::OctaveDown => "Octave Down",
+            Action::GoToRow => "Go to Row",
+            Action::AddTrack => "Add Track",
+            Action::DeleteTrack => "Delete Track",
+            Action::CloneTrack => "Clone Track",
+            Action::Quantize => "Quantize",
+            Action::TransposeUp => "Transpose Up",
+            Action::TransposeDown => "Transpose Down",
+            Action::TransposeOctaveUp => "Transpose Octave Up",
+            Action::TransposeOctaveDown => "Transpose Octave Down",
+            Action::Interpolate => "Interpolate",
+            Action::DeleteCell => "Delete Cell",
+            Action::InsertRow => "Insert Row",
+            Action::InsertRowBelow => "Insert Row Below",
+            Action::DeleteRow => "Delete Row",
+            Action::Undo => "Undo",
+            Action::EnterCommandMode => "Command Mode",
+            Action::TogglePlay => "Play/Pause",
+            Action::Stop => "Stop",
+            Action::BpmUp => "BPM Up",
+            Action::BpmDown => "BPM Down",
+            Action::BpmUpLarge => "BPM Up Large",
+            Action::BpmDownLarge => "BPM Down Large",
+            Action::ToggleLoop => "Toggle Loop",
+            Action::TogglePlaybackMode => "Playback Mode",
+            Action::JumpNextPattern => "Next Pattern",
+            Action::JumpPrevPattern => "Prev Pattern",
+            Action::ToggleMute => "Toggle Mute",
+            Action::ToggleSolo => "Toggle Solo",
+            Action::NextTrack => "Next Track",
+            Action::SwitchView(_) => "Switch View",
+            Action::SaveProject => "Save Project",
+            Action::LoadProject => "Load Project",
+            Action::OpenExportDialog => "Export Dialog",
+            Action::ToggleSplitView => "Split View",
+            Action::ExecuteScript => "Execute Script",
+            Action::OpenTemplates => "Templates",
+            Action::ToggleLiveMode => "Live Mode",
+            Action::ToggleFollowMode => "Follow Mode",
+            Action::OpenBpmPrompt => "BPM Prompt",
+            Action::TapTempo => "Tap Tempo",
+            Action::OpenLenPrompt => "Pattern Length",
+            Action::SetLoopStart => "Set Loop Start",
+            Action::SetLoopEnd => "Set Loop End",
+            Action::ToggleLoopRegion => "Toggle Loop Region",
+            Action::ToggleDrawMode => "Draw Mode",
+            Action::Quit => "Quit",
+            Action::Confirm => "Confirm",
+            Action::Cancel => "Cancel",
+            Action::OpenModal => "Open Modal",
+            Action::ToggleHelp => "Help",
+            Action::OpenFileBrowser => "File Browser",
+            Action::AddInstrument => "Add Instrument",
+            Action::DeleteInstrument => "Delete Instrument",
+            Action::RenameInstrument => "Rename Instrument",
+            Action::EditInstrument => "Edit Instrument",
+            Action::SelectInstrument => "Select Instrument",
+            Action::AddPattern => "Add Pattern",
+            Action::DeletePattern => "Delete Pattern",
+            Action::ClonePattern => "Clone Pattern",
+            Action::SelectPattern => "Select Pattern",
+            Action::None => "None",
+        }
+    }
+
+    fn description(&self) -> &str {
+        match self {
+            Action::MoveLeft => "Move cursor left",
+            Action::MoveDown => "Move cursor down",
+            Action::MoveUp => "Move cursor up",
+            Action::MoveRight => "Move cursor right",
+            Action::PageUp => "Move page up",
+            Action::PageDown => "Move page down",
+            Action::EnterInsertMode => "Enter insert mode for note entry",
+            Action::EnterNormalMode => "Return to normal mode",
+            Action::EnterVisualMode => "Enter visual mode for selection",
+            Action::EnterNote(_) => "Enter musical note",
+            Action::SetOctave(_) => "Set current octave (0-9)",
+            Action::Copy => "Copy selection to clipboard",
+            Action::Paste => "Paste from clipboard",
+            Action::Cut => "Cut selection to clipboard",
+            Action::Redo => "Redo last undone change",
+            Action::EnterNoteOff => "Enter a note-off (release)",
+            Action::EnterNoteCut => "Enter a note-cut (hard silence)",
+            Action::StepUp => "Increase row step size",
+            Action::StepDown => "Decrease row step size",
+            Action::OctaveUp => "Increase current octave",
+            Action::OctaveDown => "Decrease current octave",
+            Action::GoToRow => "Jump to specific row",
+            Action::AddTrack => "Add a new track",
+            Action::DeleteTrack => "Delete current track",
+            Action::CloneTrack => "Clone current track",
+            Action::Quantize => "Quantize selection",
+            Action::TransposeUp => "Transpose semitone up",
+            Action::TransposeDown => "Transpose semitone down",
+            Action::TransposeOctaveUp => "Transpose octave up",
+            Action::TransposeOctaveDown => "Transpose octave down",
+            Action::Interpolate => "Interpolate selection between values",
+            Action::DeleteCell => "Delete cell content at cursor",
+            Action::InsertRow => "Insert a blank row",
+            Action::InsertRowBelow => "Insert a blank row below",
+            Action::DeleteRow => "Delete current row",
+            Action::Undo => "Undo last change",
+            Action::EnterCommandMode => "Enter command line mode",
+            Action::TogglePlay => "Toggle audio playback",
+            Action::Stop => "Stop playback",
+            Action::BpmUp => "Increase BPM by 1",
+            Action::BpmDown => "Decrease BPM by 1",
+            Action::BpmUpLarge => "Increase BPM by 10",
+            Action::BpmDownLarge => "Decrease BPM by 10",
+            Action::ToggleLoop => "Toggle playback looping",
+            Action::TogglePlaybackMode => "Toggle song/pattern mode",
+            Action::JumpNextPattern => "Jump to next pattern",
+            Action::JumpPrevPattern => "Jump to previous pattern",
+            Action::ToggleMute => "Mute/unmute current track",
+            Action::ToggleSolo => "Solo current track",
+            Action::NextTrack => "Jump to next track",
+            Action::SwitchView(_) => "Switch to another application view",
+            Action::SaveProject => "Save current project",
+            Action::LoadProject => "Load project from file",
+            Action::OpenExportDialog => "Open audio export dialog",
+            Action::ToggleSplitView => "Toggle code editor split view",
+            Action::ExecuteScript => "Execute current script",
+            Action::OpenTemplates => "Open code template menu",
+            Action::ToggleLiveMode => "Toggle live script execution",
+            Action::ToggleFollowMode => "Follow playback position",
+            Action::OpenBpmPrompt => "Set BPM via prompt",
+            Action::TapTempo => "Set BPM via tap tempo",
+            Action::OpenLenPrompt => "Set pattern length via prompt",
+            Action::SetLoopStart => "Set loop region start",
+            Action::SetLoopEnd => "Set loop region end",
+            Action::ToggleLoopRegion => "Toggle loop region active",
+            Action::ToggleDrawMode => "Toggle parameter draw mode",
+            Action::Quit => "Quit application",
+            Action::Confirm => "Confirm action or choice",
+            Action::Cancel => "Cancel action or choice",
+            Action::OpenModal => "Open a modal dialog",
+            Action::ToggleHelp => "Show help screen",
+            Action::OpenFileBrowser => "Open file browser",
+            Action::AddInstrument => "Add a new instrument",
+            Action::DeleteInstrument => "Delete current instrument",
+            Action::RenameInstrument => "Rename current instrument",
+            Action::EditInstrument => "Enter instrument editor",
+            Action::SelectInstrument => "Select current instrument",
+            Action::AddPattern => "Add a new pattern",
+            Action::DeletePattern => "Delete current pattern",
+            Action::ClonePattern => "Clone current pattern",
+            Action::SelectPattern => "Select current pattern",
+            Action::None => "No operation",
+        }
+    }
+
+    fn category(&self) -> ActionCategory {
+        match self {
+            Action::MoveLeft
+            | Action::MoveDown
+            | Action::MoveUp
+            | Action::MoveRight
+            | Action::PageUp
+            | Action::PageDown
+            | Action::GoToRow
+            | Action::NextTrack => ActionCategory::Navigation,
+
+            Action::EnterInsertMode | Action::EnterNormalMode | Action::EnterVisualMode => {
+                ActionCategory::Application
+            }
+
+            Action::EnterNote(_)
+            | Action::SetOctave(_)
+            | Action::EnterNoteOff
+            | Action::EnterNoteCut
+            | Action::StepUp
+            | Action::StepDown
+            | Action::OctaveUp
+            | Action::OctaveDown
+            | Action::Quantize
+            | Action::TransposeUp
+            | Action::TransposeDown
+            | Action::TransposeOctaveUp
+            | Action::TransposeOctaveDown
+            | Action::Interpolate
+            | Action::DeleteCell
+            | Action::InsertRow
+            | Action::InsertRowBelow
+            | Action::DeleteRow
+            | Action::Undo
+            | Action::ToggleDrawMode => ActionCategory::Editing,
+
+            Action::Copy | Action::Paste | Action::Cut | Action::Redo => ActionCategory::Clipboard,
+
+            Action::AddTrack
+            | Action::DeleteTrack
+            | Action::CloneTrack
+            | Action::ToggleMute
+            | Action::ToggleSolo => ActionCategory::Track,
+
+            Action::AddInstrument
+            | Action::DeleteInstrument
+            | Action::RenameInstrument
+            | Action::EditInstrument
+            | Action::SelectInstrument => ActionCategory::Instrument,
+
+            Action::AddPattern
+            | Action::DeletePattern
+            | Action::ClonePattern
+            | Action::SelectPattern => ActionCategory::Pattern,
+
+            Action::TogglePlay
+            | Action::Stop
+            | Action::BpmUp
+            | Action::BpmDown
+            | Action::BpmUpLarge
+            | Action::BpmDownLarge
+            | Action::ToggleLoop
+            | Action::TogglePlaybackMode
+            | Action::JumpNextPattern
+            | Action::JumpPrevPattern
+            | Action::ToggleFollowMode
+            | Action::OpenBpmPrompt
+            | Action::TapTempo
+            | Action::OpenLenPrompt
+            | Action::SetLoopStart
+            | Action::SetLoopEnd
+            | Action::ToggleLoopRegion => ActionCategory::Transport,
+
+            Action::SwitchView(_) | Action::ToggleSplitView | Action::ToggleLiveMode => {
+                ActionCategory::View
+            }
+
+            Action::SaveProject | Action::LoadProject | Action::OpenExportDialog => {
+                ActionCategory::Project
+            }
+
+            Action::ExecuteScript | Action::OpenTemplates => ActionCategory::Editing,
+
+            Action::EnterCommandMode
+            | Action::Quit
+            | Action::Confirm
+            | Action::Cancel
+            | Action::OpenModal
+            | Action::ToggleHelp
+            | Action::OpenFileBrowser => ActionCategory::Application,
+
+            Action::None => ActionCategory::None,
+        }
+    }
 }
 
 /// Map a keyboard event to an action, aware of the current editor mode
@@ -1126,5 +1660,19 @@ mod tests {
             map_key_to_action(ctrl_l, EditorMode::Insert),
             Action::ToggleLiveMode
         );
+    }
+
+    #[test]
+    fn test_get_bindings_for_normal_mode() {
+        let bindings = KeybindingRegistry::get_bindings_for_mode(EditorMode::Normal);
+        assert!(!bindings.is_empty());
+        assert!(bindings.iter().any(|b| b.key == "h / ←"));
+    }
+
+    #[test]
+    fn test_get_bindings_for_insert_mode() {
+        let bindings = KeybindingRegistry::get_bindings_for_mode(EditorMode::Insert);
+        assert!(!bindings.is_empty());
+        assert!(bindings.iter().any(|b| b.key == "Esc"));
     }
 }

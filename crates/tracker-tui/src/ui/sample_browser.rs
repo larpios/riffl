@@ -391,7 +391,7 @@ pub fn compute_waveform_peaks(path: &Path, n_bars: usize) -> Vec<f32> {
     }
     let channels = sample.channels() as usize;
     let data = sample.data();
-    let frames_per_bar = (frames + n_bars - 1) / n_bars;
+    let frames_per_bar = frames.div_ceil(n_bars);
     let mut peaks = Vec::with_capacity(n_bars);
     for bar in 0..n_bars {
         let start = bar * frames_per_bar;
@@ -602,6 +602,7 @@ fn render_browser_list(frame: &mut Frame, area: Rect, browser: &SampleBrowser, t
 /// Uses eighth-block characters (`▁▂▃▄▅▆▇█`) to draw a bar chart from the
 /// bottom of the panel, one column per time slice, giving sub-row amplitude
 /// resolution.
+#[allow(clippy::too_many_arguments)]
 fn render_waveform_panel(
     frame: &mut Frame,
     area: Rect,

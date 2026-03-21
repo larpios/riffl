@@ -203,8 +203,7 @@ fn build_waveform(sample: &Sample, width: usize, theme: &Theme) -> [Line<'static
     let mut top_styles: Vec<(String, Style)> = Vec::new();
     let mut bot_styles: Vec<(String, Style)> = Vec::new();
 
-    for col in 0..width {
-        let (peak_pos, peak_neg) = peaks[col];
+    for (col, &(peak_pos, peak_neg)) in peaks.iter().enumerate().take(width) {
         let is_loop_marker = loop_start_col == Some(col) || loop_end_col == Some(col);
 
         if is_loop_marker {

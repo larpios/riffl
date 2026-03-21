@@ -3,6 +3,7 @@ mod app;
 mod config;
 mod editor;
 mod input;
+mod registry;
 mod ui;
 
 use crate::app::AppView;
@@ -333,10 +334,11 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
     }
 
     // If instrument editor panel is focused, handle its input first
-    if app.current_view == AppView::InstrumentList && app.inst_editor.focused {
-        if handle_instrument_editor_key(app, key) {
-            return;
-        }
+    if app.current_view == AppView::InstrumentList
+        && app.inst_editor.focused
+        && handle_instrument_editor_key(app, key)
+    {
+        return;
     }
 
     // If code editor is active, handle code editor input first

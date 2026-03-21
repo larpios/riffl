@@ -1595,14 +1595,12 @@ impl App {
     /// Set the name of the selected instrument.
     pub fn set_instrument_name(&mut self, name: String) {
         if let Some(idx) = self.instrument_selection {
-            if idx < self.song.instruments.len() {
-                if !name.is_empty() {
-                    self.song.instruments[idx].name = name.clone();
-                    if idx < self.instrument_names.len() {
-                        self.instrument_names[idx] = name;
-                    }
-                    self.mark_dirty();
+            if idx < self.song.instruments.len() && !name.is_empty() {
+                self.song.instruments[idx].name = name.clone();
+                if idx < self.instrument_names.len() {
+                    self.instrument_names[idx] = name;
                 }
+                self.mark_dirty();
             }
         }
     }
