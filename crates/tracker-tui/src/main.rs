@@ -1185,6 +1185,12 @@ fn handle_sample_browser_key(app: &mut App, key: KeyEvent) -> bool {
             true
         }
 
+        // Bookmark selected directory — b toggles bookmark, persists to config
+        KeyCode::Char('b') => {
+            app.toggle_browser_bookmark();
+            true
+        }
+
         _ => false,
     }
 }

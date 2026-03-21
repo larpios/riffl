@@ -29,6 +29,8 @@ pub struct BrowserEntry {
     pub is_dir: bool,
     /// True when this root entry comes from the configured (pinned) roots list.
     pub is_pinned: bool,
+    /// True when this root entry is in the user's bookmarks.
+    pub is_bookmarked: bool,
 }
 
 /// Internal navigation state.
@@ -52,6 +54,8 @@ pub struct SampleBrowser {
     pinned_roots: Vec<PathBuf>,
     /// All roots, including auto-detected ones added via [`add_auto_root`].
     roots: Vec<PathBuf>,
+    /// User-bookmarked directories, shown at the top of the roots list.
+    bookmarked_paths: Vec<PathBuf>,
     mode: BrowserMode,
     entries: Vec<BrowserEntry>,
     selected: usize,
@@ -64,6 +68,7 @@ impl SampleBrowser {
         let mut browser = Self {
             pinned_roots: roots.clone(),
             roots,
+            bookmarked_paths: Vec::new(),
             mode: BrowserMode::Roots,
             entries: Vec::new(),
             selected: 0,
@@ -181,8 +186,38 @@ impl SampleBrowser {
             .unwrap_or(false)
     }
 
+    /// Return `true` if the selected entry is a directory.
+    pub fn selected_is_dir(&self) -> bool {
+        self.entries
+            .get(self.selected)
+            .map(|e| e.is_dir)
+            .unwrap_or(false)
+    }
+
+    /// Return `true` if the selected directory is currently bookmarked.
+    pub fn selected_is_bookmarked(&self) -> bool {
+        match self.entries.get(self.selected) {
+            Some(e) if e.is_dir => self.bookmarked_paths.contains(&e.path),
+            _ => false,
+        }
+    }
+
+    /// Set the bookmarked directories. Bookmarked dirs appear at the top of the
+    /// roots list. Refreshes entries if currently showing the roots list.
+    pub fn set_bookmarks(&mut self, paths: Vec<PathBuf>) {
+        self.bookmarked_paths = paths;
+        if matches!(self.mode, BrowserMode::Roots) {
+            self.refresh_entries();
+        }
+    }
+
     pub fn selected_index(&self) -> usize {
         self.selected
+    }
+
+    /// Set the selected index (clamped to valid range). Primarily for tests.
+    pub fn select(&mut self, idx: usize) {
+        self.selected = idx.min(self.entries.len().saturating_sub(1));
     }
 
     pub fn entries(&self) -> &[BrowserEntry] {
@@ -216,21 +251,46 @@ impl SampleBrowser {
 
     fn refresh_entries(&mut self) {
         let pinned = &self.pinned_roots;
+        let bookmarked = &self.bookmarked_paths;
         self.entries = match &self.mode {
-            BrowserMode::Roots => self
-                .roots
-                .iter()
-                .map(|p| BrowserEntry {
-                    name: p
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or_else(|| p.to_str().unwrap_or("?"))
-                        .to_string(),
-                    path: p.clone(),
-                    is_dir: true,
-                    is_pinned: pinned.contains(p),
-                })
-                .collect(),
+            BrowserMode::Roots => {
+                // Bookmarked dirs first (alphabetically), then non-bookmarked roots in original order.
+                let mut bm_entries: Vec<BrowserEntry> = bookmarked
+                    .iter()
+                    .map(|p| BrowserEntry {
+                        name: p
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or_else(|| p.to_str().unwrap_or("?"))
+                            .to_string(),
+                        path: p.clone(),
+                        is_dir: true,
+                        is_pinned: pinned.contains(p),
+                        is_bookmarked: true,
+                    })
+                    .collect();
+                bm_entries.sort_by(|a, b| a.name.cmp(&b.name));
+
+                let rest: Vec<BrowserEntry> = self
+                    .roots
+                    .iter()
+                    .filter(|p| !bookmarked.contains(p))
+                    .map(|p| BrowserEntry {
+                        name: p
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or_else(|| p.to_str().unwrap_or("?"))
+                            .to_string(),
+                        path: p.clone(),
+                        is_dir: true,
+                        is_pinned: pinned.contains(p),
+                        is_bookmarked: false,
+                    })
+                    .collect();
+
+                bm_entries.extend(rest);
+                bm_entries
+            }
             BrowserMode::InDir { current, .. } => scan_entries(current),
         };
     }
@@ -262,6 +322,7 @@ fn scan_entries(dir: &Path) -> Vec<BrowserEntry> {
                 path,
                 is_dir: true,
                 is_pinned: false,
+                is_bookmarked: false,
             });
         } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
             if AUDIO_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
@@ -270,6 +331,7 @@ fn scan_entries(dir: &Path) -> Vec<BrowserEntry> {
                     path,
                     is_dir: false,
                     is_pinned: false,
+                    is_bookmarked: false,
                 });
             }
         }
@@ -327,9 +389,9 @@ pub fn render_sample_browser(
 
     let at_root_list = browser.at_roots();
     let nav_hint = if at_root_list {
-        "  l/Enter: browse dir  ·  j/k: navigate"
+        "  l/Enter: browse dir  ·  b: bookmark  ·  j/k: navigate"
     } else {
-        "  Space: preview/stop  ·  ←/→: scrub  ·  Enter: load  ·  l: enter dir  ·  h: up  ·  ~: roots  ·  j/k: navigate"
+        "  Space: preview/stop  ·  ←/→: scrub  ·  Enter: load  ·  l: enter dir  ·  b: bookmark  ·  h: up  ·  ~: roots  ·  j/k: navigate"
     };
 
     let block = Block::default()
@@ -362,8 +424,14 @@ pub fn render_sample_browser(
 
             let label = if entry.is_dir {
                 if at_root_list {
-                    // Pinned (configured) roots get a star marker.
-                    let pin = if entry.is_pinned { "★ " } else { "  " };
+                    // Bookmarked roots get ♥, pinned (configured) roots get ★.
+                    let pin = if entry.is_bookmarked {
+                        "\u{2665} "
+                    } else if entry.is_pinned {
+                        "\u{2605} "
+                    } else {
+                        "  "
+                    };
                     format!("  {pin}{}", entry.path.display())
                 } else {
                     format!("  [{}]", entry.name)
@@ -714,6 +782,102 @@ mod tests {
         assert!(title.contains("parent_dir"), "shows dir name: {title:?}");
 
         fs::remove_dir_all(&grandparent).ok();
+    }
+
+    // --- Bookmarks ---
+
+    #[test]
+    fn test_bookmarked_dir_shown_first() {
+        let a = make_dir("bm_first_a");
+        let b = make_dir("bm_first_b");
+
+        let mut browser = SampleBrowser::new(vec![a.clone(), b.clone()]);
+        browser.set_bookmarks(vec![b.clone()]);
+
+        assert!(browser.at_roots());
+        assert_eq!(browser.entries().len(), 2, "both dirs present");
+        assert_eq!(
+            browser.entries()[0].path, b,
+            "bookmarked dir should be first"
+        );
+        assert!(browser.entries()[0].is_bookmarked);
+        assert!(!browser.entries()[1].is_bookmarked);
+
+        fs::remove_dir_all(&a).ok();
+        fs::remove_dir_all(&b).ok();
+    }
+
+    #[test]
+    fn test_bookmarked_entry_has_flag() {
+        let a = make_dir("bm_flag_a");
+        let b = make_dir("bm_flag_b");
+
+        let mut browser = SampleBrowser::new(vec![a.clone(), b.clone()]);
+        browser.set_bookmarks(vec![a.clone()]);
+
+        let entry = browser.entries().iter().find(|e| e.path == a).unwrap();
+        assert!(entry.is_bookmarked);
+
+        let entry_b = browser.entries().iter().find(|e| e.path == b).unwrap();
+        assert!(!entry_b.is_bookmarked);
+
+        fs::remove_dir_all(&a).ok();
+        fs::remove_dir_all(&b).ok();
+    }
+
+    #[test]
+    fn test_in_dir_entries_never_bookmarked() {
+        let dir = make_dir("bm_indir");
+        let sub = dir.join("sub");
+        fs::create_dir_all(&sub).unwrap();
+
+        let mut browser = SampleBrowser::new(vec![dir.clone()]);
+        // Even if sub is in bookmarks, entries inside a dir show is_bookmarked=false
+        browser.set_bookmarks(vec![sub.clone()]);
+        browser.enter_dir();
+
+        for entry in browser.entries() {
+            assert!(
+                !entry.is_bookmarked,
+                "entries inside a dir should not show is_bookmarked"
+            );
+        }
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn test_selected_is_dir_on_dir_entry() {
+        let dir = make_dir("is_dir_sel");
+        let sub = dir.join("sub");
+        fs::create_dir_all(&sub).unwrap();
+
+        let mut browser = SampleBrowser::new(vec![dir.clone()]);
+        browser.enter_dir();
+
+        assert!(browser.selected_is_dir());
+        assert!(!browser.selected_is_file());
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn test_selected_is_bookmarked_reflects_state() {
+        let a = make_dir("bm_sel_a");
+        let b = make_dir("bm_sel_b");
+
+        let mut browser = SampleBrowser::new(vec![a.clone(), b.clone()]);
+        browser.set_bookmarks(vec![a.clone()]);
+
+        // After set_bookmarks, a is first
+        browser.select(0); // a (bookmarked)
+        assert!(browser.selected_is_bookmarked());
+
+        browser.select(1); // b (not bookmarked)
+        assert!(!browser.selected_is_bookmarked());
+
+        fs::remove_dir_all(&a).ok();
+        fs::remove_dir_all(&b).ok();
     }
 
     #[test]
