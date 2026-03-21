@@ -4,102 +4,102 @@
 
 * Vision
 ** What We're Building
-   A full-featured DAW with tracker-style interface and live coding capabilities (inspired by Strudel/TidalCycles), built in Rust. Not just a tracker — a complete music production environment where tracker workflow and algorithmic composition coexist.
+A full-featured DAW with tracker-style interface and live coding capabilities (inspired by Strudel/TidalCycles), built in Rust. Not just a tracker — a complete music production environment where tracker workflow and algorithmic composition coexist.
 
 ** Core Identity
-   - *Tracker-first*: Pattern grid is the primary editing interface. Effect commands, step sequencing, hex values — the tracker DNA stays.
-   - *Live coding built-in*: Rhai scripting engine for algorithmic pattern generation, generative music, real-time composition. This is the differentiator no commercial DAW has.
-   - *Two frontends*: TUI (current, great for tracker workflow) and GUI (future, needed for waveforms, plugin UIs, automation curves).
+- *Tracker-first*: Pattern grid is the primary editing interface. Effect commands, step sequencing, hex values — the tracker DNA stays.
+- *Live coding built-in*: Rhai scripting engine for algorithmic pattern generation, generative music, real-time composition. This is the differentiator no commercial DAW has.
+- *Two frontends*: TUI (current, great for tracker workflow) and GUI (future, needed for waveforms, plugin UIs, automation curves).
 
 ** What Sets Us Apart
-   | Us                             | Traditional DAWs           | Traditional Trackers |
-   |--------------------------------+----------------------------+----------------------|
-   | Tracker grid + live coding DSL | Piano roll + mouse workflow | Tracker grid only    |
-   | Rust (fast, safe, no GC)       | C++ (legacy, unsafe)       | C/C++                |
-   | TUI + GUI dual frontend        | GUI only                   | GUI only             |
-   | Open-source core               | Closed source              | Mostly closed        |
-   | Modern plugin hosting (CLAP)   | VST2/3 + AU                | Limited/none         |
+| Us                             | Traditional DAWs           | Traditional Trackers |
+|--------------------------------+----------------------------+----------------------|
+| Tracker grid + live coding DSL | Piano roll + mouse workflow | Tracker grid only    |
+| Rust (fast, safe, no GC)       | C++ (legacy, unsafe)       | C/C++                |
+| TUI + GUI dual frontend        | GUI only                   | GUI only             |
+| Open-source core               | Closed source              | Mostly closed        |
+| Modern plugin hosting (CLAP)   | VST2/3 + AU                | Limited/none         |
 
 * Architecture
 ** Target Structure (Cargo Workspace)
-   #+BEGIN_SRC 
-   riffl/
-   ├── crates/
-   │   ├── tracker-core/        # Engine: audio, mixer, transport, pattern, song, DSL, project I/O
-   │   │   └── src/
-   │   │       ├── audio/       # cpal engine, mixer, effects, sample loading
-   │   │       ├── pattern/     # Note, Cell, Row, Track, Pattern
-   │   │       ├── dsl/         # Rhai scripting engine
-   │   │       ├── transport.rs # BPM, playback, row advancement
-   │   │       ├── song.rs      # Song model, instruments
-   │   │       ├── project.rs   # Save/load (.trs)
-   │   │       ├── export.rs    # WAV/FLAC rendering
-   │   │       ├── midi/        # MIDI I/O (future)
-   │   │       ├── automation/  # Automation lanes (future)
-   │   │       └── plugin/      # CLAP/VST3 hosting (future)
-   │   ├── tracker-tui/         # TUI frontend (ratatui + crossterm)
-   │   │   └── src/
-   │   │       ├── main.rs
-   │   │       ├── app.rs       # TUI-specific app state
-   │   │       ├── ui/          # Rendering
-   │   │       ├── input/       # Keybindings
-   │   │       └── editor/      # Editor state (cursor, modes)
-   │   └── tracker-gui/         # GUI frontend (future)
-   │       └── src/
-   ├── docs/
-   ├── Cargo.toml               # Workspace root
-   └── ...
-   #+END_SRC
+#+BEGIN_SRC 
+riffl/
+├── crates/
+│   ├── tracker-core/        # Engine: audio, mixer, transport, pattern, song, DSL, project I/O
+│   │   └── src/
+│   │       ├── audio/       # cpal engine, mixer, effects, sample loading
+│   │       ├── pattern/     # Note, Cell, Row, Track, Pattern
+│   │       ├── dsl/         # Rhai scripting engine
+│   │       ├── transport.rs # BPM, playback, row advancement
+│   │       ├── song.rs      # Song model, instruments
+│   │       ├── project.rs   # Save/load (.trs)
+│   │       ├── export.rs    # WAV/FLAC rendering
+│   │       ├── midi/        # MIDI I/O (future)
+│   │       ├── automation/  # Automation lanes (future)
+│   │       └── plugin/      # CLAP/VST3 hosting (future)
+│   ├── tracker-tui/         # TUI frontend (ratatui + crossterm)
+│   │   └── src/
+│   │       ├── main.rs
+│   │       ├── app.rs       # TUI-specific app state
+│   │       ├── ui/          # Rendering
+│   │       ├── input/       # Keybindings
+│   │       └── editor/      # Editor state (cursor, modes)
+│   └── tracker-gui/         # GUI frontend (future)
+│       └── src/
+├── docs/
+├── Cargo.toml               # Workspace root
+└── ...
+#+END_SRC
 
 ** Key Architectural Principle
-   *The core is the product. Frontends are skins.*
+*The core is the product. Frontends are skins.*
 
-   `tracker-core` must be 100% frontend-agnostic. No ratatui types, no crossterm types, no UI concepts. It exposes:
-   - A `Song` model (patterns, instruments, arrangement)
-   - A `Transport` (play/stop/pause, BPM, position)
-   - A `Mixer` (audio rendering)
-   - A `ScriptEngine` (Rhai DSL evaluation)
-   - An `AudioEngine` (device management, stream output)
+`tracker-core` must be 100% frontend-agnostic. No ratatui types, no crossterm types, no UI concepts. It exposes:
+- A `Song` model (patterns, instruments, arrangement)
+- A `Transport` (play/stop/pause, BPM, position)
+- A `Mixer` (audio rendering)
+- A `ScriptEngine` (Rhai DSL evaluation)
+- An `AudioEngine` (device management, stream output)
 
-   Both TUI and GUI import `tracker-core` and build their own UI/input layer on top.
+Both TUI and GUI import `tracker-core` and build their own UI/input layer on top.
 
 * Development Phases (High-Level)
 ** Phase 1: Architecture Split (DONE 2026-03-08)
-   Refactor monolith into workspace (tracker-core + tracker-tui).
+Refactor monolith into workspace (tracker-core + tracker-tui).
 ** Phase 2: Audio Engine Upgrades (IN-PROGRESS)
-   Professional-grade mixing and effects. Channel strip architecture, built-in effects, improved sample engine.
+Professional-grade mixing and effects. Channel strip architecture, built-in effects, improved sample engine.
 ** Phase 3: MIDI + Automation (PLANNED)
-   External controller support and parameter automation.
+External controller support and parameter automation.
 ** Phase 4: Arrangement + Song Structure (PLANNED)
-   Full song arrangement beyond pattern sequencing.
+Full song arrangement beyond pattern sequencing.
 ** Phase 5: Plugin Hosting (PLANNED)
-   Host third-party audio plugins (CLAP/VST3).
+Host third-party audio plugins (CLAP/VST3).
 ** Phase 6: GUI Frontend (PLANNED)
-   Full graphical frontend.
+Full graphical frontend.
 ** Phase 7: Live Coding Power (ONGOING)
-   Strudel-level expressiveness in the scripting DSL.
+Strudel-level expressiveness in the scripting DSL.
 
 * Monetization Strategy
 ** Phase A: Community Building (now - Phase 3)
-   - *Open source* the full project (MIT or dual MIT/Apache-2.0)
-   - *GitHub Sponsors / Patreon* for early supporters
-   - Build community around the live-coding-meets-tracker niche.
+- *Open source* the full project (MIT or dual MIT/Apache-2.0)
+- *GitHub Sponsors / Patreon* for early supporters
+- Build community around the live-coding-meets-tracker niche.
 ** Phase B: Open-Core Transition (Phase 4-5)
-   - Core tracker + DSL stays open source forever.
-   - *Paid features* (~$75 license like Renoise):
-     - VST3/CLAP plugin hosting
-     - Advanced effects (convolution reverb, multiband compressor)
-     - Commercial export formats (MP3, AAC)
-     - Multi-output routing
+- Core tracker + DSL stays open source forever.
+- *Paid features* (~$75 license like Renoise):
+  - VST3/CLAP plugin hosting
+  - Advanced effects (convolution reverb, multiband compressor)
+  - Commercial export formats (MP3, AAC)
+  - Multi-output routing
 ** Phase C: Ecosystem Revenue (Phase 6+)
-   - Paid sample packs / instrument packs.
-   - Premium DSL script library / marketplace.
+- Paid sample packs / instrument packs.
+- Premium DSL script library / marketplace.
 
 * Milestone 1 — ProTracker Parity
-  :PROPERTIES:
-  :STATUS: completed
-  :END:
-  Minimum target: feature parity with ProTracker (Amiga MOD tracker).
+:PROPERTIES:
+:STATUS: completed
+:END:
+Minimum target: feature parity with ProTracker (Amiga MOD tracker).
 
 ** Effect Commands
 *** DONE 5xy — Tone Portamento + Volume Slide
@@ -127,17 +127,24 @@
 *** DONE Sample Default Volume
 
 ** File Format
-*** DONE MOD Import
-*** TODO MOD Export
+*** TODO MOD Import [0/1]
+- [ ] Fix Import Bugs [/]
+    - [ ] BPM Update
+    - [ ] Inconsistent Notes
+*** DONE MOD Export
+*** TODO IT Import
+*** TODO IT Export
+*** TODO XM Import
+*** TODO XM Export
 
 * Milestone 2 — Renoise-Level Instrument System
-  :PROPERTIES:
-  :STATUS: planned
-  :END:
-  This is what separates a toy tracker from a real composition tool.
+:PROPERTIES:
+:STATUS: planned
+:END:
+This is what separates a toy tracker from a real composition tool.
 
 ** TODO Instrument Envelopes
-   Per-instrument ADSR + LFO for volume, pitch, and panning.
+Per-instrument ADSR + LFO for volume, pitch, and panning.
 ** TODO Multi-Sample Instruments (Keyzone Mapping)
 ** TODO Sample Slicing
 ** TODO Per-Note Extra Columns (Renoise-style)
@@ -148,9 +155,9 @@
 ** TODO Undo/Redo Beyond Pattern Snapshots
 
 * Milestone 2.5 — Pattern Editor & Transport Essentials
-  :PROPERTIES:
-  :STATUS: in-progress
-  :END:
+:PROPERTIES:
+:STATUS: in-progress
+:END:
 
 ** DONE Better Keybindings for Entering Notes
 ** DONE r — Replace-Once Mode
@@ -164,15 +171,24 @@
 ** DONE Note Interpolation
 ** DONE BPM Inline Edit
 ** DONE :tutor — Interactive Tutorial / Cheat Sheet
-** TODO Sample Browser Overhaul
-   - [DONE] ./samples/ relative to project file
-   - [DONE] Filesystem root escape / free browsing
-   - [DONE] Configured roots as ★ pinned entries
-   - [DONE] Bookmarks (b toggles, ♥ marker)
-   - [ ] Waveform panel lazy-load
-   - [ ] Space toggle play/stop preview
+** TODO Sample Browser Overhaul [6/8]
+- [x] ./samples/ relative to project file
+- [x] Filesystem root escape / free browsing
+- [x] Configured roots as ★ pinned entries
+- [x] Bookmarks (b toggles, ♥ marker)
+- [x] Which-Key auto-discovery (registry-derived, no static arrays)
+- [x] Command auto-discovery (registry-derived autocomplete)
+- [ ] Waveform panel lazy-load
+- [ ] Space toggle play/stop preview
+- [ ] Multi pane view for usability
+
+** TODO Better Instrument Editor
+*** TODO Instrument Envelope Editor
+*** TODO Instrument Keyzone Editor
+*** TODO Export Instrument to Files
 
 * Milestone 3 — Quality-of-Life / Usability
+** TODO Fix Inconsistent Modal Input Across Views
 ** TODO Live Recording
 ** TODO Built-in Samples/Synths
 ** TODO Drawing Samples
@@ -185,17 +201,20 @@
 ** TODO Master Bus Processing
 ** TODO Built-in DSP Effects (Chorus, Bitcrusher, Distortion, Convolution, Multiband)
 
-* Milestone 5 — MIDI
+* Milestone 5 - Code Editor
+** TODO Fix Code Editor Modal Input
+
+* Milestone 6 — MIDI
 ** TODO MIDI Input (Note-on/off, CC learn)
 ** TODO MIDI Output
 ** TODO MIDI File Import/Export
 
-* Milestone 6 — Advanced DSL
+* Milestone 7 — Advanced DSL
 ** TODO Mini-Notation Parser ("bd sd [hh hh] cp")
 ** TODO Pattern Combinators (stack, cat, fast, slow, rev)
 ** TODO Live Eval
 
-* Milestone 7 — Chip Sound Emulation (Furnace-style, optional)
-* Milestone 8 — Glicol Integration (parked)
-* Milestone 9 — Plugin Hosting
-* Milestone 10 — GUI Frontend
+* Milestone 8 — Chip Sound Emulation (Furnace-style, optional)
+* Milestone 9 — Glicol Integration (parked)
+* Milestone 10 — Plugin Hosting
+* Milestone 11 — GUI Frontend
