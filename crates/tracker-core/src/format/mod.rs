@@ -148,7 +148,7 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
                     None
                 };
 
-                let mut mapped_sample_idx = 0;
+                let mut mapped_sample_idx = None;
 
                 if let Some(i) = resolved_inst {
                     if i < module.instrument.len() {
@@ -164,9 +164,9 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
                             }
                             if i < inst_to_tracker_inst.len() && sample_idx < inst_to_tracker_inst[i].len() {
                                 if let Some(mapped_idx) = inst_to_tracker_inst[i][sample_idx] {
-                                    mapped_sample_idx = mapped_idx as u8;
+                                    mapped_sample_idx = Some(mapped_idx as u8);
                                     if explicit_inst {
-                                        cell.instrument = Some(mapped_sample_idx);
+                                        cell.instrument = mapped_sample_idx;
                                     }
                                 }
                             }
@@ -175,10 +175,33 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
                 }
 
                 if let Some(NoteEvent::On(mut n)) = note_event {
-                    n.instrument = mapped_sample_idx;
-                    cell.note = Some(NoteEvent::On(n));
+                    if let Some(idx) = mapped_sample_idx {
+                        n.instrument = idx;
+                        cell.note = Some(NoteEvent::On(n));
+                    } else {
+                        // Drop notes that have no valid sample mapped
+                        cell.note = None;
+                    }
                 } else {
                     cell.note = note_event;
+                }
+
+                for ef in &xm_tu.effects {
+                    match ef {
+                        xmrs::effect::TrackEffect::NoteCut { tick, .. } => {
+                            cell.effects.push(crate::pattern::effect::Effect::new(
+                                0xE,
+                                0xC0 | (*tick as u8 & 0xF),
+                            ));
+                        }
+                        xmrs::effect::TrackEffect::NoteDelay(tick) => {
+                            cell.effects.push(crate::pattern::effect::Effect::new(
+                                0xE,
+                                0xD0 | (*tick as u8 & 0xF),
+                            ));
+                        }
+                        _ => {}
+                    }
                 }
 
                 pat.set_cell(r_idx, c_idx, cell);
