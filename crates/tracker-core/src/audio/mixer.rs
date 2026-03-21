@@ -55,6 +55,8 @@ struct Voice {
     envelope_tick: usize,
     /// Ratio to convert an absolute frequency (Hz) into relative playback_rate.
     hz_to_rate: f64,
+    /// The absolute frequency of the note that triggered this voice.
+    triggered_note_freq: f64,
     /// Fadeout multiplier for IT/XM instruments (0.0 - 1.0).
     /// Decreased by instrument.fadeout every tick when key_on is false.
     fadeout_multiplier: f32,
@@ -67,6 +69,7 @@ impl Voice {
         playback_rate: f64,
         velocity_gain: f32,
         hz_to_rate: f64,
+        triggered_note_freq: f64,
     ) -> Self {
         Self {
             instrument_index,
@@ -79,6 +82,7 @@ impl Voice {
             key_on: true,
             envelope_tick: 0,
             hz_to_rate,
+            triggered_note_freq,
             fadeout_multiplier: 1.0,
         }
     }
@@ -98,6 +102,7 @@ struct PendingNote {
     playback_rate: f64,
     velocity_gain: f32,
     hz_to_rate: f64,
+    triggered_note_freq: f64,
     offset: Option<usize>,
     trigger_frame: u32,
 }
@@ -391,15 +396,20 @@ impl Mixer {
 
                         let playback_rate = target_freq * hz_to_rate;
 
-                        // Map velocity to gain 0.0-1.0, scaled by instrument and sample volume.
-                        // If cell specifies a volume (0-64), it overrides the note's velocity.
                         let inst_vol = self
                             .instruments
                             .get(instrument_idx)
                             .map(|inst| inst.volume)
                             .unwrap_or(1.0);
-                        let velocity = cell.volume.map(|v| (v as f32 / 64.0) * 127.0).unwrap_or(note.velocity as f32);
+                        let velocity = note.velocity as f32;
                         let velocity_gain = (velocity / 127.0) * inst_vol * sample.volume;
+
+                        // Apply instrument panning override to the effect processor
+                        if let Some(inst_pan) = self.instruments.get(instrument_idx).and_then(|i| i.panning) {
+                            if let Some(state) = self.effect_processor.channel_state_mut(ch) {
+                                state.panning_override = Some((inst_pan + 1.0) / 2.0);
+                            }
+                        }
 
                         // Check for Note Delay (EDx)
                         if let Some(delay_tick) = self
@@ -424,6 +434,7 @@ impl Mixer {
                                 playback_rate,
                                 velocity_gain,
                                 hz_to_rate,
+                                triggered_note_freq: target_freq,
                                 offset,
                                 trigger_frame,
                             });
@@ -434,6 +445,7 @@ impl Mixer {
                                 playback_rate,
                                 velocity_gain,
                                 hz_to_rate,
+                                target_freq,
                             );
                             if let Some(offset) = self.effect_processor.sample_offset(ch) {
                                 voice = voice.with_position(offset as f64);
@@ -451,7 +463,15 @@ impl Mixer {
                             .and_then(|inst| inst.volume_envelope.as_ref())
                             .is_some_and(|env| env.enabled);
 
-                        if has_envelope {
+                        let has_sustain_loop =
+                            self.samples.get(voice.sample_index).is_some_and(|s| {
+                                s.sustain_loop_mode != crate::audio::sample::LoopMode::NoLoop
+                                    && s.sustain_loop_end > s.sustain_loop_start
+                            });
+
+                        if has_envelope || has_sustain_loop {
+                            // Release the key: envelope continues past sustain,
+                            // and sustain loop releases so the sample plays through.
                             voice.key_on = false;
                         } else {
                             self.voices[ch] = None;
@@ -526,6 +546,7 @@ impl Mixer {
                             pn.playback_rate,
                             pn.velocity_gain,
                             pn.hz_to_rate,
+                            pn.triggered_note_freq,
                         );
                         if let Some(offset) = pn.offset {
                             voice = voice.with_position(offset as f64);
@@ -577,18 +598,48 @@ impl Mixer {
                                 // Apply retrigger volume action
                                 match ch_state.retrigger_volume_action {
                                     0 | 8 => {} // No change
-                                    1 => voice.velocity_gain = (voice.velocity_gain - 1.0/64.0).max(0.0),
-                                    2 => voice.velocity_gain = (voice.velocity_gain - 2.0/64.0).max(0.0),
-                                    3 => voice.velocity_gain = (voice.velocity_gain - 4.0/64.0).max(0.0),
-                                    4 => voice.velocity_gain = (voice.velocity_gain - 8.0/64.0).max(0.0),
-                                    5 => voice.velocity_gain = (voice.velocity_gain - 16.0/64.0).max(0.0),
+                                    1 => {
+                                        voice.velocity_gain =
+                                            (voice.velocity_gain - 1.0 / 64.0).max(0.0)
+                                    }
+                                    2 => {
+                                        voice.velocity_gain =
+                                            (voice.velocity_gain - 2.0 / 64.0).max(0.0)
+                                    }
+                                    3 => {
+                                        voice.velocity_gain =
+                                            (voice.velocity_gain - 4.0 / 64.0).max(0.0)
+                                    }
+                                    4 => {
+                                        voice.velocity_gain =
+                                            (voice.velocity_gain - 8.0 / 64.0).max(0.0)
+                                    }
+                                    5 => {
+                                        voice.velocity_gain =
+                                            (voice.velocity_gain - 16.0 / 64.0).max(0.0)
+                                    }
                                     6 => voice.velocity_gain *= 2.0 / 3.0,
                                     7 => voice.velocity_gain *= 0.5,
-                                    9 => voice.velocity_gain = (voice.velocity_gain + 1.0/64.0).min(1.0),
-                                    10 => voice.velocity_gain = (voice.velocity_gain + 2.0/64.0).min(1.0),
-                                    11 => voice.velocity_gain = (voice.velocity_gain + 4.0/64.0).min(1.0),
-                                    12 => voice.velocity_gain = (voice.velocity_gain + 8.0/64.0).min(1.0),
-                                    13 => voice.velocity_gain = (voice.velocity_gain + 16.0/64.0).min(1.0),
+                                    9 => {
+                                        voice.velocity_gain =
+                                            (voice.velocity_gain + 1.0 / 64.0).min(1.0)
+                                    }
+                                    10 => {
+                                        voice.velocity_gain =
+                                            (voice.velocity_gain + 2.0 / 64.0).min(1.0)
+                                    }
+                                    11 => {
+                                        voice.velocity_gain =
+                                            (voice.velocity_gain + 4.0 / 64.0).min(1.0)
+                                    }
+                                    12 => {
+                                        voice.velocity_gain =
+                                            (voice.velocity_gain + 8.0 / 64.0).min(1.0)
+                                    }
+                                    13 => {
+                                        voice.velocity_gain =
+                                            (voice.velocity_gain + 16.0 / 64.0).min(1.0)
+                                    }
                                     14 => voice.velocity_gain *= 3.0 / 2.0,
                                     15 => voice.velocity_gain *= 2.0,
                                     _ => {}
@@ -602,19 +653,16 @@ impl Mixer {
                         continue;
                     }
 
-                    // Instrument base volume and panning
-                    let mut inst_vol = 1.0;
-                    let mut inst_pan = 0.0;
+                    // Envelope and Fadeout processing
+                    let mut env_vol = 1.0;
                     if let Some(inst) = self.instruments.get(voice.instrument_index) {
-                        inst_vol = inst.volume;
-                        inst_pan = inst.panning.unwrap_or(0.0);
-
                         // Fadeout processing
                         if !voice.key_on && inst.fadeout > 0 {
                             if tick_frame == frames_per_tick.saturating_sub(1) {
                                 // IT and XM both use a 16-bit fadeout reduction system (effectively 65536 max).
                                 let delta = inst.fadeout as f32 / 65536.0;
-                                voice.fadeout_multiplier = (voice.fadeout_multiplier - delta).max(0.0);
+                                voice.fadeout_multiplier =
+                                    (voice.fadeout_multiplier - delta).max(0.0);
                                 if voice.fadeout_multiplier <= 0.0001 {
                                     voice.active = false;
                                 }
@@ -625,7 +673,7 @@ impl Mixer {
                             if vol_env.enabled {
                                 let (val, next_tick) =
                                     vol_env.evaluate(voice.envelope_tick, voice.key_on);
-                                inst_vol *= val;
+                                env_vol = val;
 
                                 if tick_frame == frames_per_tick.saturating_sub(1) {
                                     voice.envelope_tick = next_tick;
@@ -648,9 +696,6 @@ impl Mixer {
                         effect_processor.advance_frame(ch);
                         continue;
                     }
-                    
-                    let env_vol = inst_vol;
-                    let _env_pan = inst_pan; // TODO: apply instrument pan to the final mix if needed
 
                     let sample = match samples.get(voice.sample_index) {
                         Some(s) => s,
@@ -674,7 +719,25 @@ impl Mixer {
                     let src_frame = voice.position as usize;
 
                     use crate::audio::sample::LoopMode;
-                    match sample.loop_mode {
+
+                    // Determine effective loop mode, start, and end.
+                    // If the sample has a sustain loop AND the key is still held,
+                    // use the sustain loop. Otherwise fall through to the regular
+                    // loop (or NoLoop).
+                    let (eff_loop_mode, eff_loop_start, eff_loop_end) = if voice.key_on
+                        && sample.sustain_loop_mode != LoopMode::NoLoop
+                        && sample.sustain_loop_end > sample.sustain_loop_start
+                    {
+                        (
+                            sample.sustain_loop_mode,
+                            sample.sustain_loop_start,
+                            sample.sustain_loop_end,
+                        )
+                    } else {
+                        (sample.loop_mode, sample.loop_start, sample.loop_end)
+                    };
+
+                    match eff_loop_mode {
                         LoopMode::NoLoop => {
                             if src_frame >= sample_frames {
                                 voice.active = false;
@@ -683,18 +746,18 @@ impl Mixer {
                             }
                         }
                         LoopMode::Forward => {
-                            if src_frame > sample.loop_end {
-                                let loop_len = (sample.loop_end - sample.loop_start + 1) as f64;
+                            if src_frame > eff_loop_end {
+                                let loop_len = (eff_loop_end - eff_loop_start + 1) as f64;
                                 voice.position -= loop_len;
                             }
                         }
                         LoopMode::PingPong => {
-                            if voice.loop_direction > 0.0 && src_frame > sample.loop_end {
+                            if voice.loop_direction > 0.0 && src_frame > eff_loop_end {
                                 voice.loop_direction = -1.0;
-                                voice.position = sample.loop_end as f64;
-                            } else if voice.loop_direction < 0.0 && src_frame < sample.loop_start {
+                                voice.position = eff_loop_end as f64;
+                            } else if voice.loop_direction < 0.0 && src_frame < eff_loop_start {
                                 voice.loop_direction = 1.0;
-                                voice.position = sample.loop_start as f64;
+                                voice.position = eff_loop_start as f64;
                             }
                         }
                     }
@@ -707,16 +770,11 @@ impl Mixer {
                         continue;
                     }
 
-                    // Compute effective playback rate incorporating pitch and tone portamento frequency.
-                    let base_active_rate =
-                        if let Some(porta_freq) = effect_processor.portamento_frequency(ch) {
-                            porta_freq * voice.hz_to_rate
-                        } else {
-                            voice.playback_rate
-                        };
-
-                    let effective_rate =
-                        base_active_rate * render_state.pitch_ratio * voice.loop_direction;
+                    // Compute effective playback rate using the combined pitch ratio from effects.
+                    let effective_rate = voice.triggered_note_freq
+                        * voice.hz_to_rate
+                        * render_state.pitch_ratio
+                        * voice.loop_direction;
 
                     // Read sample data with linear interpolation
                     let (left, right) = {
@@ -724,26 +782,26 @@ impl Mixer {
                         let frac = (voice.position - pos_floor as f64) as f32;
                         let next_frame = {
                             let next = pos_floor + 1;
-                            match sample.loop_mode {
+                            match eff_loop_mode {
                                 LoopMode::NoLoop => next,
                                 LoopMode::Forward => {
-                                    if next > sample.loop_end {
-                                        sample.loop_start
+                                    if next > eff_loop_end {
+                                        eff_loop_start
                                     } else {
                                         next
                                     }
                                 }
                                 LoopMode::PingPong => {
                                     if voice.loop_direction > 0.0 {
-                                        if next > sample.loop_end {
-                                            sample.loop_end
+                                        if next > eff_loop_end {
+                                            eff_loop_end
                                         } else {
                                             next
                                         }
-                                    } else if pos_floor > sample.loop_start {
+                                    } else if pos_floor > eff_loop_start {
                                         pos_floor - 1
                                     } else {
-                                        sample.loop_start
+                                        eff_loop_start
                                     }
                                 }
                             }
@@ -767,6 +825,9 @@ impl Mixer {
                     };
 
                     let effect_gain = render_state.gain.unwrap_or(1.0);
+                    if let Some(pan_01) = render_state.pan_override {
+                        strip.set_effect_pan_immediate(pan_01 * 2.0 - 1.0);
+                    }
                     let (left_gain, right_gain) = strip.next_gains();
 
                     let out_idx = frame * 2;
@@ -774,6 +835,7 @@ impl Mixer {
                     let post_l = left
                         * voice.velocity_gain
                         * effect_gain
+                        * render_state.channel_volume
                         * left_gain
                         * env_vol
                         * global_vol_mult
@@ -781,6 +843,7 @@ impl Mixer {
                     let post_r = right
                         * voice.velocity_gain
                         * effect_gain
+                        * render_state.channel_volume
                         * right_gain
                         * env_vol
                         * global_vol_mult

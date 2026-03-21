@@ -217,11 +217,11 @@ fn parse_it_header(data: &[u8]) -> Result<ItHeader, String> {
 /// Raw IT pattern slot.
 #[derive(Clone, Copy, Default)]
 struct ItSlot {
-    note: u8,       // 0=none, 1-120=note, 254=notecut, 255=noteoff
-    instrument: u8, // 0=none, 1-99=instrument
-    volume: u8,     // volume column value
+    note: u8,         // 0=none, 1-120=note, 254=notecut, 255=noteoff
+    instrument: u8,   // 0=none, 1-99=instrument
+    volume: u8,       // volume column value
     has_volume: bool, // whether volume column was explicitly present
-    effect: u8,     // effect command (1=A, 4=D, etc.)
+    effect: u8,       // effect command (1=A, 4=D, etc.)
     effect_param: u8,
 }
 
@@ -249,7 +249,16 @@ fn parse_it_pattern(data: &[u8], offset: u32) -> Result<ItPattern, String> {
     // 4 bytes reserved
     let packed_data = &data[off + 8..off + 8 + packed_length as usize];
 
-    let mut result = vec![vec![ItSlot { note: 253, ..ItSlot::default() }; 64]; row_count as usize];
+    let mut result = vec![
+        vec![
+            ItSlot {
+                note: 253,
+                ..ItSlot::default()
+            };
+            64
+        ];
+        row_count as usize
+    ];
     let mut last_mask_vars = [0u8; 64];
     let mut last_note = [253u8; 64]; // Initialize to "no note"
     let mut last_instrument = [0u8; 64];
@@ -275,7 +284,10 @@ fn parse_it_pattern(data: &[u8], offset: u32) -> Result<ItPattern, String> {
                 last_mask_vars[channel]
             };
 
-            let mut slot = ItSlot { note: 253, ..ItSlot::default() };
+            let mut slot = ItSlot {
+                note: 253,
+                ..ItSlot::default()
+            };
 
             if mask_variable & 0x01 != 0 {
                 let n = *iter.next().ok_or("IT pattern truncated")?;
@@ -592,10 +604,7 @@ fn it_unpack_16bit(input: &[u8], output_len: usize, double_delta: bool) -> Vec<i
     output
 }
 
-fn load_it_sample_data(
-    file_data: &[u8],
-    sh: &ItSampleHeader,
-) -> Option<Vec<f32>> {
+fn load_it_sample_data(file_data: &[u8], sh: &ItSampleHeader) -> Option<Vec<f32>> {
     if !sh.is_associated() || sh.sample_length == 0 {
         return None;
     }
@@ -623,7 +632,7 @@ fn load_it_sample_data(
         };
 
         if block_offset >= sample_data.len() {
-            break; 
+            break;
         }
         let block_data = &sample_data[block_offset..];
 
@@ -631,11 +640,15 @@ fn load_it_sample_data(
             if is_16bit {
                 let raw = it_unpack_16bit(block_data, num_frames, true);
                 let xor_val = if !is_signed { -32768i16 } else { 0 };
-                raw.into_iter().map(|s| (s ^ xor_val) as f32 / 32768.0).collect()
+                raw.into_iter()
+                    .map(|s| (s ^ xor_val) as f32 / 32768.0)
+                    .collect()
             } else {
                 let raw = it_unpack_8bit(block_data, num_frames, true);
                 let xor_val = if !is_signed { -128i8 } else { 0 };
-                raw.into_iter().map(|s| (s ^ xor_val) as f32 / 128.0).collect()
+                raw.into_iter()
+                    .map(|s| (s ^ xor_val) as f32 / 128.0)
+                    .collect()
             }
         } else {
             // Uncompressed
@@ -867,12 +880,12 @@ fn convert_it_volume_column(vol: u8) -> (Option<u8>, Option<Effect>) {
         // 213-222: Pitch slide up (f)
         213..=222 => {
             let param = vol - 213;
-            (None, Some(Effect::new(0x01, param << 4)))
+            (None, Some(Effect::new(0x01, param)))
         }
         // 223..=232: Pitch slide down (e)
         223..=232 => {
             let param = vol - 223;
-            (None, Some(Effect::new(0x02, param << 4)))
+            (None, Some(Effect::new(0x02, param)))
         }
         _ => (None, None),
     }
@@ -1022,15 +1035,16 @@ fn convert_it_effect(cmd: u8, param: u8) -> Option<Effect> {
         // S: Extended effects (Sxy)
         0x13 => {
             match hi {
-                0x1 => Some(Effect::new(0x0E, 0x30 | lo)), // Glissando
-                0x3 => Some(Effect::new(0x0E, 0x40 | lo)), // Vibrato waveform
-                0x4 => Some(Effect::new(0x0E, 0x70 | lo)), // Tremolo waveform
-                0x5 => Some(Effect::new(0x0E, 0x50 | lo)), // Set finetune
-                0x6 => Some(Effect::new(0x0E, 0x60 | lo)), // Pattern loop
-                0xB => Some(Effect::new(0x0E, 0x60 | lo)), // Pattern loop (alt)
-                0xC => Some(Effect::new(0x0E, 0xC0 | lo)), // Note cut
-                0xD => Some(Effect::new(0x0E, 0xD0 | lo)), // Note delay
-                0xE => Some(Effect::new(0x0E, 0xE0 | lo)), // Pattern delay
+                0x1 => Some(Effect::new(0x0E, 0x30 | lo)), // S1x: Glissando
+                0x3 => Some(Effect::new(0x0E, 0x40 | lo)), // S3x: Vibrato waveform
+                0x4 => Some(Effect::new(0x0E, 0x70 | lo)), // S4x: Tremolo waveform
+                0x5 => Some(Effect::new(0x0E, 0x50 | lo)), // S5x: Set finetune
+                0x6 => Some(Effect::new(0x0E, 0x60 | lo)), // S6x: Pattern loop
+                0x9 => Some(Effect::new(0x0E, 0x90 | lo)), // S9x: Retrigger note (every x ticks)
+                0xB => Some(Effect::new(0x0E, 0x60 | lo)), // SBx: Pattern loop (alt)
+                0xC => Some(Effect::new(0x0E, 0xC0 | lo)), // SCx: Note cut
+                0xD => Some(Effect::new(0x0E, 0xD0 | lo)), // SDx: Note delay
+                0xE => Some(Effect::new(0x0E, 0xE0 | lo)), // SEx: Pattern delay
                 _ => None,
             }
         }
@@ -1124,8 +1138,9 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
                     sh.name.clone()
                 }),
             );
-            // Effective volume is (GlobalVol * DefaultVol) / 64. Scale to 0.0-1.0.
-            sample.volume = (sh.global_volume as f32 / 64.0) * (sh.default_volume as f32 / 64.0);
+            // Sample volume stays at 1.0 (default).
+            // All IT volume factors are consolidated on the Instrument to avoid
+            // double-multiplication (the mixer multiplies inst_vol * sample.volume).
 
             // Loop
             if sh.use_loop() && sh.loop_end > sh.loop_start {
@@ -1138,6 +1153,21 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
                         LoopMode::Forward
                     };
                     sample = sample.with_loop(mode, loop_start, loop_end);
+                }
+            }
+
+            // Sustain loop (active while key is held, plays through on release)
+            if sh.use_sustain_loop() && sh.sustain_loop_end > sh.sustain_loop_start {
+                let sus_start = sh.sustain_loop_start as usize;
+                let sus_end = (sh.sustain_loop_end as usize).saturating_sub(1);
+                if sus_end > sus_start {
+                    let mode = if sh.flags & 0x40 != 0 && !sh.use_loop() {
+                        // Bit 6 is ping-pong for sustain loop when no regular loop
+                        LoopMode::PingPong
+                    } else {
+                        LoopMode::Forward
+                    };
+                    sample = sample.with_sustain_loop(mode, sus_start, sus_end);
                 }
             }
 
@@ -1154,8 +1184,10 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
 
             let mut inst = Instrument::new(sname);
             inst.sample_index = Some(out_samples.len());
-            // Combine sample default volume with sample global volume
-            inst.volume = (sh.default_volume as f32 / 64.0) * (sh.global_volume as f32 / 64.0);
+            // Combine sample default volume with sample global volume.
+            // This is the sample-level static multiplier.
+            sample.volume = (sh.default_volume as f32 / 64.0) * (sh.global_volume as f32 / 64.0);
+            inst.volume = 1.0; // instrument global volume will be multiplied in later
 
             // Default panning (0-64). 128+ means use tracker channel pan.
             if sh.default_pan <= 64 {
@@ -1181,10 +1213,7 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
             for &(target_note, sample) in &it_inst.note_sample_table {
                 if sample > 0 {
                     let si = (sample as usize).saturating_sub(1);
-                    let tracker_idx = sample_to_tracker_inst
-                        .get(si)
-                        .copied()
-                        .flatten();
+                    let tracker_idx = sample_to_tracker_inst.get(si).copied().flatten();
                     if let Some(ti) = tracker_idx {
                         note_map.push(Some((ti, target_note, inst_vol)));
                     } else {
@@ -1195,14 +1224,17 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
                 }
             }
 
-            // Push envelope data to each referenced sample's instrument entry
+            // Push envelope data to each referenced sample's instrument entry.
+            // Track which instruments we've already updated to avoid repeated
+            // multiplication of the IT instrument global volume.
+            let mut updated_instruments = std::collections::HashSet::new();
             for (tracker_idx, _, vol) in note_map.iter().flatten() {
                 let tracker_idx = *tracker_idx;
-                if tracker_idx < out_instruments.len() {
-                    // Combine instrument global volume with existing sample volume
+                if tracker_idx < out_instruments.len() && updated_instruments.insert(tracker_idx) {
+                    // Combine IT instrument global volume with existing sample-level volume.
                     out_instruments[tracker_idx].volume *= *vol;
                     out_instruments[tracker_idx].fadeout = it_inst.fadeout;
-                    
+
                     if out_instruments[tracker_idx].volume_envelope.is_none() {
                         out_instruments[tracker_idx].volume_envelope =
                             it_inst.volume_envelope.clone();
@@ -1266,7 +1298,6 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
     // If Global Volume is 128 and Mix Volume is 128, it will be 1.0.
     // If Global Vol is 128 and Mix Vol is 48 (standard), it will be ~0.375.
 
-
     // ── Convert patterns ──
     song.patterns.clear();
     let mut last_instrument: Vec<Option<usize>> = vec![None; num_channels];
@@ -1325,10 +1356,8 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
                                 60 // C-5 is the anchor
                             };
 
-                            if let Some((tracker_idx, note_pitch, _instr_vol)) = inst_to_sample[i]
-                                .get(lookup_note)
-                                .copied()
-                                .flatten()
+                            if let Some((tracker_idx, note_pitch, _instr_vol)) =
+                                inst_to_sample[i].get(lookup_note).copied().flatten()
                             {
                                 mapped_sample_idx = Some(tracker_idx as u8);
                                 last_sample[c_idx] = mapped_sample_idx;
@@ -1341,7 +1370,8 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
                         }
                     } else {
                         // Direct sample mode
-                        if let Some(tracker_idx) = sample_to_tracker_inst.get(i).copied().flatten() {
+                        if let Some(tracker_idx) = sample_to_tracker_inst.get(i).copied().flatten()
+                        {
                             mapped_sample_idx = Some(tracker_idx as u8);
                             last_sample[c_idx] = mapped_sample_idx;
                             if slot.instrument > 0 {
@@ -1422,4 +1452,3 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
         samples: out_samples,
     })
 }
-

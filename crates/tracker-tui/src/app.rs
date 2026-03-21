@@ -1989,6 +1989,7 @@ impl App {
                 if let Ok(mut mixer) = self.mixer.lock() {
                     mixer.update_tempo(self.song.bpm);
                     mixer.set_tpl(self.song.tpl);
+                    mixer.set_global_volume(self.song.global_volume);
                 }
                 self.sync_mixer_instruments();
                 self.project_path = Some(path.to_path_buf());

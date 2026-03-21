@@ -43,6 +43,12 @@ pub struct Sample {
     pub volume: f32,
     /// Fine-tune adjustment in cents (-100 to +100).
     pub finetune: i32,
+    /// Sustain loop mode (IT format). Loops while key is held, plays through on release.
+    pub sustain_loop_mode: LoopMode,
+    /// Start of sustain loop in frames.
+    pub sustain_loop_start: usize,
+    /// End of sustain loop in frames (inclusive).
+    pub sustain_loop_end: usize,
 }
 
 impl Sample {
@@ -60,6 +66,9 @@ impl Sample {
             loop_end: frame_count.saturating_sub(1),
             volume: 1.0,
             finetune: 0,
+            sustain_loop_mode: LoopMode::NoLoop,
+            sustain_loop_start: 0,
+            sustain_loop_end: 0,
         }
     }
 
@@ -74,6 +83,16 @@ impl Sample {
         self.loop_mode = mode;
         self.loop_start = start;
         self.loop_end = end;
+        self
+    }
+
+    /// Set sustain loop points and mode (IT format).
+    /// The sustain loop is active while the key is held; on key release the
+    /// sample plays through to its end or enters the regular loop.
+    pub fn with_sustain_loop(mut self, mode: LoopMode, start: usize, end: usize) -> Self {
+        self.sustain_loop_mode = mode;
+        self.sustain_loop_start = start;
+        self.sustain_loop_end = end;
         self
     }
 
@@ -176,6 +195,9 @@ impl Default for Sample {
             loop_end: 0,
             volume: 1.0,
             finetune: 0,
+            sustain_loop_mode: LoopMode::NoLoop,
+            sustain_loop_start: 0,
+            sustain_loop_end: 0,
         }
     }
 }
