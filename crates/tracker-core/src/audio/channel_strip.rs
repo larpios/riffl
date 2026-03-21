@@ -120,6 +120,13 @@ impl ChannelStrip {
             .map_or(0.0, RampedParam::next)
     }
 
+    /// Override the pan position from an effect command (8xx).
+    ///
+    /// `pan` is in the channel strip's coordinate system: -1.0=left, 0.0=centre, 1.0=right.
+    pub fn set_effect_pan(&mut self, pan: f32) {
+        self.pan.set(pan.clamp(-1.0, 1.0), MIXER_RAMP_SECS);
+    }
+
     /// Get the number of configured send levels.
     pub fn num_send_levels(&self) -> usize {
         self.send_levels.len()

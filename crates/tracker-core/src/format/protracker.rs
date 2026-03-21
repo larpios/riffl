@@ -26,9 +26,7 @@ const DEFAULT_VELOCITY: u8 = 100;
 /// Default BPM when no tempo info is found in the MOD file.
 const _DEFAULT_BPM: f64 = 125.0;
 
-
-
-/// Extract tempo information from MOD patterns by scanning for SetSpeed and SetTempo effects.
+/// Extract tempo information from MOD patterns by scanning for SetSpeed effects.
 /// Returns (speed, bpm) indicating the first Speed (TPL) and BPM found, defaulting to 6 and 125.0.
 fn extract_tempo_from_patterns(patterns: &[Pattern]) -> (u8, f64) {
     use crate::pattern::effect::EffectType;
@@ -44,13 +42,14 @@ fn extract_tempo_from_patterns(patterns: &[Pattern]) -> (u8, f64) {
             if let Some(row) = pattern.get_row(row_idx) {
                 for cell in row.iter() {
                     if let Some(effect) = cell.effects.first() {
-                        if !found_speed && effect.effect_type() == Some(EffectType::SetSpeed) {
-                            out_speed = effect.param.max(1);
-                            found_speed = true;
-                        }
-                        if !found_bpm && effect.effect_type() == Some(EffectType::SetTempo) {
-                            out_bpm = effect.param as f64;
-                            found_bpm = true;
+                        if effect.effect_type() == Some(EffectType::SetSpeed) {
+                            if !found_bpm && effect.param >= 32 {
+                                out_bpm = effect.param as f64;
+                                found_bpm = true;
+                            } else if !found_speed && effect.param > 0 && effect.param < 32 {
+                                out_speed = effect.param;
+                                found_speed = true;
+                            }
                         }
                     }
                 }
@@ -546,11 +545,8 @@ fn decode_effect(cmd: u8, param: u8) -> Option<Effect> {
     if cmd == 0 && param == 0 {
         return None;
     }
-    // MOD Fxx effect: if param < 32, it sets tick speed (0xF).
-    // if param >= 32, it sets BPM (0x8 in our engine).
-    if cmd == 0xF && param >= 0x20 {
-        return Some(Effect::new(0x8, param)); // 0x8 is SetTempo
-    }
+    // MOD Fxx effect: param < 32 sets tick speed, param >= 32 sets BPM.
+    // Both use command 0xF — SetSpeed handler checks the param range.
     Some(Effect::new(cmd, param))
 }
 

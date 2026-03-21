@@ -30,8 +30,8 @@ pub enum EffectType {
     VibratoVolumeSlide,
     /// `7xy` — Tremolo: oscillate amplitude with speed x, depth y.
     Tremolo,
-    /// `8xx` — Set tempo (BPM).
-    SetTempo,
+    /// `8xx` — Set panning position (0x00 = full left, 0x80 = centre, 0xFF = full right).
+    SetPanning,
     /// `9xx` — Sample Offset: start sample at xx * 256 frames.
     SampleOffset,
     /// `Axy` — Volume slide: x = up speed, y = down speed.
@@ -46,6 +46,26 @@ pub enum EffectType {
     Extended,
     /// `Fxx` — Set speed (Ticks Per Line).
     SetSpeed,
+    /// `Gxx` or `Vxx` — Set global volume. (0x10)
+    SetGlobalVolume,
+    /// `Hxy` or `Wxy` — Global volume slide. (0x11)
+    GlobalVolumeSlide,
+    /// `Pxy` — Panning slide. (0x12)
+    PanningSlide,
+    /// `Mxx` — Channel volume (IT). (0x13)
+    ChannelVolume,
+    /// `Nxy` — Channel volume slide (IT). (0x14)
+    ChannelVolumeSlide,
+    /// `Txy` or `Ixy` — Tremor. (0x15)
+    Tremor,
+    /// `Rxy` or `Qxy` — Retrig Note + Volume Slide. (0x16)
+    RetrigNoteVolSlide,
+    /// `Lxx` — Set envelope position. (0x17)
+    SetEnvelopePosition,
+    /// `Yxy` — Panbrello. (0x18)
+    Panbrello,
+    /// `Zxx` — MIDI Macro. (0x19)
+    MidiMacro,
 }
 
 impl EffectType {
@@ -62,7 +82,7 @@ impl EffectType {
             0x5 => Some(EffectType::TonePortamentoVolumeSlide),
             0x6 => Some(EffectType::VibratoVolumeSlide),
             0x7 => Some(EffectType::Tremolo),
-            0x8 => Some(EffectType::SetTempo),
+            0x8 => Some(EffectType::SetPanning),
             0x9 => Some(EffectType::SampleOffset),
             0xA => Some(EffectType::VolumeSlide),
             0xB => Some(EffectType::PositionJump),
@@ -70,6 +90,16 @@ impl EffectType {
             0xD => Some(EffectType::PatternBreak),
             0xE => Some(EffectType::Extended),
             0xF => Some(EffectType::SetSpeed),
+            0x10 => Some(EffectType::SetGlobalVolume),
+            0x11 => Some(EffectType::GlobalVolumeSlide),
+            0x12 => Some(EffectType::PanningSlide),
+            0x13 => Some(EffectType::ChannelVolume),
+            0x14 => Some(EffectType::ChannelVolumeSlide),
+            0x15 => Some(EffectType::Tremor),
+            0x16 => Some(EffectType::RetrigNoteVolSlide),
+            0x17 => Some(EffectType::SetEnvelopePosition),
+            0x18 => Some(EffectType::Panbrello),
+            0x19 => Some(EffectType::MidiMacro),
             _ => None,
         }
     }
@@ -90,7 +120,7 @@ impl EffectType {
             EffectType::TonePortamentoVolumeSlide => 0x5,
             EffectType::VibratoVolumeSlide => 0x6,
             EffectType::Tremolo => 0x7,
-            EffectType::SetTempo => 0x8,
+            EffectType::SetPanning => 0x8,
             EffectType::SampleOffset => 0x9,
             EffectType::VolumeSlide => 0xA,
             EffectType::SetVolume => 0xC,
@@ -98,6 +128,16 @@ impl EffectType {
             EffectType::PatternBreak => 0xD,
             EffectType::Extended => 0xE,
             EffectType::SetSpeed => 0xF,
+            EffectType::SetGlobalVolume => 0x10,
+            EffectType::GlobalVolumeSlide => 0x11,
+            EffectType::PanningSlide => 0x12,
+            EffectType::ChannelVolume => 0x13,
+            EffectType::ChannelVolumeSlide => 0x14,
+            EffectType::Tremor => 0x15,
+            EffectType::RetrigNoteVolSlide => 0x16,
+            EffectType::SetEnvelopePosition => 0x17,
+            EffectType::Panbrello => 0x18,
+            EffectType::MidiMacro => 0x19,
         }
     }
 
@@ -112,7 +152,7 @@ impl EffectType {
             EffectType::TonePortamentoVolumeSlide => "Porta+Vol",
             EffectType::VibratoVolumeSlide => "Vib+Vol",
             EffectType::Tremolo => "Tremolo",
-            EffectType::SetTempo => "Set Tempo",
+            EffectType::SetPanning => "Set Tempo",
             EffectType::SampleOffset => "Offset",
             EffectType::VolumeSlide => "Vol Slide",
             EffectType::PositionJump => "Pos Jump",
@@ -120,6 +160,16 @@ impl EffectType {
             EffectType::PatternBreak => "Pat Break",
             EffectType::Extended => "Extended",
             EffectType::SetSpeed => "Set Speed",
+            EffectType::SetGlobalVolume => "Global Vol",
+            EffectType::GlobalVolumeSlide => "GVol Slide",
+            EffectType::PanningSlide => "Pan Slide",
+            EffectType::ChannelVolume => "Chan Vol",
+            EffectType::ChannelVolumeSlide => "CVol Slide",
+            EffectType::Tremor => "Tremor",
+            EffectType::RetrigNoteVolSlide => "Retrig Vol",
+            EffectType::SetEnvelopePosition => "Env Pos",
+            EffectType::Panbrello => "Panbrello",
+            EffectType::MidiMacro => "Midi Macro",
         }
     }
 
@@ -322,6 +372,37 @@ mod tests {
         );
         assert_eq!(EffectType::from_command(0xE), Some(EffectType::Extended));
         assert_eq!(EffectType::from_command(0xF), Some(EffectType::SetSpeed));
+        assert_eq!(
+            EffectType::from_command(0x10),
+            Some(EffectType::SetGlobalVolume)
+        );
+        assert_eq!(
+            EffectType::from_command(0x11),
+            Some(EffectType::GlobalVolumeSlide)
+        );
+        assert_eq!(
+            EffectType::from_command(0x12),
+            Some(EffectType::PanningSlide)
+        );
+        assert_eq!(
+            EffectType::from_command(0x13),
+            Some(EffectType::ChannelVolume)
+        );
+        assert_eq!(
+            EffectType::from_command(0x14),
+            Some(EffectType::ChannelVolumeSlide)
+        );
+        assert_eq!(EffectType::from_command(0x15), Some(EffectType::Tremor));
+        assert_eq!(
+            EffectType::from_command(0x16),
+            Some(EffectType::RetrigNoteVolSlide)
+        );
+        assert_eq!(
+            EffectType::from_command(0x17),
+            Some(EffectType::SetEnvelopePosition)
+        );
+        assert_eq!(EffectType::from_command(0x18), Some(EffectType::Panbrello));
+        assert_eq!(EffectType::from_command(0x19), Some(EffectType::MidiMacro));
     }
 
     #[test]
@@ -347,6 +428,16 @@ mod tests {
             EffectType::PatternBreak,
             EffectType::Extended,
             EffectType::SetSpeed,
+            EffectType::SetGlobalVolume,
+            EffectType::GlobalVolumeSlide,
+            EffectType::PanningSlide,
+            EffectType::ChannelVolume,
+            EffectType::ChannelVolumeSlide,
+            EffectType::Tremor,
+            EffectType::RetrigNoteVolSlide,
+            EffectType::SetEnvelopePosition,
+            EffectType::Panbrello,
+            EffectType::MidiMacro,
         ];
         for &effect_type in &types {
             let cmd = effect_type.to_command();
@@ -374,7 +465,7 @@ mod tests {
         assert_eq!(eff.effect_type(), Some(EffectType::SetVolume));
 
         // Unknown command
-        let eff_unknown = Effect::new(0x10, 0x00);
+        let eff_unknown = Effect::new(0x1A, 0x00);
         assert_eq!(eff_unknown.effect_type(), None);
     }
 
@@ -398,6 +489,9 @@ mod tests {
         assert_eq!(Effect::new(0xD, 0x00).mnemonic(), "Pat Break");
         assert_eq!(Effect::new(0xE, 0x00).mnemonic(), "Extended");
         assert_eq!(Effect::new(0xF, 0x06).mnemonic(), "Set Speed");
+        assert_eq!(Effect::new(0x10, 0x40).mnemonic(), "Global Vol");
+        assert_eq!(Effect::new(0x11, 0x40).mnemonic(), "GVol Slide");
+        assert_eq!(Effect::new(0x12, 0x22).mnemonic(), "Pan Slide");
     }
 
     #[test]
@@ -454,12 +548,15 @@ mod tests {
             EffectType::PitchSlideDown,
             EffectType::PortamentoToNote,
             EffectType::Vibrato,
-            EffectType::SetTempo,
+            EffectType::SetPanning,
             EffectType::VolumeSlide,
             EffectType::PositionJump,
             EffectType::SetVolume,
             EffectType::PatternBreak,
             EffectType::SetSpeed,
+            EffectType::SetGlobalVolume,
+            EffectType::GlobalVolumeSlide,
+            EffectType::Tremor,
         ];
         for &et in &types {
             let json = serde_json::to_string(&et).unwrap();
@@ -495,9 +592,8 @@ mod tests {
     #[test]
     fn test_effect_display_unknown_commands() {
         // Unknown command types should still display correctly as hex
-        assert_eq!(format!("{}", Effect::new(0x5, 0x00)), "500");
-        assert_eq!(format!("{}", Effect::new(0x6, 0xAB)), "6AB");
-        assert_eq!(format!("{}", Effect::new(0xE, 0x12)), "E12");
+        assert_eq!(format!("{}", Effect::new(0xFF, 0x12)), "FF12");
+        assert_eq!(format!("{}", Effect::new(0x1A, 0xAB)), "1AAB");
     }
 
     // --- Effect Construction and Field Access ---
@@ -513,7 +609,7 @@ mod tests {
             (EffectType::TonePortamentoVolumeSlide, 0x12, 0x5),
             (EffectType::VibratoVolumeSlide, 0x21, 0x6),
             (EffectType::Tremolo, 0x48, 0x7),
-            (EffectType::SetTempo, 0x80, 0x8),
+            (EffectType::SetPanning, 0x80, 0x8),
             (EffectType::SampleOffset, 0x80, 0x9),
             (EffectType::VolumeSlide, 0x04, 0xA),
             (EffectType::PositionJump, 0x02, 0xB),

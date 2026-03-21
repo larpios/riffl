@@ -11,6 +11,7 @@ use crate::audio::sample::Sample;
 use crate::pattern::note::NoteEvent;
 use crate::pattern::pattern::Pattern;
 use crate::pattern::track::Track;
+use crate::pattern::EffectType;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
@@ -33,6 +34,8 @@ fn atomic_max_f32(atomic: &AtomicU32, new_val: f32) {
 /// State for a single voice playing a sample.
 #[derive(Debug, Clone)]
 struct Voice {
+    /// Index into the mixer's instrument list.
+    instrument_index: usize,
     /// Index into the mixer's sample list.
     sample_index: usize,
     /// Current read position within the sample's audio data (in frames).
@@ -46,17 +49,33 @@ struct Voice {
     /// Current playback direction (1.0 for forward, -1.0 for reverse).
     /// Used for ping-pong loops.
     loop_direction: f64,
+    /// Whether the key is currently held down.
+    key_on: bool,
+    /// Current envelope position in ticks.
+    envelope_tick: usize,
+    /// Ratio to convert an absolute frequency (Hz) into relative playback_rate.
+    hz_to_rate: f64,
 }
 
 impl Voice {
-    fn new(sample_index: usize, playback_rate: f64, velocity_gain: f32) -> Self {
+    fn new(
+        instrument_index: usize,
+        sample_index: usize,
+        playback_rate: f64,
+        velocity_gain: f32,
+        hz_to_rate: f64,
+    ) -> Self {
         Self {
+            instrument_index,
             sample_index,
             position: 0.0,
             playback_rate,
             velocity_gain,
             active: true,
             loop_direction: 1.0,
+            key_on: true,
+            envelope_tick: 0,
+            hz_to_rate,
         }
     }
 
@@ -70,9 +89,11 @@ impl Voice {
 #[derive(Debug, Clone)]
 struct PendingNote {
     channel: usize,
+    instrument_index: usize,
     sample_index: usize,
     playback_rate: f64,
     velocity_gain: f32,
+    hz_to_rate: f64,
     offset: Option<usize>,
     trigger_frame: u32,
 }
@@ -179,15 +200,15 @@ impl Mixer {
             let num_buses = self.bus_system.num_buses();
             for _ in self.voices.len()..num_channels {
                 self.voices.push(None);
-                
+
                 let mut strip = ChannelStrip::new();
                 strip.set_sample_rate(sample_rate);
                 strip.ensure_send_levels(num_buses);
                 self.channel_strips.push(strip);
-                
+
                 self.channel_levels.push((
                     std::sync::atomic::AtomicU32::new(0),
-                    std::sync::atomic::AtomicU32::new(0)
+                    std::sync::atomic::AtomicU32::new(0),
                 ));
             }
         } else {
@@ -196,7 +217,7 @@ impl Mixer {
             self.channel_strips.truncate(num_channels);
             self.channel_levels.truncate(num_channels);
         }
-        
+
         // Push the changes down to the effect processor as well
         self.effect_processor.resize_channels(num_channels);
     }
@@ -289,6 +310,15 @@ impl Mixer {
 
             transport_commands.extend(cmds);
 
+            // Apply effect-based panning override (8xx) to the channel strip.
+            // xmrs stores panning as 0.0 (left) → 1.0 (right); strip uses -1.0 → 1.0.
+            if let Some(pan_01) = self.effect_processor.channel_panning(ch) {
+                let pan = pan_01 * 2.0 - 1.0;
+                if let Some(strip) = self.channel_strips.get_mut(ch) {
+                    strip.set_effect_pan(pan);
+                }
+            }
+
             match &cell.note {
                 Some(NoteEvent::On(note)) => {
                     if !audible {
@@ -296,8 +326,21 @@ impl Mixer {
                         self.voices[ch] = None;
                         continue;
                     }
+
+                    let has_tone_porta = cell.effects.iter().any(|e| {
+                        matches!(
+                            e.effect_type(),
+                            Some(EffectType::PortamentoToNote)
+                                | Some(EffectType::TonePortamentoVolumeSlide)
+                        )
+                    });
+
                     let instrument_idx = cell.instrument.unwrap_or(note.instrument) as usize;
-                    if instrument_idx < self.samples.len() {
+
+                    if has_tone_porta && self.voices[ch].is_some() {
+                        // A tone portamento effect exists and a voice is already playing.
+                        // Do not trigger a new sample. The TrackerEffectProcessor handles target pitch updates.
+                    } else if instrument_idx < self.samples.len() {
                         let sample = &self.samples[instrument_idx];
                         // Calculate playback rate to pitch the sample to the desired note.
                         // The sample's base_note (default C-4) plays at original speed.
@@ -306,11 +349,12 @@ impl Mixer {
                         let target_freq = note.frequency();
                         let sample_rate_ratio =
                             sample.sample_rate() as f64 / self.output_sample_rate as f64;
-                        let mut playback_rate = (target_freq / base_freq) * sample_rate_ratio;
+
+                        let mut hz_to_rate = (1.0 / base_freq) * sample_rate_ratio;
 
                         // Apply sample-level finetune (in cents)
                         if sample.finetune != 0 {
-                            playback_rate *= 2.0_f64.powf(sample.finetune as f64 / 1200.0);
+                            hz_to_rate *= 2.0_f64.powf(sample.finetune as f64 / 1200.0);
                         }
 
                         // Apply finetune from instrument or effect override
@@ -327,8 +371,10 @@ impl Mixer {
 
                         if finetune != 0 {
                             // ProTracker finetune formula: 1 unit = 1/8th of a semitone
-                            playback_rate *= 2.0_f64.powf(finetune as f64 / (12.0 * 8.0));
+                            hz_to_rate *= 2.0_f64.powf(finetune as f64 / (12.0 * 8.0));
                         }
+
+                        let playback_rate = target_freq * hz_to_rate;
 
                         // Map velocity 0-127 to gain 0.0-1.0, scaled by instrument and sample volume
                         let inst_vol = self
@@ -357,15 +403,22 @@ impl Mixer {
 
                             self.pending_notes.push(PendingNote {
                                 channel: ch,
+                                instrument_index: instrument_idx,
                                 sample_index: instrument_idx,
                                 playback_rate,
                                 velocity_gain,
+                                hz_to_rate,
                                 offset,
                                 trigger_frame,
                             });
                         } else {
-                            let mut voice =
-                                Voice::new(instrument_idx, playback_rate, velocity_gain);
+                            let mut voice = Voice::new(
+                                instrument_idx,
+                                instrument_idx,
+                                playback_rate,
+                                velocity_gain,
+                                hz_to_rate,
+                            );
                             if let Some(offset) = self.effect_processor.sample_offset(ch) {
                                 voice = voice.with_position(offset as f64);
                             }
@@ -375,7 +428,19 @@ impl Mixer {
                     }
                 }
                 Some(NoteEvent::Off) => {
-                    self.voices[ch] = None;
+                    if let Some(voice) = &mut self.voices[ch] {
+                        let has_envelope = self
+                            .instruments
+                            .get(voice.instrument_index)
+                            .and_then(|inst| inst.volume_envelope.as_ref())
+                            .is_some_and(|env| env.enabled);
+
+                        if has_envelope {
+                            voice.key_on = false;
+                        } else {
+                            self.voices[ch] = None;
+                        }
+                    }
                     if let Some(s) = self.effect_processor.channel_state_mut(ch) {
                         s.reset();
                     }
@@ -439,10 +504,22 @@ impl Mixer {
                         .position(|pn| pn.channel == ch && pn.trigger_frame == current_row_frame)
                     {
                         let pn = self.pending_notes.remove(pos);
-                        let mut voice =
-                            Voice::new(pn.sample_index, pn.playback_rate, pn.velocity_gain);
+                        let mut voice = Voice::new(
+                            pn.instrument_index,
+                            pn.sample_index,
+                            pn.playback_rate,
+                            pn.velocity_gain,
+                            pn.hz_to_rate,
+                        );
                         if let Some(offset) = pn.offset {
                             voice = voice.with_position(offset as f64);
+                        }
+                        if let Some(env_override) = effect_processor
+                            .channel_state(ch)
+                            .unwrap()
+                            .envelope_position_override
+                        {
+                            voice.envelope_tick = env_override;
                         }
                         *voice_slot = Some(voice);
                         triggered_now = true;
@@ -481,6 +558,37 @@ impl Mixer {
                                 && current_tick.is_multiple_of(retrigger_interval as u32)
                             {
                                 voice.position = 0.0;
+                            }
+                        }
+                    }
+
+                    if !voice.active {
+                        effect_processor.advance_frame(ch);
+                        continue;
+                    }
+
+                    // Envelope processing
+                    let mut env_vol = 1.0;
+                    if let Some(inst) = self.instruments.get(voice.instrument_index) {
+                        if let Some(vol_env) = &inst.volume_envelope {
+                            if vol_env.enabled {
+                                let (val, next_tick) =
+                                    vol_env.evaluate(voice.envelope_tick, voice.key_on);
+                                env_vol = val;
+
+                                if tick_frame == frames_per_tick.saturating_sub(1) {
+                                    voice.envelope_tick = next_tick;
+                                }
+
+                                if !voice.key_on
+                                    && vol_env
+                                        .points
+                                        .last()
+                                        .is_some_and(|p| voice.envelope_tick >= p.frame as usize)
+                                    && val <= 0.001
+                                {
+                                    voice.active = false;
+                                }
                             }
                         }
                     }
@@ -545,8 +653,16 @@ impl Mixer {
                         continue;
                     }
 
+                    // Compute effective playback rate incorporating pitch and tone portamento frequency.
+                    let base_active_rate =
+                        if let Some(porta_freq) = effect_processor.portamento_frequency(ch) {
+                            porta_freq * voice.hz_to_rate
+                        } else {
+                            voice.playback_rate
+                        };
+
                     let effective_rate =
-                        voice.playback_rate * render_state.pitch_ratio * voice.loop_direction;
+                        base_active_rate * render_state.pitch_ratio * voice.loop_direction;
 
                     // Read sample data with linear interpolation
                     let (left, right) = {
@@ -600,8 +716,19 @@ impl Mixer {
                     let (left_gain, right_gain) = strip.next_gains();
 
                     let out_idx = frame * 2;
-                    let post_l = left * voice.velocity_gain * effect_gain * left_gain;
-                    let post_r = right * voice.velocity_gain * effect_gain * right_gain;
+                    let global_vol_mult = effect_processor.global_volume;
+                    let post_l = left
+                        * voice.velocity_gain
+                        * effect_gain
+                        * left_gain
+                        * env_vol
+                        * global_vol_mult;
+                    let post_r = right
+                        * voice.velocity_gain
+                        * effect_gain
+                        * right_gain
+                        * env_vol
+                        * global_vol_mult;
 
                     output[out_idx] += post_l;
                     output[out_idx + 1] += post_r;
@@ -621,9 +748,15 @@ impl Mixer {
 
                     // Advance frame-level effect modulations
                     effect_processor.advance_frame(ch);
+
+                    // Re-apply panning per-frame for sliding effects
+                    if let Some(pan_01) = effect_processor.channel_panning(ch) {
+                        strip.set_effect_pan(pan_01 * 2.0 - 1.0);
+                    }
                 }
             }
 
+            effect_processor.advance_global_frame();
             bus_system.process_and_mix(output, num_frames);
         } // end main voice block — field borrows released
 

@@ -23,6 +23,12 @@ pub struct Config {
     /// Default number of channels (tracks) for new patterns
     pub default_channels: usize,
 
+    /// Default playback mode for new sessions
+    pub default_playback_mode: tracker_core::transport::PlaybackMode,
+
+    /// Default loop state for new sessions
+    pub default_loop_enabled: bool,
+
     /// Additional sample directories shown in the sample browser.
     /// `~/.config/riffl/samples/` is always included automatically.
     /// Also overridden/extended by RIFFL_SAMPLE_DIR env var or --sample-dir CLI flag.
@@ -42,6 +48,8 @@ impl Default for Config {
             default_bpm: 125.0,
             default_pattern_rows: 16,
             default_channels: 4,
+            default_playback_mode: tracker_core::transport::PlaybackMode::Pattern,
+            default_loop_enabled: true,
             sample_dirs: Vec::new(),
             bookmarked_dirs: Vec::new(),
         }
@@ -215,6 +223,8 @@ mod tests {
             default_bpm: 140.0,
             default_pattern_rows: 32,
             default_channels: 8,
+            default_playback_mode: tracker_core::transport::PlaybackMode::Song,
+            default_loop_enabled: false,
             sample_dirs: vec!["/tmp/samples".to_string()],
             bookmarked_dirs: vec![],
         };
@@ -224,5 +234,10 @@ mod tests {
         assert_eq!(restored.default_bpm, 140.0);
         assert_eq!(restored.default_pattern_rows, 32);
         assert_eq!(restored.default_channels, 8);
+        assert_eq!(
+            restored.default_playback_mode,
+            tracker_core::transport::PlaybackMode::Song
+        );
+        assert_eq!(restored.default_loop_enabled, false);
     }
 }

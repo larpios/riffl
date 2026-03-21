@@ -414,9 +414,9 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         let track_name = track.map_or_else(
             || format!("CH{}", ch),
             |t| {
-                // Truncate name to fit
-                if t.name.len() > 7 {
-                    t.name[..7].to_string()
+                // Truncate name to fit (up to 10 chars max allowing Track 10, Track 99 to fit)
+                if t.name.len() > 10 {
+                    t.name[..10].to_string()
                 } else {
                     t.name.clone()
                 }
