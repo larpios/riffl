@@ -40,6 +40,10 @@ pub struct VoiceRenderState {
     /// Volume gain from effect commands (Cxx set volume, Axy volume slide).
     /// None means no effect override (use default 1.0).
     pub gain: Option<f32>,
+    /// Base channel volume set by IT/XM master effects (Mxx). 0.0 - 1.0.
+    pub channel_volume: f32,
+    /// Effective panning position (0.0 = left, 0.5 = center, 1.0 = right).
+    pub pan_override: Option<f32>,
 }
 
 /// Per-channel effect state tracking.
@@ -60,6 +64,8 @@ pub struct ChannelEffectState {
     /// Accumulated pitch offset in frequency ratio units.
     /// 1.0 = no change, >1.0 = higher, <1.0 = lower.
     pub pitch_ratio: f64,
+    /// The frequency of the note that triggered this voice (for portamento).
+    pub triggered_note_freq: f64,
 
     // --- Portamento to note ---
     /// Target frequency for portamento slide.
@@ -185,6 +191,7 @@ impl Default for ChannelEffectState {
             arpeggio_y: 0,
             arpeggio_active: false,
             pitch_ratio: 1.0,
+            triggered_note_freq: 440.0,
             portamento_target: None,
             portamento_speed: 0.0,
             portamento_freq: None,
@@ -323,14 +330,19 @@ impl ChannelEffectState {
     }
 
     /// Advance vibrato LFO phase by one frame.
-    pub fn advance_vibrato(&mut self, sample_rate: u32) {
+    pub fn advance_vibrato(&mut self, _sample_rate: u32) {
         if !self.vibrato_active || self.vibrato_speed == 0 {
             return;
         }
 
-        let lfo_hz = self.vibrato_speed as f64 * 0.5;
-        let phase_increment = 2.0 * std::f64::consts::PI * lfo_hz / sample_rate as f64;
-        self.vibrato_phase += phase_increment;
+        // FT2/XM Vibrato: phase increments by speed every tick.
+        // There are 64 units of phase per full cycle (2*PI).
+        // Total phase added per row = (speed / 64.0) * ticks_per_row * 2*PI.
+        let cycles_per_row = (self.vibrato_speed as f64 / 64.0) * self.ticks_per_row as f64;
+        let phase_inc_per_frame =
+            (cycles_per_row * 2.0 * std::f64::consts::PI) / self.frames_per_row as f64;
+
+        self.vibrato_phase += phase_inc_per_frame;
 
         if self.vibrato_phase > 2.0 * std::f64::consts::PI {
             self.vibrato_phase -= 2.0 * std::f64::consts::PI;
@@ -364,14 +376,17 @@ impl ChannelEffectState {
     }
 
     /// Advance tremolo LFO phase by one frame.
-    pub fn advance_tremolo(&mut self, sample_rate: u32) {
+    pub fn advance_tremolo(&mut self, _sample_rate: u32) {
         if !self.tremolo_active || self.tremolo_speed == 0 {
             return;
         }
 
-        let lfo_hz = self.tremolo_speed as f64 * 0.5;
-        let phase_increment = 2.0 * std::f64::consts::PI * lfo_hz / sample_rate as f64;
-        self.tremolo_phase += phase_increment;
+        // Same cycle logic as vibrato
+        let cycles_per_row = (self.tremolo_speed as f64 / 64.0) * self.ticks_per_row as f64;
+        let phase_inc_per_frame =
+            (cycles_per_row * 2.0 * std::f64::consts::PI) / self.frames_per_row as f64;
+
+        self.tremolo_phase += phase_inc_per_frame;
 
         if self.tremolo_phase > 2.0 * std::f64::consts::PI {
             self.tremolo_phase -= 2.0 * std::f64::consts::PI;
@@ -397,7 +412,7 @@ impl ChannelEffectState {
 
     /// Get the effective volume from effects (if any volume override is active).
     pub fn effective_volume(&self) -> Option<f32> {
-        if self.volume_override.is_none() && !self.tremolo_active {
+        if self.volume_override.is_none() && !self.tremolo_active && !self.tremor_active {
             return None;
         }
         let mut base_vol = self.volume_override.unwrap_or(1.0);
@@ -409,6 +424,7 @@ impl ChannelEffectState {
                 let ticks_per_row = self.ticks_per_row.max(1) as u32;
                 let frames_per_tick = self.frames_per_row.max(1) / ticks_per_row;
                 let current_tick = self.row_frame_counter / frames_per_tick.max(1);
+                // Tremor cycle: ON for `on` ticks, then OFF for `off` ticks.
                 if current_tick % total_ticks >= self.tremor_on as u32 {
                     base_vol = 0.0;
                 }
@@ -420,24 +436,29 @@ impl ChannelEffectState {
 
     /// Advance portamento frequency smoothly.
     pub fn advance_portamento(&mut self) {
-        if let (Some(target), Some(freq)) = (self.portamento_target, self.portamento_freq) {
-            if self.portamento_speed <= 0.0 || (freq - target).abs() < 0.001 {
-                self.portamento_freq = Some(target);
+        if let (Some(target), triggered_freq) = (self.portamento_target, self.triggered_note_freq) {
+            if self.portamento_speed <= 0.0 || triggered_freq <= 0.0 {
+                return;
+            }
+
+            let target_ratio = target / triggered_freq;
+            let current_ratio = self.pitch_ratio;
+
+            if (current_ratio - target_ratio).abs() < 0.000001 {
+                self.pitch_ratio = target_ratio;
                 return;
             }
 
             let active_ticks = (self.ticks_per_row as f64 - 1.0).max(1.0);
             let semitones_per_row = self.portamento_speed * active_ticks;
             let semitones_per_frame = semitones_per_row / self.frames_per_row as f64;
-            let ratio = 2.0_f64.powf(semitones_per_frame / 12.0);
+            let ratio_step = 2.0_f64.powf(semitones_per_frame / 12.0);
 
-            let new_freq = if freq < target {
-                (freq * ratio).min(target)
+            if current_ratio < target_ratio {
+                self.pitch_ratio = (current_ratio * ratio_step).min(target_ratio);
             } else {
-                (freq / ratio).max(target)
-            };
-
-            self.portamento_freq = Some(new_freq);
+                self.pitch_ratio = (current_ratio / ratio_step).max(target_ratio);
+            }
         }
     }
 }
@@ -510,13 +531,13 @@ impl TrackerEffectProcessor {
 
             if !has_tone_porta {
                 state.pitch_ratio = 1.0;
+                state.triggered_note_freq = freq;
                 state.portamento_target = None;
                 state.portamento_freq = None;
             } else {
                 state.portamento_target = Some(freq);
-                if state.portamento_freq.is_none() {
-                    state.portamento_freq = Some(freq);
-                }
+                // We keep the old pitch_ratio and triggered_note_freq
+                // Tone portamento will slide pitch_ratio towards target/triggered
             }
         }
 
@@ -538,16 +559,24 @@ impl TrackerEffectProcessor {
                 EffectType::PitchSlideUp => {
                     // Set pitch slide up speed
                     state.pitch_slide_up = effect.param;
+                    // Apply immediate slide for tick 0 responsiveness
+                    let semitones = effect.param as f64 / 16.0;
+                    state.pitch_ratio *= 2.0_f64.powf(semitones / 12.0);
                 }
 
                 EffectType::PitchSlideDown => {
                     // Set pitch slide down speed
                     state.pitch_slide_down = effect.param;
+                    // Apply immediate slide for tick 0 responsiveness
+                    let semitones = effect.param as f64 / 16.0;
+                    state.pitch_ratio *= 2.0_f64.powf(-semitones / 12.0);
                 }
 
                 EffectType::PortamentoToNote => {
                     // Set portamento speed; target is set when a note is triggered
-                    state.portamento_speed = effect.param as f64 / 16.0;
+                    if effect.param > 0 {
+                        state.portamento_speed = effect.param as f64 / 16.0;
+                    }
                     if let Some(freq) = note_frequency {
                         state.portamento_target = Some(freq);
                         // Initialize current freq if not already sliding
@@ -559,15 +588,26 @@ impl TrackerEffectProcessor {
 
                 EffectType::Vibrato => {
                     state.vibrato_active = true;
-                    state.vibrato_speed = effect.param_x();
-                    state.vibrato_depth = effect.param_y();
+                    if effect.param_x() > 0 {
+                        state.vibrato_speed = effect.param_x();
+                    }
+                    if effect.param_y() > 0 {
+                        state.vibrato_depth = effect.param_y();
+                    }
                 }
 
                 EffectType::TonePortamentoVolumeSlide => {
                     // 5xy: 3xx + Axy
                     // Uses existing portamento speed, adds volume slide
-                    state.volume_slide_up = effect.param_x();
-                    state.volume_slide_down = effect.param_y();
+                    if effect.param > 0 {
+                        state.volume_slide_up = effect.param_x();
+                        state.volume_slide_down = effect.param_y();
+                    }
+
+                    // Apply immediate slide for tick 0 responsiveness
+                    let current_vol = state.volume_override.unwrap_or(1.0);
+                    let delta = (state.volume_slide_up as f32 - state.volume_slide_down as f32) / 64.0;
+                    state.volume_override = Some((current_vol + delta).clamp(0.0, 2.0));
 
                     // Portamento target is handled by new notes triggered on this row
                     if let Some(freq) = note_frequency {
@@ -582,14 +622,25 @@ impl TrackerEffectProcessor {
                     // 6xy: 4xy + Axy
                     // Continues vibrato, adds volume slide
                     state.vibrato_active = true;
-                    state.volume_slide_up = effect.param_x();
-                    state.volume_slide_down = effect.param_y();
+                    if effect.param > 0 {
+                        state.volume_slide_up = effect.param_x();
+                        state.volume_slide_down = effect.param_y();
+                    }
+
+                    // Apply immediate slide for tick 0 responsiveness
+                    let current_vol = state.volume_override.unwrap_or(1.0);
+                    let delta = (state.volume_slide_up as f32 - state.volume_slide_down as f32) / 64.0;
+                    state.volume_override = Some((current_vol + delta).clamp(0.0, 2.0));
                 }
 
                 EffectType::Tremolo => {
                     state.tremolo_active = true;
-                    state.tremolo_speed = effect.param_x();
-                    state.tremolo_depth = effect.param_y();
+                    if effect.param_x() > 0 {
+                        state.tremolo_speed = effect.param_x();
+                    }
+                    if effect.param_y() > 0 {
+                        state.tremolo_depth = effect.param_y();
+                    }
                 }
 
                 EffectType::SampleOffset => {
@@ -598,10 +649,16 @@ impl TrackerEffectProcessor {
                 }
 
                 EffectType::VolumeSlide => {
-                    let up = effect.param_x();
-                    let down = effect.param_y();
-                    state.volume_slide_up = up;
-                    state.volume_slide_down = down;
+                    if effect.param > 0 {
+                        state.volume_slide_up = effect.param_x();
+                        state.volume_slide_down = effect.param_y();
+                    }
+
+                    // Apply immediate slide for tick 0 responsiveness
+                    let current_vol = state.volume_override.unwrap_or(1.0);
+                    let delta = (state.volume_slide_up as f32 - state.volume_slide_down as f32) / 64.0;
+                    state.volume_override = Some((current_vol + delta).clamp(0.0, 2.0));
+
                     // Volume slides in classic trackers are only applied on ticks > 0.
                     // We handle the continuous sliding smoothly in advance_frame.
                 }
@@ -726,12 +783,14 @@ impl TrackerEffectProcessor {
                 EffectType::ChannelVolumeSlide => {
                     if effect.param_x() == 0x0A {
                         // NxF: Fine Channel Vol Up
-                        state.channel_volume =
-                            (state.channel_volume + (effect.param_y() as f32 / 64.0)).clamp(0.0, 1.0);
+                        state.channel_volume = (state.channel_volume
+                            + (effect.param_y() as f32 / 64.0))
+                            .clamp(0.0, 1.0);
                     } else if effect.param_x() == 0x0B {
                         // NFy: Fine Channel Vol Down
-                        state.channel_volume =
-                            (state.channel_volume - (effect.param_y() as f32 / 64.0)).clamp(0.0, 1.0);
+                        state.channel_volume = (state.channel_volume
+                            - (effect.param_y() as f32 / 64.0))
+                            .clamp(0.0, 1.0);
                     } else {
                         state.channel_volume_slide_up = effect.param_x();
                         state.channel_volume_slide_down = effect.param_y();
@@ -776,11 +835,22 @@ impl TrackerEffectProcessor {
     pub fn advance_frame(&mut self, channel: usize) {
         if let Some(state) = self.channels.get_mut(channel) {
             state.row_frame_counter += 1;
+            
+            // Skip continuous effects on the very first frame of the row (tick 0).
+            // This matches tracker behavior where slides (Axy, 1xx, 2xx) only
+            // happen on ticks > 0. Since row_frame_counter starts at 0 and we just
+            // incremented it, we skip if it's 1 (the first frame after tick 0 start).
+            if state.row_frame_counter <= 1 {
+                return;
+            }
+
             state.advance_vibrato(self.sample_rate);
             state.advance_tremolo(self.sample_rate);
             state.advance_portamento();
+            let _ = state;
+            self.advance_panbrello(channel);
 
-            // Advance pitch slides smoothly across the row (for 1xx, 2xx)
+            let state = self.channels.get_mut(channel).unwrap();
             if state.pitch_slide_up > 0 || state.pitch_slide_down > 0 {
                 // Pitch slides happen every tick except tick 0.
                 let semitones_per_tick =
@@ -835,7 +905,11 @@ impl TrackerEffectProcessor {
     pub fn advance_global_frame(&mut self) {
         if self.global_volume_slide_up > 0 || self.global_volume_slide_down > 0 {
             // Use the frames_per_row from the first channel as a target speed reference
-            let fpr = self.channels.get(0).map(|s| s.frames_per_row).unwrap_or(6000) as f32;
+            let fpr = self
+                .channels
+                .get(0)
+                .map(|s| s.frames_per_row)
+                .unwrap_or(6000) as f32;
             let tpr = self.channels.get(0).map(|s| s.ticks_per_row).unwrap_or(6) as f32;
 
             let delta_per_tick =
@@ -872,7 +946,38 @@ impl TrackerEffectProcessor {
 
     /// Get the panning override for a channel (from 8xx effect), as 0.0–1.0.
     pub fn channel_panning(&self, channel: usize) -> Option<f32> {
-        self.channels.get(channel).and_then(|s| s.panning_override)
+        self.channels.get(channel).and_then(|s| {
+            if s.panning_override.is_none() && !s.panbrello_active {
+                return None;
+            }
+            let base = s.panning_override.unwrap_or(0.5);
+            let panbrello = if s.panbrello_active {
+                (s.panbrello_phase.sin() * s.panbrello_depth as f64 / 64.0) as f32
+            } else {
+                0.0
+            };
+            Some((base + panbrello).clamp(0.0, 1.0))
+        })
+    }
+
+    /// Advance panbrello LFO phase.
+    pub fn advance_panbrello(&mut self, channel: usize) {
+        if let Some(state) = self.channels.get_mut(channel) {
+            if !state.panbrello_active || state.panbrello_speed == 0 {
+                return;
+            }
+
+            // Same cycle logic as vibrato
+            let cycles_per_row = (state.panbrello_speed as f64 / 64.0) * state.ticks_per_row as f64;
+            let phase_inc_per_frame =
+                (cycles_per_row * 2.0 * std::f64::consts::PI) / state.frames_per_row as f64;
+
+            state.panbrello_phase += phase_inc_per_frame;
+
+            if state.panbrello_phase > 2.0 * std::f64::consts::PI {
+                state.panbrello_phase -= 2.0 * std::f64::consts::PI;
+            }
+        }
     }
 
     /// Get the effective volume override for a channel (from Cxx or Axy effects).
@@ -887,6 +992,12 @@ impl TrackerEffectProcessor {
         VoiceRenderState {
             pitch_ratio: self.pitch_ratio(channel),
             gain: self.volume_override(channel),
+            channel_volume: self
+                .channels
+                .get(channel)
+                .map(|s| s.channel_volume)
+                .unwrap_or(1.0),
+            pan_override: self.channel_panning(channel),
         }
     }
 
@@ -1378,13 +1489,17 @@ mod tests {
 
         let vol_after_row = proc.volume_override(0).unwrap();
 
-        // Advance one frame
+        // Advance two frames
+        // Frame 1: row_frame_counter becomes 1. Continuous effects SKIPPED.
+        // Frame 2: row_frame_counter becomes 2. Continuous effects PROCESSED.
+        proc.advance_frame(0);
         proc.advance_frame(0);
 
         let vol_after_frame = proc.volume_override(0).unwrap();
 
-        // Each frame should slide by (up-down)/64 / frames_per_row
-        let expected_delta = (1.0 / 64.0) / 6000.0;
+        // Each frame (after the first) should slide by (up-down)/64 * (ticks-1) / frames_per_row
+        // ticks_per_row defaults to 6, so active_ticks = 5.
+        let expected_delta = (1.0 / 64.0 * 5.0) / 6000.0;
         assert!((vol_after_frame - (vol_after_row + expected_delta as f32)).abs() < 0.000001);
     }
 

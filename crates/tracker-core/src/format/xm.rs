@@ -414,7 +414,10 @@ fn parse_xm_instruments(
         let mut sample_headers = Vec::with_capacity(num_samples as usize);
         for _ in 0..num_samples {
             if *offset + 40 > data.len() {
-                return Err(format!("XM instrument {} sample header truncated", inst_idx));
+                return Err(format!(
+                    "XM instrument {} sample header truncated",
+                    inst_idx
+                ));
             }
             let length = read_u32_le(data, offset);
             let loop_start = read_u32_le(data, offset);
@@ -456,10 +459,8 @@ fn parse_xm_instruments(
                 let mut decoded = Vec::with_capacity(num_samples_count);
                 let mut old: u16 = 0;
                 for i in 0..num_samples_count {
-                    let raw = u16::from_le_bytes([
-                        data[*offset + i * 2],
-                        data[*offset + i * 2 + 1],
-                    ]);
+                    let raw =
+                        u16::from_le_bytes([data[*offset + i * 2], data[*offset + i * 2 + 1]]);
                     let new = raw.wrapping_add(old);
                     decoded.push(new as i16 as f32 / 32768.0);
                     old = new;
@@ -718,6 +719,7 @@ pub fn import_xm(data: &[u8]) -> Result<FormatData, String> {
             let mut inst = Instrument::new(inst_name);
             inst.sample_index = Some(out_samples.len());
             inst.volume = sh.volume as f32 / 64.0;
+            inst.panning = Some((sh.panning as f32 - 128.0) / 128.0);
 
             // Volume envelope
             if xm_inst.volume_envelope_flags & 0x01 != 0 && !xm_inst.volume_envelope.is_empty() {

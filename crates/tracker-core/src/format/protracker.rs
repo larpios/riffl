@@ -8,7 +8,7 @@ use crate::audio::sample::{LoopMode, Sample, C4_MIDI};
 use crate::pattern::effect::Effect;
 use crate::pattern::note::{Note, NoteEvent, Pitch};
 use crate::pattern::pattern::Pattern;
-use crate::pattern::Cell;
+use crate::pattern::{Cell, Track};
 use crate::song::{Instrument, Song};
 
 /// The ProTracker period value for a C-2 note (which we map to our C4_MIDI base note).
@@ -376,6 +376,22 @@ pub fn import_mod(data: &[u8]) -> Result<super::FormatData, String> {
         },
         bpm,
     );
+
+    // Initialize tracks with Amiga panning
+    // Amiga hardware: Ch 0(L), 1(R), 2(R), 3(L)
+    let mut tracks = Vec::with_capacity(num_channels);
+    for i in 0..num_channels {
+        let mut t = Track::with_number(i + 1);
+        let pan = match i % 4 {
+            0 | 3 => -0.8, // Left (somewhat softer than hard -1.0)
+            1 | 2 => 0.8,  // Right
+            _ => 0.0,
+        };
+        t.pan = pan;
+        tracks.push(t);
+    }
+    song.tracks = tracks;
+
     song.patterns = if patterns.is_empty() {
         vec![Pattern::default()]
     } else {

@@ -127,6 +127,11 @@ impl ChannelStrip {
         self.pan.set(pan.clamp(-1.0, 1.0), MIXER_RAMP_SECS);
     }
 
+    /// Set pan position immediately without ramping (for per-frame LFOs).
+    pub fn set_effect_pan_immediate(&mut self, pan: f32) {
+        self.pan.set_immediate(pan.clamp(-1.0, 1.0));
+    }
+
     /// Get the number of configured send levels.
     pub fn num_send_levels(&self) -> usize {
         self.send_levels.len()
@@ -150,10 +155,15 @@ impl ChannelStrip {
         self.mute_gain.target() == 0.0 || self.solo_gain.target() == 0.0
     }
 
-    /// Equal-power pan gains from pan position.
+    /// Linear pan gains from pan position (matching classic tracker behavior).
     fn pan_gains(pan: f32) -> (f32, f32) {
-        let angle = (pan.clamp(-1.0, 1.0) + 1.0) * 0.25 * std::f32::consts::PI;
-        (angle.cos(), angle.sin())
+        let pan = pan.clamp(-1.0, 1.0);
+        // Linear panning:
+        // Left: 1.0 at pan=-1.0, 0.5 at pan=0.0, 0.0 at pan=1.0
+        // Right: 0.0 at pan=-1.0, 0.5 at pan=0.0, 1.0 at pan=1.0
+        let left = (1.0 - pan) * 0.5;
+        let right = (1.0 + pan) * 0.5;
+        (left, right)
     }
 }
 
