@@ -103,7 +103,7 @@ impl Default for Cell {
 }
 
 impl fmt::Display for Cell {
-    /// Display in tracker format: "C#4 01 40 A04" or "--- .. .. ..."
+    /// Display in tracker format: "C#4 01 40 0A04" or "--- .. .. ...."
     ///
     /// Shows the first effect column. If two effects are present,
     /// only the first is shown in the standard display.
@@ -132,10 +132,10 @@ impl fmt::Display for Cell {
 
         write!(f, " ")?;
 
-        // Effect column (3 chars) — shows first effect
+        // Effect column (4 chars) — shows first effect
         match self.first_effect() {
             Some(eff) => write!(f, "{}", eff)?,
-            None => write!(f, "...")?,
+            None => write!(f, "....")?,
         }
 
         Ok(())
@@ -182,7 +182,7 @@ mod tests {
     #[test]
     fn test_cell_display_empty() {
         let cell = Cell::empty();
-        assert_eq!(format!("{}", cell), "--- .. .. ...");
+        assert_eq!(format!("{}", cell), "--- .. .. ....");
     }
 
     #[test]
@@ -194,20 +194,20 @@ mod tests {
             volume: Some(0x40),
             effects: vec![Effect::new(0xC, 0x20)],
         };
-        assert_eq!(format!("{}", cell), "C#4 01 40 C20");
+        assert_eq!(format!("{}", cell), "C#4 01 40 0C20");
     }
 
     #[test]
     fn test_cell_display_note_off() {
         let cell = Cell::with_note(NoteEvent::Off);
-        assert_eq!(format!("{}", cell), "=== .. .. ...");
+        assert_eq!(format!("{}", cell), "=== .. .. ....");
     }
 
     #[test]
     fn test_effect_display() {
-        assert_eq!(format!("{}", Effect::new(0, 0)), "000");
-        assert_eq!(format!("{}", Effect::new(0xF, 0xFF)), "FFF");
-        assert_eq!(format!("{}", Effect::new(0xC, 0x40)), "C40");
+        assert_eq!(format!("{}", Effect::new(0, 0)), "0000");
+        assert_eq!(format!("{}", Effect::new(0xF, 0xFF)), "0FFF");
+        assert_eq!(format!("{}", Effect::new(0xC, 0x40)), "0C40");
     }
 
     #[test]
@@ -236,7 +236,7 @@ mod tests {
         assert!(!cell.is_empty());
         assert_eq!(cell.instrument, Some(2));
         assert_eq!(cell.volume, Some(64));
-        assert_eq!(format!("{}", cell), "A-4 02 40 F06");
+        assert_eq!(format!("{}", cell), "A-4 02 40 0F06");
     }
 
     #[test]
@@ -248,7 +248,7 @@ mod tests {
             effects: Vec::new(),
         };
         assert!(!cell.is_empty());
-        assert_eq!(format!("{}", cell), "--- 05 .. ...");
+        assert_eq!(format!("{}", cell), "--- 05 .. ....");
     }
 
     #[test]
@@ -260,7 +260,7 @@ mod tests {
             effects: Vec::new(),
         };
         assert!(!cell.is_empty());
-        assert_eq!(format!("{}", cell), "--- .. 7F ...");
+        assert_eq!(format!("{}", cell), "--- .. 7F ....");
     }
 
     #[test]
@@ -272,16 +272,16 @@ mod tests {
             effects: vec![Effect::new(0xA, 0x0F)],
         };
         assert!(!cell.is_empty());
-        assert_eq!(format!("{}", cell), "--- .. .. A0F");
+        assert_eq!(format!("{}", cell), "--- .. .. 0A0F");
     }
 
     #[test]
     fn test_effect_boundary_values() {
         let min = Effect::new(0, 0);
-        assert_eq!(format!("{}", min), "000");
+        assert_eq!(format!("{}", min), "0000");
 
         let max = Effect::new(0xF, 0xFF);
-        assert_eq!(format!("{}", max), "FFF");
+        assert_eq!(format!("{}", max), "0FFF");
     }
 
     #[test]
@@ -354,7 +354,7 @@ mod tests {
             effects: vec![Effect::new(0xA, 0x04), Effect::new(0xC, 0x40)],
         };
         // Display should show first effect
-        assert_eq!(format!("{}", cell), "--- .. .. A04");
+        assert_eq!(format!("{}", cell), "--- .. .. 0A04");
     }
 
     #[test]
@@ -411,7 +411,7 @@ mod tests {
             Some(super::super::effect::EffectType::VolumeSlide)
         );
         assert_eq!(first.param, 0x04);
-        assert_eq!(format!("{}", first), "A04");
+        assert_eq!(format!("{}", first), "0A04");
 
         let second = cell.second_effect().unwrap();
         assert_eq!(
@@ -419,7 +419,7 @@ mod tests {
             Some(super::super::effect::EffectType::SetSpeed)
         );
         assert_eq!(second.param, 0x06);
-        assert_eq!(format!("{}", second), "F06");
+        assert_eq!(format!("{}", second), "0F06");
     }
 
     #[test]
@@ -439,16 +439,16 @@ mod tests {
     fn test_cell_display_with_all_effect_types() {
         // Verify display with each known effect type as first effect
         let test_cases = vec![
-            (Effect::new(0x0, 0x37), "--- .. .. 037"),
-            (Effect::new(0x1, 0x10), "--- .. .. 110"),
-            (Effect::new(0x2, 0x20), "--- .. .. 220"),
-            (Effect::new(0x3, 0x08), "--- .. .. 308"),
-            (Effect::new(0x4, 0x46), "--- .. .. 446"),
-            (Effect::new(0xA, 0x0F), "--- .. .. A0F"),
-            (Effect::new(0xB, 0x02), "--- .. .. B02"),
-            (Effect::new(0xC, 0x40), "--- .. .. C40"),
-            (Effect::new(0xD, 0x00), "--- .. .. D00"),
-            (Effect::new(0xF, 0x06), "--- .. .. F06"),
+            (Effect::new(0x0, 0x37), "--- .. .. 0037"),
+            (Effect::new(0x1, 0x10), "--- .. .. 0110"),
+            (Effect::new(0x2, 0x20), "--- .. .. 0220"),
+            (Effect::new(0x3, 0x08), "--- .. .. 0308"),
+            (Effect::new(0x4, 0x46), "--- .. .. 0446"),
+            (Effect::new(0xA, 0x0F), "--- .. .. 0A0F"),
+            (Effect::new(0xB, 0x02), "--- .. .. 0B02"),
+            (Effect::new(0xC, 0x40), "--- .. .. 0C40"),
+            (Effect::new(0xD, 0x00), "--- .. .. 0D00"),
+            (Effect::new(0xF, 0x06), "--- .. .. 0F06"),
         ];
         for (effect, expected) in test_cases {
             let cell = Cell {
@@ -492,7 +492,7 @@ mod tests {
             volume: Some(0x64),
             effects: vec![Effect::new(0x4, 0x37)],
         };
-        assert_eq!(format!("{}", cell), "A-4 05 64 437");
+        assert_eq!(format!("{}", cell), "A-4 05 64 0437");
     }
 
     #[test]

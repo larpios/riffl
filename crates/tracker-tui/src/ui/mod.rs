@@ -431,8 +431,8 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         } else {
             label.push_str("   ");
         }
-        // Pad/truncate to fit column width (14 chars content + separator)
-        let display = format!("│ {:<14}", label);
+        // Pad/truncate to fit column width (15 chars content + separator)
+        let display = format!("│ {:<15}", label);
 
         let header_style = if is_soloed {
             Style::default()
@@ -629,7 +629,7 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     let is_note_cut = note_str == "^^^";
                     let has_inst = inst_str != "..";
                     let has_vol = vol_str != "..";
-                    let has_effect = eff_str != "...";
+                    let has_effect = eff_str != "....";
 
                     let note_style = if is_note_cut {
                         Style::default()
@@ -708,7 +708,7 @@ fn format_cell_parts(
             };
             let eff_str = match cell.first_effect() {
                 Some(eff) => format!("{}", eff),
-                None => "...".to_string(),
+                None => "....".to_string(),
             };
             (note_str, inst_str, vol_str, eff_str)
         }
@@ -716,7 +716,7 @@ fn format_cell_parts(
             "---".to_string(),
             "..".to_string(),
             "..".to_string(),
-            "...".to_string(),
+            "....".to_string(),
         ),
     }
 }
@@ -742,7 +742,7 @@ fn format_cell_display(cell: &tracker_core::pattern::row::Cell) -> String {
 
     let eff_str = match cell.first_effect() {
         Some(eff) => format!("{}", eff),
-        None => "...".to_string(),
+        None => "....".to_string(),
     };
 
     format!("{} {} {} {}", note_str, inst_str, vol_str, eff_str)
@@ -1310,7 +1310,7 @@ mod tests {
     #[test]
     fn test_format_cell_empty() {
         let cell = tracker_core::pattern::row::Cell::empty();
-        assert_eq!(format_cell_display(&cell), "--- .. .. ...");
+        assert_eq!(format_cell_display(&cell), "--- .. .. ....");
     }
 
     #[test]
@@ -1318,19 +1318,19 @@ mod tests {
         use tracker_core::pattern::note::{Note, Pitch};
         let cell =
             tracker_core::pattern::row::Cell::with_note(NoteEvent::On(Note::simple(Pitch::C, 4)));
-        assert_eq!(format_cell_display(&cell), "C-4 .. .. ...");
+        assert_eq!(format_cell_display(&cell), "C-4 .. .. ....");
     }
 
     #[test]
     fn test_format_cell_note_off() {
         let cell = tracker_core::pattern::row::Cell::with_note(NoteEvent::Off);
-        assert_eq!(format_cell_display(&cell), "=== .. .. ...");
+        assert_eq!(format_cell_display(&cell), "=== .. .. ....");
     }
 
     #[test]
     fn test_format_cell_note_cut() {
         let cell = tracker_core::pattern::row::Cell::with_note(NoteEvent::Cut);
-        assert_eq!(format_cell_display(&cell), "^^^ .. .. ...");
+        assert_eq!(format_cell_display(&cell), "^^^ .. .. ....");
     }
 
     #[test]
@@ -1343,7 +1343,7 @@ mod tests {
             volume: Some(0x40),
             effects: vec![Effect::new(0xC, 0x20)],
         };
-        assert_eq!(format_cell_display(&cell), "C#4 01 40 C20");
+        assert_eq!(format_cell_display(&cell), "C#4 01 40 0C20");
     }
 
     // --- format_cell_parts tests ---
@@ -1354,7 +1354,7 @@ mod tests {
         assert_eq!(n, "---");
         assert_eq!(i, "..");
         assert_eq!(v, "..");
-        assert_eq!(e, "...");
+        assert_eq!(e, "....");
     }
 
     #[test]
@@ -1364,7 +1364,7 @@ mod tests {
         assert_eq!(n, "---");
         assert_eq!(i, "..");
         assert_eq!(v, "..");
-        assert_eq!(e, "...");
+        assert_eq!(e, "....");
     }
 
     #[test]
@@ -1376,7 +1376,7 @@ mod tests {
         assert_eq!(n, "C-4");
         assert_eq!(i, "..");
         assert_eq!(v, "..");
-        assert_eq!(e, "...");
+        assert_eq!(e, "....");
     }
 
     #[test]
@@ -1393,7 +1393,7 @@ mod tests {
         assert_eq!(n, "C#4");
         assert_eq!(i, "01");
         assert_eq!(v, "40");
-        assert_eq!(e, "C20");
+        assert_eq!(e, "0C20");
     }
 
     // --- ProTracker effect rendering tests (Phase 2 effects) ---
@@ -1408,7 +1408,7 @@ mod tests {
             effects: vec![Effect::new(0x5, 0x34)],
         };
         let (_, _, _, e) = format_cell_parts(Some(&cell));
-        assert_eq!(e, "534");
+        assert_eq!(e, "0534");
     }
 
     #[test]
@@ -1421,7 +1421,7 @@ mod tests {
             effects: vec![Effect::new(0x6, 0x12)],
         };
         let (_, _, _, e) = format_cell_parts(Some(&cell));
-        assert_eq!(e, "612");
+        assert_eq!(e, "0612");
     }
 
     #[test]
@@ -1434,7 +1434,7 @@ mod tests {
             effects: vec![Effect::new(0x7, 0x44)],
         };
         let (_, _, _, e) = format_cell_parts(Some(&cell));
-        assert_eq!(e, "744");
+        assert_eq!(e, "0744");
     }
 
     #[test]
@@ -1447,7 +1447,7 @@ mod tests {
             effects: vec![Effect::new(0x9, 0x80)],
         };
         let (_, _, _, e) = format_cell_parts(Some(&cell));
-        assert_eq!(e, "980");
+        assert_eq!(e, "0980");
     }
 
     #[test]
@@ -1460,7 +1460,7 @@ mod tests {
             effects: vec![Effect::new(0xE, 0x10)],
         };
         let (_, _, _, e) = format_cell_parts(Some(&cell));
-        assert_eq!(e, "E10");
+        assert_eq!(e, "0E10");
     }
 
     #[test]
@@ -1474,7 +1474,7 @@ mod tests {
             effects: vec![Effect::new(0xA, 0x00)],
         };
         let (_, _, _, e) = format_cell_parts(Some(&cell));
-        assert_eq!(e, "A00");
+        assert_eq!(e, "0A00");
     }
 
     #[test]
@@ -1488,7 +1488,7 @@ mod tests {
             effects: vec![Effect::new(0xF, 0xFF)],
         };
         let (_, _, _, e) = format_cell_parts(Some(&cell));
-        assert_eq!(e, "FFF");
+        assert_eq!(e, "0FFF");
     }
 
     #[test]

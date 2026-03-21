@@ -194,7 +194,7 @@ impl fmt::Display for EffectType {
 ///
 /// Effect commands modify playback behavior (e.g., pitch slides, vibrato,
 /// volume changes). Each effect has a type byte and a parameter byte.
-/// Display format is 3 hex characters: command nibble + param byte (e.g., "A04", "C40", "F78").
+/// Display format is 4 hex characters: command byte + param byte (e.g., "0A04", "0C40", "0F78").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Effect {
     /// Effect type identifier (0x0-0xF).
@@ -241,10 +241,10 @@ impl Effect {
 }
 
 impl fmt::Display for Effect {
-    /// Display as 3 hex characters: command nibble + param byte.
-    /// Example: command=0xA, param=0x04 → "A04"
+    /// Display as 4 hex characters: command byte + param byte.
+    /// Example: command=0xA, param=0x04 → "0A04"
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:01X}{:02X}", self.command, self.param)
+        write!(f, "{:02X}{:02X}", self.command, self.param)
     }
 }
 
@@ -259,39 +259,39 @@ mod tests {
 
     #[test]
     fn test_effect_display_formatting() {
-        assert_eq!(format!("{}", Effect::new(0, 0)), "000");
-        assert_eq!(format!("{}", Effect::new(0xA, 0x04)), "A04");
-        assert_eq!(format!("{}", Effect::new(0xC, 0x40)), "C40");
-        assert_eq!(format!("{}", Effect::new(0xF, 0x78)), "F78");
-        assert_eq!(format!("{}", Effect::new(0xF, 0xFF)), "FFF");
+        assert_eq!(format!("{}", Effect::new(0, 0)), "0000");
+        assert_eq!(format!("{}", Effect::new(0xA, 0x04)), "0A04");
+        assert_eq!(format!("{}", Effect::new(0xC, 0x40)), "0C40");
+        assert_eq!(format!("{}", Effect::new(0xF, 0x78)), "0F78");
+        assert_eq!(format!("{}", Effect::new(0xF, 0xFF)), "0FFF");
     }
 
     #[test]
     fn test_effect_display_boundary_values() {
         let min = Effect::new(0, 0);
-        assert_eq!(format!("{}", min), "000");
+        assert_eq!(format!("{}", min), "0000");
 
         let max = Effect::new(0xF, 0xFF);
-        assert_eq!(format!("{}", max), "FFF");
+        assert_eq!(format!("{}", max), "0FFF");
     }
 
     #[test]
     fn test_effect_display_all_commands() {
         // Verify each standard command byte displays correctly
-        assert_eq!(format!("{}", Effect::new(0x0, 0x37)), "037"); // Arpeggio
-        assert_eq!(format!("{}", Effect::new(0x1, 0x10)), "110"); // Pitch slide up
-        assert_eq!(format!("{}", Effect::new(0x2, 0x20)), "220"); // Pitch slide down
-        assert_eq!(format!("{}", Effect::new(0x3, 0x08)), "308"); // Portamento
-        assert_eq!(format!("{}", Effect::new(0x4, 0x46)), "446"); // Vibrato
-        assert_eq!(format!("{}", Effect::new(0x7, 0x00)), "700"); // Tremolo
-        assert_eq!(format!("{}", Effect::new(0x8, 0x80)), "880"); // Set tempo
-        assert_eq!(format!("{}", Effect::new(0x9, 0x00)), "900"); // Sample offset
-        assert_eq!(format!("{}", Effect::new(0xA, 0x0F)), "A0F"); // Volume slide
-        assert_eq!(format!("{}", Effect::new(0xB, 0x02)), "B02"); // Position jump
-        assert_eq!(format!("{}", Effect::new(0xC, 0x40)), "C40"); // Set volume
-        assert_eq!(format!("{}", Effect::new(0xD, 0x00)), "D00"); // Pattern break
-        assert_eq!(format!("{}", Effect::new(0xE, 0x00)), "E00"); // Extended
-        assert_eq!(format!("{}", Effect::new(0xF, 0x06)), "F06"); // Set speed
+        assert_eq!(format!("{}", Effect::new(0x0, 0x37)), "0037"); // Arpeggio
+        assert_eq!(format!("{}", Effect::new(0x1, 0x10)), "0110"); // Pitch slide up
+        assert_eq!(format!("{}", Effect::new(0x2, 0x20)), "0220"); // Pitch slide down
+        assert_eq!(format!("{}", Effect::new(0x3, 0x08)), "0308"); // Portamento
+        assert_eq!(format!("{}", Effect::new(0x4, 0x46)), "0446"); // Vibrato
+        assert_eq!(format!("{}", Effect::new(0x7, 0x00)), "0700"); // Tremolo
+        assert_eq!(format!("{}", Effect::new(0x8, 0x80)), "0880"); // Set tempo
+        assert_eq!(format!("{}", Effect::new(0x9, 0x00)), "0900"); // Sample offset
+        assert_eq!(format!("{}", Effect::new(0xA, 0x0F)), "0A0F"); // Volume slide
+        assert_eq!(format!("{}", Effect::new(0xB, 0x02)), "0B02"); // Position jump
+        assert_eq!(format!("{}", Effect::new(0xC, 0x40)), "0C40"); // Set volume
+        assert_eq!(format!("{}", Effect::new(0xD, 0x00)), "0D00"); // Pattern break
+        assert_eq!(format!("{}", Effect::new(0xE, 0x00)), "0E00"); // Extended
+        assert_eq!(format!("{}", Effect::new(0xF, 0x06)), "0F06"); // Set speed
     }
 
     // --- Effect Value Encoding/Decoding Tests ---
@@ -583,10 +583,10 @@ mod tests {
     #[test]
     fn test_effect_display_mid_range_params() {
         // Verify hex formatting for common effect values
-        assert_eq!(format!("{}", Effect::new(0x4, 0x37)), "437"); // Vibrato speed=3 depth=7
-        assert_eq!(format!("{}", Effect::new(0xA, 0x80)), "A80"); // Volume slide up 8
-        assert_eq!(format!("{}", Effect::new(0xC, 0x7F)), "C7F"); // Set volume to 127
-        assert_eq!(format!("{}", Effect::new(0xF, 0x03)), "F03"); // Set speed to 3
+        assert_eq!(format!("{}", Effect::new(0x4, 0x37)), "0437"); // Vibrato speed=3 depth=7
+        assert_eq!(format!("{}", Effect::new(0xA, 0x80)), "0A80"); // Volume slide up 8
+        assert_eq!(format!("{}", Effect::new(0xC, 0x7F)), "0C7F"); // Set volume to 127
+        assert_eq!(format!("{}", Effect::new(0xF, 0x03)), "0F03"); // Set speed to 3
     }
 
     #[test]
