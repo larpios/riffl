@@ -31,6 +31,7 @@ pub mod pattern_list;
 pub mod sample_browser;
 pub mod theme;
 pub mod tutor;
+pub mod vu_meters;
 
 use help::render_help;
 use tutor::render_tutor;
@@ -941,10 +942,10 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let (mode_label, mode_bg) = if app.pending_replace {
         ("REPLACE", theme.cursor_normal_bg)
     } else if app.is_code_editor_active() {
-        if app.code_editor.insert_mode {
-            ("INSERT", theme.warning_color())
-        } else {
-            ("NORMAL", theme.primary)
+        match app.code_editor.mode {
+            code_editor::ModeKind::Normal => ("NORMAL", theme.primary),
+            code_editor::ModeKind::Insert => ("INSERT", theme.warning_color()),
+            code_editor::ModeKind::Visual => ("VISUAL", theme.secondary),
         }
     } else {
         (mode.label(), theme.primary)

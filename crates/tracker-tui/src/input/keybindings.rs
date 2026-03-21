@@ -253,6 +253,11 @@ const KEY_MAPPINGS: &[KeyMapping] = &[
         action: Action::TransposeOctaveUp,
         mode: EditorMode::Visual,
     },
+    KeyMapping {
+        key: "Ctrl+Enter",
+        action: Action::ExecuteScript,
+        mode: EditorMode::Normal,
+    }
 ];
 
 /// Chord prefix mappings for which-key display
