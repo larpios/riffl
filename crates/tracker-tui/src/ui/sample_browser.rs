@@ -449,21 +449,49 @@ fn browser_title(browser: &SampleBrowser) -> String {
     }
 }
 
+/// Format a duration (in seconds) as `MM:SS.cc` (centiseconds).
+pub(crate) fn format_preview_time(secs: f64) -> String {
+    let total_cs = (secs * 100.0) as u64;
+    let cs = total_cs % 100;
+    let total_s = total_cs / 100;
+    let s = total_s % 60;
+    let m = total_s / 60;
+    format!("{m:02}:{s:02}.{cs:02}")
+}
+
+/// Compute the cursor column for a given playback position within a bar-chart panel.
+///
+/// Returns the column index (0-based, clamped to `[0, width.saturating_sub(1)]`)
+/// that corresponds to `pos` out of `total` frames mapped onto `width` columns.
+/// Returns `0` when `total == 0`.
+pub(crate) fn cursor_col_for(pos: usize, total: usize, width: usize) -> usize {
+    if total == 0 || width == 0 {
+        return 0;
+    }
+    ((pos * width) / total).min(width.saturating_sub(1))
+}
+
 /// Render the sample browser view.
 ///
 /// When a WAV waveform has been lazy-loaded (`browser.waveform_peaks` is
 /// non-empty) and the terminal is wide enough, the area is split horizontally:
 /// ~65 % for the file list on the left and ~35 % for the waveform panel on
 /// the right.
+///
+/// `preview_pos` and `total_frames` are the current playback position and
+/// total frame count (both in output-rate frames) for the active browser preview.
+/// `output_sample_rate` converts frame counts to wall-clock time.
 pub fn render_sample_browser(
     frame: &mut Frame,
     area: Rect,
     browser: &SampleBrowser,
     theme: &Theme,
+    preview_pos: usize,
+    total_frames: usize,
+    output_sample_rate: u32,
 ) {
-    let show_waveform = !browser.waveform_peaks.is_empty()
-        && browser.waveform_path.is_some()
-        && area.width >= 60;
+    let show_waveform =
+        !browser.waveform_peaks.is_empty() && browser.waveform_path.is_some() && area.width >= 60;
 
     let (list_area, wave_area_opt) = if show_waveform {
         let chunks = Layout::default()
@@ -478,7 +506,16 @@ pub fn render_sample_browser(
     render_browser_list(frame, list_area, browser, theme);
 
     if let (Some(wave_area), Some(wpath)) = (wave_area_opt, browser.waveform_path.as_deref()) {
-        render_waveform_panel(frame, wave_area, &browser.waveform_peaks, wpath, theme);
+        render_waveform_panel(
+            frame,
+            wave_area,
+            &browser.waveform_peaks,
+            wpath,
+            theme,
+            preview_pos,
+            total_frames,
+            output_sample_rate,
+        );
     }
 }
 
@@ -571,6 +608,9 @@ fn render_waveform_panel(
     peaks: &[f32],
     path: &Path,
     theme: &Theme,
+    preview_pos: usize,
+    total_frames: usize,
+    output_sample_rate: u32,
 ) {
     let name = path
         .file_name()
@@ -593,6 +633,17 @@ fn render_waveform_panel(
         return;
     }
 
+    // Reserve the bottom row for the time display when a preview is active.
+    let show_time = total_frames > 0 && output_sample_rate > 0;
+    let waveform_rows = if show_time && h > 1 { h - 1 } else { h };
+
+    // Compute cursor column (0-based within waveform columns).
+    let cursor_col = if total_frames > 0 {
+        Some(cursor_col_for(preview_pos, total_frames, w))
+    } else {
+        None
+    };
+
     // Map the peak array to exactly `w` bars by index interpolation.
     let bars: Vec<f32> = (0..w)
         .map(|col| {
@@ -605,15 +656,17 @@ fn render_waveform_panel(
     const EIGHTHS: [char; 9] = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 
     let mut lines: Vec<Line> = Vec::with_capacity(h);
-    for row in 0..h {
+    for row in 0..waveform_rows {
         // row 0 = top of panel; row_from_bottom 0 = bottom row.
-        let row_from_bottom = h - 1 - row;
+        let row_from_bottom = waveform_rows - 1 - row;
         let subcells_below = row_from_bottom * 8;
 
         let spans: Vec<Span> = bars
             .iter()
-            .map(|&amp| {
-                let total = (amp * (h * 8) as f32) as usize;
+            .enumerate()
+            .map(|(col, &amp)| {
+                let is_cursor = cursor_col == Some(col);
+                let total = (amp * (waveform_rows * 8) as f32) as usize;
                 let ch = if subcells_below + 8 <= total {
                     '█'
                 } else if subcells_below < total {
@@ -621,15 +674,29 @@ fn render_waveform_panel(
                 } else {
                     ' '
                 };
-                let style = if ch != ' ' {
+                let style = if is_cursor {
+                    // Cursor column: bright accent, always visible.
+                    Style::default().fg(theme.warning_color())
+                } else if ch != ' ' {
                     Style::default().fg(theme.primary)
                 } else {
                     Style::default()
                 };
-                Span::styled(ch.to_string(), style)
+                let display = if is_cursor { '▏' } else { ch };
+                Span::styled(display.to_string(), style)
             })
             .collect();
         lines.push(Line::from(spans));
+    }
+
+    // Time display row: "MM:SS.cc / MM:SS.cc" centred at the bottom.
+    if show_time && h > waveform_rows {
+        let rate = output_sample_rate as f64;
+        let elapsed = format_preview_time(preview_pos as f64 / rate);
+        let total_t = format_preview_time(total_frames as f64 / rate);
+        let time_str = format!("{elapsed} / {total_t}");
+        let time_span = Span::styled(time_str, Style::default().fg(theme.text_dimmed));
+        lines.push(Line::from(vec![time_span]).centered());
     }
 
     frame.render_widget(Paragraph::new(lines), inner);
@@ -971,7 +1038,8 @@ mod tests {
         assert!(browser.at_roots());
         assert_eq!(browser.entries().len(), 2, "both dirs present");
         assert_eq!(
-            browser.entries()[0].path, b,
+            browser.entries()[0].path,
+            b,
             "bookmarked dir should be first"
         );
         assert!(browser.entries()[0].is_bookmarked);
@@ -1129,6 +1197,57 @@ mod tests {
     fn test_compute_waveform_peaks_zero_bars() {
         let peaks = compute_waveform_peaks(Path::new("/some/file.wav"), 0);
         assert!(peaks.is_empty(), "n_bars=0 should return empty vec");
+    }
+
+    // --- format_preview_time ---
+
+    #[test]
+    fn test_format_preview_time_zero() {
+        assert_eq!(format_preview_time(0.0), "00:00.00");
+    }
+
+    #[test]
+    fn test_format_preview_time_one_second_half() {
+        assert_eq!(format_preview_time(1.5), "00:01.50");
+    }
+
+    #[test]
+    fn test_format_preview_time_one_minute() {
+        assert_eq!(format_preview_time(60.0), "01:00.00");
+    }
+
+    #[test]
+    fn test_format_preview_time_mixed() {
+        // 1m 23.45s
+        assert_eq!(format_preview_time(83.45), "01:23.45");
+    }
+
+    // --- cursor_col_for ---
+
+    #[test]
+    fn test_cursor_col_at_start() {
+        assert_eq!(cursor_col_for(0, 1000, 40), 0);
+    }
+
+    #[test]
+    fn test_cursor_col_at_end_clamped() {
+        // pos == total: should clamp to w - 1
+        assert_eq!(cursor_col_for(1000, 1000, 40), 39);
+    }
+
+    #[test]
+    fn test_cursor_col_midpoint() {
+        assert_eq!(cursor_col_for(500, 1000, 40), 20);
+    }
+
+    #[test]
+    fn test_cursor_col_zero_total() {
+        assert_eq!(cursor_col_for(42, 0, 40), 0);
+    }
+
+    #[test]
+    fn test_cursor_col_zero_width() {
+        assert_eq!(cursor_col_for(42, 1000, 0), 0);
     }
 
     #[test]

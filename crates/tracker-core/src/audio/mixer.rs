@@ -509,6 +509,20 @@ impl Mixer {
         self.preview_sample.is_some()
     }
 
+    /// Returns `(current_frame_pos, total_frames)` for the active preview.
+    ///
+    /// `current_frame_pos` is the integer part of `preview_pos` (sample-native frames).
+    /// `total_frames` is the frame count of the preview sample, or `0` when no preview is loaded.
+    pub fn preview_pos_and_total(&self) -> (usize, usize) {
+        let pos = self.preview_pos as usize;
+        let total = self
+            .preview_sample
+            .as_ref()
+            .map(|s| s.frame_count())
+            .unwrap_or(0);
+        (pos, total)
+    }
+
     /// Trigger a one-shot preview starting from `start_frame` (in sample-native frames).
     /// Use `0` to play from the beginning, same as [`trigger_preview`].
     pub fn trigger_preview_at(
@@ -1564,7 +1578,10 @@ mod tests {
         // Render a small buffer — should not panic, preview starts mid-sample
         let mut output = vec![0.0f32; 64];
         mixer.render(&mut output);
-        assert!(mixer.is_preview_playing(), "still playing after small render");
+        assert!(
+            mixer.is_preview_playing(),
+            "still playing after small render"
+        );
     }
 
     #[test]
@@ -1573,5 +1590,24 @@ mod tests {
         let mut mixer = Mixer::new(vec![Arc::clone(&sample)], Vec::new(), 4, 44100);
         mixer.trigger_preview_at(Arc::clone(&sample), 1.0, 0);
         assert!(mixer.is_preview_playing());
+    }
+
+    #[test]
+    fn test_preview_pos_and_total_no_preview() {
+        let sample = Arc::new(make_test_sample(44100, 0.25));
+        let mixer = Mixer::new(vec![Arc::clone(&sample)], Vec::new(), 4, 44100);
+        let (pos, total) = mixer.preview_pos_and_total();
+        assert_eq!(pos, 0);
+        assert_eq!(total, 0);
+    }
+
+    #[test]
+    fn test_preview_pos_and_total_after_trigger_at() {
+        let sample = Arc::new(make_test_sample(44100, 1.0)); // 44100 frames
+        let mut mixer = Mixer::new(vec![Arc::clone(&sample)], Vec::new(), 4, 44100);
+        mixer.trigger_preview_at(Arc::clone(&sample), 1.0, 4410);
+        let (pos, total) = mixer.preview_pos_and_total();
+        assert_eq!(pos, 4410);
+        assert_eq!(total, sample.frame_count());
     }
 }
