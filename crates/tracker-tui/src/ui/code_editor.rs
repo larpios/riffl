@@ -14,6 +14,14 @@ use tracker_core::dsl::examples::TEMPLATES;
 
 use super::theme::Theme;
 
+#[derive(Debug, Clone, Copy, Default)]
+pub enum ModeKind {
+    #[default]
+    Normal,
+    Insert,
+    Visual,
+}
+
 /// Rhai keywords for syntax highlighting.
 const KEYWORDS: &[&str] = &[
     "let", "if", "else", "for", "in", "while", "loop", "fn", "return", "true", "false", "break",
@@ -43,8 +51,8 @@ pub struct CodeEditor {
     pub show_templates: bool,
     /// Currently highlighted template index in the menu.
     pub template_cursor: usize,
-    /// Whether the editor is in insert (typing) mode vs. normal (navigation) mode.
-    pub insert_mode: bool,
+    /// Whether the editor is in insert mode.
+    pub mode: ModeKind,
 }
 
 impl CodeEditor {
@@ -61,7 +69,7 @@ impl CodeEditor {
             active: false,
             show_templates: false,
             template_cursor: 0,
-            insert_mode: false,
+            mode: ModeKind::Normal,
         }
     }
 
@@ -499,22 +507,28 @@ fn render_editor_panel(frame: &mut Frame, area: Rect, editor: &CodeEditor, theme
         theme.border_style()
     };
 
-    let (mode_label, mode_style) = if editor.insert_mode {
-        (
-            " INSERT ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(theme.warning_color())
-                .add_modifier(Modifier::BOLD),
-        )
-    } else {
-        (
+    let (mode_label, mode_style) = match editor.mode {
+        ModeKind::Normal => (
             " NORMAL ",
             Style::default()
                 .fg(Color::Black)
                 .bg(theme.primary)
                 .add_modifier(Modifier::BOLD),
-        )
+        ),
+        ModeKind::Insert => (
+            " INSERT ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(theme.warning_color())
+                .add_modifier(Modifier::BOLD),
+        ),
+        ModeKind::Visual => (
+            " VISUAL ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(theme.secondary)
+                .add_modifier(Modifier::BOLD),
+        ),
     };
     let title = Line::from(vec![
         Span::raw(" Code Editor (Rhai) "),

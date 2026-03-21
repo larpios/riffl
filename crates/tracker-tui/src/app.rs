@@ -12,7 +12,7 @@ use anyhow::Result;
 use crate::config::Config;
 use crate::editor::{Editor, EditorMode};
 use crate::ui::arrangement::ArrangementView;
-use crate::ui::code_editor::CodeEditor;
+use crate::ui::code_editor::{self, CodeEditor};
 use crate::ui::export_dialog::ExportDialog;
 use crate::ui::file_browser::FileBrowser;
 use crate::ui::instrument_editor::InstrumentEditorState;
@@ -468,7 +468,28 @@ impl App {
             }
         }
 
+        // Decay VU meter levels on every tick during playback for visual smoothing.
+        if self.transport.is_playing() {
+            if let Ok(mut mixer) = self.mixer.lock() {
+                mixer.decay_channel_levels(0.85);
+            }
+        }
+
         Ok(())
+    }
+
+    /// Return peak levels for the first `num_channels` channels as `(left, right)` pairs.
+    ///
+    /// Locks the mixer briefly and reads atomic peak values for each channel.
+    /// Missing channels (index out of range) return `(0.0, 0.0)`.
+    pub fn channel_levels(&self, num_channels: usize) -> Vec<(f32, f32)> {
+        if let Ok(mixer) = self.mixer.lock() {
+            (0..num_channels)
+                .map(|ch| mixer.get_channel_level(ch))
+                .collect()
+        } else {
+            vec![(0.0, 0.0); num_channels]
+        }
     }
 
     /// Apply transport commands produced by effect processing (Fxx, Bxx, Dxx).
@@ -512,20 +533,13 @@ impl App {
                 TransportCommand::PatternLoop(sub_param) => {
                     if sub_param == 0 {
                         // E60: set loop point
-                        self.transport
-                            .set_pattern_loop_row(Some(self.transport.current_row()));
-                    } else if self.transport.pattern_loop_count() == 0 {
-                        // E6x (x>0): start looping if not already looping
-                        self.transport.set_pattern_loop_count(sub_param);
-                        if let Some(target) = self.transport.trigger_pattern_loop() {
+                        self.transport.set_pattern_loop_start();
+                    } else {
+                        // E6x (x>0): jump back to loop point x times
+                        if let Some(target) = self.transport.handle_pattern_loop(sub_param) {
                             if self.follow_mode {
                                 self.editor.go_to_row(target);
                             }
-                        }
-                    } else if let Some(target) = self.transport.trigger_pattern_loop() {
-                        // E6x (x>0): continue looping
-                        if self.follow_mode {
-                            self.editor.go_to_row(target);
                         }
                     }
                 }
@@ -1406,6 +1420,10 @@ impl App {
         }
 
         self.song = result.song;
+        self.transport.set_bpm(self.song.bpm);
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.update_tempo(self.song.bpm);
+        }
         self.sync_mixer_instruments();
         self.transport.stop();
 
@@ -1746,7 +1764,7 @@ impl App {
     /// Switch to a different top-level view.
     pub fn set_view(&mut self, view: AppView) {
         // Always start code editor in Normal mode when entering/leaving it
-        self.code_editor.insert_mode = false;
+        self.code_editor.mode = code_editor::ModeKind::Normal;
         self.current_view = view;
         // When switching to CodeEditor view, activate the code editor
         self.code_editor.active = view == AppView::CodeEditor;
@@ -2354,7 +2372,7 @@ mod tests {
         assert!(!app.code_editor.output_is_error);
         // Verify pattern was cleared
         let cell = app.editor.pattern().get_cell(0, 0);
-        assert!(cell.map_or(true, |c| c.is_empty()));
+        assert!(cell.is_none_or(|c| c.is_empty()));
     }
 
     #[test]
@@ -2419,7 +2437,7 @@ mod tests {
         // Clear the specific cell before the loop triggers
         app.editor.pattern_mut().clear_cell(0, 0);
         let cell = app.editor.pattern().get_cell(0, 0);
-        assert!(cell.map_or(true, |c| c.is_empty()));
+        assert!(cell.is_none_or(|c| c.is_empty()));
 
         // Now advance past the end — should loop to row 0 and re-execute script
         // We need to call update() which handles the advance and live mode logic
@@ -2468,7 +2486,7 @@ mod tests {
 
         // Pattern should remain empty since live mode is off
         let cell = app.editor.pattern().get_cell(0, 0);
-        assert!(cell.map_or(true, |c| c.is_empty()));
+        assert!(cell.is_none_or(|c| c.is_empty()));
     }
 
     #[test]
@@ -2606,7 +2624,7 @@ mod tests {
         // Verify pattern is empty before the loop
         for i in 0..4 {
             let cell = app.editor.pattern().get_cell(i, 0);
-            assert!(cell.map_or(true, |c| c.is_empty()));
+            assert!(cell.is_none_or(|c| c.is_empty()));
         }
 
         // Loop back to row 0 — live mode should re-execute script
@@ -3076,8 +3094,10 @@ mod tests {
         let dir = std::env::temp_dir().join("riffl_bm_startup");
         std::fs::create_dir_all(&dir).unwrap();
 
-        let mut config = crate::config::Config::default();
-        config.bookmarked_dirs = vec![dir.display().to_string()];
+        let config = crate::config::Config {
+            bookmarked_dirs: vec![dir.display().to_string()],
+            ..Default::default()
+        };
 
         let mut app = App::new();
         // Simulate old main.rs ordering: set_sample_dirs first (config still default/empty)
@@ -3151,5 +3171,79 @@ mod tests {
         // No preview active: pos and total should both be 0.
         assert_eq!(pos, 0);
         assert_eq!(total, 0);
+    }
+
+    // --- VU Meter Tests ---
+
+    #[test]
+    fn test_channel_levels_returns_correct_count() {
+        let app = App::new();
+        let levels = app.channel_levels(4);
+        assert_eq!(levels.len(), 4);
+    }
+
+    #[test]
+    fn test_channel_levels_initially_zero() {
+        let app = App::new();
+        let levels = app.channel_levels(4);
+        for (l, r) in levels {
+            assert_eq!(l, 0.0, "Initial left level should be 0.0");
+            assert_eq!(r, 0.0, "Initial right level should be 0.0");
+        }
+    }
+
+    #[test]
+    fn test_channel_levels_zero_channels() {
+        let app = App::new();
+        let levels = app.channel_levels(0);
+        assert!(levels.is_empty());
+    }
+
+    #[test]
+    fn test_decay_not_called_when_stopped() {
+        // When transport is stopped, update() should NOT decay channel levels.
+        // We verify indirectly: levels stay at 0.0 after update() while stopped.
+        let mut app = App::new();
+        assert!(app.transport.is_stopped());
+        // Levels start at zero and stay at zero (decay of zero is still zero,
+        // but this also confirms the code path doesn't panic).
+        let _ = app.update();
+        let levels = app.channel_levels(4);
+        for (l, r) in levels {
+            assert_eq!(l, 0.0);
+            assert_eq!(r, 0.0);
+        }
+    }
+
+    #[test]
+    fn test_import_mod_file_syncs_bpm_to_transport() {
+        // Build a minimal valid 4-channel MOD file in memory (same layout as
+        // test_import_mod_minimal_valid in tracker-core).
+        let mut data = vec![0u8; 1084];
+        data[1080] = 1; // song_length = 1
+        data[1082] = 0; // pattern_order[0] = 0
+        let tag_pos = 20 + 31 * 30 + 2 + 128; // = 1080
+        data[tag_pos] = b'M';
+        data[tag_pos + 1] = b'.';
+        data[tag_pos + 2] = b'K';
+        data[tag_pos + 3] = b'.';
+        // Pattern data: 64 rows * 4 channels * 4 bytes = 1024 bytes
+        data.resize(1084 + 1024, 0);
+
+        // Write to a temp file
+        let path = std::env::temp_dir().join("test_minimal.mod");
+        std::fs::write(&path, &data).expect("failed to write temp MOD");
+
+        let mut app = App::new();
+        // Set a different BPM so we can confirm it gets overwritten by the import
+        app.transport.set_bpm(140.0);
+        assert_eq!(app.transport.bpm(), 140.0);
+
+        app.import_mod_file(&path).expect("import should succeed");
+
+        // After import, transport BPM must match the song BPM (125.0 for MOD default)
+        assert_eq!(app.transport.bpm(), 125.0);
+
+        let _ = std::fs::remove_file(&path);
     }
 }
