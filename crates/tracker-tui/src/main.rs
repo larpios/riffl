@@ -7,6 +7,7 @@ mod registry;
 mod ui;
 
 use crate::app::AppView;
+use crate::ui::code_editor::ModeKind;
 use std::io;
 use std::panic;
 use std::time::Duration;
@@ -889,173 +890,191 @@ fn handle_code_editor_key(app: &mut App, key: KeyEvent) {
     // No modifiers: text editing and navigation
     if key.modifiers == KeyModifiers::NONE {
         // In Normal mode: navigation and view-switching only, no text input
-        if !app.code_editor.insert_mode {
-            match key.code {
-                // Enter insert mode
-                KeyCode::Char('i') => {
-                    app.code_editor.insert_mode = true;
-                    return;
-                }
-                // View switching (same as pattern editor)
-                KeyCode::Char('1') => {
-                    app.set_view(app::AppView::PatternEditor);
-                    app.split_view = false;
-                    return;
-                }
-                KeyCode::Char('2') => {
-                    app.set_view(app::AppView::Arrangement);
-                    app.split_view = false;
-                    return;
-                }
-                KeyCode::Char('3') => {
-                    app.set_view(app::AppView::InstrumentList);
-                    app.split_view = false;
-                    return;
-                }
-                KeyCode::Char('4') => {
-                    app.set_view(app::AppView::CodeEditor);
-                    return;
-                }
-                KeyCode::Char('5') => {
-                    app.set_view(app::AppView::PatternList);
-                    app.split_view = false;
-                    return;
-                }
-                // Command mode
-                KeyCode::Char(':') => {
-                    app.command_mode = true;
-                    app.command_input.clear();
-                    return;
-                }
-                // Escape in normal mode: leave code editor (same as before)
-                KeyCode::Esc => {
-                    if app.split_view {
-                        app.code_editor.active = false;
-                    } else {
-                        app.set_view(app::AppView::PatternEditor);
+        match app.code_editor.mode {
+            ModeKind::Normal => {
+                match key.code {
+                    // Enter insert mode
+                    KeyCode::Char('i') => {
+                        app.code_editor.mode = ModeKind::Insert;
+                        return;
                     }
-                    return;
+                    // Enter visual mode
+                    KeyCode::Char('v') => {
+                        app.code_editor.mode = ModeKind::Visual;
+                        return;
+                    }
+                    // View switching (same as pattern editor)
+                    KeyCode::Char('1') => {
+                        app.set_view(app::AppView::PatternEditor);
+                        app.split_view = false;
+                        return;
+                    }
+                    KeyCode::Char('2') => {
+                        app.set_view(app::AppView::Arrangement);
+                        app.split_view = false;
+                        return;
+                    }
+                    KeyCode::Char('3') => {
+                        app.set_view(app::AppView::InstrumentList);
+                        app.split_view = false;
+                        return;
+                    }
+                    KeyCode::Char('4') => {
+                        app.set_view(app::AppView::CodeEditor);
+                        return;
+                    }
+                    KeyCode::Char('5') => {
+                        app.set_view(app::AppView::PatternList);
+                        app.split_view = false;
+                        return;
+                    }
+                    // Command mode
+                    KeyCode::Char(':') => {
+                        app.command_mode = true;
+                        app.command_input.clear();
+                        return;
+                    }
+                    // Escape in normal mode: leave code editor (same as before)
+                    KeyCode::Esc => {
+                        if app.split_view {
+                            app.code_editor.active = false;
+                        } else {
+                            app.set_view(app::AppView::PatternEditor);
+                        }
+                        return;
+                    }
+                    // Navigation still works in Normal mode
+                    KeyCode::Left | KeyCode::Char('h') => {
+                        app.code_editor.move_left();
+                        return;
+                    }
+                    KeyCode::Right | KeyCode::Char('l') => {
+                        app.code_editor.move_right();
+                        return;
+                    }
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        app.code_editor.move_up();
+                        return;
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        app.code_editor.move_down();
+                        return;
+                    }
+                    KeyCode::Home => {
+                        app.code_editor.move_home();
+                        return;
+                    }
+                    KeyCode::End => {
+                        app.code_editor.move_end();
+                        return;
+                    }
+                    KeyCode::PageUp => {
+                        app.code_editor.page_up(20);
+                        return;
+                    }
+                    KeyCode::PageDown => {
+                        app.code_editor.page_down(20);
+                        return;
+                    }
+                    _ => return,
                 }
-                // Navigation still works in Normal mode
-                KeyCode::Left | KeyCode::Char('h') => {
-                    app.code_editor.move_left();
-                    return;
+            }
+            ModeKind::Insert => {
+                match key.code {
+                    // Escape: exit insert mode (back to normal, don't leave the view)
+                    KeyCode::Esc => {
+                        app.code_editor.mode = ModeKind::Normal;
+                        return;
+                    }
+                    // Text editing
+                    KeyCode::Char(c) => {
+                        app.code_editor.insert_char(c);
+                        return;
+                    }
+                    KeyCode::Enter => {
+                        app.code_editor.insert_newline();
+                        return;
+                    }
+                    KeyCode::Backspace => {
+                        app.code_editor.backspace();
+                        return;
+                    }
+                    KeyCode::Delete => {
+                        app.code_editor.delete();
+                        return;
+                    }
+                    // Cursor navigation
+                    KeyCode::Left => {
+                        app.code_editor.move_left();
+                        return;
+                    }
+                    KeyCode::Right => {
+                        app.code_editor.move_right();
+                        return;
+                    }
+                    KeyCode::Up => {
+                        app.code_editor.move_up();
+                        return;
+                    }
+                    KeyCode::Down => {
+                        app.code_editor.move_down();
+                        return;
+                    }
+                    KeyCode::Home => {
+                        app.code_editor.move_home();
+                        return;
+                    }
+                    KeyCode::End => {
+                        app.code_editor.move_end();
+                        return;
+                    }
+                    KeyCode::PageUp => {
+                        app.code_editor.page_up(20);
+                        return;
+                    }
+                    KeyCode::PageDown => {
+                        app.code_editor.page_down(20);
+                        return;
+                    }
+                    // View switching with F-keys still works
+                    KeyCode::F(1) => {
+                        app.set_view(app::AppView::PatternEditor);
+                        app.split_view = false;
+                        return;
+                    }
+                    KeyCode::F(2) => {
+                        app.set_view(app::AppView::Arrangement);
+                        app.split_view = false;
+                        return;
+                    }
+                    KeyCode::F(3) => {
+                        app.set_view(app::AppView::InstrumentList);
+                        app.split_view = false;
+                        return;
+                    }
+                    KeyCode::F(4) => {
+                        app.set_view(app::AppView::CodeEditor);
+                        return;
+                    }
+                    KeyCode::Tab => {
+                        // Insert 2 spaces for indentation
+                        app.code_editor.insert_char(' ');
+                        app.code_editor.insert_char(' ');
+                        return;
+                    }
+                    _ => {}
                 }
-                KeyCode::Right | KeyCode::Char('l') => {
-                    app.code_editor.move_right();
-                    return;
+            }
+            ModeKind::Visual => {
+                match key.code {
+                    // Escape: exit visual mode (back to normal, don't leave the view)
+                    KeyCode::Esc => {
+                        app.code_editor.mode = ModeKind::Normal;
+                        return;
+                    }
+                    _ => {}
                 }
-                KeyCode::Up | KeyCode::Char('k') => {
-                    app.code_editor.move_up();
-                    return;
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    app.code_editor.move_down();
-                    return;
-                }
-                KeyCode::Home => {
-                    app.code_editor.move_home();
-                    return;
-                }
-                KeyCode::End => {
-                    app.code_editor.move_end();
-                    return;
-                }
-                KeyCode::PageUp => {
-                    app.code_editor.page_up(20);
-                    return;
-                }
-                KeyCode::PageDown => {
-                    app.code_editor.page_down(20);
-                    return;
-                }
-                _ => return,
             }
-        }
-
-        match key.code {
-            // Escape: exit insert mode (back to normal, don't leave the view)
-            KeyCode::Esc => {
-                app.code_editor.insert_mode = false;
-                return;
-            }
-            // Text editing
-            KeyCode::Char(c) => {
-                app.code_editor.insert_char(c);
-                return;
-            }
-            KeyCode::Enter => {
-                app.code_editor.insert_newline();
-                return;
-            }
-            KeyCode::Backspace => {
-                app.code_editor.backspace();
-                return;
-            }
-            KeyCode::Delete => {
-                app.code_editor.delete();
-                return;
-            }
-            // Cursor navigation
-            KeyCode::Left => {
-                app.code_editor.move_left();
-                return;
-            }
-            KeyCode::Right => {
-                app.code_editor.move_right();
-                return;
-            }
-            KeyCode::Up => {
-                app.code_editor.move_up();
-                return;
-            }
-            KeyCode::Down => {
-                app.code_editor.move_down();
-                return;
-            }
-            KeyCode::Home => {
-                app.code_editor.move_home();
-                return;
-            }
-            KeyCode::End => {
-                app.code_editor.move_end();
-                return;
-            }
-            KeyCode::PageUp => {
-                app.code_editor.page_up(20);
-                return;
-            }
-            KeyCode::PageDown => {
-                app.code_editor.page_down(20);
-                return;
-            }
-            // View switching with F-keys still works
-            KeyCode::F(1) => {
-                app.set_view(app::AppView::PatternEditor);
-                app.split_view = false;
-                return;
-            }
-            KeyCode::F(2) => {
-                app.set_view(app::AppView::Arrangement);
-                app.split_view = false;
-                return;
-            }
-            KeyCode::F(3) => {
-                app.set_view(app::AppView::InstrumentList);
-                app.split_view = false;
-                return;
-            }
-            KeyCode::F(4) => {
-                app.set_view(app::AppView::CodeEditor);
-                return;
-            }
-            KeyCode::Tab => {
-                // Insert 2 spaces for indentation
-                app.code_editor.insert_char(' ');
-                app.code_editor.insert_char(' ');
-                return;
-            }
-            _ => {}
         }
     }
 
