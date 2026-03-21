@@ -70,6 +70,8 @@ pub struct Song {
     pub artist: String,
     /// Tempo in beats per minute.
     pub bpm: f64,
+    /// Ticks per row (speed), defaults to 6.
+    pub speed: u8,
     /// Pattern pool (up to 256 patterns).
     pub patterns: Vec<Pattern>,
     /// Arrangement: ordered list of pattern indices forming the song sequence.
@@ -94,6 +96,7 @@ impl Song {
             name: name.into(),
             artist: String::new(),
             bpm,
+            speed: 6,
             patterns: vec![default_pattern],
             arrangement: vec![0],
             tracks,
