@@ -1170,6 +1170,128 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     frame.render_widget(footer, area);
 }
 
+/// Render command-line autocomplete suggestions above the footer.
+fn render_command_completions(frame: &mut Frame, footer_area: ratatui::layout::Rect, app: &App) {
+    let input = app.command_input.trim();
+    let input_word = input.split_whitespace().next().unwrap_or(input);
+    let matches: Vec<(&str, &str)> = COMMANDS
+        .iter()
+        .filter(|(cmd, _)| {
+            let cmd_word = cmd.split_whitespace().next().unwrap_or(cmd);
+            cmd_word.starts_with(input_word)
+        })
+        .copied()
+        .collect();
+
+    if matches.is_empty() {
+        return;
+    }
+
+    let theme = &app.theme;
+    let width = 30u16;
+    let height = matches.len() as u16 + 2;
+    let x = 0;
+    let y = footer_area.y.saturating_sub(height);
+    let area = ratatui::layout::Rect::new(x, y, width, height);
+
+    frame.render_widget(Clear, area);
+
+    let lines: Vec<Line> = matches
+        .iter()
+        .map(|(cmd, desc)| {
+            Line::from(vec![
+                Span::raw(" :"),
+                Span::styled(
+                    *cmd,
+                    Style::default()
+                        .fg(theme.success_color())
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(format!("  {}", desc)),
+            ])
+        })
+        .collect();
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.text_dimmed))
+        .style(Style::default().bg(Color::Black));
+
+    let para = Paragraph::new(lines).block(block);
+    frame.render_widget(para, area);
+}
+
+/// Which-key descriptions for pending chords.
+const WHICH_KEY_ENTRIES: &[(&str, &str, &str)] =
+    &[("d", "d", "dd  delete row"), ("g", "g", "gg  go to top")];
+
+/// Render a which-key popup showing completions for the current pending key.
+fn render_which_key(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let pending = match app.pending_key {
+        Some(c) => c,
+        None => return,
+    };
+
+    let theme = &app.theme;
+    let entries: Vec<(&str, &str)> = WHICH_KEY_ENTRIES
+        .iter()
+        .filter(|(prefix, _, _)| prefix.starts_with(pending))
+        .map(|(_, key, desc)| (*key, *desc))
+        .collect();
+
+    if entries.is_empty() {
+        return;
+    }
+
+    let width = 24u16;
+    let height = entries.len() as u16 + 2;
+    // Bottom-left, just above footer
+    let x = 0;
+    let y = area.height.saturating_sub(height + 1);
+    let popup_area = ratatui::layout::Rect::new(x, y, width, height);
+
+    frame.render_widget(Clear, popup_area);
+
+    let title = format!(" {}… ", pending);
+    let lines: Vec<Line> = entries
+        .iter()
+        .map(|(key, desc)| {
+            Line::from(vec![
+                Span::raw(" "),
+                Span::styled(
+                    format!("{}{}", pending, key),
+                    Style::default()
+                        .fg(theme.success_color())
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(format!("  {}", desc)),
+            ])
+        })
+        .collect();
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.primary))
+        .title(title)
+        .style(Style::default().bg(Color::Black));
+
+    let para = Paragraph::new(lines).block(block);
+    frame.render_widget(para, popup_area);
+}
+
+/// All commands available in command mode, with their descriptions.
+const COMMANDS: &[(&str, &str)] = &[
+    ("w", "save project"),
+    ("wq", "save and quit"),
+    ("x", "save and quit"),
+    ("q", "quit"),
+    ("q!", "quit without saving"),
+    ("bpm <n>", "set tempo (20–999)"),
+    ("t <n>", "set tempo (shorthand)"),
+    ("tempo <n>", "set tempo"),
+    ("step <n>", "set row advance step (0–8)"),
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1446,126 +1568,4 @@ mod tests {
         let offset = calculate_scroll_offset(63, 20, 64);
         assert_eq!(offset, 44); // 64 - 20 = 44
     }
-}
-
-/// All commands available in command mode, with their descriptions.
-const COMMANDS: &[(&str, &str)] = &[
-    ("w", "save project"),
-    ("wq", "save and quit"),
-    ("x", "save and quit"),
-    ("q", "quit"),
-    ("q!", "quit without saving"),
-    ("bpm <n>", "set tempo (20–999)"),
-    ("t <n>", "set tempo (shorthand)"),
-    ("tempo <n>", "set tempo"),
-    ("step <n>", "set row advance step (0–8)"),
-];
-
-/// Render command-line autocomplete suggestions above the footer.
-fn render_command_completions(frame: &mut Frame, footer_area: ratatui::layout::Rect, app: &App) {
-    let input = app.command_input.trim();
-    let input_word = input.split_whitespace().next().unwrap_or(input);
-    let matches: Vec<(&str, &str)> = COMMANDS
-        .iter()
-        .filter(|(cmd, _)| {
-            let cmd_word = cmd.split_whitespace().next().unwrap_or(cmd);
-            cmd_word.starts_with(input_word)
-        })
-        .copied()
-        .collect();
-
-    if matches.is_empty() {
-        return;
-    }
-
-    let theme = &app.theme;
-    let width = 30u16;
-    let height = matches.len() as u16 + 2;
-    let x = 0;
-    let y = footer_area.y.saturating_sub(height);
-    let area = ratatui::layout::Rect::new(x, y, width, height);
-
-    frame.render_widget(Clear, area);
-
-    let lines: Vec<Line> = matches
-        .iter()
-        .map(|(cmd, desc)| {
-            Line::from(vec![
-                Span::raw(" :"),
-                Span::styled(
-                    *cmd,
-                    Style::default()
-                        .fg(theme.success_color())
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(format!("  {}", desc)),
-            ])
-        })
-        .collect();
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.text_dimmed))
-        .style(Style::default().bg(Color::Black));
-
-    let para = Paragraph::new(lines).block(block);
-    frame.render_widget(para, area);
-}
-
-/// Which-key descriptions for pending chords.
-const WHICH_KEY_ENTRIES: &[(&str, &str, &str)] =
-    &[("d", "d", "dd  delete row"), ("g", "g", "gg  go to top")];
-
-/// Render a which-key popup showing completions for the current pending key.
-fn render_which_key(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    let pending = match app.pending_key {
-        Some(c) => c,
-        None => return,
-    };
-
-    let theme = &app.theme;
-    let entries: Vec<(&str, &str)> = WHICH_KEY_ENTRIES
-        .iter()
-        .filter(|(prefix, _, _)| prefix.starts_with(pending))
-        .map(|(_, key, desc)| (*key, *desc))
-        .collect();
-
-    if entries.is_empty() {
-        return;
-    }
-
-    let width = 24u16;
-    let height = entries.len() as u16 + 2;
-    // Bottom-left, just above footer
-    let x = 0;
-    let y = area.height.saturating_sub(height + 1);
-    let popup_area = ratatui::layout::Rect::new(x, y, width, height);
-
-    frame.render_widget(Clear, popup_area);
-
-    let title = format!(" {}… ", pending);
-    let lines: Vec<Line> = entries
-        .iter()
-        .map(|(key, desc)| {
-            Line::from(vec![
-                Span::raw(" "),
-                Span::styled(
-                    format!("{}{}", pending, key),
-                    Style::default()
-                        .fg(theme.success_color())
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(format!("  {}", desc)),
-            ])
-        })
-        .collect();
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.primary))
-        .title(title)
-        .style(Style::default().bg(Color::Black));
-
-    let para = Paragraph::new(lines).block(block);
-    frame.render_widget(para, popup_area);
 }

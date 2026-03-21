@@ -893,4 +893,267 @@ mod tests {
         let imported = import_mod(&exported).unwrap();
         assert_eq!(imported.song.name, "Test Song Title");
     }
+
+    #[test]
+    fn test_export_mod_instrument_volume_preserved() {
+        let mut song = Song::new("Volume Test".to_string(), 125.0);
+        song.patterns = vec![Pattern::new(64, 4)];
+        song.arrangement = vec![0];
+        for i in 0..31 {
+            song.instruments
+                .push(Instrument::new(format!("Inst {}", i)));
+        }
+        song.instruments[0].volume = 0.75;
+        let samples: Vec<Sample> = vec![Sample::default(); 31];
+        let exported = export_mod(&song, &samples).unwrap();
+        let imported = import_mod(&exported).unwrap();
+        let imported_vol = imported.song.instruments[0].volume;
+        assert!(
+            (imported_vol - 0.75).abs() < 0.02,
+            "volume not preserved: {}",
+            imported_vol
+        );
+    }
+
+    #[test]
+    fn test_export_mod_instrument_finetune_preserved() {
+        let mut song = Song::new("Finetune Test".to_string(), 125.0);
+        song.patterns = vec![Pattern::new(64, 4)];
+        song.arrangement = vec![0];
+        for i in 0..31 {
+            song.instruments
+                .push(Instrument::new(format!("Inst {}", i)));
+        }
+        song.instruments[0].finetune = -5;
+        let samples: Vec<Sample> = vec![Sample::default(); 31];
+        let exported = export_mod(&song, &samples).unwrap();
+        let imported = import_mod(&exported).unwrap();
+        assert_eq!(imported.song.instruments[0].finetune, -5);
+    }
+
+    #[test]
+    fn test_export_mod_effect_preserved() {
+        let mut song = Song::new("Effect Test".to_string(), 125.0);
+        let mut pat = Pattern::new(64, 4);
+        pat.set_cell(
+            0,
+            0,
+            Cell {
+                note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 100, 0))),
+                instrument: Some(0),
+                volume: None,
+                effects: vec![Effect::new(0x0C, 64)], // Set volume C-4 to 64
+            },
+        );
+        song.patterns = vec![pat];
+        song.arrangement = vec![0];
+        for i in 0..31 {
+            song.instruments
+                .push(Instrument::new(format!("Inst {}", i)));
+        }
+        let samples: Vec<Sample> = vec![Sample::default(); 31];
+        let exported = export_mod(&song, &samples).unwrap();
+        let imported = import_mod(&exported).unwrap();
+        let cell = imported.song.patterns[0].get_cell(0, 0).unwrap();
+        assert!(!cell.effects.is_empty(), "effect was lost in round-trip");
+        assert_eq!(cell.effects[0].param, 64);
+    }
+
+    #[test]
+    fn test_export_mod_multiple_effects_preserved() {
+        let mut song = Song::new("Multi Effect Test".to_string(), 125.0);
+        let mut pat = Pattern::new(64, 4);
+        pat.set_cell(
+            5,
+            2,
+            Cell {
+                note: Some(NoteEvent::On(Note::new(Pitch::A, 3, 100, 1))),
+                instrument: Some(1),
+                volume: None,
+                effects: vec![
+                    Effect::new(0x09, 0x20), // Sample offset 0x20
+                    Effect::new(0x0D, 0x08), // Note delay 8
+                ],
+            },
+        );
+        song.patterns = vec![pat];
+        song.arrangement = vec![0];
+        let samples: Vec<Sample> = vec![Sample::default(); 31];
+        let exported = export_mod(&song, &samples).unwrap();
+        let imported = import_mod(&exported).unwrap();
+        let cell = imported.song.patterns[0].get_cell(5, 2).unwrap();
+        assert!(
+            cell.effects.len() >= 1,
+            "at least one effect should be preserved"
+        );
+    }
+
+    #[test]
+    fn test_export_mod_sample_data_roundtrip() {
+        use crate::audio::sample::Sample;
+        let mut song = Song::new("Sample Data".to_string(), 125.0);
+        song.patterns = vec![Pattern::new(64, 4)];
+        song.arrangement = vec![0];
+        let sample_data: Vec<f32> = (0..1000).map(|i| (i as f32 / 100.0).sin()).collect();
+        let sample = Sample::new(sample_data.clone(), 8363, 1, Some("Test".to_string()));
+        let mut samples: Vec<Sample> = vec![Sample::default(); 31];
+        samples[0] = sample;
+        let exported = export_mod(&song, &samples).unwrap();
+        let imported = import_mod(&exported).unwrap();
+        let imported_sample = &imported.samples[0];
+        assert!(
+            imported_sample.frame_count() > 0,
+            "sample data should be preserved"
+        );
+    }
+
+    #[test]
+    fn test_export_mod_multi_pattern_arrangement() {
+        let mut song = Song::new("Multi Pattern".to_string(), 125.0);
+        song.patterns = vec![
+            Pattern::new(64, 4),
+            Pattern::new(64, 4),
+            Pattern::new(64, 4),
+        ];
+        song.arrangement = vec![0, 1, 2, 1, 0];
+        let samples: Vec<Sample> = vec![Sample::default(); 31];
+        let exported = export_mod(&song, &samples).unwrap();
+        let imported = import_mod(&exported).unwrap();
+        assert_eq!(imported.song.arrangement, vec![0, 1, 2, 1, 0]);
+        assert_eq!(imported.song.patterns.len(), 3);
+    }
+
+    #[test]
+    fn test_export_mod_pattern_data_in_different_patterns() {
+        let mut song = Song::new("Pattern Data Test".to_string(), 125.0);
+        let mut pat0 = Pattern::new(64, 4);
+        pat0.set_cell(
+            0,
+            0,
+            Cell {
+                note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 100, 0))),
+                instrument: Some(0),
+                volume: None,
+                effects: vec![],
+            },
+        );
+        let mut pat1 = Pattern::new(64, 4);
+        pat1.set_cell(
+            10,
+            1,
+            Cell {
+                note: Some(NoteEvent::On(Note::new(Pitch::E, 4, 100, 0))),
+                instrument: Some(1),
+                volume: None,
+                effects: vec![],
+            },
+        );
+        pat1.set_cell(
+            20,
+            3,
+            Cell {
+                note: Some(NoteEvent::On(Note::new(Pitch::G, 4, 100, 2))),
+                instrument: Some(2),
+                volume: None,
+                effects: vec![],
+            },
+        );
+        song.patterns = vec![pat0, pat1];
+        song.arrangement = vec![0, 1];
+        let samples: Vec<Sample> = vec![Sample::default(); 31];
+        let exported = export_mod(&song, &samples).unwrap();
+        let imported = import_mod(&exported).unwrap();
+        let pat0_cell = imported.song.patterns[0].get_cell(0, 0).unwrap();
+        assert!(matches!(
+            pat0_cell.note.as_ref(),
+            Some(NoteEvent::On(n)) if n.pitch == Pitch::C
+        ));
+        let pat1_cell_1 = imported.song.patterns[1].get_cell(10, 1).unwrap();
+        assert!(matches!(
+            pat1_cell_1.note.as_ref(),
+            Some(NoteEvent::On(n)) if n.pitch == Pitch::E
+        ));
+        let pat1_cell_2 = imported.song.patterns[1].get_cell(20, 3).unwrap();
+        assert!(matches!(
+            pat1_cell_2.note.as_ref(),
+            Some(NoteEvent::On(n)) if n.pitch == Pitch::G
+        ));
+        assert_eq!(pat1_cell_2.instrument, Some(2));
+    }
+
+    #[test]
+    fn test_export_mod_empty_cells_preserved() {
+        let mut song = Song::new("Empty Cells".to_string(), 125.0);
+        let mut pat = Pattern::new(64, 4);
+        pat.set_cell(
+            5,
+            2,
+            Cell {
+                note: Some(NoteEvent::On(Note::new(Pitch::D, 4, 100, 1))),
+                instrument: Some(1),
+                volume: None,
+                effects: vec![],
+            },
+        );
+        song.patterns = vec![pat];
+        song.arrangement = vec![0];
+        let samples: Vec<Sample> = vec![Sample::default(); 31];
+        let exported = export_mod(&song, &samples).unwrap();
+        let imported = import_mod(&exported).unwrap();
+        let empty_cell = imported.song.patterns[0].get_cell(4, 2).unwrap();
+        assert!(empty_cell.note.is_none(), "empty cell should remain empty");
+        let empty_cell_2 = imported.song.patterns[0].get_cell(6, 2).unwrap();
+        assert!(
+            empty_cell_2.note.is_none(),
+            "empty cell should remain empty"
+        );
+    }
+
+    #[test]
+    fn test_export_mod_2channel_format() {
+        let mut song = Song::new("2 Channel".to_string(), 125.0);
+        song.patterns = vec![Pattern::new(64, 2)];
+        song.arrangement = vec![0];
+        let samples: Vec<Sample> = vec![Sample::default(); 31];
+        let exported = export_mod(&song, &samples).unwrap();
+        assert_eq!(&exported[1080..1084], b"2CHN");
+        let imported = import_mod(&exported).unwrap();
+        assert_eq!(imported.song.patterns[0].num_channels(), 2);
+    }
+
+    #[test]
+    fn test_export_mod_8channel_format() {
+        let mut song = Song::new("8 Channel".to_string(), 125.0);
+        song.patterns = vec![Pattern::new(64, 8)];
+        song.arrangement = vec![0];
+        let samples: Vec<Sample> = vec![Sample::default(); 31];
+        let exported = export_mod(&song, &samples).unwrap();
+        assert_eq!(&exported[1080..1084], b"8CHN");
+        let imported = import_mod(&exported).unwrap();
+        assert_eq!(imported.song.patterns[0].num_channels(), 8);
+    }
+
+    #[test]
+    fn test_export_mod_all_instruments_initialized() {
+        let mut song = Song::new("All Instruments".to_string(), 125.0);
+        song.patterns = vec![Pattern::new(64, 4)];
+        song.arrangement = vec![0];
+        for i in 0..31 {
+            song.instruments
+                .push(Instrument::new(format!("Inst {}", i)));
+        }
+        for inst in &mut song.instruments {
+            inst.volume = 0.5;
+        }
+        let samples: Vec<Sample> = vec![Sample::default(); 31];
+        let exported = export_mod(&song, &samples).unwrap();
+        let imported = import_mod(&exported).unwrap();
+        for (i, inst) in imported.song.instruments.iter().enumerate() {
+            assert!(
+                (inst.volume - 0.5).abs() < 0.02,
+                "instrument {} volume not preserved",
+                i
+            );
+        }
+    }
 }
