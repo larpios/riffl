@@ -42,8 +42,11 @@ pub struct Transport {
     /// Tempo in beats per minute (clamped to 20-999)
     bpm: f64,
 
-    /// Ticks per row (Speed) (clamped to 1-31)
-    speed: u8,
+    /// Lines per beat (1-255)
+    lpb: u32,
+
+    /// Ticks per row (1-255)
+    tpl: u32,
 
     /// Current row position within the pattern
     current_row: usize,
@@ -89,10 +92,11 @@ pub struct Transport {
 const MIN_BPM: f64 = 20.0;
 /// Maximum allowed BPM
 const MAX_BPM: f64 = 999.0;
-/// Minimum allowed speed
-const MIN_SPEED: u8 = 1;
-/// Maximum allowed speed
-const MAX_SPEED: u8 = 31;
+/// Minimum allowed LPB/TPL
+const MIN_LPB: u32 = 1;
+const MAX_LPB: u32 = 255;
+const MIN_TPL: u32 = 1;
+const MAX_TPL: u32 = 255;
 
 impl Transport {
     /// Create a new Transport with default settings
@@ -100,7 +104,8 @@ impl Transport {
         Self {
             state: TransportState::Stopped,
             bpm: 120.0,
-            speed: 6,
+            lpb: 4,
+            tpl: 6,
             current_row: 0,
             arrangement_position: 0,
             loop_enabled: false,
@@ -308,14 +313,24 @@ impl Transport {
         self.bpm
     }
 
-    /// Set the speed (ticks per row), clamped to the valid range (1-31)
-    pub fn set_speed(&mut self, speed: u8) {
-        self.speed = speed.clamp(MIN_SPEED, MAX_SPEED);
+    /// Set the lines per beat, clamped to the valid range (1-255)
+    pub fn set_lpb(&mut self, lpb: u32) {
+        self.lpb = lpb.clamp(MIN_LPB, MAX_LPB);
     }
 
-    /// Get the current speed
-    pub fn speed(&self) -> u8 {
-        self.speed
+    /// Get the current lines per beat
+    pub fn lpb(&self) -> u32 {
+        self.lpb
+    }
+
+    /// Set the ticks per line (speed), clamped to the valid range (1-255)
+    pub fn set_tpl(&mut self, tpl: u32) {
+        self.tpl = tpl.clamp(MIN_TPL, MAX_TPL);
+    }
+
+    /// Get the current ticks per line
+    pub fn tpl(&self) -> u32 {
+        self.tpl
     }
 
     /// Get the current transport state
@@ -563,11 +578,11 @@ impl Transport {
         self.state == TransportState::Paused
     }
 
-    /// Calculate seconds per row based on current BPM and speed.
-    /// Formula: seconds per row = (2.5 / BPM) * Speed
-    /// At 120 BPM, Speed 6: (2.5 / 120) * 6 = 0.125s (125ms)
+    /// Calculate seconds per row based on current BPM and LPB.
+    /// Formula: seconds per row = 60.0 / (BPM * LPB)
+    /// At 120 BPM, LPB 4: 60 / (120 * 4) = 0.125s (125ms)
     fn seconds_per_row(&self) -> f64 {
-        (2.5 / self.bpm) * self.speed as f64
+        60.0 / (self.bpm * self.lpb as f64)
     }
 }
 
@@ -657,7 +672,7 @@ mod tests {
         transport.set_num_rows(16);
         transport.play();
 
-        // At 120 BPM, 4 rows/beat: each row lasts 0.125s
+        // At 120 BPM, 4 LPB = 4 rows/beat: each row lasts 0.125s
         let spr = 0.125;
 
         // Not enough time — should not advance

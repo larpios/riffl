@@ -257,7 +257,7 @@ const KEY_MAPPINGS: &[KeyMapping] = &[
         key: "Ctrl+Enter",
         action: Action::ExecuteScript,
         mode: EditorMode::Normal,
-    }
+    },
 ];
 
 /// Chord prefix mappings for which-key display

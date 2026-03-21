@@ -16,8 +16,8 @@ use crate::pattern::effect::{Effect, EffectType};
 pub enum TransportCommand {
     /// Set the tempo to the given BPM value.
     SetBpm(f64),
-    /// Set the ticks per row (speed).
-    SetSpeed(u8),
+    /// Set the ticks per line (TPL).
+    SetTpl(u32),
     /// Jump to the given arrangement position (Bxx effect).
     PositionJump(usize),
     /// Break to the given row of the next pattern (Dxx effect).
@@ -578,13 +578,15 @@ impl TrackerEffectProcessor {
                     }
                 }
 
-                EffectType::SetSpeed => {
-                    // Fxx: if param < 0x20, set speed (ticks per row)
-                    // if param >= 0x20, set BPM
-                    if effect.param >= 0x20 {
+                EffectType::SetTempo => {
+                    if effect.param > 0 {
                         commands.push(TransportCommand::SetBpm(effect.param as f64));
-                    } else if effect.param > 0 {
-                        commands.push(TransportCommand::SetSpeed(effect.param));
+                    }
+                }
+
+                EffectType::SetSpeed => {
+                    if effect.param > 0 {
+                        commands.push(TransportCommand::SetTpl(effect.param as u32));
                     }
                 }
             }
@@ -1246,7 +1248,7 @@ mod tests {
     #[test]
     fn test_process_row_set_bpm() {
         let mut proc = TrackerEffectProcessor::new(4, 48000);
-        let effects = vec![Effect::from_type(EffectType::SetSpeed, 0x80)]; // BPM = 128
+        let effects = vec![Effect::from_type(EffectType::SetTempo, 0x80)]; // BPM = 128
         let cmds = proc.process_row(0, &effects, None);
 
         assert_eq!(cmds.len(), 1);
@@ -1254,13 +1256,13 @@ mod tests {
     }
 
     #[test]
-    fn test_process_row_set_speed_low_value_no_bpm() {
+    fn test_process_row_set_tpl() {
         let mut proc = TrackerEffectProcessor::new(4, 48000);
-        let effects = vec![Effect::from_type(EffectType::SetSpeed, 0x06)]; // Speed, not BPM
+        let effects = vec![Effect::from_type(EffectType::SetSpeed, 0x06)]; // TPL
         let cmds = proc.process_row(0, &effects, None);
 
         assert_eq!(cmds.len(), 1);
-        assert_eq!(cmds[0], TransportCommand::SetSpeed(6));
+        assert_eq!(cmds[0], TransportCommand::SetTpl(6));
     }
 
     #[test]
@@ -1418,15 +1420,15 @@ mod tests {
         let mut proc = TrackerEffectProcessor::new(4, 48000);
 
         // F20 = BPM 32 (minimum BPM-range value)
-        let cmds = proc.process_row(0, &[Effect::from_type(EffectType::SetSpeed, 0x20)], None);
+        let cmds = proc.process_row(0, &[Effect::from_type(EffectType::SetTempo, 0x20)], None);
         assert_eq!(cmds, vec![TransportCommand::SetBpm(32.0)]);
 
         // FFF = BPM 255 (maximum)
-        let cmds = proc.process_row(0, &[Effect::from_type(EffectType::SetSpeed, 0xFF)], None);
+        let cmds = proc.process_row(0, &[Effect::from_type(EffectType::SetTempo, 0xFF)], None);
         assert_eq!(cmds, vec![TransportCommand::SetBpm(255.0)]);
 
         // F1F = speed 31, not BPM (just below boundary)
         let cmds = proc.process_row(0, &[Effect::from_type(EffectType::SetSpeed, 0x1F)], None);
-        assert_eq!(cmds, vec![TransportCommand::SetSpeed(31)]);
+        assert_eq!(cmds, vec![TransportCommand::SetTpl(31)]);
     }
 }

@@ -509,10 +509,10 @@ impl App {
                         mixer.update_tempo(clamped);
                     }
                 }
-                TransportCommand::SetSpeed(speed) => {
-                    self.transport.set_speed(speed);
+                TransportCommand::SetTpl(tpl) => {
+                    self.transport.set_tpl(tpl);
                     if let Ok(mut mixer) = self.mixer.lock() {
-                        mixer.set_speed(speed);
+                        mixer.set_tpl(tpl);
                     }
                 }
                 TransportCommand::PositionJump(pos) => {
@@ -1857,7 +1857,7 @@ impl App {
     /// Save the current project to disk.
     ///
     /// If a project path is set, saves to that path. Otherwise saves to
-    /// "untitled.trs" in the current directory.
+    /// "untitled.rtm" in the current directory.
     pub fn save_project(&mut self) {
         let current_pos = self.transport.arrangement_position();
         self.flush_editor_pattern(current_pos);
@@ -1865,7 +1865,7 @@ impl App {
         let path = self
             .project_path
             .clone()
-            .unwrap_or_else(|| PathBuf::from("untitled.trs"));
+            .unwrap_or_else(|| PathBuf::from("untitled.rtm"));
 
         match project::save_project(&path, &self.song) {
             Ok(()) => {
@@ -2172,7 +2172,7 @@ mod tests {
     #[test]
     fn test_open_export_dialog_with_project_path() {
         let mut app = App::new();
-        app.project_path = Some(PathBuf::from("my_song.trs"));
+        app.project_path = Some(PathBuf::from("my_song.rtm"));
 
         app.open_export_dialog();
         assert!(app.has_export_dialog());
@@ -2998,7 +2998,7 @@ mod tests {
 
         let mut app = App::new();
         // Simulate a loaded project whose directory contains ./samples/
-        app.project_path = Some(dir.join("test.trs"));
+        app.project_path = Some(dir.join("test.rtm"));
         app.refresh_browser_roots();
 
         let has_samples = app
@@ -3021,7 +3021,7 @@ mod tests {
         // No samples/ subdir created here
 
         let mut app = App::new();
-        app.project_path = Some(dir.join("test.trs"));
+        app.project_path = Some(dir.join("test.rtm"));
         app.refresh_browser_roots();
 
         let samples_dir = dir.join("samples");

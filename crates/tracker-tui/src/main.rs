@@ -654,7 +654,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             if let Some(path) = app.project_path.clone() {
                 app.load_project(&path);
             } else {
-                let path = std::path::PathBuf::from("untitled.trs");
+                let path = std::path::PathBuf::from("untitled.rtm");
                 if path.exists() {
                     app.load_project(&path);
                 } else {
