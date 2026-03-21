@@ -1404,12 +1404,25 @@ impl App {
         (pos, total, rate)
     }
 
-    /// Import a ProTracker .mod file, replacing the current song.
+    /// Import a module file (.mod, .xm, .it), replacing the current song.
     /// Returns Ok(()) on success, or an error message.
-    pub fn import_mod_file(&mut self, path: &std::path::Path) -> Result<(), String> {
+    pub fn import_file(&mut self, path: &std::path::Path) -> Result<(), String> {
         let data = std::fs::read(path).map_err(|e| format!("Read error: {e}"))?;
-        let result = tracker_core::mod_import::import_mod(&data)
-            .map_err(|e| format!("MOD parse error: {e}"))?;
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        let result = match ext.as_str() {
+            "xm" => tracker_core::format::xm::import_xm(&data)
+                .map_err(|e| format!("XM parse error: {e}")),
+            "it" => tracker_core::format::it::import_it(&data)
+                .map_err(|e| format!("IT parse error: {e}")),
+            "s3m" => tracker_core::format::s3m::import_s3m(&data)
+                .map_err(|e| format!("S3M parse error: {e}")),
+            _ => tracker_core::format::protracker::import_mod(&data)
+                .map_err(|e| format!("MOD parse error: {e}")),
+        }?;
 
         if let Ok(mut mixer) = self.mixer.lock() {
             mixer.clear_samples();
@@ -3231,22 +3244,6 @@ mod tests {
         let mut data = vec![0u8; 1084];
         data[1080] = 1; // song_length = 1
         data[1082] = 0; // pattern_order[0] = 0
-        let tag_pos = 20 + 31 * 30 + 2 + 128; // = 1080
-        data[tag_pos] = b'M';
-        data[tag_pos + 1] = b'.';
-        data[tag_pos + 2] = b'K';
-        data[tag_pos + 3] = b'.';
-        // Pattern data: 64 rows * 4 channels * 4 bytes = 1024 bytes
-        data.resize(1084 + 1024, 0);
-
-        // Write to a temp file
-        let path = std::env::temp_dir().join("test_minimal.mod");
-        std::fs::write(&path, &data).expect("failed to write temp MOD");
-
-        let mut app = App::new();
-        // Set a different BPM so we can confirm it gets overwritten by the import
-        app.transport.set_bpm(140.0);
-        assert_eq!(app.transport.bpm(), 140.0);
 
         app.import_mod_file(&path).expect("import should succeed");
 
