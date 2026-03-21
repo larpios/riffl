@@ -1,387 +1,201 @@
-#+TITLE: riffl Roadmap
-#+DATE: 2026-03-13
-#+DESCRIPTION: Development roadmap. Floor: ProTracker parity. Ceiling: Renoise-level power and fun.
+#+TITLE: Riffl Vision & Roadmap
+#+DATE: 2026-03-21
+#+DESCRIPTION: The single source of truth for Riffl's vision, architecture, and development milestones.
 
-* Goals
-  Minimum target: feature parity with ProTracker (Amiga MOD tracker).
-  Real target: the power and feel of Renoise — deep instrument system, flexible
-  pattern editing, great DSP, live recording, and a scripting DSL that no
-  commercial tracker has. Chip emulation (Furnace-style) is a potential future
-  direction but not a priority.
+* Vision
+** What We're Building
+   A full-featured DAW with tracker-style interface and live coding capabilities (inspired by Strudel/TidalCycles), built in Rust. Not just a tracker — a complete music production environment where tracker workflow and algorithmic composition coexist.
 
-  See VISION.md for the long-horizon plan (GUI, plugin hosting, monetisation).
+** Core Identity
+   - *Tracker-first*: Pattern grid is the primary editing interface. Effect commands, step sequencing, hex values — the tracker DNA stays.
+   - *Live coding built-in*: Rhai scripting engine for algorithmic pattern generation, generative music, real-time composition. This is the differentiator no commercial DAW has.
+   - *Two frontends*: TUI (current, great for tracker workflow) and GUI (future, needed for waveforms, plugin UIs, automation curves).
+
+** What Sets Us Apart
+   | Us                             | Traditional DAWs           | Traditional Trackers |
+   |--------------------------------+----------------------------+----------------------|
+   | Tracker grid + live coding DSL | Piano roll + mouse workflow | Tracker grid only    |
+   | Rust (fast, safe, no GC)       | C++ (legacy, unsafe)       | C/C++                |
+   | TUI + GUI dual frontend        | GUI only                   | GUI only             |
+   | Open-source core               | Closed source              | Mostly closed        |
+   | Modern plugin hosting (CLAP)   | VST2/3 + AU                | Limited/none         |
+
+* Architecture
+** Target Structure (Cargo Workspace)
+   #+BEGIN_SRC 
+   riffl/
+   ├── crates/
+   │   ├── tracker-core/        # Engine: audio, mixer, transport, pattern, song, DSL, project I/O
+   │   │   └── src/
+   │   │       ├── audio/       # cpal engine, mixer, effects, sample loading
+   │   │       ├── pattern/     # Note, Cell, Row, Track, Pattern
+   │   │       ├── dsl/         # Rhai scripting engine
+   │   │       ├── transport.rs # BPM, playback, row advancement
+   │   │       ├── song.rs      # Song model, instruments
+   │   │       ├── project.rs   # Save/load (.trs)
+   │   │       ├── export.rs    # WAV/FLAC rendering
+   │   │       ├── midi/        # MIDI I/O (future)
+   │   │       ├── automation/  # Automation lanes (future)
+   │   │       └── plugin/      # CLAP/VST3 hosting (future)
+   │   ├── tracker-tui/         # TUI frontend (ratatui + crossterm)
+   │   │   └── src/
+   │   │       ├── main.rs
+   │   │       ├── app.rs       # TUI-specific app state
+   │   │       ├── ui/          # Rendering
+   │   │       ├── input/       # Keybindings
+   │   │       └── editor/      # Editor state (cursor, modes)
+   │   └── tracker-gui/         # GUI frontend (future)
+   │       └── src/
+   ├── docs/
+   ├── Cargo.toml               # Workspace root
+   └── ...
+   #+END_SRC
+
+** Key Architectural Principle
+   *The core is the product. Frontends are skins.*
+
+   `tracker-core` must be 100% frontend-agnostic. No ratatui types, no crossterm types, no UI concepts. It exposes:
+   - A `Song` model (patterns, instruments, arrangement)
+   - A `Transport` (play/stop/pause, BPM, position)
+   - A `Mixer` (audio rendering)
+   - A `ScriptEngine` (Rhai DSL evaluation)
+   - An `AudioEngine` (device management, stream output)
+
+   Both TUI and GUI import `tracker-core` and build their own UI/input layer on top.
+
+* Development Phases (High-Level)
+** Phase 1: Architecture Split (DONE 2026-03-08)
+   Refactor monolith into workspace (tracker-core + tracker-tui).
+** Phase 2: Audio Engine Upgrades (IN-PROGRESS)
+   Professional-grade mixing and effects. Channel strip architecture, built-in effects, improved sample engine.
+** Phase 3: MIDI + Automation (PLANNED)
+   External controller support and parameter automation.
+** Phase 4: Arrangement + Song Structure (PLANNED)
+   Full song arrangement beyond pattern sequencing.
+** Phase 5: Plugin Hosting (PLANNED)
+   Host third-party audio plugins (CLAP/VST3).
+** Phase 6: GUI Frontend (PLANNED)
+   Full graphical frontend.
+** Phase 7: Live Coding Power (ONGOING)
+   Strudel-level expressiveness in the scripting DSL.
+
+* Monetization Strategy
+** Phase A: Community Building (now - Phase 3)
+   - *Open source* the full project (MIT or dual MIT/Apache-2.0)
+   - *GitHub Sponsors / Patreon* for early supporters
+   - Build community around the live-coding-meets-tracker niche.
+** Phase B: Open-Core Transition (Phase 4-5)
+   - Core tracker + DSL stays open source forever.
+   - *Paid features* (~$75 license like Renoise):
+     - VST3/CLAP plugin hosting
+     - Advanced effects (convolution reverb, multiband compressor)
+     - Commercial export formats (MP3, AAC)
+     - Multi-output routing
+** Phase C: Ecosystem Revenue (Phase 6+)
+   - Paid sample packs / instrument packs.
+   - Premium DSL script library / marketplace.
 
 * Milestone 1 — ProTracker Parity
   :PROPERTIES:
-  :STATUS: in-progress
+  :STATUS: completed
   :END:
+  Minimum target: feature parity with ProTracker (Amiga MOD tracker).
 
 ** Effect Commands
-   ProTracker has 10 top-level effects + 14 extended (Exy) sub-effects.
-   We implement 9 of the top-level ones. Missing:
-
 *** DONE 5xy — Tone Portamento + Volume Slide
-    Combine effect 3 (portamento-to-note) and A (volume slide) in one column.
-    Param: same nibble split as Axy (upper = slide up, lower = slide down).
-
 *** DONE 6xy — Vibrato + Volume Slide
-    Combine effect 4 (vibrato) and A (volume slide).
-    Continues vibrato from previous row while sliding volume.
-
 *** DONE 7xy — Tremolo
-    Periodic volume modulation (analogous to vibrato but on amplitude).
-    Upper nibble = speed, lower = depth. Same waveform table as vibrato.
-    State needed: tremolo_phase, tremolo_speed, tremolo_depth, tremolo_waveform.
-
 *** DONE 9xx — Sample Offset
-    Start sample playback at offset (xx * 256) frames into the sample.
-    Implemented: Voice.with_position() sets initial position at note-on.
-
-*** DONE Exy — Extended Effects (command 0xE, sub-command in upper param nibble)
-    The E-effects share a single command slot; sub-command is param >> 4.
-
+*** DONE Exy — Extended Effects
 **** DONE E1x — Fine Portamento Up
-     Like 1xx but applied once per row (not per tick). Param = semitones * 16.
-
 **** DONE E2x — Fine Portamento Down
-     Like 2xx but applied once per row.
-
 **** DONE E3x — Glissando Control
-     Toggle whether tone portamento (3xx) snaps to nearest semitone.
-     E30 = smooth, E31 = glissando (semitone steps).
-
 **** DONE E4x — Set Vibrato Waveform
-     0=sine (default), 1=ramp-down, 2=square, 3=random.
-     Waveform table used by 4xy and 6xy.
-
 **** DONE E5x — Set Finetune
-     Override instrument finetune for the current channel on this row.
-     Param range 0–F maps to -8..+7 (ProTracker convention).
-
 **** DONE E6x — Pattern Loop
-     E60 = set loop start point; E6x (x>0) = loop x times back to start.
-     State needed per-channel: loop_start_row, loop_count.
-
 **** DONE E7x — Set Tremolo Waveform
-     Same waveform options as E4x, applies to 7xy tremolo.
-
 **** DONE E9x — Retrigger Note
-     Re-trigger the current sample every x ticks within the row.
-
 **** DONE EAx — Fine Volume Slide Up
-     Like Ax0 but applied once per row.
-
 **** DONE EBx — Fine Volume Slide Down
-     Like A0x but applied once per row.
-
 **** DONE ECx — Note Cut
-     Set volume to 0 after x ticks within the row (sample keeps playing silently).
-
 **** DONE EDx — Note Delay
-     Delay note trigger by x ticks within the row.
-
 **** DONE EEx — Pattern Delay
-     Delay advancing to the next row by x extra row-lengths.
 
 ** Sample Features
-
 *** DONE Loop Points
-    =loop_start=, =loop_end=, =loop_mode= (NoLoop/Forward/PingPong) exist on
-    =Sample=. Mixer render wraps =voice.position= at loop bounds.
-
 *** DONE Sample Finetune
-    =finetune: i8= on =Instrument=. Wired into playback rate in mixer tick.
-    Editable in the instrument editor panel (Tab to Finetune field, +/-).
-
 *** DONE Sample Default Volume
-    =volume: f32= on =Instrument=. Applied as multiplier at note-on.
 
 ** File Format
-
 *** DONE MOD Import
-    Minimal .mod parser implemented in =mod_import.rs=.
-    Maps sample data, instruments, patterns, and arrangement.
-
 *** TODO MOD Export
-    Serialise Song back to .mod (lossy — only ProTracker-compatible features survive).
-    Useful for sharing with other trackers.
 
 * Milestone 2 — Renoise-Level Instrument System
   :PROPERTIES:
   :STATUS: planned
   :END:
-
   This is what separates a toy tracker from a real composition tool.
 
 ** TODO Instrument Envelopes
    Per-instrument ADSR + LFO for volume, pitch, and panning.
-   Applied on top of effect commands (commands take priority, envelope is default).
-   - Volume envelope: shapes amplitude over note duration
-   - Pitch envelope: automatic pitch glide/vibrato without effect columns
-   - Panning envelope: auto-pan effects
-
 ** TODO Multi-Sample Instruments (Keyzone Mapping)
-   One instrument can map different samples to different key ranges and/or
-   velocity layers. E.g.: low notes use a bass sample, high notes use a
-   different recording.
-   Data model: =Instrument= gets =keyzones: Vec<Keyzone>=, each with
-   =note_range=, =velocity_range=, =sample_index=.
-
 ** TODO Sample Slicing
-   Mark slice points on a sample; each slice is addressable as a separate note
-   in the pattern. Beat-chopping workflow. Essential for drum programming.
-
 ** TODO Per-Note Extra Columns (Renoise-style)
-   Alongside Note + Instrument + Effect(s), add optional columns:
-   - Volume column (00–FF, overrides instrument default)
-   - Panning column (00–FF, L–R)
-   - Delay column (00–FF ticks, delays note trigger within the row)
-   These are per-cell, not global effects.
-
 ** TODO Phrases (Sub-Patterns inside Instruments)
-   An instrument can contain mini-patterns ("phrases") that play back when the
-   instrument is triggered. Like Renoise phrases. Enables complex rhythms
-   triggered by a single note.
-
 ** TODO Sample Editor View
-   Waveform display with loop point handles (set via cursor keys).
-   Zoom in/out. Mark loop start/end. Normalize, reverse, fade in/out operations.
-
 ** TODO More Channels
-   Support up to 64 channels (like Renoise). UI adapts with horizontal scroll.
-   Current Vec<> is unbounded; the default and new-project dialog need updating.
-
 ** TODO Configurable Pattern Length
-   Not locked to 64 rows. Per-pattern row count (16–512), like Renoise.
-   Transport must handle variable-length patterns in the arrangement.
-
 ** TODO Undo/Redo Beyond Pattern Snapshots
-   Global undo stack covering instrument edits, arrangement changes, etc.
-   (Pattern-level undo already exists in Editor.)
 
 * Milestone 2.5 — Pattern Editor & Transport Essentials
   :PROPERTIES:
   :STATUS: in-progress
   :END:
 
-  These are blocking for real composition use. Should be done before
-  the Renoise-level instrument system.
-
 ** DONE Better Keybindings for Entering Notes
-FT2/IT piano keyboard layout: =a=C =w=C# =s=D =e=D# =d=E =f=F =t=F# =g=G =y=G# =h=A =u=A# =j=B =k=C+1oct
-
 ** DONE r — Replace-Once Mode
-   Like vim's =r=: press =r=, type one note, cursor stays, mode stays Normal.
-   No persistent insert, no step advance. Useful for fixing individual cells.
-   Implemented: commit e813a24c.
-
 ** DONE Play From Cursor
-   =Enter= (while stopped) starts playback from the current cursor row, not row 0.
-   Decouple play-start position from the edit cursor.
-   Implemented: =transport.play_from(row)= + =App::play_from_cursor()= + =Enter= in PatternEditor (stopped). Commit ea27f43c.
-
 ** DONE Loop Region
-   Set loop start/end rows (=Alt+[= / =Alt+]=).
-   Visual markers in the pattern row gutter: =[= start, =]= end, =¦= interior rows.
-   Transport wraps at loop end back to loop start during playback.
-   Toggle active with =Ctrl+Shift+L=. Footer shows =LOP HH-HH= pill when set.
-
 ** DONE Follow Mode
-   Toggle =f= in Normal mode: edit cursor chases the playhead during playback.
-   Without this, you can't see what's playing while it plays.
-   Implemented: =follow_mode= field on App, wired in =update()= on AdvanceResult::Row.
-   =FOL= pill shown in footer when active.
-
 ** DONE Transpose Selection
-   Shift selected notes by semitone (=Shift+Up= / =Shift+Down=) or octave
-   (=Ctrl+Shift+Up= / =Ctrl+Shift+Down=). Works on visual selection or current cell.
-   Core YTPMV workflow — remapping chops to pitches constantly.
-   Implemented: =transpose_selection(semitones)= on =Editor=. Normal and Visual
-   modes both handled. Five unit tests covering single-cell, selection, empty
-   cells, out-of-range clamping, and undo.
-
 ** DONE Note Cut (^^^) Distinct from Note Off (===)
-   Add =NoteEvent::Cut= variant. Displays as =^^^=. Hard-silences the voice
-   immediately (no envelope release). Currently =NoteEvent::Off= (===) does
-   the same thing because there are no envelopes yet, but the distinction
-   will matter once envelopes land.
-   Also wire =ECx= extended effect (tick-delayed cut) in the mixer render.
-   Key to enter note-cut: =Del= in Insert mode (=Backspace= still deletes cell).
-
-** DONE Note Off Is Not Discoverable
-   Note-off is currently bound to =`= (backtick) in Insert mode. This is
-   not documented anywhere in the UI and differs from every tracker convention
-   (FT2 uses =1=, IT/Renoise use =~= or a dedicated key).
-   Fix: rebind to =~= or =1=, add to help screen and `:tutor`.
-
 ** DONE Per-Pattern Row Count
-   Not locked to the global default. Each =Pattern= stores its own row count
-   (16–512). Transport handles variable-length patterns in the arrangement.
-   Essential for mixing short fills with long sections.
-   =Ctrl+P= opens inline length prompt; =Len:N= shown in footer.
-
 ** DONE Draw Mode
-   Hold =d= + note key to repeat-fill rows while held, or toggle draw mode
-   where cursor auto-advances and repeats the last entered note.
-   Speeds up drum pattern entry dramatically.
-   Implemented: =draw_mode: bool= + =draw_note: Option<NoteEvent>= on App.
-   =D= in Insert mode toggles draw mode. Cursor movement (j/down) when active
-   auto-repeats last placed note. DRW pill shown in footer. Commit 57e92eee.
-
 ** DONE Note Interpolation
-   Select a range → =I= to linearly interpolate volume or pitch between the
-   first and last non-empty cell. Smooth automation without manual hex entry.
-   Implemented: =interpolate_selection()= on =Editor=, wired to =I= in Visual mode.
-
 ** DONE BPM Inline Edit
-   BPM is visible in the status bar but only editable via =:bpm N= command.
-   Add =T= or =Ctrl+B= to open a quick BPM prompt.
-   Bonus: tap-tempo (tap a key N times to set BPM from the interval).
-   Implemented: =Ctrl+B= opens inline BPM prompt (pre-populated with current BPM,
-   Enter applies, Esc cancels). =t= in Normal mode does tap-tempo — records tap
-   timestamps, averages intervals over last 3 seconds, applies BPM after ≥2 taps.
-
 ** DONE :tutor — Interactive Tutorial / Cheat Sheet
-   =:tutor= opens a navigable in-app reference covering:
-   - All keybindings (Normal, Insert, Visual modes)
-   - How to enter notes, note-off, note-cut, effects
-   - How to use the sample browser (including the non-obvious Space/Enter split)
-   - Transport controls and playback shortcuts
-   - Effect command reference (0xy, 9xx, Exy table)
-   Implemented as a full-screen scrollable overlay. j/k scroll, q/Esc close.
-   Piano keyboard layout and all effects documented inline.
-
 ** TODO Sample Browser Overhaul
-   Current browser only reads =sample_dirs= from config
-   (default: =~/.config/riffl/samples=). Needed:
-   - [DONE] =./samples/= relative to the open project file (auto-added if exists)
-   - [DONE] Filesystem root escape — navigate to =/= or =~= and browse freely;
-     =h= navigates up past configured roots; =~= jumps back to the roots list
-   - [DONE] Configured roots remain as "pinned" (★) entries in the root list
-   - [DONE] Favourites / bookmarks: =b= toggles bookmark on selected dir, persists
-     to =config.toml=, bookmarked dirs shown at top of root list with ♥ marker
-   Waveform panel: show waveform for selected file (lazy-load on selection).
-   During Space preview: live playback cursor through waveform, time display.
-   Preview toggle: Space = play/stop (currently Space always restarts).
-   Scrub preview start: Left/Right while previewing to set start offset.
+   - [DONE] ./samples/ relative to project file
+   - [DONE] Filesystem root escape / free browsing
+   - [DONE] Configured roots as ★ pinned entries
+   - [DONE] Bookmarks (b toggles, ♥ marker)
+   - [ ] Waveform panel lazy-load
+   - [ ] Space toggle play/stop preview
 
 * Milestone 3 — Quality-of-Life / Usability
-  :PROPERTIES:
-  :STATUS: planned
-  :END:
-
 ** TODO Live Recording
-   Record notes into the pattern in real-time while playback runs.
-   Keys/MIDI trigger notes that are written to the current row, advancing
-   with the playback cursor.
-
-** TODO Visual Feedback
-   - Per-channel VU meters in the pattern view
-   - Waveform preview in instrument list (2-row oscilloscope already in
-     instrument editor; extend to list view thumbnail)
-   - Spectrum analyser on master output (optional, can be toggled)
-
+** TODO Built-in Samples/Synths
+** TODO Drawing Samples
+** TODO Visual Feedback (VU meters, Oscilloscope)
 ** TODO Pattern Clone / Duplicate / Merge
-   Common pattern operations: duplicate a pattern, merge two patterns,
-   create a variant. Speeds up composition significantly.
 
-* Milestone 4 — Audio Engine Upgrades (Phase 2 from VISION.md)
-  :PROPERTIES:
-  :STATUS: planned
-  :END:
-
+* Milestone 4 — Audio Engine Upgrades
 ** TODO Built-in Synth Voice
-   Subtractive synth per channel (oscillator → filter → ADSR envelope).
-   No sample needed — instrument can be synth-based or sample-based.
-
 ** TODO Insert Effects on Channel Strips
-   Per-channel effect chain: EQ, compressor, delay, reverb.
-   Infrastructure partially exists (PluginChain / PluginSlot).
-
 ** TODO Master Bus Processing
-   Brickwall limiter, master EQ, metering.
+** TODO Built-in DSP Effects (Chorus, Bitcrusher, Distortion, Convolution, Multiband)
 
-** TODO Built-in DSP Effects (Renoise-level)
-   Beyond the basic delay/filter already in the plugin system:
-   - Chorus / flanger
-   - Bitcrusher / sample rate reducer (lo-fi, chiptune-adjacent)
-   - Waveshaper / distortion
-   - Convolution reverb (impulse response based)
-   - Multiband compressor
-   - Parametric EQ
-
-* Milestone 5 — MIDI (Phase 3 from VISION.md)
-  :PROPERTIES:
-  :STATUS: planned
-  :END:
-
-** TODO MIDI Input
-   midir-based. Note-on/off → trigger notes in editor (Insert mode).
-   CC → map to parameters (volume, BPM, etc.) with learn mode.
-
+* Milestone 5 — MIDI
+** TODO MIDI Input (Note-on/off, CC learn)
 ** TODO MIDI Output
-   Send pattern notes as MIDI to external synths/DAWs.
-
 ** TODO MIDI File Import/Export
-   .mid → Pattern (quantised to rows). Pattern → .mid for DAW roundtrip.
 
-* Milestone 6 — Advanced DSL (Phase 7 from VISION.md)
-  :PROPERTIES:
-  :STATUS: planned
-  :END:
-
-** TODO Mini-Notation Parser
-   Strudel/TidalCycles-style: ="bd sd [hh hh] cp"=.
-   Translates to pattern rows at parse time.
-
-** TODO Pattern Combinators
-   =stack=, =cat=, =fast=, =slow=, =rev=, =every=, =sometimes= — usable from Rhai scripts.
-
+* Milestone 6 — Advanced DSL
+** TODO Mini-Notation Parser ("bd sd [hh hh] cp")
+** TODO Pattern Combinators (stack, cat, fast, slow, rev)
 ** TODO Live Eval
-   Modify a running pattern via DSL without stopping playback.
 
-* Milestone 7 — Chip Sound Emulation (Furnace-style, optional future)
-  :PROPERTIES:
-  :STATUS: parked
-  :END:
-
-  Not a priority, but the architecture should not preclude it.
-  Would require a =ChipVoice= variant alongside =SampleVoice= and =SynthVoice=.
-  Candidates: YM2612 (Genesis FM), SN76489 (Game Boy/SMS), NES APU, SID (C64).
-  Each chip has its own effect command vocabulary.
-
+* Milestone 7 — Chip Sound Emulation (Furnace-style, optional)
 * Milestone 8 — Glicol Integration (parked)
-  :PROPERTIES:
-  :STATUS: parked
-  :END:
-
-  Prototype exists in =src/audio/glicol_mixer.rs= (basic sine/noise via
-  =glicol_synth= AudioContext). The goal is to use Glicol's graph-based DSP
-  nodes (Sampler, filters, envelopes) as an alternative voice engine alongside
-  the existing sample mixer.
-
-** TODO Map Instruments to Glicol Sampler Nodes
-   Replace placeholder SinOsc/Noise nodes with =glicol_synth::Sampler= nodes
-   that load actual sample data from =Arc<Sample>=.
-
-** TODO Replace Old Mixer Logic
-   Once Sampler playback is validated, phase out the custom =Voice= renderer
-   and route everything through =GlicolMixer=.
-   Keep =TrackerEffectProcessor= — it is engine-agnostic.
-
-* Milestone 9 — Plugin Hosting (Phase 5 from VISION.md)
-  :PROPERTIES:
-  :STATUS: planned
-  :END:
-
-** TODO CLAP Hosting via clack-host
-** TODO VST3 Hosting via vst3-sys
-** TODO Plugin Parameter Automation
-
-* Milestone 10 — GUI Frontend (Phase 6 from VISION.md)
-  :PROPERTIES:
-  :STATUS: planned
-  :END:
-
-  Framework decision deferred until Phase 5 experience.
-  Candidates: egui, Iced, Tauri.
+* Milestone 9 — Plugin Hosting
+* Milestone 10 — GUI Frontend
