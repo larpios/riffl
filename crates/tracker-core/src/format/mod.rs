@@ -49,7 +49,7 @@ pub fn convert_xmrs_module(mut module: xmrs::module::Module) -> Result<FormatDat
 
                         let mut sample = Sample::new(float_data, 8363, channels, Some(xm_samp.name.clone()));
                         sample.volume = xm_samp.volume;
-                        sample.finetune = (xm_samp.finetune * 100.0) as i32;
+                        sample.finetune = (-xm_samp.finetune * 100.0) as i32;
 
                         match xm_samp.loop_flag {
                             LoopType::No => {}
