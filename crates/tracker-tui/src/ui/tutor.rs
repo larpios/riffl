@@ -374,10 +374,17 @@ fn tutor_content(theme: &Theme) -> Vec<Line<'static>> {
         theme,
     ));
     lines.push(effect_row(
+        "8xx",
+        "bpm",
+        "Set Tempo",
+        "Set playback BPM to xx (00-FF)",
+        theme,
+    ));
+    lines.push(effect_row(
         "Fxx",
-        "val",
-        "Set Speed/BPM",
-        "xx < 20: set ticks-per-row (speed);  xx ≥ 20: set BPM",
+        "tpl",
+        "Set Speed/TPL",
+        "Set ticks-per-line (speed) to xx",
         theme,
     ));
     lines.push(blank());

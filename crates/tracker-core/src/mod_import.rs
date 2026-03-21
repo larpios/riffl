@@ -27,33 +27,44 @@ const DEFAULT_VELOCITY: u8 = 100;
 const _DEFAULT_BPM: f64 = 125.0;
 
 /// Convert MOD speed value to BPM using the ProTracker formula: BPM = 750 / speed
-fn speed_to_bpm(speed: u8) -> f64 {
-    750.0 / speed as f64
-}
+// fn speed_to_bpm(speed: u8) -> f64 {
+//     750.0 / speed as f64
+// }
 
-/// Extract tempo information from MOD patterns by scanning for Fxx (SetSpeed) effects.
-/// Returns (speed, bpm) where speed is the first speed value found (default 6),
-/// and bpm is calculated using the ProTracker formula.
+/// Extract tempo information from MOD patterns by scanning for SetSpeed and SetTempo effects.
+/// Returns (speed, bpm) indicating the first Speed (TPL) and BPM found, defaulting to 6 and 125.0.
 fn extract_tempo_from_patterns(patterns: &[Pattern]) -> (u8, f64) {
     use crate::pattern::effect::EffectType;
-    let default_speed = 6u8;
+    let mut out_speed = 6u8;
+    let mut out_bpm = 125.0;
+
+    // We just want to find the first occurrence of each to set the initial Song tempo.
+    let mut found_speed = false;
+    let mut found_bpm = false;
 
     for pattern in patterns {
         for row_idx in 0..pattern.num_rows() {
             if let Some(row) = pattern.get_row(row_idx) {
                 for cell in row.iter() {
                     if let Some(effect) = cell.effects.first() {
-                        if effect.effect_type() == Some(EffectType::SetSpeed) {
-                            let speed = effect.param.max(1) * 2;
-                            return (speed, speed_to_bpm(speed));
+                        if !found_speed && effect.effect_type() == Some(EffectType::SetSpeed) {
+                            out_speed = effect.param.max(1);
+                            found_speed = true;
+                        }
+                        if !found_bpm && effect.effect_type() == Some(EffectType::SetTempo) {
+                            out_bpm = effect.param as f64;
+                            found_bpm = true;
                         }
                     }
                 }
             }
+            if found_speed && found_bpm {
+                return (out_speed, out_bpm);
+            }
         }
     }
 
-    (default_speed, speed_to_bpm(default_speed))
+    (out_speed, out_bpm)
 }
 
 /// Result of a successful MOD import.
@@ -389,7 +400,7 @@ pub fn import_mod(data: &[u8]) -> Result<ModImportResult, String> {
         arrangement
     };
     song.instruments = instruments;
-    song.speed = speed;
+    song.tpl = speed as u32;
 
     Ok(ModImportResult { song, samples })
 }
@@ -546,6 +557,11 @@ fn decode_effect(cmd: u8, param: u8) -> Option<Effect> {
     // Arpeggio with param 0 is a no-op in ProTracker
     if cmd == 0 && param == 0 {
         return None;
+    }
+    // MOD Fxx effect: if param < 32, it sets tick speed (0xF).
+    // if param >= 32, it sets BPM (0x8 in our engine).
+    if cmd == 0xF && param >= 0x20 {
+        return Some(Effect::new(0x8, param)); // 0x8 is SetTempo
     }
     Some(Effect::new(cmd, param))
 }

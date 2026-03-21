@@ -53,6 +53,7 @@ pub struct CodeEditor {
     pub template_cursor: usize,
     /// Whether the editor is in insert mode.
     pub mode: ModeKind,
+    pub visual_selection: Option<(usize, usize, usize, usize)>,
 }
 
 impl CodeEditor {
@@ -70,6 +71,7 @@ impl CodeEditor {
             show_templates: false,
             template_cursor: 0,
             mode: ModeKind::Normal,
+            visual_selection: None,
         }
     }
 

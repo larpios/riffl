@@ -102,8 +102,8 @@ pub struct Mixer {
     channel_strips: Vec<ChannelStrip>,
     /// Per-channel effect processing state.
     effect_processor: TrackerEffectProcessor,
-    /// Number of ticks per row (Speed).
-    ticks_per_row: u8,
+    /// Number of ticks per line (TPL).
+    tpl: u32,
     /// Pending note triggers (EDx effect).
     pending_notes: Vec<PendingNote>,
     /// Send/return bus system for effects routing.
@@ -160,7 +160,7 @@ impl Mixer {
             output_sample_rate,
             channel_strips,
             effect_processor: TrackerEffectProcessor::new(num_channels, output_sample_rate),
-            ticks_per_row: 6,
+            tpl: 6,
             pending_notes: Vec::new(),
             bus_system,
             preview_sample: None,
@@ -243,8 +243,8 @@ impl Mixer {
                 .process_row(ch, &cell.effects, note_frequency);
 
             for cmd in &cmds {
-                if let TransportCommand::SetSpeed(speed) = cmd {
-                    self.set_speed(*speed);
+                if let TransportCommand::SetTpl(tpl) = cmd {
+                    self.set_tpl(*tpl);
                 }
             }
 
@@ -311,7 +311,7 @@ impl Mixer {
                                 .channel_state(ch)
                                 .map(|s| s.frames_per_row)
                                 .unwrap_or(6000);
-                            let frames_per_tick = frames_per_row / self.ticks_per_row as u32;
+                            let frames_per_tick = frames_per_row / self.tpl;
                             let trigger_frame = delay_tick as u32 * frames_per_tick;
 
                             let offset = self.effect_processor.sample_offset(ch);
@@ -723,12 +723,12 @@ impl Mixer {
         self.bus_system.reset();
     }
 
-    /// Set the ticks per row (speed) for the mixer and its effect processor.
-    pub fn set_speed(&mut self, speed: u8) {
-        self.ticks_per_row = speed.max(1);
+    /// Set the ticks per line (TPL) for the mixer and its effect processor.
+    pub fn set_tpl(&mut self, tpl: u32) {
+        self.tpl = tpl.max(1);
         for ch in 0..self.voices.len() {
             if let Some(state) = self.effect_processor.channel_state_mut(ch) {
-                state.ticks_per_row = self.ticks_per_row;
+                state.ticks_per_row = self.tpl as u8;
             }
         }
     }

@@ -1,7 +1,7 @@
 /// Project save/load functionality for the tracker.
 ///
 /// Serializes and deserializes the Song data model to/from JSON files
-/// with the `.trs` extension. Sample audio data is not embedded; only
+/// with the `.rtm` extension. Sample audio data is not embedded; only
 /// file path references are stored.
 use std::fs;
 use std::path::Path;
@@ -13,7 +13,7 @@ use crate::song::Song;
 /// Save a project (Song) to a JSON file.
 ///
 /// The song is serialized to pretty-printed JSON and written to the specified path.
-/// By convention, riffl project files use the `.trs` extension.
+/// By convention, riffl project files use the `.rtm` extension.
 pub fn save_project(path: &Path, song: &Song) -> Result<()> {
     let json = serde_json::to_string_pretty(song).context("Failed to serialize project")?;
     fs::write(path, json)
@@ -43,7 +43,7 @@ mod tests {
     fn test_save_load_roundtrip_default_song() {
         let song = Song::default();
         let dir = std::env::temp_dir();
-        let path = dir.join("test_roundtrip_default.trs");
+        let path = dir.join("test_roundtrip_default.rtm");
 
         save_project(&path, &song).unwrap();
         let loaded = load_project(&path).unwrap();
@@ -100,7 +100,7 @@ mod tests {
         song.instruments.push(inst2);
 
         let dir = std::env::temp_dir();
-        let path = dir.join("test_roundtrip_notes.trs");
+        let path = dir.join("test_roundtrip_notes.rtm");
 
         save_project(&path, &song).unwrap();
         let loaded = load_project(&path).unwrap();
@@ -155,7 +155,7 @@ mod tests {
         );
 
         let dir = std::env::temp_dir();
-        let path = dir.join("test_roundtrip_data_integrity.trs");
+        let path = dir.join("test_roundtrip_data_integrity.rtm");
 
         save_project(&path, &song).unwrap();
         let loaded = load_project(&path).unwrap();
@@ -168,7 +168,7 @@ mod tests {
 
     #[test]
     fn test_load_missing_file() {
-        let path = Path::new("/tmp/nonexistent_file_12345.trs");
+        let path = Path::new("/tmp/nonexistent_file_12345.rtm");
         let result = load_project(path);
         assert!(result.is_err());
     }
@@ -176,7 +176,7 @@ mod tests {
     #[test]
     fn test_load_corrupt_file() {
         let dir = std::env::temp_dir();
-        let path = dir.join("test_corrupt.trs");
+        let path = dir.join("test_corrupt.rtm");
 
         // Write invalid JSON
         let mut file = fs::File::create(&path).unwrap();
@@ -192,7 +192,7 @@ mod tests {
     #[test]
     fn test_load_empty_file() {
         let dir = std::env::temp_dir();
-        let path = dir.join("test_empty.trs");
+        let path = dir.join("test_empty.rtm");
 
         fs::write(&path, "").unwrap();
 
@@ -206,7 +206,7 @@ mod tests {
     #[test]
     fn test_load_incomplete_json() {
         let dir = std::env::temp_dir();
-        let path = dir.join("test_incomplete.trs");
+        let path = dir.join("test_incomplete.rtm");
 
         // Write JSON that's valid but missing required fields
         fs::write(&path, r#"{"name": "Test"}"#).unwrap();
@@ -221,7 +221,7 @@ mod tests {
     #[test]
     fn test_save_creates_file() {
         let dir = std::env::temp_dir();
-        let path = dir.join("test_save_creates.trs");
+        let path = dir.join("test_save_creates.rtm");
 
         // Ensure file doesn't exist
         let _ = fs::remove_file(&path);
@@ -239,7 +239,7 @@ mod tests {
     #[test]
     fn test_save_overwrites_existing() {
         let dir = std::env::temp_dir();
-        let path = dir.join("test_save_overwrites.trs");
+        let path = dir.join("test_save_overwrites.rtm");
 
         let song1 = Song::new("First", 120.0);
         save_project(&path, &song1).unwrap();
@@ -275,7 +275,7 @@ mod tests {
         }
 
         let dir = std::env::temp_dir();
-        let path = dir.join("test_roundtrip_tracks.trs");
+        let path = dir.join("test_roundtrip_tracks.rtm");
 
         save_project(&path, &song).unwrap();
         let loaded = load_project(&path).unwrap();

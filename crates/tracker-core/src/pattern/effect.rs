@@ -30,6 +30,8 @@ pub enum EffectType {
     VibratoVolumeSlide,
     /// `7xy` — Tremolo: oscillate amplitude with speed x, depth y.
     Tremolo,
+    /// `8xx` — Set tempo (BPM).
+    SetTempo,
     /// `9xx` — Sample Offset: start sample at xx * 256 frames.
     SampleOffset,
     /// `Axy` — Volume slide: x = up speed, y = down speed.
@@ -42,7 +44,7 @@ pub enum EffectType {
     PatternBreak,
     /// `Exy` — Extended effects: sub-command x, param y.
     Extended,
-    /// `Fxx` — Set speed/BPM.
+    /// `Fxx` — Set speed (Ticks Per Line).
     SetSpeed,
 }
 
@@ -60,6 +62,7 @@ impl EffectType {
             0x5 => Some(EffectType::TonePortamentoVolumeSlide),
             0x6 => Some(EffectType::VibratoVolumeSlide),
             0x7 => Some(EffectType::Tremolo),
+            0x8 => Some(EffectType::SetTempo),
             0x9 => Some(EffectType::SampleOffset),
             0xA => Some(EffectType::VolumeSlide),
             0xB => Some(EffectType::PositionJump),
@@ -87,6 +90,7 @@ impl EffectType {
             EffectType::TonePortamentoVolumeSlide => 0x5,
             EffectType::VibratoVolumeSlide => 0x6,
             EffectType::Tremolo => 0x7,
+            EffectType::SetTempo => 0x8,
             EffectType::SampleOffset => 0x9,
             EffectType::VolumeSlide => 0xA,
             EffectType::SetVolume => 0xC,
@@ -108,6 +112,7 @@ impl EffectType {
             EffectType::TonePortamentoVolumeSlide => "Porta+Vol",
             EffectType::VibratoVolumeSlide => "Vib+Vol",
             EffectType::Tremolo => "Tremolo",
+            EffectType::SetTempo => "Set Tempo",
             EffectType::SampleOffset => "Offset",
             EffectType::VolumeSlide => "Vol Slide",
             EffectType::PositionJump => "Pos Jump",
@@ -228,10 +233,14 @@ mod tests {
         assert_eq!(format!("{}", Effect::new(0x2, 0x20)), "220"); // Pitch slide down
         assert_eq!(format!("{}", Effect::new(0x3, 0x08)), "308"); // Portamento
         assert_eq!(format!("{}", Effect::new(0x4, 0x46)), "446"); // Vibrato
+        assert_eq!(format!("{}", Effect::new(0x7, 0x00)), "700"); // Tremolo
+        assert_eq!(format!("{}", Effect::new(0x8, 0x80)), "880"); // Set tempo
+        assert_eq!(format!("{}", Effect::new(0x9, 0x00)), "900"); // Sample offset
         assert_eq!(format!("{}", Effect::new(0xA, 0x0F)), "A0F"); // Volume slide
         assert_eq!(format!("{}", Effect::new(0xB, 0x02)), "B02"); // Position jump
         assert_eq!(format!("{}", Effect::new(0xC, 0x40)), "C40"); // Set volume
         assert_eq!(format!("{}", Effect::new(0xD, 0x00)), "D00"); // Pattern break
+        assert_eq!(format!("{}", Effect::new(0xE, 0x00)), "E00"); // Extended
         assert_eq!(format!("{}", Effect::new(0xF, 0x06)), "F06"); // Set speed
     }
 
@@ -317,8 +326,7 @@ mod tests {
 
     #[test]
     fn test_effect_type_unrecognized_commands() {
-        // Now only 0x8 is unrecognized among standard 0-F
-        assert_eq!(EffectType::from_command(0x8), None);
+        // Now no commands are completely unrecognized? Wait, 0x0-0xF are all covered except maybe some. All 16 are used now.
     }
 
     #[test]
@@ -382,6 +390,7 @@ mod tests {
         assert_eq!(Effect::new(0x5, 0x00).mnemonic(), "Porta+Vol");
         assert_eq!(Effect::new(0x6, 0x00).mnemonic(), "Vib+Vol");
         assert_eq!(Effect::new(0x7, 0x00).mnemonic(), "Tremolo");
+        assert_eq!(Effect::new(0x8, 0x80).mnemonic(), "Set Tempo");
         assert_eq!(Effect::new(0x9, 0x00).mnemonic(), "Offset");
         assert_eq!(Effect::new(0xA, 0x04).mnemonic(), "Vol Slide");
         assert_eq!(Effect::new(0xB, 0x02).mnemonic(), "Pos Jump");
@@ -389,7 +398,6 @@ mod tests {
         assert_eq!(Effect::new(0xD, 0x00).mnemonic(), "Pat Break");
         assert_eq!(Effect::new(0xE, 0x00).mnemonic(), "Extended");
         assert_eq!(Effect::new(0xF, 0x06).mnemonic(), "Set Speed");
-        assert_eq!(Effect::new(0x8, 0x00).mnemonic(), "Unknown");
     }
 
     #[test]
@@ -426,10 +434,10 @@ mod tests {
     fn test_effect_serde_roundtrip() {
         let effects = vec![
             Effect::new(0x0, 0x37),
+            Effect::new(0x8, 0x80),
             Effect::new(0xA, 0x04),
             Effect::new(0xC, 0x40),
             Effect::new(0xF, 0xFF),
-            Effect::new(0x7, 0x00), // unknown command
         ];
         for eff in &effects {
             let json = serde_json::to_string(eff).unwrap();
@@ -446,6 +454,7 @@ mod tests {
             EffectType::PitchSlideDown,
             EffectType::PortamentoToNote,
             EffectType::Vibrato,
+            EffectType::SetTempo,
             EffectType::VolumeSlide,
             EffectType::PositionJump,
             EffectType::SetVolume,
@@ -488,7 +497,6 @@ mod tests {
         // Unknown command types should still display correctly as hex
         assert_eq!(format!("{}", Effect::new(0x5, 0x00)), "500");
         assert_eq!(format!("{}", Effect::new(0x6, 0xAB)), "6AB");
-        assert_eq!(format!("{}", Effect::new(0x8, 0xFF)), "8FF");
         assert_eq!(format!("{}", Effect::new(0xE, 0x12)), "E12");
     }
 
@@ -505,6 +513,7 @@ mod tests {
             (EffectType::TonePortamentoVolumeSlide, 0x12, 0x5),
             (EffectType::VibratoVolumeSlide, 0x21, 0x6),
             (EffectType::Tremolo, 0x48, 0x7),
+            (EffectType::SetTempo, 0x80, 0x8),
             (EffectType::SampleOffset, 0x80, 0x9),
             (EffectType::VolumeSlide, 0x04, 0xA),
             (EffectType::PositionJump, 0x02, 0xB),
