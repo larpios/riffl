@@ -271,7 +271,7 @@ const CHORD_MAPPINGS: &[ChordMapping] = &[
     ChordMapping {
         prefix: 'g',
         completion: 'g',
-        action: Action::GoToRow,
+        action: Action::GoToTop,
     },
 ];
 
@@ -297,7 +297,7 @@ impl KeybindingRegistry {
             .filter(|m| m.prefix == prefix)
             .map(|m| {
                 let key = format!("{}{}", prefix, m.completion);
-                let desc = format!("{} {}", key, m.action.description());
+                let desc = m.action.description().to_string();
                 (key, desc)
             })
             .collect()
@@ -345,6 +345,7 @@ pub enum Action {
 
     // Go to row
     GoToRow,
+    GoToTop,
 
     // Track management
     AddTrack,
@@ -470,6 +471,7 @@ impl ActionMetadata for Action {
             Action::OctaveUp => "Octave Up",
             Action::OctaveDown => "Octave Down",
             Action::GoToRow => "Go to Row",
+            Action::GoToTop => "Go to Top",
             Action::AddTrack => "Add Track",
             Action::DeleteTrack => "Delete Track",
             Action::CloneTrack => "Clone Track",
@@ -557,6 +559,7 @@ impl ActionMetadata for Action {
             Action::OctaveUp => "Increase current octave",
             Action::OctaveDown => "Decrease current octave",
             Action::GoToRow => "Jump to specific row",
+            Action::GoToTop => "Jump to top of pattern",
             Action::AddTrack => "Add a new track",
             Action::DeleteTrack => "Delete current track",
             Action::CloneTrack => "Clone current track",
@@ -629,6 +632,7 @@ impl ActionMetadata for Action {
             | Action::PageUp
             | Action::PageDown
             | Action::GoToRow
+            | Action::GoToTop
             | Action::NextTrack => ActionCategory::Navigation,
 
             Action::EnterInsertMode | Action::EnterNormalMode | Action::EnterVisualMode => {
@@ -1713,16 +1717,20 @@ mod tests {
     fn test_get_which_key_entries_d() {
         let entries = KeybindingRegistry::get_which_key_entries('d');
         assert!(!entries.is_empty());
+        // desc must not duplicate the key — just the action description
         assert!(entries
             .iter()
-            .any(|(key, desc)| key == "dd" && desc.contains("Delete")));
+            .any(|(key, desc)| key == "dd" && desc.contains("Delete") && !desc.contains("dd")));
     }
 
     #[test]
     fn test_get_which_key_entries_g() {
         let entries = KeybindingRegistry::get_which_key_entries('g');
         assert!(!entries.is_empty());
-        assert!(entries.iter().any(|(key, _desc)| key == "gg"));
+        // key must be "gg", desc must say "top" (not "Row") and must not duplicate the key
+        assert!(entries.iter().any(|(key, desc)| {
+            key == "gg" && desc.to_lowercase().contains("top") && !desc.contains("gg")
+        }));
     }
 
     #[test]
