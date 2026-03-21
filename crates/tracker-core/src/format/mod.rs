@@ -35,10 +35,18 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
                 if let Some(xm_samp) = s_opt {
                     if let Some(ref data) = xm_samp.data {
                         let float_data = match data {
-                            SampleDataType::Mono8(v) => v.iter().map(|&s| s as f32 / 128.0).collect(),
-                            SampleDataType::Mono16(v) => v.iter().map(|&s| s as f32 / 32768.0).collect(),
-                            SampleDataType::Stereo8(v) => v.iter().map(|&s| s as f32 / 128.0).collect(),
-                            SampleDataType::Stereo16(v) => v.iter().map(|&s| s as f32 / 32768.0).collect(),
+                            SampleDataType::Mono8(v) => {
+                                v.iter().map(|&s| s as f32 / 128.0).collect()
+                            }
+                            SampleDataType::Mono16(v) => {
+                                v.iter().map(|&s| s as f32 / 32768.0).collect()
+                            }
+                            SampleDataType::Stereo8(v) => {
+                                v.iter().map(|&s| s as f32 / 128.0).collect()
+                            }
+                            SampleDataType::Stereo16(v) => {
+                                v.iter().map(|&s| s as f32 / 32768.0).collect()
+                            }
                             SampleDataType::StereoFloat(v) => v.clone(),
                         };
 
@@ -47,7 +55,8 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
                             _ => 2,
                         };
 
-                        let mut sample = Sample::new(float_data, 8363, channels, Some(xm_samp.name.clone()));
+                        let mut sample =
+                            Sample::new(float_data, 8363, channels, Some(xm_samp.name.clone()));
                         sample.volume = xm_samp.volume;
                         sample.finetune = (-xm_samp.finetune * 100.0) as i32;
 
@@ -71,7 +80,8 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
                             }
                         }
 
-                        let base_note_midi = (48_i32 - xm_samp.relative_pitch as i32).clamp(0, 119) as u8;
+                        let base_note_midi =
+                            (48_i32 - xm_samp.relative_pitch as i32).clamp(0, 119) as u8;
                         sample = sample.with_base_note(base_note_midi);
 
                         let inst_name = if xm_samp.name.is_empty() {
@@ -81,7 +91,7 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
                         } else {
                             format!("{} - {}", xm_inst.name, xm_samp.name)
                         };
-                        
+
                         let mut inst = Instrument::new(inst_name);
                         inst.sample_index = Some(out_samples.len());
                         inst.volume = xm_samp.volume;
@@ -99,6 +109,7 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
 
     song.patterns.clear();
     let num_channels = module.get_num_channels().max(1);
+    let mut last_instrument: Vec<Option<usize>> = vec![None; num_channels];
 
     for xm_pat in &module.pattern {
         let mut pat = crate::pattern::Pattern::new(xm_pat.len().max(1), num_channels);
@@ -111,25 +122,39 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
 
                 let mut cell = Cell::empty();
 
-                if xm_tu.note.is_keyoff() {
-                    cell.note = Some(NoteEvent::Off);
+                let mut note_event = None;
+                if xm_tu.note.is_keyoff() || xm_tu.note.value() == 97 {
+                    note_event = Some(NoteEvent::Off);
                 } else if xm_tu.note == xmrs::pitch::Pitch::Cut {
-                    cell.note = Some(NoteEvent::Cut);
+                    note_event = Some(NoteEvent::Cut);
                 } else if xm_tu.note.is_valid() && !xm_tu.note.is_none() {
                     let val = xm_tu.note.value();
                     let octave = val / 12;
                     if let Some(pitch) = crate::pattern::note::Pitch::from_semitone(val % 12) {
                         let vel = (xm_tu.velocity * 127.0).clamp(0.0, 127.0) as u8;
-                        cell.note = Some(NoteEvent::On(Note::new(pitch, octave, vel, 0)));
+                        note_event = Some(NoteEvent::On(Note::new(pitch, octave, vel, 0)));
                     }
                 }
 
-                if let Some(inst_idx_1based) = xm_tu.instrument {
-                    let i = inst_idx_1based.saturating_sub(1);
+                let mut explicit_inst = false;
+                let resolved_inst = if let Some(inst_idx_1based) = xm_tu.instrument {
+                    explicit_inst = true;
+                    let i = inst_idx_1based.saturating_sub(1) as usize;
+                    last_instrument[c_idx] = Some(i);
+                    Some(i)
+                } else if note_event.is_some() {
+                    last_instrument[c_idx]
+                } else {
+                    None
+                };
+
+                let mut mapped_sample_idx = 0;
+
+                if let Some(i) = resolved_inst {
                     if i < module.instrument.len() {
                         if let InstrumentType::Default(def) = &module.instrument[i].instr_type {
                             let mut sample_idx = 0;
-                            if let Some(NoteEvent::On(n)) = &cell.note {
+                            if let Some(NoteEvent::On(n)) = &note_event {
                                 let midi_pitch = n.octave as usize * 12 + n.pitch.semitone() as usize;
                                 if midi_pitch < 120 {
                                     if let Some(s) = def.sample_for_pitch[midi_pitch] {
@@ -139,11 +164,21 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
                             }
                             if i < inst_to_tracker_inst.len() && sample_idx < inst_to_tracker_inst[i].len() {
                                 if let Some(mapped_idx) = inst_to_tracker_inst[i][sample_idx] {
-                                    cell.instrument = Some(mapped_idx as u8);
+                                    mapped_sample_idx = mapped_idx as u8;
+                                    if explicit_inst {
+                                        cell.instrument = Some(mapped_sample_idx);
+                                    }
                                 }
                             }
                         }
                     }
+                }
+
+                if let Some(NoteEvent::On(mut n)) = note_event {
+                    n.instrument = mapped_sample_idx;
+                    cell.note = Some(NoteEvent::On(n));
+                } else {
+                    cell.note = note_event;
                 }
 
                 pat.set_cell(r_idx, c_idx, cell);
