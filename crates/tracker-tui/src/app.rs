@@ -793,6 +793,18 @@ impl App {
         }
     }
 
+    fn sync_mixer_tracks(&self) {
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.update_tracks(&self.song.tracks);
+        }
+    }
+
+    fn sync_mixer_global_volume(&self) {
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.set_global_volume(self.song.global_volume);
+        }
+    }
+
     /// Adjust BPM by a delta value
     pub fn adjust_bpm(&mut self, delta: f64) {
         self.transport.adjust_bpm(delta);
@@ -1444,10 +1456,13 @@ impl App {
         self.transport.set_tpl(self.song.tpl);
         self.transport.set_lpb(self.song.lpb);
         if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.set_num_channels(self.song.tracks.len());
             mixer.update_tempo(self.song.bpm);
             mixer.set_tpl(self.song.tpl);
+            mixer.set_global_volume(self.song.global_volume);
         }
         self.sync_mixer_instruments();
+        self.sync_mixer_tracks();
         self.transport.stop();
 
         let pattern_idx = self.song.arrangement.first().copied().unwrap_or(0);

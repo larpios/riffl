@@ -746,7 +746,7 @@ pub fn import_xm(data: &[u8]) -> Result<FormatData, String> {
                     loop_end_point: xm_inst.panning_loop_end as usize,
                 });
             }
-
+            inst.fadeout = xm_inst.volume_fadeout;
             sample_map[s_idx] = Some(out_instruments.len());
             out_samples.push(sample);
             out_instruments.push(inst);
