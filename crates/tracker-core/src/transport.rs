@@ -42,6 +42,9 @@ pub struct Transport {
     /// Tempo in beats per minute (clamped to 20-999)
     bpm: f64,
 
+    /// Ticks per row (Speed) (clamped to 1-31)
+    speed: u8,
+
     /// Current row position within the pattern
     current_row: usize,
 
@@ -68,14 +71,25 @@ pub struct Transport {
 
     /// Whether the loop region is enforced during playback
     loop_region_active: bool,
+
+    /// Row index for pattern loop (E60 effect).
+    pattern_loop_row: Option<usize>,
+
+    /// Remaining loop iterations (E6x effect).
+    pattern_loop_count: u8,
+
+    /// Extra rows to delay (EEx effect).
+    pattern_delay: u8,
 }
 
 /// Minimum allowed BPM
 const MIN_BPM: f64 = 20.0;
 /// Maximum allowed BPM
 const MAX_BPM: f64 = 999.0;
-/// Rows per beat (speed 6 in tracker terms = 4 rows per beat)
-const ROWS_PER_BEAT: f64 = 4.0;
+/// Minimum allowed speed
+const MIN_SPEED: u8 = 1;
+/// Maximum allowed speed
+const MAX_SPEED: u8 = 31;
 
 impl Transport {
     /// Create a new Transport with default settings
@@ -83,6 +97,7 @@ impl Transport {
         Self {
             state: TransportState::Stopped,
             bpm: 120.0,
+            speed: 6,
             current_row: 0,
             arrangement_position: 0,
             loop_enabled: true,
@@ -92,6 +107,9 @@ impl Transport {
             arrangement_length: 1,
             loop_region: None,
             loop_region_active: false,
+            pattern_loop_row: None,
+            pattern_loop_count: 0,
+            pattern_delay: 0,
         }
     }
 
@@ -116,6 +134,12 @@ impl Transport {
             // Prevent accumulator from building up too much
             if self.tick_accumulator > seconds_per_row {
                 self.tick_accumulator = 0.0;
+            }
+
+            // Handle Pattern Delay (EEx)
+            if self.pattern_delay > 0 {
+                self.pattern_delay -= 1;
+                return AdvanceResult::None;
             }
 
             let next_row = self.current_row + 1;
@@ -193,6 +217,9 @@ impl Transport {
             TransportState::Stopped => {
                 self.current_row = 0;
                 self.tick_accumulator = 0.0;
+                self.pattern_loop_row = None;
+                self.pattern_loop_count = 0;
+                self.pattern_delay = 0;
                 self.state = TransportState::Playing;
             }
             TransportState::Paused => {
@@ -214,6 +241,9 @@ impl Transport {
         let clamped = start_row.min(self.num_rows.saturating_sub(1));
         self.current_row = clamped;
         self.tick_accumulator = 0.0;
+        self.pattern_loop_row = None;
+        self.pattern_loop_count = 0;
+        self.pattern_delay = 0;
         self.state = TransportState::Playing;
     }
 
@@ -223,6 +253,9 @@ impl Transport {
         self.current_row = 0;
         self.arrangement_position = 0;
         self.tick_accumulator = 0.0;
+        self.pattern_loop_row = None;
+        self.pattern_loop_count = 0;
+        self.pattern_delay = 0;
     }
 
     /// Pause playback at the current position
@@ -257,6 +290,16 @@ impl Transport {
         self.bpm
     }
 
+    /// Set the speed (ticks per row), clamped to the valid range (1-31)
+    pub fn set_speed(&mut self, speed: u8) {
+        self.speed = speed.clamp(MIN_SPEED, MAX_SPEED);
+    }
+
+    /// Get the current speed
+    pub fn speed(&self) -> u8 {
+        self.speed
+    }
+
     /// Get the current transport state
     pub fn state(&self) -> TransportState {
         self.state
@@ -265,6 +308,11 @@ impl Transport {
     /// Get the current row position
     pub fn current_row(&self) -> usize {
         self.current_row
+    }
+
+    /// Set current row
+    pub fn set_row(&mut self, row: usize) {
+        self.current_row = row.min(self.num_rows.saturating_sub(1));
     }
 
     /// Get the current arrangement position (index into the arrangement Vec)
@@ -408,6 +456,45 @@ impl Transport {
         true
     }
 
+    /// Set the pattern loop row (E60).
+    pub fn set_pattern_loop_row(&mut self, row: Option<usize>) {
+        self.pattern_loop_row = row;
+    }
+
+    /// Get the pattern loop row.
+    pub fn pattern_loop_row(&self) -> Option<usize> {
+        self.pattern_loop_row
+    }
+
+    /// Set the pattern loop count (E6x).
+    pub fn set_pattern_loop_count(&mut self, count: u8) {
+        self.pattern_loop_count = count;
+    }
+
+    /// Get the pattern loop count.
+    pub fn pattern_loop_count(&self) -> u8 {
+        self.pattern_loop_count
+    }
+
+    /// Trigger a pattern loop jump if the count > 0.
+    /// Returns the target row if the jump should occur, else None.
+    pub fn trigger_pattern_loop(&mut self) -> Option<usize> {
+        if self.pattern_loop_count > 0 {
+            self.pattern_loop_count -= 1;
+            let target = self.pattern_loop_row.unwrap_or(0);
+            self.current_row = target;
+            self.tick_accumulator = 0.0;
+            Some(target)
+        } else {
+            None
+        }
+    }
+
+    /// Set the pattern delay (EEx).
+    pub fn set_pattern_delay(&mut self, delay: u8) {
+        self.pattern_delay = delay;
+    }
+
     /// Check if the transport is currently playing
     pub fn is_playing(&self) -> bool {
         self.state == TransportState::Playing
@@ -423,10 +510,11 @@ impl Transport {
         self.state == TransportState::Paused
     }
 
-    /// Calculate seconds per row based on current BPM.
-    /// At 120 BPM with 4 rows per beat: 60 / 120 / 4 = 0.125s (125ms)
+    /// Calculate seconds per row based on current BPM and speed.
+    /// Formula: seconds per row = (2.5 / BPM) * Speed
+    /// At 120 BPM, Speed 6: (2.5 / 120) * 6 = 0.125s (125ms)
     fn seconds_per_row(&self) -> f64 {
-        60.0 / self.bpm / ROWS_PER_BEAT
+        (2.5 / self.bpm) * self.speed as f64
     }
 }
 
@@ -500,7 +588,7 @@ mod tests {
         transport.play();
 
         // Advance a few rows
-        let spr = 60.0 / 120.0 / 4.0; // 0.125s at 120 BPM
+        let spr = (2.5 / 120.0) * 6.0; // 0.125s at 120 BPM, speed 6
         transport.advance(spr);
         assert_eq!(transport.current_row(), 1);
 

@@ -49,6 +49,17 @@ impl Voice {
     }
 }
 
+/// Pending note trigger for Note Delay (EDx).
+#[derive(Debug, Clone)]
+struct PendingNote {
+    channel: usize,
+    sample_index: usize,
+    playback_rate: f64,
+    velocity_gain: f32,
+    offset: Option<usize>,
+    trigger_frame: u32,
+}
+
 /// Audio mixer that reads pattern data and produces mixed audio output.
 ///
 /// The mixer holds references to loaded samples and maintains per-channel
@@ -74,6 +85,10 @@ pub struct Mixer {
     channel_strips: Vec<ChannelStrip>,
     /// Per-channel effect processing state.
     effect_processor: TrackerEffectProcessor,
+    /// Number of ticks per row (Speed).
+    ticks_per_row: u8,
+    /// Pending note triggers (EDx effect).
+    pending_notes: Vec<PendingNote>,
     /// Send/return bus system for effects routing.
     bus_system: BusSystem,
     /// One-shot preview sample (e.g. audition from browser). Independent of pattern voices.
@@ -121,6 +136,8 @@ impl Mixer {
             output_sample_rate,
             channel_strips,
             effect_processor: TrackerEffectProcessor::new(num_channels, output_sample_rate),
+            ticks_per_row: 6,
+            pending_notes: Vec::new(),
             bus_system,
             preview_sample: None,
             preview_pos: 0.0,
@@ -173,6 +190,9 @@ impl Mixer {
             None => return Vec::new(),
         };
 
+        // Clear pending notes from previous row
+        self.pending_notes.clear();
+
         let mut transport_commands = Vec::new();
 
         for (ch, cell) in row.iter().enumerate() {
@@ -196,6 +216,13 @@ impl Mixer {
             let cmds = self
                 .effect_processor
                 .process_row(ch, &cell.effects, note_frequency);
+
+            for cmd in &cmds {
+                if let TransportCommand::SetSpeed(speed) = cmd {
+                    self.set_speed(*speed);
+                }
+            }
+
             transport_commands.extend(cmds);
 
             match &cell.note {
@@ -248,12 +275,38 @@ impl Mixer {
                         let velocity_gain =
                             (note.velocity as f32 / 127.0) * inst_vol * sample.volume;
 
-                        let mut voice = Voice::new(instrument_idx, playback_rate, velocity_gain);
-                        if let Some(offset) = self.effect_processor.sample_offset(ch) {
-                            voice = voice.with_position(offset as f64);
-                        }
+                        // Check for Note Delay (EDx)
+                        if let Some(delay_tick) = self
+                            .effect_processor
+                            .channel_state(ch)
+                            .and_then(|s| s.note_delay_tick)
+                        {
+                            let frames_per_row = self
+                                .effect_processor
+                                .channel_state(ch)
+                                .map(|s| s.frames_per_row)
+                                .unwrap_or(6000);
+                            let frames_per_tick = frames_per_row / self.ticks_per_row as u32;
+                            let trigger_frame = delay_tick as u32 * frames_per_tick;
 
-                        self.voices[ch] = Some(voice);
+                            let offset = self.effect_processor.sample_offset(ch);
+
+                            self.pending_notes.push(PendingNote {
+                                channel: ch,
+                                sample_index: instrument_idx,
+                                playback_rate,
+                                velocity_gain,
+                                offset,
+                                trigger_frame,
+                            });
+                        } else {
+                            let mut voice = Voice::new(instrument_idx, playback_rate, velocity_gain);
+                            if let Some(offset) = self.effect_processor.sample_offset(ch) {
+                                voice = voice.with_position(offset as f64);
+                            }
+
+                            self.voices[ch] = Some(voice);
+                        }
                     }
                 }
                 Some(NoteEvent::Off) => {
@@ -305,32 +358,78 @@ impl Mixer {
             let num_buses = bus_system.num_buses();
 
             for (ch, voice_slot) in voices.iter_mut().enumerate() {
-                let voice = match voice_slot {
-                    Some(v) if v.active => v,
-                    _ => continue,
-                };
-
-                let sample = match samples.get(voice.sample_index) {
-                    Some(s) => s,
-                    None => {
-                        voice.active = false;
-                        continue;
-                    }
-                };
-
-                let sample_data = sample.data();
-                let sample_channels = sample.channels() as usize;
-                let sample_frames = sample.frame_count();
-
-                if sample_frames == 0 {
-                    voice.active = false;
-                    continue;
-                }
-
                 let strip = &mut channel_strips[ch];
 
                 for frame in 0..num_frames {
+                    // Check for pending note trigger for this channel at this frame
+                    let mut triggered_now = false;
+                    let current_row_frame = effect_processor.channel_state(ch).unwrap().row_frame_counter;
+                    
+                    if let Some(pos) = self.pending_notes.iter().position(|pn| pn.channel == ch && pn.trigger_frame == current_row_frame) {
+                        let pn = self.pending_notes.remove(pos);
+                        let mut voice = Voice::new(pn.sample_index, pn.playback_rate, pn.velocity_gain);
+                        if let Some(offset) = pn.offset {
+                            voice = voice.with_position(offset as f64);
+                        }
+                        *voice_slot = Some(voice);
+                        triggered_now = true;
+                    }
+
+                    let voice = match voice_slot {
+                        Some(v) if v.active => v,
+                        _ => {
+                            effect_processor.advance_frame(ch);
+                            continue;
+                        }
+                    };
+
                     let render_state = effect_processor.voice_render_state(ch);
+                    let ch_state = effect_processor.channel_state(ch).unwrap();
+                    
+                    // Sub-row timing logic
+                    let frames_per_tick = ch_state.frames_per_row / ch_state.ticks_per_row as u32;
+                    let current_tick = ch_state.row_frame_counter / frames_per_tick;
+                    let tick_frame = ch_state.row_frame_counter % frames_per_tick;
+
+                    // Note Cut (ECx)
+                    if let Some(cut_tick) = ch_state.note_cut_tick {
+                        if current_tick >= cut_tick as u32 {
+                            voice.active = false;
+                        }
+                    }
+
+                    // Retrigger (E9x)
+                    if !triggered_now { // Don't retrigger a note that just started
+                        if let Some(retrigger_interval) = ch_state.retrigger_interval {
+                            if retrigger_interval > 0 && current_tick > 0 && tick_frame == 0 && (current_tick % retrigger_interval as u32 == 0) {
+                                voice.position = 0.0;
+                            }
+                        }
+                    }
+
+                    if !voice.active {
+                        effect_processor.advance_frame(ch);
+                        continue;
+                    }
+
+                    let sample = match samples.get(voice.sample_index) {
+                        Some(s) => s,
+                        None => {
+                            voice.active = false;
+                            effect_processor.advance_frame(ch);
+                            continue;
+                        }
+                    };
+
+                    let sample_data = sample.data();
+                    let sample_channels = sample.channels() as usize;
+                    let sample_frames = sample.frame_count();
+
+                    if sample_frames == 0 {
+                        voice.active = false;
+                        effect_processor.advance_frame(ch);
+                        continue;
+                    }
 
                     let src_frame = voice.position as usize;
 
@@ -339,7 +438,8 @@ impl Mixer {
                         LoopMode::NoLoop => {
                             if src_frame >= sample_frames {
                                 voice.active = false;
-                                break;
+                                effect_processor.advance_frame(ch);
+                                continue;
                             }
                         }
                         LoopMode::Forward => {
@@ -363,7 +463,8 @@ impl Mixer {
                     let src_frame = voice.position as usize;
                     if src_frame >= sample_frames {
                         voice.active = false;
-                        break;
+                        effect_processor.advance_frame(ch);
+                        continue;
                     }
 
                     let effective_rate =
@@ -385,8 +486,6 @@ impl Mixer {
                                     }
                                 }
                                 LoopMode::PingPong => {
-                                    // For ping-pong, if we're at the boundary, the interpolation
-                                    // should go towards the next position based on loop_direction.
                                     if voice.loop_direction > 0.0 {
                                         if next > sample.loop_end {
                                             sample.loop_end
@@ -394,10 +493,6 @@ impl Mixer {
                                             next
                                         }
                                     } else {
-                                        // Reverse direction: frac is effectively the distance from pos_floor.
-                                        // But position is decreasing.
-                                        // Actually, linear interpolation usually assumes pos1 + (pos2-pos1)*frac.
-                                        // If we're moving backwards, frac is the distance from the lower integer.
                                         if pos_floor > sample.loop_start {
                                             pos_floor - 1
                                         } else {
@@ -582,8 +677,19 @@ impl Mixer {
         for voice in &mut self.voices {
             *voice = None;
         }
+        self.pending_notes.clear();
         self.effect_processor.reset_all();
         self.bus_system.reset();
+    }
+
+    /// Set the ticks per row (speed) for the mixer and its effect processor.
+    pub fn set_speed(&mut self, speed: u8) {
+        self.ticks_per_row = speed.max(1);
+        for ch in 0..self.voices.len() {
+            if let Some(state) = self.effect_processor.channel_state_mut(ch) {
+                state.ticks_per_row = self.ticks_per_row;
+            }
+        }
     }
 
     /// Update the effect processor's tempo (frames per row).
@@ -617,7 +723,8 @@ impl Mixer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pattern::note::{Note, Pitch};
+    use crate::pattern::effect::{Effect, EffectType};
+    use crate::pattern::note::{Note, NoteEvent, Pitch};
     use crate::pattern::row::Cell;
 
     /// Create a simple sine wave sample at 440Hz for testing.
@@ -1609,5 +1716,107 @@ mod tests {
         let (pos, total) = mixer.preview_pos_and_total();
         assert_eq!(pos, 4410);
         assert_eq!(total, sample.frame_count());
+    }
+
+    #[test]
+    fn test_mixer_note_delay_edx() {
+        let data = vec![1.0f32; 100];
+        let sample = Arc::new(Sample::new(data, 44100, 1, None));
+        let mut mixer = Mixer::new(vec![sample], Vec::new(), 1, 44100);
+        mixer.update_tempo(120.0); // Sync tempo for 44100Hz
+        let mut pattern = Pattern::new(16, 1);
+
+        // ED3: Delay by 3 ticks. Default 6 ticks per row.
+        // 120 BPM => 125ms per row. 6 ticks => 20.83ms per tick.
+        // 3 ticks => 62.5ms. At 44100Hz => 2756.25 frames.
+        // trigger_frame = 3 * (5512 / 6) = 3 * 918 = 2754.
+        let mut cell = Cell::default();
+        cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
+        cell.effects.push(Effect::from_type(EffectType::Extended, 0xD3));
+        pattern.set_cell(0, 0, cell);
+
+        mixer.tick(0, &pattern);
+
+        // Voice should NOT be active initially
+        assert!(mixer.voices[0].is_none());
+        assert_eq!(mixer.pending_notes.len(), 1);
+
+        // Render some frames (less than 3 ticks)
+        let mut output = vec![0.0f32; 2000 * 2];
+        mixer.render(&mut output);
+        assert!(output.iter().all(|&s| s == 0.0));
+        assert!(mixer.voices[0].is_none());
+
+        // Render more frames to pass the trigger point (2754)
+        let mut output2 = vec![0.0f32; 1000 * 2];
+        mixer.render(&mut output2);
+
+        // Voice should now be active
+        assert!(mixer.voices[0].is_some());
+        // And we should have some audio in output2
+        assert!(output2.iter().any(|&s| s > 0.0));
+    }
+
+    #[test]
+    fn test_mixer_note_cut_ecx() {
+        let data = vec![1.0f32; 10000];
+        let sample = Arc::new(Sample::new(data, 44100, 1, None));
+        let mut mixer = Mixer::new(vec![sample], Vec::new(), 1, 44100);
+        mixer.update_tempo(120.0);
+        let mut pattern = Pattern::new(16, 1);
+
+        // EC2: Cut after 2 ticks. 2 ticks = 2 * 918 = 1836 frames.
+        let mut cell = Cell::default();
+        cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
+        cell.effects.push(Effect::from_type(EffectType::Extended, 0xC2));
+        pattern.set_cell(0, 0, cell);
+
+        mixer.tick(0, &pattern);
+        assert!(mixer.voices[0].is_some());
+
+        // Render 1000 frames (less than 2 ticks)
+        let mut output = vec![0.0f32; 1000 * 2];
+        mixer.render(&mut output);
+        assert!(output.iter().any(|&s| s > 0.0));
+        assert!(mixer.voices[0].as_ref().unwrap().active);
+
+        // Render more frames to pass the cut point (1836)
+        let mut output2 = vec![0.0f32; 2000 * 2];
+        mixer.render(&mut output2);
+
+        // Voice should now be inactive
+        assert!(!mixer.voices[0].as_ref().unwrap().active);
+    }
+
+    #[test]
+    fn test_mixer_retrigger_e9x() {
+        let data = vec![1.0f32; 10000];
+        let sample = Arc::new(Sample::new(data, 44100, 1, None));
+        let mut mixer = Mixer::new(vec![sample], Vec::new(), 1, 44100);
+        mixer.update_tempo(120.0);
+        let mut pattern = Pattern::new(16, 1);
+
+        // E92: Retrigger every 2 ticks. 2 ticks = 1836 frames.
+        let mut cell = Cell::default();
+        cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
+        cell.effects.push(Effect::from_type(EffectType::Extended, 0x92));
+        pattern.set_cell(0, 0, cell);
+
+        mixer.tick(0, &pattern);
+
+        // Advance some frames
+        let mut output = vec![0.0f32; 1000 * 2];
+        mixer.render(&mut output);
+        let pos1 = mixer.voices[0].as_ref().unwrap().position;
+        assert!(pos1 > 0.0);
+
+        // Advance past retrigger point (1836)
+        let mut output2 = vec![0.0f32; 1000 * 2];
+        mixer.render(&mut output2);
+
+        let pos2 = mixer.voices[0].as_ref().unwrap().position;
+        // Position should have been reset at frame 1836 and then advanced for (2000-1836) = 164 frames
+        // So pos2 should be ~164 * rate. Without retrigger, it would be ~2000 * rate.
+        assert!(pos2 < pos1);
     }
 }
