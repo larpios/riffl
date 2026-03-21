@@ -9,7 +9,7 @@ Riffl is an ambitious music tracker blending the structured pattern workflow of 
 - **Genres:** Capable of anything from Dariacore to Breakcore or YTPMVs.
 
 ## 🏗️ Architecture
-- **Single Source of Truth:** [docs/roadmap.org](docs/roadmap.org)
+- **Single Source of Truth:** [docs/ROADMAP.org](docs/ROADMAP.org)
 - **Engine-Agnostic Core:** `crates/tracker-core`
 - **Frontends:** `crates/tracker-tui` (current), `crates/tracker-gui` (planned).
 
