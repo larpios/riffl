@@ -957,7 +957,7 @@ impl App {
 
     /// Rebuild browser roots from configured dirs plus any project-relative samples dir.
     ///
-    /// Call this after changing `project_path` or `configured_sample_dirs`.
+    /// Call this after changing `project_path`, `configured_sample_dirs`, or bookmarks.
     pub(crate) fn refresh_browser_roots(&mut self) {
         // Overlay file browser uses the first configured dir as its starting point
         if let Some(first) = self.configured_sample_dirs.first() {
@@ -965,6 +965,15 @@ impl App {
         }
         self.sample_browser
             .set_roots(self.configured_sample_dirs.clone());
+
+        // Apply persisted bookmarks
+        let bookmarks: Vec<std::path::PathBuf> = self
+            .config
+            .bookmarked_dirs
+            .iter()
+            .map(std::path::PathBuf::from)
+            .collect();
+        self.sample_browser.set_bookmarks(bookmarks);
 
         // Auto-add <project_dir>/samples/ if it exists and isn't already a root
         if let Some(proj_dir) = self
@@ -978,6 +987,44 @@ impl App {
                 self.sample_browser.add_auto_root(samples_dir);
             }
         }
+    }
+
+    /// Toggle a bookmark on the currently selected directory in the sample browser.
+    ///
+    /// If the selection is a directory, it is added to (or removed from) the
+    /// `config.bookmarked_dirs` list, the config is saved, and the browser is
+    /// refreshed so bookmarked dirs appear at the top of the roots list.
+    /// Has no effect if the selected entry is a file or if the list is empty.
+    pub fn toggle_browser_bookmark(&mut self) {
+        let path = match self
+            .sample_browser
+            .selected_path()
+            .filter(|_| self.sample_browser.selected_is_dir())
+        {
+            Some(p) => p.to_path_buf(),
+            None => return,
+        };
+
+        let path_str = path.display().to_string();
+        if let Some(pos) = self
+            .config
+            .bookmarked_dirs
+            .iter()
+            .position(|d| d == &path_str)
+        {
+            self.config.bookmarked_dirs.remove(pos);
+        } else {
+            self.config.bookmarked_dirs.push(path_str);
+        }
+
+        let _ = self.config.save();
+        let bookmarks: Vec<std::path::PathBuf> = self
+            .config
+            .bookmarked_dirs
+            .iter()
+            .map(std::path::PathBuf::from)
+            .collect();
+        self.sample_browser.set_bookmarks(bookmarks);
     }
 
     /// Open the file browser overlay
@@ -2928,6 +2975,77 @@ mod tests {
     }
 
     // --- Browser preview toggle & scrub state ---
+
+    // --- Browser bookmarks ---
+
+    #[test]
+    fn test_toggle_bookmark_adds_dir() {
+        let dir = std::env::temp_dir().join("riffl_bm_add");
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut app = App::new();
+        app.set_sample_dirs(vec![dir.clone()]);
+
+        // Select the first entry (our dir is a root)
+        assert!(app.sample_browser.at_roots());
+        app.sample_browser.select(0);
+
+        assert!(app.config.bookmarked_dirs.is_empty(), "no bookmarks yet");
+        app.toggle_browser_bookmark();
+
+        assert_eq!(app.config.bookmarked_dirs.len(), 1);
+        assert_eq!(
+            app.config.bookmarked_dirs[0],
+            dir.display().to_string()
+        );
+        assert!(app.sample_browser.selected_is_bookmarked());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn test_toggle_bookmark_removes_dir() {
+        let dir = std::env::temp_dir().join("riffl_bm_remove");
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut app = App::new();
+        app.set_sample_dirs(vec![dir.clone()]);
+        app.sample_browser.select(0);
+
+        app.toggle_browser_bookmark(); // add
+        assert_eq!(app.config.bookmarked_dirs.len(), 1);
+
+        app.toggle_browser_bookmark(); // remove
+        assert!(
+            app.config.bookmarked_dirs.is_empty(),
+            "bookmark should be removed on second toggle"
+        );
+        assert!(!app.sample_browser.selected_is_bookmarked());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn test_toggle_bookmark_no_effect_on_file_selection() {
+        let dir = std::env::temp_dir().join("riffl_bm_file");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("kick.wav"), b"x").unwrap();
+
+        let mut app = App::new();
+        app.set_sample_dirs(vec![dir.clone()]);
+        // Enter the root so we see the file
+        app.sample_browser.enter_dir();
+        app.sample_browser.select(0);
+        assert!(app.sample_browser.selected_is_file());
+
+        app.toggle_browser_bookmark();
+        assert!(
+            app.config.bookmarked_dirs.is_empty(),
+            "file selection should not create a bookmark"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn test_browser_preview_inactive_initially() {

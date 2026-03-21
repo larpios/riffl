@@ -258,8 +258,8 @@ FT2/IT piano keyboard layout: =a=C =w=C# =s=D =e=D# =d=E =f=F =t=F# =g=G =y=G# =
    - [DONE] Filesystem root escape — navigate to =/= or =~= and browse freely;
      =h= navigates up past configured roots; =~= jumps back to the roots list
    - [DONE] Configured roots remain as "pinned" (★) entries in the root list
-   Favourites / bookmarks: mark a dir with =b=, persist to config, shown at
-   top of root list.
+   - [DONE] Favourites / bookmarks: =b= toggles bookmark on selected dir, persists
+     to =config.toml=, bookmarked dirs shown at top of root list with ♥ marker
    Waveform panel: show waveform for selected file (lazy-load on selection).
    During Space preview: live playback cursor through waveform, time display.
    Preview toggle: Space = play/stop (currently Space always restarts).

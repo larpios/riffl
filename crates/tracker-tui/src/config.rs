@@ -28,6 +28,11 @@ pub struct Config {
     /// Also overridden/extended by RIFFL_SAMPLE_DIR env var or --sample-dir CLI flag.
     #[serde(default)]
     pub sample_dirs: Vec<String>,
+
+    /// User-bookmarked directories shown at the top of the sample browser roots list.
+    /// Populated when the user presses `b` on a directory in the sample browser.
+    #[serde(default)]
+    pub bookmarked_dirs: Vec<String>,
 }
 
 impl Default for Config {
@@ -38,6 +43,7 @@ impl Default for Config {
             default_pattern_rows: 16,
             default_channels: 4,
             sample_dirs: Vec::new(),
+            bookmarked_dirs: Vec::new(),
         }
     }
 }
@@ -183,6 +189,26 @@ mod tests {
     }
 
     #[test]
+    fn test_bookmarked_dirs_toml_roundtrip() {
+        let cfg = Config {
+            bookmarked_dirs: vec!["/tmp/fav1".to_string(), "/tmp/fav2".to_string()],
+            ..Config::default()
+        };
+        let s = toml::to_string_pretty(&cfg).unwrap();
+        let restored: Config = toml::from_str(&s).unwrap();
+        assert_eq!(
+            restored.bookmarked_dirs,
+            vec!["/tmp/fav1".to_string(), "/tmp/fav2".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_bookmarked_dirs_default_empty() {
+        let cfg = Config::default();
+        assert!(cfg.bookmarked_dirs.is_empty());
+    }
+
+    #[test]
     fn test_config_roundtrip_toml() {
         let cfg = Config {
             theme: "nord".to_string(),
@@ -190,6 +216,7 @@ mod tests {
             default_pattern_rows: 32,
             default_channels: 8,
             sample_dirs: vec!["/tmp/samples".to_string()],
+            bookmarked_dirs: vec![],
         };
         let s = toml::to_string_pretty(&cfg).unwrap();
         let restored: Config = toml::from_str(&s).unwrap();
