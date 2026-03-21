@@ -26,10 +26,7 @@ const DEFAULT_VELOCITY: u8 = 100;
 /// Default BPM when no tempo info is found in the MOD file.
 const _DEFAULT_BPM: f64 = 125.0;
 
-/// Convert MOD speed value to BPM using the ProTracker formula: BPM = 750 / speed
-// fn speed_to_bpm(speed: u8) -> f64 {
-//     750.0 / speed as f64
-// }
+
 
 /// Extract tempo information from MOD patterns by scanning for SetSpeed and SetTempo effects.
 /// Returns (speed, bpm) indicating the first Speed (TPL) and BPM found, defaulting to 6 and 125.0.

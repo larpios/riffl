@@ -15,7 +15,7 @@ pub mod protracker;
 pub mod s3m;
 pub mod xm;
 
-pub fn convert_xmrs_module(mut module: xmrs::module::Module) -> Result<FormatData, String> {
+pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, String> {
     use xmrs::instrument::InstrumentType;
     use xmrs::sample::{LoopType, SampleDataType};
 
@@ -33,8 +33,8 @@ pub fn convert_xmrs_module(mut module: xmrs::module::Module) -> Result<FormatDat
             sample_map.resize(def.sample.len(), None);
             for (s_idx, s_opt) in def.sample.iter().enumerate() {
                 if let Some(xm_samp) = s_opt {
-                    if xm_samp.data.is_some() {
-                        let float_data = match xm_samp.data.as_ref().unwrap() {
+                    if let Some(ref data) = xm_samp.data {
+                        let float_data = match data {
                             SampleDataType::Mono8(v) => v.iter().map(|&s| s as f32 / 128.0).collect(),
                             SampleDataType::Mono16(v) => v.iter().map(|&s| s as f32 / 32768.0).collect(),
                             SampleDataType::Stereo8(v) => v.iter().map(|&s| s as f32 / 128.0).collect(),
@@ -42,7 +42,7 @@ pub fn convert_xmrs_module(mut module: xmrs::module::Module) -> Result<FormatDat
                             SampleDataType::StereoFloat(v) => v.clone(),
                         };
 
-                        let channels = match xm_samp.data.as_ref().unwrap() {
+                        let channels = match data {
                             SampleDataType::Mono8(_) | SampleDataType::Mono16(_) => 1,
                             _ => 2,
                         };
@@ -125,7 +125,7 @@ pub fn convert_xmrs_module(mut module: xmrs::module::Module) -> Result<FormatDat
                 }
 
                 if let Some(inst_idx_1based) = xm_tu.instrument {
-                    let i = inst_idx_1based.saturating_sub(1) as usize;
+                    let i = inst_idx_1based.saturating_sub(1);
                     if i < module.instrument.len() {
                         if let InstrumentType::Default(def) = &module.instrument[i].instr_type {
                             let mut sample_idx = 0;

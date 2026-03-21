@@ -350,10 +350,17 @@ impl TrackerEffectProcessor {
     /// Create a new effect processor for the given number of channels.
     pub fn new(num_channels: usize, sample_rate: u32) -> Self {
         Self {
-            channels: (0..num_channels)
-                .map(|_| ChannelEffectState::default())
-                .collect(),
+            channels: vec![ChannelEffectState::default(); num_channels],
             sample_rate,
+        }
+    }
+
+    /// Resize the per-channel vector dynamically when loading new modules.
+    pub fn resize_channels(&mut self, num_channels: usize) {
+        if num_channels > self.channels.len() {
+            self.channels.resize(num_channels, ChannelEffectState::default());
+        } else {
+            self.channels.truncate(num_channels);
         }
     }
 

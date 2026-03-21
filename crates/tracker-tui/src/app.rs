@@ -234,7 +234,7 @@ impl App {
         let mut song = Song::new("Untitled", 125.0);
 
         // Create transport synced to song BPM and pattern size
-        let config = Config::default(); // Initialize config here to use its sample_rate
+        let _config = Config::default(); // Initialize config here to use its sample_rate
         let mut transport = Transport::new();
         transport.set_playback_mode(tracker_core::transport::PlaybackMode::Pattern);
         transport.set_loop_enabled(true);
@@ -1456,11 +1456,25 @@ impl App {
         } else {
             tracker_core::pattern::Pattern::default()
         };
+
         self.editor = crate::editor::Editor::new(pattern);
+        self.sync_mixer_channels();
+        
         self.arrangement_view = crate::ui::arrangement::ArrangementView::new();
         self.is_dirty = false;
 
         Ok(())
+    }
+
+    /// Synchronize the number of channels inside the audio mixer with the current pattern.
+    pub fn sync_mixer_channels(&mut self) {
+        let num_channels = self.editor.pattern().num_channels();
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.set_num_channels(num_channels);
+        }
+        if let Ok(mut gm) = self.glicol_mixer.lock() {
+            gm.set_num_channels(num_channels);
+        }
     }
 
     /// Open the export dialog.

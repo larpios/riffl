@@ -170,6 +170,37 @@ impl Mixer {
         }
     }
 
+    /// Dynamically adjust the operational channel count.
+    /// Resizes voices, mixer channel strips, VU meters, and internal effect processors.
+    pub fn set_num_channels(&mut self, num_channels: usize) {
+        if num_channels > self.voices.len() {
+            // pad out more tracks to match requested configuration
+            let sample_rate = self.output_sample_rate as f32;
+            let num_buses = self.bus_system.num_buses();
+            for _ in self.voices.len()..num_channels {
+                self.voices.push(None);
+                
+                let mut strip = ChannelStrip::new();
+                strip.set_sample_rate(sample_rate);
+                strip.ensure_send_levels(num_buses);
+                self.channel_strips.push(strip);
+                
+                self.channel_levels.push((
+                    std::sync::atomic::AtomicU32::new(0),
+                    std::sync::atomic::AtomicU32::new(0)
+                ));
+            }
+        } else {
+            // trim tracks if shrinking
+            self.voices.truncate(num_channels);
+            self.channel_strips.truncate(num_channels);
+            self.channel_levels.truncate(num_channels);
+        }
+        
+        // Push the changes down to the effect processor as well
+        self.effect_processor.resize_channels(num_channels);
+    }
+
     /// Update per-channel mixing state from track metadata.
     ///
     /// This syncs the mixer's internal mixing state with the track

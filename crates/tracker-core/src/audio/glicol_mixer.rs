@@ -40,6 +40,22 @@ impl GlicolMixer {
         }
     }
 
+    pub fn set_num_channels(&mut self, num_channels: usize) {
+        use glicol_synth::oscillator::SinOsc;
+        if num_channels > self.num_channels {
+            for _ in self.num_channels..num_channels {
+                let node = self.context.add_mono_node(SinOsc::new());
+                let dest = self.context.destination;
+                self.context.connect(node, dest);
+                self.context.send_msg(node, Message::SetToNumber(0, 0.0));
+                self.track_nodes.push(node);
+            }
+        } else {
+            self.track_nodes.truncate(num_channels);
+        }
+        self.num_channels = num_channels;
+    }
+
     pub fn render(&mut self, output: &mut [f32]) {
         for frame in output.chunks_exact_mut(2) {
             if self.buf_pos >= self.left_buf.len() {
