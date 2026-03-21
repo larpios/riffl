@@ -28,6 +28,17 @@ use input::keybindings::{map_key_to_action, Action};
 const TICK_RATE: Duration = Duration::from_millis(16);
 
 fn main() -> Result<()> {
+    // Check for --dump-config before doing any terminal setup
+    if std::env::args().any(|arg| arg == "--dump-config") {
+        let config = crate::config::Config::load();
+        if let Ok(toml_str) = toml::to_string_pretty(&config) {
+            println!("{}", toml_str);
+        } else {
+            eprintln!("Failed to serialize config to TOML");
+        }
+        return Ok(());
+    }
+
     // Set up panic hook to restore terminal before panicking
     let original_hook = panic::take_hook();
     panic::set_hook(Box::new(move |panic_info| {
@@ -1089,13 +1100,10 @@ fn handle_code_editor_key(app: &mut App, key: KeyEvent) {
                 }
             }
             ModeKind::Visual => {
-                match key.code {
-                    // Escape: exit visual mode (back to normal, don't leave the view)
-                    KeyCode::Esc => {
-                        app.code_editor.mode = ModeKind::Normal;
-                        return;
-                    }
-                    _ => {}
+                // Escape: exit visual mode (back to normal, don't leave the view)
+                if key.code == KeyCode::Esc {
+                    app.code_editor.mode = ModeKind::Normal;
+                    return;
                 }
             }
         }

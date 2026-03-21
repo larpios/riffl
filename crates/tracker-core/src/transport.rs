@@ -12,7 +12,7 @@ pub enum TransportState {
 }
 
 /// Playback mode: single pattern loop or full song arrangement
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum PlaybackMode {
     /// Loop the current pattern only
     Pattern,

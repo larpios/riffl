@@ -99,6 +99,11 @@ pub struct ChannelEffectState {
     /// Sample playback offset in frames (9xx effect).
     pub sample_offset: Option<usize>,
 
+    // --- Panning ---
+    /// Current effect-controlled panning position (0.0 = left, 0.5 = centre, 1.0 = right).
+    /// `None` means no panning override from effects; the channel strip pan is used instead.
+    pub panning_override: Option<f32>,
+
     // --- Volume ---
     /// Current effect-controlled volume (0.0 - 1.0).
     /// `None` means no volume override from effects.
@@ -133,6 +138,38 @@ pub struct ChannelEffectState {
     pub frames_per_row: u32,
     /// Number of ticks per row (default 6).
     pub ticks_per_row: u8,
+
+    // --- Advanced XM/IT Effects ---
+    /// Base channel volume set by Mxx (0.0 - 1.0).
+    pub channel_volume: f32,
+    /// Channel volume slide up speed.
+    pub channel_volume_slide_up: u8,
+    /// Channel volume slide down speed.
+    pub channel_volume_slide_down: u8,
+
+    /// Panning slide right speed.
+    pub panning_slide_right: u8,
+    /// Panning slide left speed.
+    pub panning_slide_left: u8,
+
+    /// Envelope position override in ticks (Lxx). Consumed by Mixer.
+    pub envelope_position_override: Option<usize>,
+
+    /// Tremor on-time (in ticks).
+    pub tremor_on: u8,
+    /// Tremor off-time (in ticks).
+    pub tremor_off: u8,
+    /// Tremor active state.
+    pub tremor_active: bool,
+
+    /// Panbrello phase.
+    pub panbrello_phase: f64,
+    /// Panbrello speed.
+    pub panbrello_speed: u8,
+    /// Panbrello depth.
+    pub panbrello_depth: u8,
+    /// Panbrello active state.
+    pub panbrello_active: bool,
 }
 
 impl Default for ChannelEffectState {
@@ -157,6 +194,7 @@ impl Default for ChannelEffectState {
             tremolo_active: false,
             tremolo_waveform: 0,
             sample_offset: None,
+            panning_override: None,
             volume_override: None,
             volume_slide_up: 0,
             volume_slide_down: 0,
@@ -169,6 +207,19 @@ impl Default for ChannelEffectState {
             row_frame_counter: 0,
             frames_per_row: 6000, // ~125ms at 48kHz (120 BPM default)
             ticks_per_row: 6,
+            channel_volume: 1.0,
+            channel_volume_slide_up: 0,
+            channel_volume_slide_down: 0,
+            panning_slide_right: 0,
+            panning_slide_left: 0,
+            envelope_position_override: None,
+            tremor_on: 0,
+            tremor_off: 0,
+            tremor_active: false,
+            panbrello_phase: 0.0,
+            panbrello_speed: 0,
+            panbrello_depth: 0,
+            panbrello_active: false,
         }
     }
 }
@@ -193,10 +244,17 @@ impl ChannelEffectState {
         self.volume_slide_up = 0;
         self.volume_slide_down = 0;
         self.sample_offset = None;
+        self.channel_volume_slide_up = 0;
+        self.channel_volume_slide_down = 0;
+        self.panning_slide_right = 0;
+        self.panning_slide_left = 0;
         self.finetune_override = None;
         self.retrigger_interval = None;
         self.note_cut_tick = None;
         self.note_delay_tick = None;
+        self.envelope_position_override = None;
+        self.tremor_active = false;
+        self.panbrello_active = false;
         self.row_frame_counter = 0;
     }
 
@@ -328,9 +386,43 @@ impl ChannelEffectState {
         if self.volume_override.is_none() && !self.tremolo_active {
             return None;
         }
-        let base_vol = self.volume_override.unwrap_or(1.0);
+        let mut base_vol = self.volume_override.unwrap_or(1.0);
         let tremolo = self.tremolo_amplitude_modulation();
-        Some((base_vol * tremolo).clamp(0.0, 2.0))
+
+        if self.tremor_active {
+            let total_ticks = (self.tremor_on + self.tremor_off) as u32;
+            if total_ticks > 0 {
+                let ticks_per_row = self.ticks_per_row.max(1) as u32;
+                let frames_per_tick = self.frames_per_row.max(1) / ticks_per_row;
+                let current_tick = self.row_frame_counter / frames_per_tick.max(1);
+                if current_tick % total_ticks >= self.tremor_on as u32 {
+                    base_vol = 0.0;
+                }
+            }
+        }
+
+        Some((base_vol * tremolo * self.channel_volume).clamp(0.0, 2.0))
+    }
+
+    /// Advance portamento frequency smoothly.
+    pub fn advance_portamento(&mut self) {
+        if let (Some(target), Some(freq)) = (self.portamento_target, self.portamento_freq) {
+            if self.portamento_speed <= 0.0 || (freq - target).abs() < 0.001 {
+                self.portamento_freq = Some(target);
+                return;
+            }
+
+            let semitones_per_frame = self.portamento_speed / self.frames_per_row as f64;
+            let ratio = 2.0_f64.powf(semitones_per_frame / 12.0);
+
+            let new_freq = if freq < target {
+                (freq * ratio).min(target)
+            } else {
+                (freq / ratio).max(target)
+            };
+
+            self.portamento_freq = Some(new_freq);
+        }
     }
 }
 
@@ -344,6 +436,9 @@ pub struct TrackerEffectProcessor {
     channels: Vec<ChannelEffectState>,
     /// Output sample rate (for timing calculations).
     sample_rate: u32,
+    pub global_volume: f32,
+    pub global_volume_slide_up: u8,
+    pub global_volume_slide_down: u8,
 }
 
 impl TrackerEffectProcessor {
@@ -352,13 +447,17 @@ impl TrackerEffectProcessor {
         Self {
             channels: vec![ChannelEffectState::default(); num_channels],
             sample_rate,
+            global_volume: 1.0,
+            global_volume_slide_up: 0,
+            global_volume_slide_down: 0,
         }
     }
 
     /// Resize the per-channel vector dynamically when loading new modules.
     pub fn resize_channels(&mut self, num_channels: usize) {
         if num_channels > self.channels.len() {
-            self.channels.resize(num_channels, ChannelEffectState::default());
+            self.channels
+                .resize(num_channels, ChannelEffectState::default());
         } else {
             self.channels.truncate(num_channels);
         }
@@ -388,7 +487,8 @@ impl TrackerEffectProcessor {
             let has_tone_porta = effects.iter().any(|e| {
                 matches!(
                     e.effect_type(),
-                    Some(EffectType::PortamentoToNote) | Some(EffectType::TonePortamentoVolumeSlide)
+                    Some(EffectType::PortamentoToNote)
+                        | Some(EffectType::TonePortamentoVolumeSlide)
                 )
             });
 
@@ -594,17 +694,64 @@ impl TrackerEffectProcessor {
                     }
                 }
 
-                EffectType::SetTempo => {
-                    if effect.param > 0 {
-                        commands.push(TransportCommand::SetBpm(effect.param as f64));
-                    }
+                EffectType::SetPanning => {
+                    // param 0x00=full left, 0x80=centre, 0xFF=full right
+                    state.panning_override = Some(effect.param as f32 / 255.0);
                 }
 
                 EffectType::SetSpeed => {
-                    if effect.param > 0 {
+                    if effect.param >= 32 {
+                        // Values 0x20–0xFF set BPM
+                        commands.push(TransportCommand::SetBpm(effect.param as f64));
+                    } else if effect.param > 0 {
+                        // Values 0x01–0x1F set ticks per line
                         commands.push(TransportCommand::SetTpl(effect.param as u32));
                     }
                 }
+
+                EffectType::SetGlobalVolume => {
+                    self.global_volume = (effect.param as f32 / 64.0).clamp(0.0, 1.0);
+                }
+                EffectType::GlobalVolumeSlide => {
+                    self.global_volume_slide_up = effect.param_x();
+                    self.global_volume_slide_down = effect.param_y();
+                }
+                EffectType::PanningSlide => {
+                    state.panning_slide_right = effect.param_x();
+                    state.panning_slide_left = effect.param_y();
+                }
+                EffectType::ChannelVolume => {
+                    state.channel_volume = (effect.param as f32 / 64.0).clamp(0.0, 1.0);
+                }
+                EffectType::ChannelVolumeSlide => {
+                    state.channel_volume_slide_up = effect.param_x();
+                    state.channel_volume_slide_down = effect.param_y();
+                }
+                EffectType::Tremor => {
+                    state.tremor_active = true;
+                    if effect.param_x() > 0 {
+                        state.tremor_on = effect.param_x();
+                    }
+                    if effect.param_y() > 0 {
+                        state.tremor_off = effect.param_y();
+                    }
+                }
+                EffectType::RetrigNoteVolSlide => {
+                    state.retrigger_interval = Some(effect.param_y());
+                }
+                EffectType::SetEnvelopePosition => {
+                    state.envelope_position_override = Some(effect.param as usize);
+                }
+                EffectType::Panbrello => {
+                    state.panbrello_active = true;
+                    if effect.param_x() > 0 {
+                        state.panbrello_speed = effect.param_x();
+                    }
+                    if effect.param_y() > 0 {
+                        state.panbrello_depth = effect.param_y();
+                    }
+                }
+                EffectType::MidiMacro => {}
             }
         }
 
@@ -620,6 +767,7 @@ impl TrackerEffectProcessor {
             state.row_frame_counter += 1;
             state.advance_vibrato(self.sample_rate);
             state.advance_tremolo(self.sample_rate);
+            state.advance_portamento();
 
             // Advance volume slides smoothly across the row
             if state.volume_slide_up > 0 || state.volume_slide_down > 0 {
@@ -631,6 +779,36 @@ impl TrackerEffectProcessor {
                 let delta_per_frame = delta_per_row / state.frames_per_row as f32;
                 state.volume_override = Some((current_vol + delta_per_frame).clamp(0.0, 2.0));
             }
+
+            // Channel Volume slides
+            if state.channel_volume_slide_up > 0 || state.channel_volume_slide_down > 0 {
+                let delta_per_row = (state.channel_volume_slide_up as f32
+                    - state.channel_volume_slide_down as f32)
+                    / 64.0;
+                let delta_per_frame = delta_per_row / state.frames_per_row as f32;
+                state.channel_volume = (state.channel_volume + delta_per_frame).clamp(0.0, 1.0);
+            }
+
+            // Panning slides
+            if state.panning_slide_right > 0 || state.panning_slide_left > 0 {
+                let current_pan = state.panning_override.unwrap_or(0.5);
+                let delta_per_row =
+                    (state.panning_slide_right as f32 - state.panning_slide_left as f32) / 255.0;
+                let delta_per_frame = delta_per_row / state.frames_per_row as f32;
+                state.panning_override = Some((current_pan + delta_per_frame).clamp(0.0, 1.0));
+            }
+        }
+    }
+
+    /// Advance global frame-level modulations.
+    pub fn advance_global_frame(&mut self) {
+        if self.global_volume_slide_up > 0 || self.global_volume_slide_down > 0 {
+            // Assuming 6000 frames per row for global slides if unknown, but better approx
+            // is tempo_bpm. Since we don't have frames_per_row globally, we use a default approx.
+            let delta_per_row =
+                (self.global_volume_slide_up as f32 - self.global_volume_slide_down as f32) / 64.0;
+            let delta_per_frame = delta_per_row / 6000.0;
+            self.global_volume = (self.global_volume + delta_per_frame).clamp(0.0, 1.0);
         }
     }
 
@@ -655,6 +833,11 @@ impl TrackerEffectProcessor {
     /// Get the finetune override for a channel (from E5x effect).
     pub fn finetune_override(&self, channel: usize) -> Option<i8> {
         self.channels.get(channel).and_then(|s| s.finetune_override)
+    }
+
+    /// Get the panning override for a channel (from 8xx effect), as 0.0–1.0.
+    pub fn channel_panning(&self, channel: usize) -> Option<f32> {
+        self.channels.get(channel).and_then(|s| s.panning_override)
     }
 
     /// Get the effective volume override for a channel (from Cxx or Axy effects).
@@ -1265,7 +1448,8 @@ mod tests {
     #[test]
     fn test_process_row_set_bpm() {
         let mut proc = TrackerEffectProcessor::new(4, 48000);
-        let effects = vec![Effect::from_type(EffectType::SetTempo, 0x80)]; // BPM = 128
+        // SetSpeed with param >= 32 sets BPM
+        let effects = vec![Effect::from_type(EffectType::SetSpeed, 0x80)]; // BPM = 128
         let cmds = proc.process_row(0, &effects, None);
 
         assert_eq!(cmds.len(), 1);
@@ -1436,15 +1620,15 @@ mod tests {
     fn test_set_bpm_boundary() {
         let mut proc = TrackerEffectProcessor::new(4, 48000);
 
-        // F20 = BPM 32 (minimum BPM-range value)
-        let cmds = proc.process_row(0, &[Effect::from_type(EffectType::SetTempo, 0x20)], None);
+        // 0x20 (32) = BPM 32 (minimum BPM-range value for SetSpeed)
+        let cmds = proc.process_row(0, &[Effect::from_type(EffectType::SetSpeed, 0x20)], None);
         assert_eq!(cmds, vec![TransportCommand::SetBpm(32.0)]);
 
-        // FFF = BPM 255 (maximum)
-        let cmds = proc.process_row(0, &[Effect::from_type(EffectType::SetTempo, 0xFF)], None);
+        // 0xFF = BPM 255 (maximum)
+        let cmds = proc.process_row(0, &[Effect::from_type(EffectType::SetSpeed, 0xFF)], None);
         assert_eq!(cmds, vec![TransportCommand::SetBpm(255.0)]);
 
-        // F1F = speed 31, not BPM (just below boundary)
+        // 0x1F (31) = speed 31, not BPM (just below boundary)
         let cmds = proc.process_row(0, &[Effect::from_type(EffectType::SetSpeed, 0x1F)], None);
         assert_eq!(cmds, vec![TransportCommand::SetTpl(31)]);
     }

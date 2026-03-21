@@ -7,6 +7,96 @@ use serde::{Deserialize, Serialize};
 
 use crate::pattern::{Note, Pattern, Pitch, Track};
 
+/// A point in an envelope.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EnvelopePoint {
+    /// Frame or tick number where this point occurs.
+    pub frame: u16,
+    /// Envelope value at this point. Typically 0.0 to 1.0 for volume/panning, or -1.0 to 1.0 for pitch.
+    pub value: f32,
+}
+
+/// An envelope describing how a parameter changes over time.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct Envelope {
+    /// Ordered list of points forming the envelope.
+    pub points: Vec<EnvelopePoint>,
+    /// Whether the envelope is enabled.
+    pub enabled: bool,
+    /// Sustain point index (loop while key is held).
+    pub sustain_enabled: bool,
+    pub sustain_start_point: usize,
+    pub sustain_end_point: usize,
+    /// Loop segment (loop while key is held or after if no sustain exists).
+    pub loop_enabled: bool,
+    pub loop_start_point: usize,
+    pub loop_end_point: usize,
+}
+
+impl Envelope {
+    /// Evaluates the envelope value at the given tick, handling sustain and loop points.
+    /// Returns a tuple of `(value, next_tick)`.
+    pub fn evaluate(&self, tick: usize, key_on: bool) -> (f32, usize) {
+        if !self.enabled || self.points.is_empty() {
+            return (1.0, tick + 1);
+        }
+
+        // Calculate next tick based on loop points
+        let mut next_tick = tick + 1;
+
+        if self.sustain_enabled && key_on {
+            let sus_start = self
+                .points
+                .get(self.sustain_start_point)
+                .map(|p| p.frame)
+                .unwrap_or(0);
+            let sus_end = self
+                .points
+                .get(self.sustain_end_point)
+                .map(|p| p.frame)
+                .unwrap_or(0);
+            if next_tick > sus_end as usize {
+                next_tick = sus_start as usize;
+            }
+        } else if self.loop_enabled {
+            let loop_start = self
+                .points
+                .get(self.loop_start_point)
+                .map(|p| p.frame)
+                .unwrap_or(0);
+            let loop_end = self
+                .points
+                .get(self.loop_end_point)
+                .map(|p| p.frame)
+                .unwrap_or(0);
+            if next_tick > loop_end as usize {
+                next_tick = loop_start as usize;
+            }
+        }
+
+        // Clamp to end
+        let last_point = self.points.last().unwrap();
+        if tick >= last_point.frame as usize {
+            return (last_point.value, next_tick.min(tick)); // stick to the last frame
+        }
+
+        // Find the segment we are in
+        let mut value = 0.0;
+        for i in 0..self.points.len() - 1 {
+            let p1 = &self.points[i];
+            let p2 = &self.points[i + 1];
+            if tick >= p1.frame as usize && tick < p2.frame as usize {
+                let range = (p2.frame - p1.frame) as f32;
+                let fraction = (tick - p1.frame as usize) as f32 / range;
+                value = p1.value + (p2.value - p1.value) * fraction;
+                break;
+            }
+        }
+
+        (value, next_tick)
+    }
+}
+
 /// An instrument definition linking a name to a sample.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Instrument {
@@ -23,6 +113,12 @@ pub struct Instrument {
     /// Finetune adjustment (-8 to +7).
     /// Each unit is 1/8th of a semitone (12.5 cents).
     pub finetune: i8,
+    /// Volume envelope, if any.
+    pub volume_envelope: Option<Envelope>,
+    /// Panning envelope, if any.
+    pub panning_envelope: Option<Envelope>,
+    /// Pitch envelope, if any.
+    pub pitch_envelope: Option<Envelope>,
 }
 
 impl Instrument {
@@ -35,6 +131,9 @@ impl Instrument {
             base_note: Note::simple(Pitch::C, 4),
             volume: 1.0,
             finetune: 0,
+            volume_envelope: None,
+            panning_envelope: None,
+            pitch_envelope: None,
         }
     }
 

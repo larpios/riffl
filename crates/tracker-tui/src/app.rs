@@ -234,10 +234,10 @@ impl App {
         let mut song = Song::new("Untitled", 125.0);
 
         // Create transport synced to song BPM and pattern size
-        let _config = Config::default(); // Initialize config here to use its sample_rate
+        let config = Config::load();
         let mut transport = Transport::new();
-        transport.set_playback_mode(tracker_core::transport::PlaybackMode::Pattern);
-        transport.set_loop_enabled(true);
+        transport.set_playback_mode(config.default_playback_mode);
+        transport.set_loop_enabled(config.default_loop_enabled);
         transport.set_num_rows(pattern.num_rows());
         transport.set_bpm(song.bpm);
         // Sync mixer effect processor tempo with the song BPM
@@ -1459,7 +1459,7 @@ impl App {
 
         self.editor = crate::editor::Editor::new(pattern);
         self.sync_mixer_channels();
-        
+
         self.arrangement_view = crate::ui::arrangement::ArrangementView::new();
         self.is_dirty = false;
 

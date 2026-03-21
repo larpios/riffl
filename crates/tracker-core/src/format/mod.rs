@@ -15,7 +15,22 @@ pub mod protracker;
 pub mod s3m;
 pub mod xm;
 
+/// Encode an xmrs Waveform variant into the 2-bit tracker waveform index.
+/// Bit 2 (value 4) signals "no retrigger on new note" when set.
+fn encode_waveform(waveform: &xmrs::waveform::Waveform, retrig: bool) -> u8 {
+    use xmrs::waveform::Waveform;
+    let w = match waveform {
+        Waveform::Sine => 0,
+        Waveform::RampDown => 1,
+        Waveform::Square => 2,
+        _ => 0,
+    };
+    // retrig=true means reset on new note (bit 2 = 0); retrig=false means don't reset (bit 2 = 1)
+    w | if retrig { 0 } else { 4 }
+}
+
 pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, String> {
+    use crate::song::{Envelope, EnvelopePoint};
     use xmrs::instrument::InstrumentType;
     use xmrs::sample::{LoopType, SampleDataType};
 
@@ -58,25 +73,27 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
                         let mut sample =
                             Sample::new(float_data, 8363, channels, Some(xm_samp.name.clone()));
                         sample.volume = xm_samp.volume;
-                        sample.finetune = (-xm_samp.finetune * 100.0) as i32;
+                        sample.finetune = (xm_samp.finetune * 100.0) as i32;
 
                         match xm_samp.loop_flag {
                             LoopType::No => {}
                             LoopType::Forward => {
-                                sample = sample.with_loop(
-                                    LoopMode::Forward,
-                                    xm_samp.loop_start as usize,
-                                    xm_samp.loop_start as usize
-                                        + xm_samp.loop_length.saturating_sub(1) as usize,
-                                );
+                                let loop_start = xm_samp.loop_start as usize;
+                                let loop_end =
+                                    loop_start + xm_samp.loop_length.saturating_sub(1) as usize;
+                                if loop_end > loop_start {
+                                    sample =
+                                        sample.with_loop(LoopMode::Forward, loop_start, loop_end);
+                                }
                             }
                             LoopType::PingPong => {
-                                sample = sample.with_loop(
-                                    LoopMode::PingPong,
-                                    xm_samp.loop_start as usize,
-                                    xm_samp.loop_start as usize
-                                        + xm_samp.loop_length.saturating_sub(1) as usize,
-                                );
+                                let loop_start = xm_samp.loop_start as usize;
+                                let loop_end =
+                                    loop_start + xm_samp.loop_length.saturating_sub(1) as usize;
+                                if loop_end > loop_start {
+                                    sample =
+                                        sample.with_loop(LoopMode::PingPong, loop_start, loop_end);
+                                }
                             }
                         }
 
@@ -95,6 +112,35 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
                         let mut inst = Instrument::new(inst_name);
                         inst.sample_index = Some(out_samples.len());
                         inst.volume = xm_samp.volume;
+
+                        let convert_env = |env: &xmrs::envelope::Envelope| -> Envelope {
+                            Envelope {
+                                enabled: env.enabled,
+                                points: env
+                                    .point
+                                    .iter()
+                                    .map(|p| EnvelopePoint {
+                                        frame: p.frame as u16,
+                                        value: p.value,
+                                    })
+                                    .collect(),
+                                sustain_enabled: env.sustain_enabled,
+                                sustain_start_point: env.sustain_start_point,
+                                sustain_end_point: env.sustain_end_point,
+                                loop_enabled: env.loop_enabled,
+                                loop_start_point: env.loop_start_point,
+                                loop_end_point: env.loop_end_point,
+                            }
+                        };
+
+                        if let InstrumentType::Default(def) = &xm_inst.instr_type {
+                            if def.volume_envelope.enabled {
+                                inst.volume_envelope = Some(convert_env(&def.volume_envelope));
+                            }
+                            if def.pan_envelope.enabled {
+                                inst.panning_envelope = Some(convert_env(&def.pan_envelope));
+                            }
+                        }
 
                         sample_map[s_idx] = Some(out_instruments.len());
                         out_samples.push(sample);
@@ -139,7 +185,7 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
                 let mut explicit_inst = false;
                 let resolved_inst = if let Some(inst_idx_1based) = xm_tu.instrument {
                     explicit_inst = true;
-                    let i = inst_idx_1based.saturating_sub(1) as usize;
+                    let i = inst_idx_1based.saturating_sub(1);
                     last_instrument[c_idx] = Some(i);
                     Some(i)
                 } else if note_event.is_some() {
@@ -155,14 +201,17 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
                         if let InstrumentType::Default(def) = &module.instrument[i].instr_type {
                             let mut sample_idx = 0;
                             if let Some(NoteEvent::On(n)) = &note_event {
-                                let midi_pitch = n.octave as usize * 12 + n.pitch.semitone() as usize;
+                                let midi_pitch =
+                                    n.octave as usize * 12 + n.pitch.semitone() as usize;
                                 if midi_pitch < 120 {
                                     if let Some(s) = def.sample_for_pitch[midi_pitch] {
                                         sample_idx = s;
                                     }
                                 }
                             }
-                            if i < inst_to_tracker_inst.len() && sample_idx < inst_to_tracker_inst[i].len() {
+                            if i < inst_to_tracker_inst.len()
+                                && sample_idx < inst_to_tracker_inst[i].len()
+                            {
                                 if let Some(mapped_idx) = inst_to_tracker_inst[i][sample_idx] {
                                     mapped_sample_idx = Some(mapped_idx as u8);
                                     if explicit_inst {
@@ -186,21 +235,235 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
                     cell.note = note_event;
                 }
 
+                // Convert xmrs TrackEffect variants to our internal Effect byte encoding.
+                // xmrs normalises raw bytes to floats; we reverse the normalisation here.
                 for ef in &xm_tu.effects {
-                    match ef {
-                        xmrs::effect::TrackEffect::NoteCut { tick, .. } => {
-                            cell.effects.push(crate::pattern::effect::Effect::new(
-                                0xE,
-                                0xC0 | (*tick as u8 & 0xF),
-                            ));
+                    use crate::pattern::effect::Effect;
+                    use xmrs::effect::TrackEffect;
+                    let maybe_effect: Option<Effect> = match ef {
+                        TrackEffect::Arpeggio { half1, half2 } => {
+                            let p = ((*half1 as u8 & 0xF) << 4) | (*half2 as u8 & 0xF);
+                            if p != 0 {
+                                Some(Effect::new(0x0, p))
+                            } else {
+                                None
+                            }
                         }
-                        xmrs::effect::TrackEffect::NoteDelay(tick) => {
-                            cell.effects.push(crate::pattern::effect::Effect::new(
-                                0xE,
-                                0xD0 | (*tick as u8 & 0xF),
-                            ));
+                        // Portamento: negative speed = pitch UP, positive = pitch DOWN
+                        TrackEffect::Portamento(speed) => {
+                            if *speed < 0.0 {
+                                Some(Effect::new(0x1, ((-speed) / 4.0).clamp(0.0, 255.0) as u8))
+                            } else if *speed > 0.0 {
+                                Some(Effect::new(0x2, (speed / 4.0).clamp(0.0, 255.0) as u8))
+                            } else {
+                                None
+                            }
                         }
-                        _ => {}
+                        TrackEffect::TonePortamento(speed) => {
+                            let p = (speed / 4.0).clamp(0.0, 255.0) as u8;
+                            if p > 0 {
+                                Some(Effect::new(0x3, p))
+                            } else {
+                                None
+                            }
+                        }
+                        TrackEffect::Vibrato { speed, depth } => {
+                            let s = (speed * 64.0).clamp(0.0, 15.0) as u8;
+                            let d = (depth * 16.0).clamp(0.0, 15.0) as u8;
+                            if s > 0 || d > 0 {
+                                Some(Effect::new(0x4, (s << 4) | d))
+                            } else {
+                                None
+                            }
+                        }
+                        TrackEffect::Tremolo { speed, depth } => {
+                            let s = (speed * 64.0).clamp(0.0, 15.0) as u8;
+                            let d = (depth * 16.0).clamp(0.0, 15.0) as u8;
+                            Some(Effect::new(0x7, (s << 4) | d))
+                        }
+                        TrackEffect::Panning(pos) => {
+                            Some(Effect::new(0x8, (pos * 255.0).clamp(0.0, 255.0) as u8))
+                        }
+                        TrackEffect::InstrumentSampleOffset(offset) => {
+                            Some(Effect::new(0x9, (offset / 256).min(255) as u8))
+                        }
+                        TrackEffect::PanningSlide { speed, fine } => {
+                            if *speed > 0.0 {
+                                let nibble = (speed * 15.0).clamp(0.0, 15.0) as u8;
+                                if *fine {
+                                    Some(Effect::new(0x12, 0xA0 | nibble)) // Or handle fine differently
+                                } else {
+                                    Some(Effect::new(0x12, nibble << 4))
+                                }
+                            } else if *speed < 0.0 {
+                                let nibble = ((-speed) * 15.0).clamp(0.0, 15.0) as u8;
+                                if *fine {
+                                    Some(Effect::new(0x12, 0xB0 | nibble))
+                                } else {
+                                    Some(Effect::new(0x12, nibble))
+                                }
+                            } else {
+                                None
+                            }
+                        }
+                        // VolumeSlide: signed speed (pos=up, neg=down); fine flag → EAx/EBx
+                        TrackEffect::VolumeSlide { speed, fine } => {
+                            if *speed > 0.0 {
+                                let nibble = (speed * 64.0).clamp(0.0, 15.0) as u8;
+                                if *fine {
+                                    Some(Effect::new(0xE, 0xA0 | nibble))
+                                } else {
+                                    Some(Effect::new(0xA, nibble << 4))
+                                }
+                            } else if *speed < 0.0 {
+                                let nibble = ((-speed) * 64.0).clamp(0.0, 15.0) as u8;
+                                if *fine {
+                                    Some(Effect::new(0xE, 0xB0 | nibble))
+                                } else {
+                                    Some(Effect::new(0xA, nibble))
+                                }
+                            } else {
+                                None
+                            }
+                        }
+                        // Volume set at tick 0 → Cxx
+                        TrackEffect::Volume { value, tick } if *tick == 0 => {
+                            Some(Effect::new(0xC, (value * 64.0).clamp(0.0, 64.0) as u8))
+                        }
+                        TrackEffect::ChannelVolume(value) => {
+                            Some(Effect::new(0x13, (value * 64.0).clamp(0.0, 64.0) as u8))
+                        }
+                        TrackEffect::ChannelVolumeSlide { speed, fine } => {
+                            if *speed > 0.0 {
+                                let nibble = (speed * 64.0).clamp(0.0, 15.0) as u8;
+                                if *fine {
+                                    Some(Effect::new(0x14, 0xA0 | nibble))
+                                } else {
+                                    Some(Effect::new(0x14, nibble << 4))
+                                }
+                            } else if *speed < 0.0 {
+                                let nibble = ((-speed) * 64.0).clamp(0.0, 15.0) as u8;
+                                if *fine {
+                                    Some(Effect::new(0x14, 0xB0 | nibble))
+                                } else {
+                                    Some(Effect::new(0x14, nibble))
+                                }
+                            } else {
+                                None
+                            }
+                        }
+                        TrackEffect::Glissando(on) => Some(Effect::new(0xE, 0x30 | (*on as u8))),
+                        TrackEffect::VibratoWaveform { waveform, retrig } => {
+                            Some(Effect::new(0xE, 0x40 | encode_waveform(waveform, *retrig)))
+                        }
+                        TrackEffect::InstrumentFineTune(ft) => {
+                            let enc = ((ft + 1.0) * 8.0).clamp(0.0, 15.0) as u8;
+                            Some(Effect::new(0xE, 0x50 | enc))
+                        }
+                        TrackEffect::Tremor { on_time, off_time } => {
+                            let on = (*on_time as u8).min(15);
+                            let off = (*off_time as u8).min(15);
+                            Some(Effect::new(0x15, (on << 4) | off))
+                        }
+                        TrackEffect::TremoloWaveform { waveform, retrig } => {
+                            Some(Effect::new(0xE, 0x70 | encode_waveform(waveform, *retrig)))
+                        }
+                        TrackEffect::NoteRetrig {
+                            speed,
+                            volume_modifier,
+                        } => {
+                            use xmrs::effect::NoteRetrigOperator;
+                            let mut vol_nibble = 0;
+                            match volume_modifier {
+                                NoteRetrigOperator::Mul(f) if *f < 1.0 => {
+                                    vol_nibble = 1; // Example: approximate decrement
+                                }
+                                NoteRetrigOperator::Mul(f) if *f > 1.0 => {
+                                    vol_nibble = 9; // Example: approximate increment
+                                }
+                                NoteRetrigOperator::Sum(f) if *f < 0.0 => {
+                                    vol_nibble = 6;
+                                }
+                                NoteRetrigOperator::Sum(f) if *f > 0.0 => {
+                                    vol_nibble = 0xE;
+                                }
+                                _ => {}
+                            }
+                            Some(Effect::new(0x16, (vol_nibble << 4) | (*speed as u8 & 0xF)))
+                        }
+                        TrackEffect::InstrumentVolumeEnvelopePosition(tick) => {
+                            Some(Effect::new(0x17, *tick as u8))
+                        }
+                        TrackEffect::Panbrello { speed, depth } => {
+                            let s = (speed * 15.0).clamp(0.0, 15.0) as u8;
+                            let d = (depth * 15.0).clamp(0.0, 15.0) as u8;
+                            Some(Effect::new(0x18, (s << 4) | d))
+                        }
+                        TrackEffect::NoteCut { tick, .. } => {
+                            Some(Effect::new(0xE, 0xC0 | (*tick as u8 & 0xF)))
+                        }
+                        TrackEffect::NoteDelay(tick) => {
+                            Some(Effect::new(0xE, 0xD0 | (*tick as u8 & 0xF)))
+                        }
+                        _ => None,
+                    };
+                    if let Some(eff) = maybe_effect {
+                        if cell.effects.len() < crate::pattern::effect::MAX_EFFECTS_PER_CELL {
+                            cell.effects.push(eff);
+                        }
+                    }
+                }
+
+                // Convert xmrs GlobalEffect variants (speed, BPM, jumps, loops).
+                for gef in &xm_tu.global_effects {
+                    use crate::pattern::effect::Effect;
+                    use xmrs::effect::GlobalEffect;
+                    let maybe_effect: Option<Effect> = match gef {
+                        GlobalEffect::Speed(speed) => {
+                            // < 32 → ticks per line (SetSpeed handles this range)
+                            Some(Effect::new(0xF, (*speed as u8).min(31)))
+                        }
+                        GlobalEffect::Bpm(bpm) => {
+                            // >= 32 → BPM (SetSpeed handler checks param range)
+                            Some(Effect::new(0xF, (*bpm as u8).max(32)))
+                        }
+                        GlobalEffect::PositionJump(pos) => Some(Effect::new(0xB, *pos as u8)),
+                        GlobalEffect::PatternBreak(row) => Some(Effect::new(0xD, *row as u8)),
+                        GlobalEffect::PatternLoop(count) => {
+                            Some(Effect::new(0xE, 0x60 | (*count as u8 & 0xF)))
+                        }
+                        GlobalEffect::PatternDelay { quantity, .. } => {
+                            Some(Effect::new(0xE, 0xE0 | (*quantity as u8 & 0xF)))
+                        }
+                        GlobalEffect::Volume(vol) => {
+                            Some(Effect::new(0x10, (vol * 64.0).clamp(0.0, 64.0) as u8))
+                        }
+                        GlobalEffect::VolumeSlide { speed, fine } => {
+                            if *speed > 0.0 {
+                                let nibble = (speed * 64.0).clamp(0.0, 15.0) as u8;
+                                if *fine {
+                                    Some(Effect::new(0x11, 0xA0 | nibble))
+                                } else {
+                                    Some(Effect::new(0x11, nibble << 4))
+                                }
+                            } else if *speed < 0.0 {
+                                let nibble = ((-speed) * 64.0).clamp(0.0, 15.0) as u8;
+                                if *fine {
+                                    Some(Effect::new(0x11, 0xB0 | nibble))
+                                } else {
+                                    Some(Effect::new(0x11, nibble))
+                                }
+                            } else {
+                                None
+                            }
+                        }
+                        GlobalEffect::MidiMacro(_) => Some(Effect::new(0x19, 0x00)),
+                        _ => None,
+                    };
+                    if let Some(eff) = maybe_effect {
+                        if cell.effects.len() < crate::pattern::effect::MAX_EFFECTS_PER_CELL {
+                            cell.effects.push(eff);
+                        }
                     }
                 }
 
