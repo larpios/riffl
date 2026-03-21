@@ -87,15 +87,15 @@ where
     mixer.update_tempo(song.bpm);
 
     let mut current_bpm = song.bpm;
-    let current_lpb = song.lpb;
+    let mut current_tpl = song.tpl;
 
-    // Calculate frames per row based on BPM and lpb
-    let get_frames_per_row = |bpm: f64, lpb: u32| -> usize {
-        let seconds_per_row = 60.0 / (bpm * lpb as f64);
+    // Calculate frames per row based on BPM and TPL (tick-based timing)
+    let get_frames_per_row = |bpm: f64, tpl: u32| -> usize {
+        let seconds_per_row = (2.5 / bpm) * tpl as f64;
         (seconds_per_row * config.sample_rate as f64).round() as usize
     };
 
-    let mut frames_per_row = get_frames_per_row(current_bpm, current_lpb);
+    let mut frames_per_row = get_frames_per_row(current_bpm, current_tpl);
 
     // Stereo interleaved buffer for one row of audio
     let mut row_buffer = vec![0.0f32; frames_per_row * 2];
@@ -138,11 +138,14 @@ where
                     TransportCommand::SetBpm(bpm) => {
                         current_bpm = bpm;
                         mixer.update_tempo(bpm);
-                        frames_per_row = get_frames_per_row(current_bpm, current_lpb);
+                        frames_per_row = get_frames_per_row(current_bpm, current_tpl);
                         row_buffer = vec![0.0f32; frames_per_row * 2];
                     }
                     TransportCommand::SetTpl(tpl) => {
+                        current_tpl = tpl;
                         mixer.set_tpl(tpl);
+                        frames_per_row = get_frames_per_row(current_bpm, current_tpl);
+                        row_buffer = vec![0.0f32; frames_per_row * 2];
                     }
                     _ => {} // Other commands not yet supported in offline export
                 }
@@ -193,7 +196,7 @@ fn wav_spec(config: &ExportConfig) -> WavSpec {
 
 /// Calculate the expected duration of a song in seconds.
 pub fn song_duration(song: &Song) -> f64 {
-    let seconds_per_row = 60.0 / (song.bpm * song.lpb as f64);
+    let seconds_per_row = (2.5 / song.bpm) * song.tpl as f64;
     let total_rows: usize = song
         .arrangement
         .iter()
@@ -601,10 +604,10 @@ mod tests {
             "Format should be integer"
         );
 
-        // Duration at 140 BPM, LPB 4: 64 rows * (60 / (140 * 4)) = 64 * ~0.10714 ≈ 6.857s
+        // Duration at 140 BPM, TPL 6: 64 rows * ((2.5 / 140) * 6) = 64 * ~0.10714 ≈ 6.857s
         let num_frames = reader.len() / spec.channels as u32;
         let duration = num_frames as f64 / spec.sample_rate as f64;
-        let expected = 64.0 * (60.0 / (140.0 * 4.0));
+        let expected = 64.0 * ((2.5 / 140.0) * 6.0);
         assert!(
             (duration - expected).abs() < 0.1,
             "Expected ~{:.2}s duration at 140 BPM, got {:.2}s",

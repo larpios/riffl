@@ -578,11 +578,11 @@ impl Transport {
         self.state == TransportState::Paused
     }
 
-    /// Calculate seconds per row based on current BPM and LPB.
-    /// Formula: seconds per row = 60.0 / (BPM * LPB)
-    /// At 120 BPM, LPB 4: 60 / (120 * 4) = 0.125s (125ms)
+    /// Calculate seconds per row using tick-based timing (standard for MOD/FT2/Furnace).
+    /// Formula: seconds per row = (2.5 / BPM) * TPL
+    /// At 120 BPM, TPL 6: (2.5 / 120) * 6 = 0.125s (125ms)
     fn seconds_per_row(&self) -> f64 {
-        60.0 / (self.bpm * self.lpb as f64)
+        (2.5 / self.bpm) * self.tpl as f64
     }
 }
 
@@ -672,7 +672,7 @@ mod tests {
         transport.set_num_rows(16);
         transport.play();
 
-        // At 120 BPM, 4 LPB = 4 rows/beat: each row lasts 0.125s
+        // At 120 BPM, TPL 6: each row lasts 0.125s
         let spr = 0.125;
 
         // Not enough time — should not advance

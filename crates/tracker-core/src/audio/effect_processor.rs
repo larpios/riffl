@@ -484,11 +484,8 @@ impl TrackerEffectProcessor {
                     let down = effect.param_y();
                     state.volume_slide_up = up;
                     state.volume_slide_down = down;
-
-                    // Apply volume slide immediately for this row
-                    let current_vol = state.volume_override.unwrap_or(1.0);
-                    let delta = (up as f32 - down as f32) / 64.0;
-                    state.volume_override = Some((current_vol + delta).clamp(0.0, 1.0));
+                    // Volume slides in classic trackers are only applied on ticks > 0.
+                    // We handle the continuous sliding smoothly in advance_frame.
                 }
 
                 EffectType::PositionJump => {
@@ -600,22 +597,21 @@ impl TrackerEffectProcessor {
     /// Called once per audio frame during rendering to update vibrato,
     /// arpeggio cycling, and other continuous effects.
     pub fn advance_frame(&mut self, channel: usize) {
-        let state = match self.channels.get_mut(channel) {
-            Some(s) => s,
-            None => return,
-        };
+        if let Some(state) = self.channels.get_mut(channel) {
+            state.row_frame_counter += 1;
+            state.advance_vibrato(self.sample_rate);
+            state.advance_tremolo(self.sample_rate);
 
-        state.row_frame_counter += 1;
-        state.advance_vibrato(self.sample_rate);
-        state.advance_tremolo(self.sample_rate);
+            // Advance volume slides smoothly across the row
+            if state.volume_slide_up > 0 || state.volume_slide_down > 0 {
+                let current_vol = state.volume_override.unwrap_or(1.0);
 
-        // Advance volume slides
-        if state.volume_slide_up > 0 || state.volume_slide_down > 0 {
-            let current_vol = state.volume_override.unwrap_or(1.0);
-            let delta_per_row =
-                (state.volume_slide_up as f32 - state.volume_slide_down as f32) / 64.0;
-            let delta_per_frame = delta_per_row / state.frames_per_row as f32;
-            state.volume_override = Some((current_vol + delta_per_frame).clamp(0.0, 2.0));
+                let delta_per_row =
+                    (state.volume_slide_up as f32 - state.volume_slide_down as f32) / 64.0;
+
+                let delta_per_frame = delta_per_row / state.frames_per_row as f32;
+                state.volume_override = Some((current_vol + delta_per_frame).clamp(0.0, 2.0));
+            }
         }
     }
 
@@ -1198,6 +1194,7 @@ mod tests {
 
         // Volume slide up
         proc.process_row(0, &[Effect::from_type(EffectType::VolumeSlide, 0x40)], None);
+        proc.advance_frame(0); // Volume slide takes effect smoothly during the row
         let vol_after = proc.volume_override(0).unwrap();
 
         assert!(
@@ -1215,6 +1212,7 @@ mod tests {
         let vol_before = proc.volume_override(0).unwrap();
 
         proc.process_row(0, &[Effect::from_type(EffectType::VolumeSlide, 0x04)], None);
+        proc.advance_frame(0); // Volume slide takes effect smoothly during the row
         let vol_after = proc.volume_override(0).unwrap();
 
         assert!(

@@ -374,7 +374,7 @@ mod tests {
         assert_eq!(eff.effect_type(), Some(EffectType::SetVolume));
 
         // Unknown command
-        let eff_unknown = Effect::new(0x8, 0x00);
+        let eff_unknown = Effect::new(0x10, 0x00);
         assert_eq!(eff_unknown.effect_type(), None);
     }
 

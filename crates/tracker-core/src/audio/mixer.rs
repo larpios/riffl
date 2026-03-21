@@ -231,6 +231,14 @@ impl Mixer {
                 .get(ch)
                 .is_some_and(ChannelStrip::is_silent);
 
+            // In classical trackers, specifying an instrument number resets the channel volume
+            // to the instrument's default, clearing any previous volume slides or overrides.
+            if cell.instrument.is_some() {
+                if let Some(state) = self.effect_processor.channel_state_mut(ch) {
+                    state.volume_override = None;
+                }
+            }
+
             // Determine the note frequency for effect processing
             let note_frequency = match &cell.note {
                 Some(NoteEvent::On(note)) => Some(note.frequency()),
