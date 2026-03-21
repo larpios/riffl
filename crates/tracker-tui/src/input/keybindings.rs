@@ -346,6 +346,7 @@ pub enum Action {
     // Go to row
     GoToRow,
     GoToTop,
+    GoToBottom,
 
     // Track management
     AddTrack,
@@ -472,6 +473,7 @@ impl ActionMetadata for Action {
             Action::OctaveDown => "Octave Down",
             Action::GoToRow => "Go to Row",
             Action::GoToTop => "Go to Top",
+            Action::GoToBottom => "Go to Bottom",
             Action::AddTrack => "Add Track",
             Action::DeleteTrack => "Delete Track",
             Action::CloneTrack => "Clone Track",
@@ -560,6 +562,7 @@ impl ActionMetadata for Action {
             Action::OctaveDown => "Decrease current octave",
             Action::GoToRow => "Jump to specific row",
             Action::GoToTop => "Jump to top of pattern",
+            Action::GoToBottom => "Jump to bottom of pattern",
             Action::AddTrack => "Add a new track",
             Action::DeleteTrack => "Delete current track",
             Action::CloneTrack => "Clone current track",
@@ -633,6 +636,7 @@ impl ActionMetadata for Action {
             | Action::PageDown
             | Action::GoToRow
             | Action::GoToTop
+            | Action::GoToBottom
             | Action::NextTrack => ActionCategory::Navigation,
 
             Action::EnterInsertMode | Action::EnterNormalMode | Action::EnterVisualMode => {
@@ -791,7 +795,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             KeyCode::Up => Action::TransposeUp,
             KeyCode::Down => Action::TransposeDown,
             // Uppercase shortcuts also need to work when SHIFT is reported
-            KeyCode::Char('G') => Action::GoToRow,
+            KeyCode::Char('G') => Action::GoToBottom,
             KeyCode::Char('Q') => Action::Quantize,
             KeyCode::Char('T') => Action::AddTrack,
             KeyCode::Char('D') => Action::DeleteTrack,
@@ -848,8 +852,8 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         KeyCode::Char('{') => Action::StepDown,
         KeyCode::Char('}') => Action::StepUp,
 
-        // Go to row (Shift+G), quantize
-        KeyCode::Char('G') => Action::GoToRow,
+        // Go to bottom (Shift+G), quantize
+        KeyCode::Char('G') => Action::GoToBottom,
         KeyCode::Char('Q') => Action::Quantize,
 
         // Track management (Shift+T for new, Shift+D delete, Shift+C clone)
