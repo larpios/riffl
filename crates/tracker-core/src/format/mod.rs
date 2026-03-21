@@ -48,8 +48,7 @@ pub fn convert_xmrs_module(mut module: xmrs::module::Module) -> Result<FormatDat
                     _ => 2,
                 };
 
-                let mut sample =
-                    Sample::new(float_data, 44100, channels, Some(xm_samp.name.clone()));
+                let mut sample = Sample::new(float_data, 8363, channels, Some(xm_samp.name.clone()));
                 sample.volume = xm_samp.volume;
                 sample.finetune = (xm_samp.finetune * 100.0) as i32;
 

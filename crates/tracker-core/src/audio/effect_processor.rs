@@ -377,11 +377,23 @@ impl TrackerEffectProcessor {
 
         let mut commands = Vec::new();
 
-        // If a new note is triggered, set portamento current frequency
         if let Some(freq) = note_frequency {
-            if state.portamento_target.is_some() {
-                // Portamento: set target, keep current freq sliding
+            let has_tone_porta = effects.iter().any(|e| {
+                matches!(
+                    e.effect_type(),
+                    Some(EffectType::PortamentoToNote) | Some(EffectType::TonePortamentoVolumeSlide)
+                )
+            });
+
+            if !has_tone_porta {
+                state.pitch_ratio = 1.0;
+                state.portamento_target = None;
+                state.portamento_freq = None;
+            } else {
                 state.portamento_target = Some(freq);
+                if state.portamento_freq.is_none() {
+                    state.portamento_freq = Some(freq);
+                }
             }
         }
 
