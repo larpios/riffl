@@ -255,6 +255,26 @@ const KEY_MAPPINGS: &[KeyMapping] = &[
     },
 ];
 
+/// Chord prefix mappings for which-key display
+struct ChordMapping {
+    prefix: char,
+    completion: char,
+    action: Action,
+}
+
+const CHORD_MAPPINGS: &[ChordMapping] = &[
+    ChordMapping {
+        prefix: 'd',
+        completion: 'd',
+        action: Action::DeleteRow,
+    },
+    ChordMapping {
+        prefix: 'g',
+        completion: 'g',
+        action: Action::GoToRow,
+    },
+];
+
 impl KeybindingRegistry {
     /// Get all available keybindings for a given editor mode
     pub fn get_bindings_for_mode(mode: EditorMode) -> Vec<Keybinding> {
@@ -266,6 +286,19 @@ impl KeybindingRegistry {
                 action: m.action.name().to_string(),
                 description: m.action.description().to_string(),
                 category: m.action.category(),
+            })
+            .collect()
+    }
+
+    /// Get which-key entries for a given chord prefix
+    pub fn get_which_key_entries(prefix: char) -> Vec<(String, String)> {
+        CHORD_MAPPINGS
+            .iter()
+            .filter(|m| m.prefix == prefix)
+            .map(|m| {
+                let key = format!("{}{}", prefix, m.completion);
+                let desc = format!("{} {}", key, m.action.description());
+                (key, desc)
             })
             .collect()
     }
@@ -1674,5 +1707,27 @@ mod tests {
         let bindings = KeybindingRegistry::get_bindings_for_mode(EditorMode::Insert);
         assert!(!bindings.is_empty());
         assert!(bindings.iter().any(|b| b.key == "Esc"));
+    }
+
+    #[test]
+    fn test_get_which_key_entries_d() {
+        let entries = KeybindingRegistry::get_which_key_entries('d');
+        assert!(!entries.is_empty());
+        assert!(entries
+            .iter()
+            .any(|(key, desc)| key == "dd" && desc.contains("Delete")));
+    }
+
+    #[test]
+    fn test_get_which_key_entries_g() {
+        let entries = KeybindingRegistry::get_which_key_entries('g');
+        assert!(!entries.is_empty());
+        assert!(entries.iter().any(|(key, _desc)| key == "gg"));
+    }
+
+    #[test]
+    fn test_get_which_key_entries_no_match() {
+        let entries = KeybindingRegistry::get_which_key_entries('x');
+        assert!(entries.is_empty());
     }
 }

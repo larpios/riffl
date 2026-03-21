@@ -12,6 +12,8 @@ use ratatui::{
 
 use crate::app::{App, AppView};
 use crate::editor::{EditorMode, SubColumn};
+use crate::input::keybindings::KeybindingRegistry;
+use crate::registry::{CommandMetadata, CommandRegistry};
 use tracker_core::pattern::note::NoteEvent;
 use tracker_core::transport::{PlaybackMode, TransportState};
 
@@ -1174,13 +1176,20 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 fn render_command_completions(frame: &mut Frame, footer_area: ratatui::layout::Rect, app: &App) {
     let input = app.command_input.trim();
     let input_word = input.split_whitespace().next().unwrap_or(input);
-    let matches: Vec<(&str, &str)> = COMMANDS
-        .iter()
-        .filter(|(cmd, _)| {
-            let cmd_word = cmd.split_whitespace().next().unwrap_or(cmd);
-            cmd_word.starts_with(input_word)
+
+    let matches: Vec<(String, String)> = CommandRegistry::all_commands()
+        .into_iter()
+        .filter_map(|cmd| {
+            let name = cmd.name();
+            let aliases = cmd.aliases();
+            let all_names: Vec<&str> = std::iter::once(name)
+                .chain(aliases.iter().copied())
+                .collect();
+
+            let _ = all_names.iter().find(|&&n| n.starts_with(input_word))?;
+            let usage = cmd.usage().strip_prefix(':').unwrap_or(cmd.usage());
+            Some((usage.to_string(), cmd.description().to_string()))
         })
-        .copied()
         .collect();
 
     if matches.is_empty() {
@@ -1202,7 +1211,7 @@ fn render_command_completions(frame: &mut Frame, footer_area: ratatui::layout::R
             Line::from(vec![
                 Span::raw(" :"),
                 Span::styled(
-                    *cmd,
+                    cmd.clone(),
                     Style::default()
                         .fg(theme.success_color())
                         .add_modifier(Modifier::BOLD),
@@ -1221,10 +1230,6 @@ fn render_command_completions(frame: &mut Frame, footer_area: ratatui::layout::R
     frame.render_widget(para, area);
 }
 
-/// Which-key descriptions for pending chords.
-const WHICH_KEY_ENTRIES: &[(&str, &str, &str)] =
-    &[("d", "d", "dd  delete row"), ("g", "g", "gg  go to top")];
-
 /// Render a which-key popup showing completions for the current pending key.
 fn render_which_key(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let pending = match app.pending_key {
@@ -1233,11 +1238,7 @@ fn render_which_key(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     };
 
     let theme = &app.theme;
-    let entries: Vec<(&str, &str)> = WHICH_KEY_ENTRIES
-        .iter()
-        .filter(|(prefix, _, _)| prefix.starts_with(pending))
-        .map(|(_, key, desc)| (*key, *desc))
-        .collect();
+    let entries = KeybindingRegistry::get_which_key_entries(pending);
 
     if entries.is_empty() {
         return;
@@ -1245,7 +1246,6 @@ fn render_which_key(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
     let width = 24u16;
     let height = entries.len() as u16 + 2;
-    // Bottom-left, just above footer
     let x = 0;
     let y = area.height.saturating_sub(height + 1);
     let popup_area = ratatui::layout::Rect::new(x, y, width, height);
@@ -1259,7 +1259,7 @@ fn render_which_key(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             Line::from(vec![
                 Span::raw(" "),
                 Span::styled(
-                    format!("{}{}", pending, key),
+                    key.clone(),
                     Style::default()
                         .fg(theme.success_color())
                         .add_modifier(Modifier::BOLD),
@@ -1278,19 +1278,6 @@ fn render_which_key(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let para = Paragraph::new(lines).block(block);
     frame.render_widget(para, popup_area);
 }
-
-/// All commands available in command mode, with their descriptions.
-const COMMANDS: &[(&str, &str)] = &[
-    ("w", "save project"),
-    ("wq", "save and quit"),
-    ("x", "save and quit"),
-    ("q", "quit"),
-    ("q!", "quit without saving"),
-    ("bpm <n>", "set tempo (20–999)"),
-    ("t <n>", "set tempo (shorthand)"),
-    ("tempo <n>", "set tempo"),
-    ("step <n>", "set row advance step (0–8)"),
-];
 
 #[cfg(test)]
 mod tests {
