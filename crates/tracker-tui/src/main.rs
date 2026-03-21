@@ -584,14 +584,17 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         // Track management
         Action::AddTrack => {
             app.editor.add_track();
+            app.sync_mixer_channels();
             app.mark_dirty();
         }
         Action::DeleteTrack => {
             app.editor.delete_track();
+            app.sync_mixer_channels();
             app.mark_dirty();
         }
         Action::CloneTrack => {
             app.editor.clone_track();
+            app.sync_mixer_channels();
             app.mark_dirty();
         }
 
