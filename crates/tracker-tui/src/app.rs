@@ -234,7 +234,10 @@ impl App {
         let mut song = Song::new("Untitled", 125.0);
 
         // Create transport synced to song BPM and pattern size
+        let config = Config::default(); // Initialize config here to use its sample_rate
         let mut transport = Transport::new();
+        transport.set_playback_mode(tracker_core::transport::PlaybackMode::Pattern);
+        transport.set_loop_enabled(true);
         transport.set_num_rows(pattern.num_rows());
         transport.set_bpm(song.bpm);
         // Sync mixer effect processor tempo with the song BPM
@@ -1421,8 +1424,11 @@ impl App {
 
         self.song = result.song;
         self.transport.set_bpm(self.song.bpm);
+        self.transport.set_tpl(self.song.tpl);
+        self.transport.set_lpb(self.song.lpb);
         if let Ok(mut mixer) = self.mixer.lock() {
             mixer.update_tempo(self.song.bpm);
+            mixer.set_tpl(self.song.tpl);
         }
         self.sync_mixer_instruments();
         self.transport.stop();
@@ -1931,8 +1937,11 @@ impl App {
 
                 self.song = song;
                 self.transport.set_bpm(self.song.bpm);
+                self.transport.set_tpl(self.song.tpl);
+                self.transport.set_lpb(self.song.lpb);
                 if let Ok(mut mixer) = self.mixer.lock() {
                     mixer.update_tempo(self.song.bpm);
+                    mixer.set_tpl(self.song.tpl);
                 }
                 self.sync_mixer_instruments();
                 self.project_path = Some(path.to_path_buf());

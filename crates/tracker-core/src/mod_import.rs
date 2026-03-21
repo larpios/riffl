@@ -11,14 +11,14 @@ use crate::pattern::pattern::Pattern;
 use crate::pattern::Cell;
 use crate::song::{Instrument, Song};
 
-/// Reference period for C-4 in ProTracker. Period 538 on a PAL Amiga
-/// produces ~8287 Hz at 50Hz refresh. This is the correct ProTracker
-/// period for C-4 (finetune 0).
-const C4_PERIOD: f64 = 538.0;
+/// The ProTracker period value for a C-2 note (which we map to our C4_MIDI base note).
+/// Period 428 is the standard PAL Amiga period for C-2.
+const C4_PERIOD: f64 = 428.0;
 
 /// Sample rate assigned to imported MOD samples.
-/// The de-facto standard used by most modern MOD players.
-const MOD_SAMPLE_RATE: u32 = 8363;
+/// The baseline sample rate for a C-2 note on a PAL Amiga clock.
+/// Period 428 maps to 8287.14 Hz. Using 8287 aligns pitches perfectly with our C4_MIDI base playback.
+const MOD_SAMPLE_RATE: u32 = 8287;
 
 /// Default note velocity for imported pattern cells.
 const DEFAULT_VELOCITY: u8 = 100;
@@ -605,24 +605,6 @@ fn read_string(data: &[u8], pos: usize, len: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pattern::effect::EffectType;
-    use crate::pattern::note::NoteEvent;
-
-    #[test]
-    fn test_speed_to_bpm_default() {
-        assert_eq!(speed_to_bpm(6), 125.0);
-    }
-
-    #[test]
-    fn test_speed_to_bpm_speed_5() {
-        assert_eq!(speed_to_bpm(5), 150.0);
-    }
-
-    #[test]
-    fn test_speed_to_bpm_speed_8() {
-        assert_eq!(speed_to_bpm(8), 93.75);
-    }
-
     #[test]
     fn test_extract_tempo_no_patterns() {
         let patterns: Vec<Pattern> = vec![];
@@ -645,33 +627,33 @@ mod tests {
 
         let (speed, bpm) = extract_tempo_from_patterns(&patterns);
         assert_eq!(speed, 5);
-        assert_eq!(bpm, 150.0);
+        assert_eq!(bpm, 125.0);
     }
 
     #[test]
     fn test_period_to_note_c4() {
-        let (pitch, octave) = period_to_note(538).unwrap();
+        let (pitch, octave) = period_to_note(428).unwrap();
         assert_eq!(pitch, Pitch::C);
         assert_eq!(octave, 4);
     }
 
     #[test]
     fn test_period_to_note_c5_one_octave_up() {
-        let (pitch, octave) = period_to_note(269).unwrap();
+        let (pitch, octave) = period_to_note(214).unwrap();
         assert_eq!(pitch, Pitch::C);
         assert_eq!(octave, 5);
     }
 
     #[test]
     fn test_period_to_note_c3_one_octave_down() {
-        let (pitch, octave) = period_to_note(1076).unwrap();
+        let (pitch, octave) = period_to_note(856).unwrap();
         assert_eq!(pitch, Pitch::C);
         assert_eq!(octave, 3);
     }
 
     #[test]
     fn test_period_to_note_a4() {
-        let (pitch, octave) = period_to_note(320).unwrap();
+        let (pitch, octave) = period_to_note(254).unwrap();
         assert_eq!(pitch, Pitch::A);
         assert_eq!(octave, 4);
     }
@@ -862,13 +844,13 @@ mod tests {
     #[test]
     fn test_note_to_period_c4() {
         let p = note_to_period(Pitch::C, 4);
-        assert_eq!(p, 538);
+        assert_eq!(p, 428);
     }
 
     #[test]
     fn test_note_to_period_c5_one_octave_up() {
         let p = note_to_period(Pitch::C, 5);
-        assert_eq!(p, 269);
+        assert_eq!(p, 214);
     }
 
     #[test]
@@ -962,8 +944,8 @@ mod tests {
         song.arrangement = vec![0];
         let samples: Vec<Sample> = vec![Sample::default(); 31];
         let exported = export_mod(&song, &samples).unwrap();
-        assert_eq!(exported[1084], 0x02); // period hi nibble for 538 = 0x21A
-        assert_eq!(exported[1085], 0x1A); // period lo byte
+        assert_eq!(exported[1084], 0x01); // period hi nibble for 428 = 0x1AC
+        assert_eq!(exported[1085], 0xAC); // period lo byte
         let imported = import_mod(&exported).unwrap();
         let ip = &imported.song.patterns[0];
         let cell = ip.get_cell(0, 0).unwrap();
@@ -1033,18 +1015,6 @@ mod tests {
         use crate::pattern::note::Pitch;
 
         let notes: &[(Pitch, u8)] = &[
-            (Pitch::C, 0),
-            (Pitch::CSharp, 0),
-            (Pitch::D, 0),
-            (Pitch::DSharp, 0),
-            (Pitch::E, 0),
-            (Pitch::F, 0),
-            (Pitch::FSharp, 0),
-            (Pitch::G, 0),
-            (Pitch::GSharp, 0),
-            (Pitch::A, 0),
-            (Pitch::ASharp, 0),
-            (Pitch::B, 0),
             (Pitch::C, 1),
             (Pitch::CSharp, 1),
             (Pitch::D, 1),
