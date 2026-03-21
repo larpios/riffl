@@ -143,11 +143,15 @@ pub fn render(frame: &mut Frame, app: &App) {
                 );
             }
             AppView::SampleBrowser => {
+                let (preview_pos, total_frames, sample_rate) = app.preview_cursor_state();
                 sample_browser::render_sample_browser(
                     frame,
                     content_area,
                     &app.sample_browser,
                     &app.theme,
+                    preview_pos,
+                    total_frames,
+                    sample_rate,
                 );
             }
         }

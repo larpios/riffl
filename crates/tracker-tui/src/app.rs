@@ -1339,6 +1339,24 @@ impl App {
         self.browser_preview_sample = None;
     }
 
+    /// Returns `(current_frame_pos, total_frames, output_sample_rate)` for the active browser preview.
+    ///
+    /// Used by the waveform renderer to draw a live cursor and time display.
+    /// Returns `(0, 0, 44100)` when the mixer is unavailable.
+    pub fn preview_cursor_state(&self) -> (usize, usize, u32) {
+        let rate = self
+            .audio_engine
+            .as_ref()
+            .map(|e| e.sample_rate())
+            .unwrap_or(44100);
+        let (pos, total) = self
+            .mixer
+            .lock()
+            .map(|m| m.preview_pos_and_total())
+            .unwrap_or((0, 0));
+        (pos, total, rate)
+    }
+
     /// Import a ProTracker .mod file, replacing the current song.
     /// Returns Ok(()) on success, or an error message.
     pub fn import_mod_file(&mut self, path: &std::path::Path) -> Result<(), String> {
@@ -2994,10 +3012,7 @@ mod tests {
         app.toggle_browser_bookmark();
 
         assert_eq!(app.config.bookmarked_dirs.len(), 1);
-        assert_eq!(
-            app.config.bookmarked_dirs[0],
-            dir.display().to_string()
-        );
+        assert_eq!(app.config.bookmarked_dirs[0], dir.display().to_string());
         assert!(app.sample_browser.selected_is_bookmarked());
 
         std::fs::remove_dir_all(&dir).ok();
@@ -3099,5 +3114,14 @@ mod tests {
         assert!(!app.browser_preview_active);
         assert_eq!(app.browser_preview_offset_frames, 0);
         assert!(app.browser_preview_sample.is_none());
+    }
+
+    #[test]
+    fn test_preview_cursor_state_returns_zeros_when_idle() {
+        let app = App::new();
+        let (pos, total, _rate) = app.preview_cursor_state();
+        // No preview active: pos and total should both be 0.
+        assert_eq!(pos, 0);
+        assert_eq!(total, 0);
     }
 }
