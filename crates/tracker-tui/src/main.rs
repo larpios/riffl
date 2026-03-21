@@ -547,8 +547,10 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::OctaveUp => app.editor.octave_up(),
         Action::OctaveDown => app.editor.octave_down(),
 
-        // Go to row (basic - jumps to row 0 for now, could be enhanced with input)
+        // Go to last row (Shift+G)
         Action::GoToRow => app.editor.go_to_row(usize::MAX),
+        // Go to first row (gg)
+        Action::GoToTop => app.editor.go_to_row(0),
 
         // Quantize
         Action::Quantize => {
