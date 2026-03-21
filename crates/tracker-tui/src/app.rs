@@ -1234,14 +1234,11 @@ impl App {
         Ok(())
     }
 
-    /// Preview a note pitch through the current instrument's sample.
-    /// Called when the user enters a note in Insert mode.
-    pub fn preview_note_pitch(&mut self, pitch: Pitch, octave: u8) {
+    /// Preview a note pitch through a specific instrument's sample.
+    pub fn preview_instrument_note_pitch(&mut self, inst_idx: usize, pitch: Pitch, octave: u8) {
         let note = Note::simple(pitch, octave);
         let target_freq = note.frequency();
 
-        // Find the sample for the current instrument
-        let inst_idx = self.editor.current_instrument() as usize;
         let sample = {
             let mixer = match self.mixer.lock() {
                 Ok(m) => m,
@@ -1274,6 +1271,13 @@ impl App {
                 let _ = engine.start();
             }
         }
+    }
+
+    /// Preview a note pitch through the current pattern editor instrument's sample.
+    /// Called when the user enters a note in Insert mode.
+    pub fn preview_note_pitch(&mut self, pitch: Pitch, octave: u8) {
+        let inst_idx = self.editor.current_instrument() as usize;
+        self.preview_instrument_note_pitch(inst_idx, pitch, octave);
     }
 
     /// Preview the currently selected sample in the sample browser.

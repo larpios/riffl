@@ -135,7 +135,11 @@ pub fn render_instrument_list(
     lines.push(Line::from(vec![
         Span::raw("  "),
         Span::styled("?", Style::default().fg(theme.success_color())),
-        Span::raw(" help"),
+        Span::raw(" help   "),
+        Span::styled("i", Style::default().fg(theme.secondary)),
+        Span::raw(" piano roll preview   "),
+        Span::styled("Esc", Style::default().fg(theme.secondary)),
+        Span::raw(" exit preview   "),
     ]));
 
     let paragraph = Paragraph::new(lines)

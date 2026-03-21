@@ -445,6 +445,26 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
 
     let action = map_key_to_action(key, app.editor_mode());
 
+    // Intercept note entry while in InstrumentList to preview samples without editing the pattern
+    if app.current_view == AppView::InstrumentList {
+        match action {
+            Action::EnterNote(c) => {
+                if let Some((pitch, oct_offset)) = Editor::piano_key_to_pitch(c) {
+                    let base_octave = app.editor.current_octave();
+                    let octave = (base_octave as i8 + oct_offset).clamp(0, 9) as u8;
+                    if let Some(inst_idx) = app.instrument_selection() {
+                        app.preview_instrument_note_pitch(inst_idx, pitch, octave);
+                    }
+                }
+                return;
+            }
+            Action::EnterNoteOff | Action::EnterNoteCut => {
+                return; // ignore silently
+            }
+            _ => {}
+        }
+    }
+
     match action {
         // Navigation — delegate to editor (or instrument/pattern list)
         Action::MoveLeft => app.editor.move_left(),
