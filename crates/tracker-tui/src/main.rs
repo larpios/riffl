@@ -60,6 +60,10 @@ fn main() -> Result<()> {
     app.theme_kind = theme_kind;
     app.theme = crate::ui::theme::Theme::from_kind(theme_kind);
     app.config = config;
+    // Re-apply roots so persisted bookmarks from config appear at startup.
+    // set_sample_dirs (above) ran before app.config was assigned, so bookmarks
+    // were not applied on that first call.
+    app.refresh_browser_roots();
 
     app.init()?;
 

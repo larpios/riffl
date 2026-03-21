@@ -3026,6 +3026,33 @@ mod tests {
     }
 
     #[test]
+    fn test_bookmarks_restored_on_startup_sequence() {
+        // Regression: main.rs called set_sample_dirs before app.config = config,
+        // so refresh_browser_roots ran with empty bookmarks (Config::default()).
+        // Fix: call refresh_browser_roots again after assigning the real config.
+        let dir = std::env::temp_dir().join("riffl_bm_startup");
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut config = crate::config::Config::default();
+        config.bookmarked_dirs = vec![dir.display().to_string()];
+
+        let mut app = App::new();
+        // Simulate old main.rs ordering: set_sample_dirs first (config still default/empty)
+        app.set_sample_dirs(vec![dir.clone()]);
+        // Then assign the real config and refresh — this is the fix
+        app.config = config;
+        app.refresh_browser_roots();
+
+        app.sample_browser.select(0);
+        assert!(
+            app.sample_browser.selected_is_bookmarked(),
+            "bookmark should be present after refresh_browser_roots post-config assignment"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn test_toggle_bookmark_no_effect_on_file_selection() {
         let dir = std::env::temp_dir().join("riffl_bm_file");
         std::fs::create_dir_all(&dir).unwrap();
