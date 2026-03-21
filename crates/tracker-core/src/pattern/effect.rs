@@ -71,6 +71,11 @@ impl EffectType {
         }
     }
 
+    /// Convert an effect type to its MOD/ProTracker command byte (0-F).
+    pub fn protracker_cmd(self) -> u8 {
+        self.to_command()
+    }
+
     /// Convert an effect type to its command byte.
     pub fn to_command(self) -> u8 {
         match self {

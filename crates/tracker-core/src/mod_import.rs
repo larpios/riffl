@@ -8,7 +8,7 @@ use crate::audio::sample::{LoopMode, Sample, C4_MIDI};
 use crate::pattern::effect::Effect;
 use crate::pattern::note::{Note, NoteEvent, Pitch};
 use crate::pattern::pattern::Pattern;
-use crate::pattern::row::Cell;
+use crate::pattern::Cell;
 use crate::song::{Instrument, Song};
 
 /// Reference period for C-4 in our pitch system. Period 428 on a PAL
@@ -30,6 +30,210 @@ pub struct ModImportResult {
     /// Raw audio data for each instrument slot (31 entries, matching
     /// `song.instruments` index-for-index).
     pub samples: Vec<Sample>,
+}
+
+/// Export a Song and sample data to ProTracker-compatible MOD format bytes.
+///
+/// The `samples` vec must have exactly 31 entries (one per instrument slot).
+/// Returns an error if the song has unsupported channel counts or data shapes.
+pub fn export_mod(song: &Song, samples: &[Sample]) -> Result<Vec<u8>, String> {
+    if samples.len() != 31 {
+        return Err(format!(
+            "export_mod requires exactly 31 samples (got {})",
+            samples.len()
+        ));
+    }
+
+    let num_channels = song.patterns.first().map(|p| p.num_channels()).unwrap_or(4);
+    if !(2..=32).contains(&num_channels) {
+        return Err(format!(
+            "export_mod requires 2-32 channels (got {})",
+            num_channels
+        ));
+    }
+
+    let tag = match num_channels {
+        4 => *b"M.K.",
+        2 => *b"2CHN",
+        6 => *b"6CHN",
+        8 => *b"8CHN",
+        n => {
+            let mut t = [b' ', b' ', b'c', b'h'];
+            if n >= 10 {
+                t[0] = (n / 10) as u8 + b'0';
+                t[1] = (n % 10) as u8 + b'0';
+            } else {
+                t[0] = n as u8 + b'0';
+                t[1] = b' ';
+            }
+            t
+        }
+    };
+
+    let max_pattern_idx = song.arrangement.iter().copied().max().unwrap_or(0);
+    let total_patterns = (max_pattern_idx + 1).max(1);
+
+    let mut buf = Vec::with_capacity(1084 + total_patterns * 64 * num_channels * 4);
+
+    // ── Song title (20 bytes) ───────────────────────────────────────────────
+    let title_bytes: [u8; 20] = {
+        let mut t = [b' '; 20];
+        let bytes = song.name.as_bytes();
+        let len = bytes.len().min(20);
+        t[..len].copy_from_slice(&bytes[..len]);
+        t
+    };
+    buf.extend_from_slice(&title_bytes);
+
+    // ── 31 sample headers (30 bytes each) ──────────────────────────────────
+    for (i, sample) in samples.iter().enumerate() {
+        let inst_name = song
+            .instruments
+            .get(i)
+            .map(|inst| inst.name.as_str())
+            .unwrap_or("");
+
+        let inst_finetune = song
+            .instruments
+            .get(i)
+            .map(|inst| inst.finetune.clamp(-8, 7))
+            .unwrap_or(0);
+
+        let inst_volume = song
+            .instruments
+            .get(i)
+            .map(|inst| (inst.volume.clamp(0.0, 1.0) * 64.0).round() as u8)
+            .unwrap_or(64)
+            .min(64);
+
+        let name_bytes: [u8; 22] = {
+            let mut n = [0u8; 22];
+            let bytes = inst_name.as_bytes();
+            let len = bytes.len().min(22);
+            n[..len].copy_from_slice(&bytes[..len]);
+            n
+        };
+        buf.extend_from_slice(&name_bytes);
+
+        let frame_count = sample.frame_count();
+        let byte_len = frame_count.saturating_sub(sample.header_size() as usize);
+        let word_len = byte_len / 2;
+
+        buf.extend_from_slice(&u16::to_be_bytes(word_len as u16));
+        buf.push((inst_finetune & 0x0F) as u8);
+        buf.push(inst_volume.min(64));
+        let (loop_start, loop_end) = if let Some((mode, s, e)) = sample.loop_info() {
+            if matches!(mode, LoopMode::Forward | LoopMode::PingPong) {
+                (s as u32, e as u32)
+            } else {
+                (0, 0)
+            }
+        } else {
+            (0, 0)
+        };
+        buf.extend_from_slice(&u16::to_be_bytes((loop_start / 2) as u16));
+        let loop_len = if loop_end > loop_start {
+            ((loop_end - loop_start) / 2) as u16
+        } else {
+            0u16
+        };
+        buf.extend_from_slice(&u16::to_be_bytes(loop_len));
+    }
+
+    // ── Song length + restart byte ─────────────────────────────────────────
+    let song_length = song.arrangement.len().min(128) as u8;
+    buf.push(song_length);
+    buf.push(0u8);
+
+    // ── Pattern order table (128 bytes) ────────────────────────────────────
+    for &idx in song.arrangement.iter().take(128) {
+        buf.push(idx as u8);
+    }
+    let pad_count = 128usize.saturating_sub(song.arrangement.len());
+    buf.resize(buf.len() + pad_count, 0u8);
+
+    // ── Format tag (4 bytes) ───────────────────────────────────────────────
+    buf.extend_from_slice(&tag);
+
+    // ── Pattern data ───────────────────────────────────────────────────────
+    for pat_idx in 0..total_patterns {
+        if let Some(pat) = song.patterns.get(pat_idx) {
+            for row in 0..64.min(pat.num_rows()) {
+                for ch in 0..num_channels {
+                    let (period, instrument, effect_cmd, effect_param) =
+                        if let Some(cell) = pat.get_cell(row, ch) {
+                            let inst_nibble = cell.instrument.map(|i| i + 1).unwrap_or(0);
+
+                            let (period, inst) = if let Some(ref note_event) = cell.note {
+                                match note_event {
+                                    NoteEvent::On(note) => {
+                                        let p = note_to_period(note.pitch, note.octave);
+                                        (p, inst_nibble)
+                                    }
+                                    NoteEvent::Off | NoteEvent::Cut => (0, inst_nibble),
+                                }
+                            } else {
+                                (0, inst_nibble)
+                            };
+
+                            let (eff_cmd, eff_param) = if let Some(eff) = cell.effects.first() {
+                                (
+                                    eff.effect_type().map(|et| et.protracker_cmd()).unwrap_or(0),
+                                    eff.param,
+                                )
+                            } else {
+                                (0, 0)
+                            };
+
+                            (period, inst, eff_cmd, eff_param)
+                        } else {
+                            (0, 0, 0, 0)
+                        };
+
+                    let inst_hi = (instrument & 0xF0) >> 4;
+                    let inst_lo = instrument & 0x0F;
+                    let byte0 = (((period >> 8) & 0x0F) as u8) | inst_hi;
+                    buf.push(byte0);
+                    buf.push(period as u8);
+                    buf.push((inst_lo << 4) | effect_cmd);
+                    buf.push(effect_param);
+                }
+            }
+            // Pad empty rows if pattern is shorter than 64
+            for _row in pat.num_rows()..64 {
+                for _ in 0..num_channels {
+                    buf.extend_from_slice(&[0, 0, 0, 0]);
+                }
+            }
+        } else {
+            for _ in 0..64 {
+                for _ in 0..num_channels {
+                    buf.extend_from_slice(&[0, 0, 0, 0]);
+                }
+            }
+        }
+    }
+
+    // ── Sample data ────────────────────────────────────────────────────────
+    for sample in samples {
+        let frame_count = sample.frame_count();
+        if frame_count <= sample.header_size() as usize {
+            continue;
+        }
+        let data_start = sample.header_size() as usize;
+        let data = &sample.data_ref()[data_start..];
+        let byte_len = data.len();
+        let encoded: Vec<u8> = data
+            .iter()
+            .map(|&s| {
+                let clamped = s.clamp(-1.0, 1.0);
+                (clamped * 127.0).round() as i8 as u8
+            })
+            .collect();
+        buf.extend_from_slice(&encoded[..byte_len.min(encoded.len())]);
+    }
+
+    Ok(buf)
 }
 
 /// Import a ProTracker-compatible MOD file from raw bytes.
@@ -276,15 +480,29 @@ fn period_to_note(period: u16) -> Option<(Pitch, u8)> {
     if period == 0 {
         return None;
     }
-    // semitones relative to C-4 (MIDI 48 in our numbering)
     let semitones = (12.0 * (C4_PERIOD / period as f64).log2()).round() as i32;
     let midi = 48i32 + semitones;
     if !(0..=119).contains(&midi) {
         return None;
     }
-    let pitch = Pitch::from_semitone((midi % 12) as u8)?;
+    let pitch = Pitch::from_semitone(midi.rem_euclid(12) as u8)?;
     let octave = (midi / 12) as u8;
     Some((pitch, octave))
+}
+
+/// Inverse of `period_to_note`: convert (Pitch, octave) back to a ProTracker period value.
+///
+/// Returns 0 if the note is out of MOD's supported range.
+fn note_to_period(pitch: Pitch, octave: u8) -> u16 {
+    let semitone = pitch.semitone() as i32;
+    let midi = (octave as i32) * 12 + semitone;
+    if midi <= 0 {
+        return 0;
+    }
+    let semitones_from_c4 = midi - 48;
+    let period = C4_PERIOD / 2.0_f64.powf(semitones_from_c4 as f64 / 12.0);
+    let rounded = period.round() as u16;
+    rounded.max(1)
 }
 
 /// Convert a MOD effect command and parameter to our Effect, if non-trivial.
@@ -503,5 +721,176 @@ mod tests {
     fn test_read_string_trims_nulls() {
         let data = b"hello\0\0\0world";
         assert_eq!(read_string(data, 0, 13), "hello");
+    }
+
+    #[test]
+    fn test_note_to_period_c4() {
+        let p = note_to_period(Pitch::C, 4);
+        assert_eq!(p, 428);
+    }
+
+    #[test]
+    fn test_note_to_period_c5_one_octave_up() {
+        let p = note_to_period(Pitch::C, 5);
+        assert_eq!(p, 214);
+    }
+
+    #[test]
+    fn test_note_to_period_a4_roundtrip() {
+        let period = note_to_period(Pitch::A, 4);
+        let (pitch, octave) = period_to_note(period).unwrap();
+        assert_eq!(pitch, Pitch::A);
+        assert_eq!(octave, 4);
+    }
+
+    #[test]
+    fn test_note_to_period_out_of_range_low() {
+        assert_eq!(note_to_period(Pitch::C, 0), 0);
+    }
+
+    #[test]
+    fn test_export_mod_requires_31_samples() {
+        let song = Song::new("Test".to_string(), 125.0);
+        let samples: Vec<Sample> = vec![Sample::default(); 15];
+        assert!(export_mod(&song, &samples).is_err());
+    }
+
+    #[test]
+    fn test_export_mod_empty_song_produces_valid_file() {
+        let mut song = Song::new("Empty Song".to_string(), 125.0);
+        song.patterns = vec![Pattern::new(64, 4)];
+        song.arrangement = vec![0];
+        let samples: Vec<Sample> = vec![Sample::default(); 31];
+        let result = export_mod(&song, &samples);
+        assert!(result.is_ok(), "empty export failed: {:?}", result.err());
+        let data = result.unwrap();
+        assert!(data.len() >= 1084, "file too small: {}", data.len());
+        assert_eq!(&data[1080..1084], b"M.K.");
+    }
+
+    #[test]
+    fn test_export_mod_roundtrip_empty() {
+        let mut song = Song::new("Roundtrip".to_string(), 125.0);
+        song.patterns = vec![Pattern::new(64, 4)];
+        song.arrangement = vec![0];
+        let samples: Vec<Sample> = vec![Sample::default(); 31];
+        let exported = export_mod(&song, &samples).unwrap();
+        let imported = import_mod(&exported);
+        assert!(
+            imported.is_ok(),
+            "round-trip import failed: {:?}",
+            imported.err()
+        );
+        let result = imported.unwrap();
+        assert_eq!(result.song.name, "Roundtrip");
+        assert_eq!(result.song.patterns.len(), 1);
+        assert_eq!(result.song.patterns[0].num_channels(), 4);
+        assert_eq!(result.song.arrangement, vec![0]);
+        assert_eq!(result.samples.len(), 31);
+    }
+
+    #[test]
+    fn test_export_mod_encoding_debug() {
+        let mut song = Song::new("Debug".to_string(), 125.0);
+        let mut pat = Pattern::new(64, 4);
+        pat.set_cell(
+            0,
+            0,
+            Cell {
+                note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 100, 0))),
+                instrument: Some(0),
+                volume: None,
+                effects: vec![],
+            },
+        );
+        song.patterns = vec![pat];
+        song.arrangement = vec![0];
+        let samples: Vec<Sample> = vec![Sample::default(); 31];
+        let exported = export_mod(&song, &samples).unwrap();
+        assert_eq!(exported[1084], 0x01); // period hi nibble for 428 = 0x1AC
+        assert_eq!(exported[1085], 0xAC); // period lo byte
+        let imported = import_mod(&exported).unwrap();
+        let ip = &imported.song.patterns[0];
+        let cell = ip.get_cell(0, 0).unwrap();
+        assert!(matches!(cell.note.as_ref(), Some(NoteEvent::On(n)) if n.pitch == Pitch::C));
+    }
+
+    #[test]
+    fn test_export_mod_roundtrip_with_notes() {
+        let mut song = Song::new("Note Test".to_string(), 125.0);
+        let mut pat = Pattern::new(64, 4);
+        pat.set_cell(
+            0,
+            0,
+            Cell {
+                note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 100, 0))),
+                instrument: Some(0),
+                volume: None,
+                effects: vec![],
+            },
+        );
+        pat.set_cell(
+            1,
+            0,
+            Cell {
+                note: Some(NoteEvent::On(Note::new(Pitch::E, 4, 100, 0))),
+                instrument: Some(0),
+                volume: None,
+                effects: vec![],
+            },
+        );
+        pat.set_cell(
+            2,
+            1,
+            Cell {
+                note: Some(NoteEvent::On(Note::new(Pitch::G, 4, 100, 2))),
+                instrument: Some(2),
+                volume: None,
+                effects: vec![],
+            },
+        );
+        song.patterns = vec![pat];
+        song.arrangement = vec![0];
+        let samples: Vec<Sample> = vec![Sample::default(); 31];
+        let exported = export_mod(&song, &samples).unwrap();
+        let imported = import_mod(&exported).unwrap();
+
+        let imported_pat = &imported.song.patterns[0];
+        assert!(matches!(
+            imported_pat.get_cell(0, 0).unwrap().note.as_ref(),
+            Some(NoteEvent::On(n)) if n.pitch == Pitch::C
+        ));
+        assert!(matches!(
+            imported_pat.get_cell(1, 0).unwrap().note.as_ref(),
+            Some(NoteEvent::On(n)) if n.pitch == Pitch::E
+        ));
+        let cell21 = imported_pat.get_cell(2, 1).unwrap();
+        assert!(matches!(
+            cell21.note.as_ref(),
+            Some(NoteEvent::On(n)) if n.pitch == Pitch::G
+        ));
+        assert_eq!(cell21.instrument, Some(2));
+        assert!(cell21.effects.is_empty());
+    }
+
+    #[test]
+    fn test_export_mod_respects_channel_count() {
+        let mut song = Song::new("8ch".to_string(), 125.0);
+        song.patterns = vec![Pattern::new(64, 8)];
+        song.arrangement = vec![0];
+        let samples: Vec<Sample> = vec![Sample::default(); 31];
+        let exported = export_mod(&song, &samples).unwrap();
+        assert_eq!(&exported[1080..1084], b"8CHN");
+    }
+
+    #[test]
+    fn test_export_mod_title_encoding() {
+        let mut song = Song::new("Test Song Title".to_string(), 125.0);
+        song.patterns = vec![Pattern::new(64, 4)];
+        song.arrangement = vec![0];
+        let samples: Vec<Sample> = vec![Sample::default(); 31];
+        let exported = export_mod(&song, &samples).unwrap();
+        let imported = import_mod(&exported).unwrap();
+        assert_eq!(imported.song.name, "Test Song Title");
     }
 }
