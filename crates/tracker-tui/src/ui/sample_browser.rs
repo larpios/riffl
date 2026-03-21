@@ -10,7 +10,7 @@
 use std::path::{Path, PathBuf};
 
 use ratatui::{
-    layout::Alignment,
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
@@ -59,6 +59,11 @@ pub struct SampleBrowser {
     mode: BrowserMode,
     entries: Vec<BrowserEntry>,
     selected: usize,
+    /// Cached waveform peak amplitudes for the currently selected audio file.
+    /// Empty when no waveform is loaded or selection is a directory.
+    pub waveform_peaks: Vec<f32>,
+    /// The file path whose waveform is currently cached.
+    pub waveform_path: Option<PathBuf>,
 }
 
 impl SampleBrowser {
@@ -72,6 +77,8 @@ impl SampleBrowser {
             mode: BrowserMode::Roots,
             entries: Vec::new(),
             selected: 0,
+            waveform_peaks: Vec::new(),
+            waveform_path: None,
         };
         browser.refresh_entries();
         browser
@@ -200,6 +207,28 @@ impl SampleBrowser {
             Some(e) if e.is_dir => self.bookmarked_paths.contains(&e.path),
             _ => false,
         }
+    }
+
+    /// Store computed waveform peaks for the given file path.
+    pub fn set_waveform_peaks(&mut self, path: PathBuf, peaks: Vec<f32>) {
+        self.waveform_path = Some(path);
+        self.waveform_peaks = peaks;
+    }
+
+    /// Clear cached waveform data (called when selection moves to a non-WAV entry).
+    pub fn clear_waveform(&mut self) {
+        self.waveform_path = None;
+        self.waveform_peaks.clear();
+    }
+
+    /// The file path whose waveform peaks are currently cached, if any.
+    pub fn waveform_path(&self) -> Option<&Path> {
+        self.waveform_path.as_deref()
+    }
+
+    /// Cached waveform peak amplitudes (empty when none loaded).
+    pub fn waveform_peaks(&self) -> &[f32] {
+        &self.waveform_peaks
     }
 
     /// Set the bookmarked directories. Bookmarked dirs appear at the top of the
@@ -343,6 +372,48 @@ fn scan_entries(dir: &Path) -> Vec<BrowserEntry> {
     dirs
 }
 
+/// Compute downsampled peak amplitudes for a WAV file.
+///
+/// Returns `n_bars` peak values (each 0.0..=1.0) suitable for rendering a
+/// waveform thumbnail. Returns an empty `Vec` when the file cannot be decoded.
+pub fn compute_waveform_peaks(path: &Path, n_bars: usize) -> Vec<f32> {
+    if n_bars == 0 {
+        return Vec::new();
+    }
+    // Use a fixed target rate — we only need amplitudes, not correct pitch.
+    let sample = match tracker_core::audio::load_sample(path, 44100) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let frames = sample.frame_count();
+    if frames == 0 {
+        return Vec::new();
+    }
+    let channels = sample.channels() as usize;
+    let data = sample.data();
+    let frames_per_bar = (frames + n_bars - 1) / n_bars;
+    let mut peaks = Vec::with_capacity(n_bars);
+    for bar in 0..n_bars {
+        let start = bar * frames_per_bar;
+        let end = (start + frames_per_bar).min(frames);
+        if start >= end {
+            peaks.push(0.0f32);
+            continue;
+        }
+        let mut peak = 0.0f32;
+        for frame in start..end {
+            for ch in 0..channels {
+                let idx = frame * channels + ch;
+                if idx < data.len() {
+                    peak = peak.max(data[idx].abs());
+                }
+            }
+        }
+        peaks.push(peak);
+    }
+    peaks
+}
+
 /// Build the window title for the sample browser.
 ///
 /// Shows `" Sample Browser / {root_name} "` when at the configured root,
@@ -379,12 +450,40 @@ fn browser_title(browser: &SampleBrowser) -> String {
 }
 
 /// Render the sample browser view.
+///
+/// When a WAV waveform has been lazy-loaded (`browser.waveform_peaks` is
+/// non-empty) and the terminal is wide enough, the area is split horizontally:
+/// ~65 % for the file list on the left and ~35 % for the waveform panel on
+/// the right.
 pub fn render_sample_browser(
     frame: &mut Frame,
-    area: ratatui::layout::Rect,
+    area: Rect,
     browser: &SampleBrowser,
     theme: &Theme,
 ) {
+    let show_waveform = !browser.waveform_peaks.is_empty()
+        && browser.waveform_path.is_some()
+        && area.width >= 60;
+
+    let (list_area, wave_area_opt) = if show_waveform {
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(65), Constraint::Percentage(35)])
+            .split(area);
+        (chunks[0], Some(chunks[1]))
+    } else {
+        (area, None)
+    };
+
+    render_browser_list(frame, list_area, browser, theme);
+
+    if let (Some(wave_area), Some(wpath)) = (wave_area_opt, browser.waveform_path.as_deref()) {
+        render_waveform_panel(frame, wave_area, &browser.waveform_peaks, wpath, theme);
+    }
+}
+
+/// Render the file-list portion of the sample browser.
+fn render_browser_list(frame: &mut Frame, area: Rect, browser: &SampleBrowser, theme: &Theme) {
     let title = browser_title(browser);
 
     let at_root_list = browser.at_roots();
@@ -459,6 +558,81 @@ pub fn render_sample_browser(
     let paragraph = Paragraph::new(lines);
     frame.render_widget(block, area);
     frame.render_widget(paragraph, inner);
+}
+
+/// Render a waveform bar-chart panel for a selected audio file.
+///
+/// Uses eighth-block characters (`▁▂▃▄▅▆▇█`) to draw a bar chart from the
+/// bottom of the panel, one column per time slice, giving sub-row amplitude
+/// resolution.
+fn render_waveform_panel(
+    frame: &mut Frame,
+    area: Rect,
+    peaks: &[f32],
+    path: &Path,
+    theme: &Theme,
+) {
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("waveform");
+    let title = format!(" {name} ");
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(theme.border_style())
+        .title(Span::styled(title, Style::default().fg(theme.text)))
+        .title_alignment(Alignment::Center);
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let h = inner.height as usize;
+    let w = inner.width as usize;
+    if h == 0 || w == 0 || peaks.is_empty() {
+        return;
+    }
+
+    // Map the peak array to exactly `w` bars by index interpolation.
+    let bars: Vec<f32> = (0..w)
+        .map(|col| {
+            let idx = (col * peaks.len()) / w;
+            peaks[idx.min(peaks.len() - 1)]
+        })
+        .collect();
+
+    // Eighth-block chars for sub-row precision (index 0 = empty, 8 = full).
+    const EIGHTHS: [char; 9] = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+
+    let mut lines: Vec<Line> = Vec::with_capacity(h);
+    for row in 0..h {
+        // row 0 = top of panel; row_from_bottom 0 = bottom row.
+        let row_from_bottom = h - 1 - row;
+        let subcells_below = row_from_bottom * 8;
+
+        let spans: Vec<Span> = bars
+            .iter()
+            .map(|&amp| {
+                let total = (amp * (h * 8) as f32) as usize;
+                let ch = if subcells_below + 8 <= total {
+                    '█'
+                } else if subcells_below < total {
+                    EIGHTHS[(total - subcells_below).min(8)]
+                } else {
+                    ' '
+                };
+                let style = if ch != ' ' {
+                    Style::default().fg(theme.primary)
+                } else {
+                    Style::default()
+                };
+                Span::styled(ch.to_string(), style)
+            })
+            .collect();
+        lines.push(Line::from(spans));
+    }
+
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 #[cfg(test)]
@@ -878,6 +1052,83 @@ mod tests {
 
         fs::remove_dir_all(&a).ok();
         fs::remove_dir_all(&b).ok();
+    }
+
+    // --- Waveform cache API ---
+
+    #[test]
+    fn test_set_and_clear_waveform() {
+        let dir = make_dir("wf_set_clear");
+        let path = dir.join("kick.wav");
+        let mut browser = SampleBrowser::new(vec![dir.clone()]);
+
+        assert!(browser.waveform_peaks().is_empty());
+        assert!(browser.waveform_path().is_none());
+
+        browser.set_waveform_peaks(path.clone(), vec![0.1, 0.5, 0.8]);
+        assert_eq!(browser.waveform_peaks().len(), 3);
+        assert_eq!(browser.waveform_path(), Some(path.as_path()));
+
+        browser.clear_waveform();
+        assert!(browser.waveform_peaks().is_empty());
+        assert!(browser.waveform_path().is_none());
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn test_compute_waveform_peaks_nonexistent_file() {
+        let peaks = compute_waveform_peaks(Path::new("/nonexistent/file.wav"), 64);
+        assert!(peaks.is_empty(), "bad path should return empty peaks");
+    }
+
+    #[test]
+    fn test_compute_waveform_peaks_valid_wav() {
+        use std::io::Write;
+
+        let dir = make_dir("wf_peaks_valid");
+        let path = dir.join("test.wav");
+
+        // Write a minimal PCM WAV: 44100 Hz, 1 ch, 16-bit, 0.1 s
+        fn write_wav(p: &Path, sr: u32, ch: u16, samples: &[i16]) {
+            let data_len = (samples.len() * 2) as u32;
+            let mut f = std::fs::File::create(p).unwrap();
+            f.write_all(b"RIFF").unwrap();
+            f.write_all(&(36 + data_len).to_le_bytes()).unwrap();
+            f.write_all(b"WAVE").unwrap();
+            f.write_all(b"fmt ").unwrap();
+            f.write_all(&16u32.to_le_bytes()).unwrap();
+            f.write_all(&1u16.to_le_bytes()).unwrap(); // PCM
+            f.write_all(&ch.to_le_bytes()).unwrap();
+            f.write_all(&sr.to_le_bytes()).unwrap();
+            f.write_all(&(sr * ch as u32 * 2).to_le_bytes()).unwrap();
+            f.write_all(&(ch * 2).to_le_bytes()).unwrap();
+            f.write_all(&16u16.to_le_bytes()).unwrap();
+            f.write_all(b"data").unwrap();
+            f.write_all(&data_len.to_le_bytes()).unwrap();
+            for &s in samples {
+                f.write_all(&s.to_le_bytes()).unwrap();
+            }
+        }
+
+        // 4410 mono samples at half amplitude (16383 ≈ 0.5 of i16::MAX)
+        let samples: Vec<i16> = (0..4410).map(|_| 16383i16).collect();
+        write_wav(&path, 44100, 1, &samples);
+
+        let n = 32;
+        let peaks = compute_waveform_peaks(&path, n);
+        assert_eq!(peaks.len(), n, "should return exactly n_bars peaks");
+        for &p in &peaks {
+            assert!(p > 0.0 && p <= 1.0, "peak {p} should be in (0, 1]");
+        }
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn test_compute_waveform_peaks_zero_bars() {
+        let peaks = compute_waveform_peaks(Path::new("/some/file.wav"), 0);
+        assert!(peaks.is_empty(), "n_bars=0 should return empty vec");
     }
 
     #[test]

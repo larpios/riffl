@@ -1061,6 +1061,46 @@ fn handle_code_editor_key(app: &mut App, key: KeyEvent) {
     }
 }
 
+/// Lazily update the waveform panel cache to match the current browser selection.
+///
+/// Loads peaks when a WAV file is selected and the cache is stale; clears the
+/// cache when the selection is a directory or an unsupported file type.
+fn maybe_update_waveform(app: &mut App) {
+    use crate::ui::sample_browser::compute_waveform_peaks;
+
+    let path = match app
+        .sample_browser
+        .selected_path()
+        .filter(|_| app.sample_browser.selected_is_file())
+        .map(|p| p.to_path_buf())
+    {
+        Some(p) => p,
+        None => {
+            app.sample_browser.clear_waveform();
+            return;
+        }
+    };
+
+    let is_wav = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.eq_ignore_ascii_case("wav"))
+        .unwrap_or(false);
+
+    if !is_wav {
+        app.sample_browser.clear_waveform();
+        return;
+    }
+
+    // Only reload when the selection has changed.
+    if app.sample_browser.waveform_path() == Some(path.as_path()) {
+        return;
+    }
+
+    let peaks = compute_waveform_peaks(&path, 128);
+    app.sample_browser.set_waveform_peaks(path, peaks);
+}
+
 /// Returns `true` if the key was consumed by the sample browser, `false` to fall through.
 fn handle_sample_browser_key(app: &mut App, key: KeyEvent) -> bool {
     use crossterm::event::{KeyCode, KeyModifiers};
@@ -1072,7 +1112,7 @@ fn handle_sample_browser_key(app: &mut App, key: KeyEvent) -> bool {
         return false;
     }
 
-    match key.code {
+    let consumed = match key.code {
         // Navigation — also clears any active preview so offset resets on item change
         KeyCode::Char('j') | KeyCode::Down => {
             app.reset_browser_preview();
@@ -1196,7 +1236,12 @@ fn handle_sample_browser_key(app: &mut App, key: KeyEvent) -> bool {
         }
 
         _ => false,
+    };
+
+    if consumed {
+        maybe_update_waveform(app);
     }
+    consumed
 }
 
 fn handle_file_browser_key(app: &mut App, key: KeyEvent) {
