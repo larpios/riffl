@@ -481,7 +481,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                 app.editor.enter_note_with_octave(pitch, octave);
                 // Capture as draw_note for draw mode repeat
                 {
-                    use tracker_core::pattern::note::{NoteEvent, Note};
+                    use tracker_core::pattern::note::{Note, NoteEvent};
                     let inst = app.editor.current_instrument();
                     app.draw_note = Some(NoteEvent::On(Note::new(pitch, octave, 100, inst)));
                 }
@@ -1069,25 +1069,43 @@ fn handle_sample_browser_key(app: &mut App, key: KeyEvent) -> bool {
     }
 
     match key.code {
-        // Navigation
+        // Navigation — also clears any active preview so offset resets on item change
         KeyCode::Char('j') | KeyCode::Down => {
+            app.reset_browser_preview();
             app.sample_browser.move_down();
             true
         }
         KeyCode::Char('k') | KeyCode::Up => {
+            app.reset_browser_preview();
             app.sample_browser.move_up();
             true
         }
 
-        // Enter directory
-        KeyCode::Char('l') | KeyCode::Right => {
+        // Enter directory (l always navigates; Right scrubs when previewing)
+        KeyCode::Char('l') => {
             app.sample_browser.enter_dir();
             true
         }
+        KeyCode::Right => {
+            if app.browser_preview_active {
+                app.scrub_browser_preview(true);
+            } else {
+                app.sample_browser.enter_dir();
+            }
+            true
+        }
 
-        // Go up a directory (escapes past configured root into real filesystem)
-        KeyCode::Char('h') | KeyCode::Left | KeyCode::Backspace => {
+        // Go up a directory (h / Backspace always navigate; Left scrubs when previewing)
+        KeyCode::Char('h') | KeyCode::Backspace => {
             app.sample_browser.go_up();
+            true
+        }
+        KeyCode::Left => {
+            if app.browser_preview_active {
+                app.scrub_browser_preview(false);
+            } else {
+                app.sample_browser.go_up();
+            }
             true
         }
 
@@ -1159,10 +1177,10 @@ fn handle_sample_browser_key(app: &mut App, key: KeyEvent) -> bool {
             true
         }
 
-        // Preview selected file (Space = audition without loading)
+        // Preview selected file — Space toggles play/stop; does not restart if already playing
         KeyCode::Char(' ') => {
             if app.sample_browser.selected_is_file() {
-                let _ = app.preview_selected_sample();
+                app.toggle_browser_preview();
             }
             true
         }

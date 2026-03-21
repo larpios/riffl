@@ -329,7 +329,7 @@ pub fn render_sample_browser(
     let nav_hint = if at_root_list {
         "  l/Enter: browse dir  ·  j/k: navigate"
     } else {
-        "  Space: preview  ·  Enter: load  ·  l: enter dir  ·  h: up  ·  ~: roots  ·  j/k: navigate"
+        "  Space: preview/stop  ·  ←/→: scrub  ·  Enter: load  ·  l: enter dir  ·  h: up  ·  ~: roots  ·  j/k: navigate"
     };
 
     let block = Block::default()
@@ -432,7 +432,10 @@ mod tests {
 
         // go_up should navigate to the parent of the root, NOT back to roots list
         b.go_up();
-        assert!(!b.at_roots(), "should still be in InDir, not back at roots list");
+        assert!(
+            !b.at_roots(),
+            "should still be in InDir, not back at roots list"
+        );
         assert_eq!(b.current_dir(), Some(base.as_path()));
 
         fs::remove_dir_all(&base).ok();
@@ -512,7 +515,10 @@ mod tests {
         let auto_entry = b.entries().iter().find(|e| e.path == auto).unwrap();
 
         assert!(conf_entry.is_pinned, "configured root should be pinned");
-        assert!(!auto_entry.is_pinned, "auto-detected root should not be pinned");
+        assert!(
+            !auto_entry.is_pinned,
+            "auto-detected root should not be pinned"
+        );
 
         fs::remove_dir_all(&configured).ok();
         fs::remove_dir_all(&auto).ok();
@@ -662,7 +668,10 @@ mod tests {
         assert_eq!(b.current_dir(), Some(root.as_path()));
 
         let title = browser_title(&b);
-        assert_eq!(title, " Sample Browser / Music ", "title at root: {title:?}");
+        assert_eq!(
+            title, " Sample Browser / Music ",
+            "title at root: {title:?}"
+        );
         assert!(!title.contains("/ /"), "no double-slash: {title:?}");
 
         fs::remove_dir_all(&base).ok();
@@ -698,7 +707,10 @@ mod tests {
         b.go_up(); // → parent (above configured root)
 
         let title = browser_title(&b);
-        assert!(!title.contains("/ /"), "no double-slash when above root: {title:?}");
+        assert!(
+            !title.contains("/ /"),
+            "no double-slash when above root: {title:?}"
+        );
         assert!(title.contains("parent_dir"), "shows dir name: {title:?}");
 
         fs::remove_dir_all(&grandparent).ok();

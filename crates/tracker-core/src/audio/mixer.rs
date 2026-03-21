@@ -504,6 +504,24 @@ impl Mixer {
         self.preview_sample = None;
     }
 
+    /// Returns `true` when a preview is currently active (started but not yet finished or stopped).
+    pub fn is_preview_playing(&self) -> bool {
+        self.preview_sample.is_some()
+    }
+
+    /// Trigger a one-shot preview starting from `start_frame` (in sample-native frames).
+    /// Use `0` to play from the beginning, same as [`trigger_preview`].
+    pub fn trigger_preview_at(
+        &mut self,
+        sample: Arc<Sample>,
+        playback_rate: f64,
+        start_frame: usize,
+    ) {
+        self.preview_pos = start_frame as f64;
+        self.preview_rate = playback_rate;
+        self.preview_sample = Some(sample);
+    }
+
     /// Get the number of currently active voices.
     pub fn active_voice_count(&self) -> usize {
         self.voices
@@ -1508,5 +1526,52 @@ mod tests {
         let voice = mixer.voices[0].as_ref().unwrap();
         assert_eq!(voice.loop_direction, -1.0);
         assert_eq!(voice.position, 8.0);
+    }
+
+    // --- Preview toggle & scrub ---
+
+    #[test]
+    fn test_is_preview_playing_false_initially() {
+        let sample = make_test_sample(44100, 0.25);
+        let mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
+        assert!(!mixer.is_preview_playing());
+    }
+
+    #[test]
+    fn test_is_preview_playing_true_after_trigger() {
+        let sample = Arc::new(make_test_sample(44100, 0.25));
+        let mut mixer = Mixer::new(vec![Arc::clone(&sample)], Vec::new(), 4, 44100);
+        mixer.trigger_preview(Arc::clone(&sample), 1.0);
+        assert!(mixer.is_preview_playing());
+    }
+
+    #[test]
+    fn test_is_preview_playing_false_after_stop() {
+        let sample = Arc::new(make_test_sample(44100, 0.25));
+        let mut mixer = Mixer::new(vec![Arc::clone(&sample)], Vec::new(), 4, 44100);
+        mixer.trigger_preview(Arc::clone(&sample), 1.0);
+        mixer.stop_preview();
+        assert!(!mixer.is_preview_playing());
+    }
+
+    #[test]
+    fn test_trigger_preview_at_sets_offset() {
+        let sample = Arc::new(make_test_sample(44100, 1.0));
+        let mut mixer = Mixer::new(vec![Arc::clone(&sample)], Vec::new(), 4, 44100);
+        // Start 0.1s (4410 frames) into the sample
+        mixer.trigger_preview_at(Arc::clone(&sample), 1.0, 4410);
+        assert!(mixer.is_preview_playing());
+        // Render a small buffer — should not panic, preview starts mid-sample
+        let mut output = vec![0.0f32; 64];
+        mixer.render(&mut output);
+        assert!(mixer.is_preview_playing(), "still playing after small render");
+    }
+
+    #[test]
+    fn test_trigger_preview_at_zero_same_as_trigger_preview() {
+        let sample = Arc::new(make_test_sample(44100, 0.25));
+        let mut mixer = Mixer::new(vec![Arc::clone(&sample)], Vec::new(), 4, 44100);
+        mixer.trigger_preview_at(Arc::clone(&sample), 1.0, 0);
+        assert!(mixer.is_preview_playing());
     }
 }
