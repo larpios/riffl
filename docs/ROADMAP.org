@@ -2,16 +2,23 @@
 #+DATE: 2026-03-21
 #+DESCRIPTION: The single source of truth for Riffl's vision, architecture, and development milestones.
 
+* Property Legend
+- *STATUS*: Current state of the milestone (completed, in-progress, planned, ongoing, optional, parked).
+- *PRIORITY*: A (Critical Path), B (High Value), C (Nice to Have).
+- *IMPORTANCE*: Strategic value to the product vision (Critical, High, Medium, Low).
+- *COMPLEXITY*: Estimated engineering effort (Low, Medium, High, Very High).
+- *TYPE*: Feature, Bugfix, Improvement, Refactor.
+
 * Vision
-** What We're Building
+**  What We're Building
 A full-featured DAW with tracker-style interface and live coding capabilities (inspired by Strudel/TidalCycles), built in Rust. Not just a tracker — a complete music production environment where tracker workflow and algorithmic composition coexist.
 
-** Core Identity
+**  Core Identity
 - *Tracker-first*: Pattern grid is the primary editing interface. Effect commands, step sequencing, hex values — the tracker DNA stays.
 - *Live coding built-in*: Rhai scripting engine for algorithmic pattern generation, generative music, real-time composition. This is the differentiator no commercial DAW has.
 - *Two frontends*: TUI (current, great for tracker workflow) and GUI (future, needed for waveforms, plugin UIs, automation curves).
 
-** What Sets Us Apart
+**  What Sets Us Apart
 | Us                             | Traditional DAWs           | Traditional Trackers |
 |--------------------------------+----------------------------+----------------------|
 | Tracker grid + live coding DSL | Piano roll + mouse workflow | Tracker grid only    |
@@ -21,7 +28,7 @@ A full-featured DAW with tracker-style interface and live coding capabilities (i
 | Modern plugin hosting (CLAP)   | VST2/3 + AU                | Limited/none         |
 
 * Architecture
-** Target Structure (Cargo Workspace)
+**  Target Structure (Cargo Workspace)
 #+BEGIN_SRC 
 riffl/
 ├── crates/
@@ -51,7 +58,7 @@ riffl/
 └── ...
 #+END_SRC
 
-** Key Architectural Principle
+**  Key Architectural Principle
 *The core is the product. Frontends are skins.*
 
 `tracker-core` must be 100% frontend-agnostic. No ratatui types, no crossterm types, no UI concepts. It exposes:
@@ -64,114 +71,434 @@ riffl/
 Both TUI and GUI import `tracker-core` and build their own UI/input layer on top.
 
 * Development Phases (High-Level)
-** Phase 1: Architecture Split (DONE 2026-03-08)
+**  Phase 1: Architecture Split (DONE 2026-03-08)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 Refactor monolith into workspace (tracker-core + tracker-tui).
-** Phase 2: Audio Engine Upgrades (IN-PROGRESS)
+**  Phase 2: Audio Engine Upgrades (IN-PROGRESS)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 Professional-grade mixing and effects. Channel strip architecture, built-in effects, improved sample engine.
-** Phase 3: MIDI + Automation (PLANNED)
+**  Phase 3: MIDI + Automation (PLANNED)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 External controller support and parameter automation.
-** Phase 4: Arrangement + Song Structure (PLANNED)
+**  Phase 4: Arrangement + Song Structure (PLANNED)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 Full song arrangement beyond pattern sequencing.
-** Phase 5: Plugin Hosting (PLANNED)
+**  Phase 5: Plugin Hosting (PLANNED)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 Host third-party audio plugins (CLAP/VST3).
-** Phase 6: GUI Frontend (PLANNED)
+**  Phase 6: GUI Frontend (PLANNED)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 Full graphical frontend.
-** Phase 7: Live Coding Power (ONGOING)
+**  Phase 7: Live Coding Power (ONGOING)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 Strudel-level expressiveness in the scripting DSL.
 
 * Monetization Strategy
-** Phase A: Community Building (now - Phase 3)
+**  Phase A: Community Building (now - Phase 3)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 - *Open source* the full project (MIT or dual MIT/Apache-2.0)
 - *GitHub Sponsors / Patreon* for early supporters
 - Build community around the live-coding-meets-tracker niche.
-** Phase B: Open-Core Transition (Phase 4-5)
+**  Phase B: Open-Core Transition (Phase 4-5)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 - Core tracker + DSL stays open source forever.
 - *Paid features* (~$75 license like Renoise):
   - VST3/CLAP plugin hosting
   - Advanced effects (convolution reverb, multiband compressor)
   - Commercial export formats (MP3, AAC)
   - Multi-output routing
-** Phase C: Ecosystem Revenue (Phase 6+)
+**  Phase C: Ecosystem Revenue (Phase 6+)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 - Paid sample packs / instrument packs.
 - Premium DSL script library / marketplace.
 
 * Milestone 1 — ProTracker Parity
 :PROPERTIES:
 :STATUS: completed
+:PRIORITY: A
+:IMPORTANCE: Critical
+:COMPLEXITY: High
 :END:
 Minimum target: feature parity with ProTracker (Amiga MOD tracker).
 
-** Effect Commands
+**  Effect Commands
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 *** DONE 5xy — Tone Portamento + Volume Slide
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 *** DONE 6xy — Vibrato + Volume Slide
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 *** DONE 7xy — Tremolo
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 *** DONE 9xx — Sample Offset
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 *** DONE Exy — Extended Effects
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 **** DONE E1x — Fine Portamento Up
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 **** DONE E2x — Fine Portamento Down
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 **** DONE E3x — Glissando Control
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 **** DONE E4x — Set Vibrato Waveform
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 **** DONE E5x — Set Finetune
-**** DONE E6x — Pattern Loop
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
+**** TODO E6x — Pattern Loop
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
+- [ ] Fix bugs where it loops forever even with a count value
 **** DONE E7x — Set Tremolo Waveform
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 **** DONE E9x — Retrigger Note
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 **** DONE EAx — Fine Volume Slide Up
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 **** DONE EBx — Fine Volume Slide Down
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 **** DONE ECx — Note Cut
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 **** DONE EDx — Note Delay
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 **** DONE EEx — Pattern Delay
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 
-** Sample Features
+**  Sample Features
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 *** DONE Loop Points
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 *** DONE Sample Finetune
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 *** DONE Sample Default Volume
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 
-** File Format
+**  File Format
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 *** TODO MOD Import [0/1]
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 - [ ] Fix Import Bugs [/]
-    - [ ] BPM Update
-    - [ ] Inconsistent Notes
+  - [ ] BPM Update
+  - [ ] Inconsistent Notes
 *** DONE MOD Export
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 *** TODO IT Import
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 *** TODO IT Export
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 *** TODO XM Import
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 *** TODO XM Export
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 
 * Milestone 2 — Renoise-Level Instrument System
 :PROPERTIES:
 :STATUS: planned
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Very High
 :END:
 This is what separates a toy tracker from a real composition tool.
 
 ** TODO Instrument Envelopes
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 Per-instrument ADSR + LFO for volume, pitch, and panning.
 ** TODO Multi-Sample Instruments (Keyzone Mapping)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO Sample Slicing
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO Per-Note Extra Columns (Renoise-style)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO Phrases (Sub-Patterns inside Instruments)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO Sample Editor View
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO More Channels
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO Configurable Pattern Length
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO Undo/Redo Beyond Pattern Snapshots
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 
 * Milestone 2.5 — Pattern Editor & Transport Essentials
 :PROPERTIES:
 :STATUS: in-progress
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
 :END:
 
 ** DONE Better Keybindings for Entering Notes
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** DONE r — Replace-Once Mode
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** DONE Play From Cursor
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** DONE Loop Region
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** DONE Follow Mode
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** DONE Transpose Selection
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** DONE Note Cut (^^^) Distinct from Note Off (===)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** DONE Per-Pattern Row Count
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** DONE Draw Mode
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** DONE Note Interpolation
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** DONE BPM Inline Edit
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** DONE :tutor — Interactive Tutorial / Cheat Sheet
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO Sample Browser Overhaul [6/8]
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 - [x] ./samples/ relative to project file
 - [x] Filesystem root escape / free browsing
 - [x] Configured roots as ★ pinned entries
@@ -183,38 +510,203 @@ Per-instrument ADSR + LFO for volume, pitch, and panning.
 - [ ] Multi pane view for usability
 
 ** TODO Better Instrument Editor
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 *** TODO Instrument Envelope Editor
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 *** TODO Instrument Keyzone Editor
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 *** TODO Export Instrument to Files
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
 
 * Milestone 3 — Quality-of-Life / Usability
+:PROPERTIES:
+:STATUS: planned
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Medium
+:END:
+
 ** TODO Fix Inconsistent Modal Input Across Views
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO Live Recording
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO Built-in Samples/Synths
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO Drawing Samples
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO Visual Feedback (VU meters, Oscilloscope)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO Pattern Clone / Duplicate / Merge
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 
 * Milestone 4 — Audio Engine Upgrades
+:PROPERTIES:
+:STATUS: planned
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: High
+:END:
+
 ** TODO Built-in Synth Voice
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO Insert Effects on Channel Strips
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO Master Bus Processing
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO Built-in DSP Effects (Chorus, Bitcrusher, Distortion, Convolution, Multiband)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 
 * Milestone 5 - Code Editor
+:PROPERTIES:
+:STATUS: planned
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Medium
+:END:
+
 ** TODO Fix Code Editor Modal Input
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 
 * Milestone 6 — MIDI
+:PROPERTIES:
+:STATUS: planned
+:PRIORITY: B
+:IMPORTANCE: High
+:COMPLEXITY: High
+:END:
+
 ** TODO MIDI Input (Note-on/off, CC learn)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO MIDI Output
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO MIDI File Import/Export
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 
 * Milestone 7 — Advanced DSL
+:PROPERTIES:
+:STATUS: ongoing
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: High
+:END:
+
 ** TODO Mini-Notation Parser ("bd sd [hh hh] cp")
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO Pattern Combinators (stack, cat, fast, slow, rev)
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 ** TODO Live Eval
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
 
 * Milestone 8 — Chip Sound Emulation (Furnace-style, optional)
+:PROPERTIES:
+:STATUS: optional
+:PRIORITY: C
+:IMPORTANCE: Low
+:COMPLEXITY: High
+:END:
 * Milestone 9 — Glicol Integration (parked)
+:PROPERTIES:
+:STATUS: parked
+:PRIORITY: C
+:IMPORTANCE: Low
+:COMPLEXITY: High
+:END:
 * Milestone 10 — Plugin Hosting
+:PROPERTIES:
+:STATUS: planned
+:PRIORITY: C
+:IMPORTANCE: Medium
+:COMPLEXITY: Very High
+:END:
 * Milestone 11 — GUI Frontend
+:PROPERTIES:
+:STATUS: planned
+:PRIORITY: C
+:IMPORTANCE: Medium
+:COMPLEXITY: Very High
+:END:
+

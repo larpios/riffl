@@ -5,7 +5,7 @@ Riffl is an ambitious music tracker blending the structured pattern workflow of 
 ## 🎯 Project Identity
 - **Goal:** Really capable, visually appealing, and ergonomic TUI/GUI app.
 - **Core:** Low-latency Rust audio engine, Rhai DSL for live coding.
-- **Inspiration:** Strudel, Renoise, ProTracker.
+- **Inspiration:** Strudel, Renoise, ProTracker, Furnace, OpenMPT.
 - **Genres:** Capable of anything from Dariacore to Breakcore or YTPMVs.
 
 ## 🏗️ Architecture
@@ -23,3 +23,8 @@ Riffl is an ambitious music tracker blending the structured pattern workflow of 
 - **Architecture & Roadmap:** [docs/ROADMAP.org](docs/ROADMAP.org)
 - **Dev Guidelines:** [AGENTS.md](AGENTS.md)
 - **Testing:** [ACCEPTANCE_TEST.md](ACCEPTANCE_TEST.md)
+
+## Requirements
+- Read the [docs/ROADMAP.org](docs/ROADMAP.org) to figure out things to do
+- Make sure to update the [docs/ROADMAP.org](docs/ROADMAP.org)
+- Make atomic commits as you go
