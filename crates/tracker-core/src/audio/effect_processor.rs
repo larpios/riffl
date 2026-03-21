@@ -707,10 +707,12 @@ mod tests {
 
     #[test]
     fn test_reset_preserves_frames_per_row() {
-        let mut state = ChannelEffectState::default();
-        state.frames_per_row = 12000;
-        state.pitch_ratio = 2.0;
-        state.volume_override = Some(0.5);
+        let mut state = ChannelEffectState {
+            frames_per_row: 12000,
+            pitch_ratio: 2.0,
+            volume_override: Some(0.5),
+            ..Default::default()
+        };
         state.reset();
         assert_eq!(state.frames_per_row, 12000);
         assert_eq!(state.pitch_ratio, 1.0);
@@ -719,12 +721,14 @@ mod tests {
 
     #[test]
     fn test_new_row_resets_transients() {
-        let mut state = ChannelEffectState::default();
-        state.arpeggio_active = true;
-        state.arpeggio_x = 3;
-        state.vibrato_active = true;
-        state.volume_slide_up = 4;
-        state.row_frame_counter = 100;
+        let mut state = ChannelEffectState {
+            arpeggio_active: true,
+            arpeggio_x: 3,
+            vibrato_active: true,
+            volume_slide_up: 4,
+            row_frame_counter: 100,
+            ..Default::default()
+        };
 
         state.new_row();
 
@@ -737,10 +741,12 @@ mod tests {
 
     #[test]
     fn test_new_row_preserves_running_state() {
-        let mut state = ChannelEffectState::default();
-        state.pitch_ratio = 1.5;
-        state.volume_override = Some(0.8);
-        state.portamento_target = Some(440.0);
+        let mut state = ChannelEffectState {
+            pitch_ratio: 1.5,
+            volume_override: Some(0.8),
+            portamento_target: Some(440.0),
+            ..Default::default()
+        };
 
         state.new_row();
 

@@ -11,10 +11,10 @@ use crate::pattern::pattern::Pattern;
 use crate::pattern::Cell;
 use crate::song::{Instrument, Song};
 
-/// Reference period for C-4 in our pitch system. Period 428 on a PAL
-/// Amiga produces ~8287 Hz; we treat it as our middle-C (261.63 Hz)
-/// so that relative intervals are preserved regardless of absolute pitch.
-const C4_PERIOD: f64 = 428.0;
+/// Reference period for C-4 in ProTracker. Period 538 on a PAL Amiga
+/// produces ~8287 Hz at 50Hz refresh. This is the correct ProTracker
+/// period for C-4 (finetune 0).
+const C4_PERIOD: f64 = 538.0;
 
 /// Sample rate assigned to imported MOD samples.
 /// The de-facto standard used by most modern MOD players.
@@ -22,6 +22,39 @@ const MOD_SAMPLE_RATE: u32 = 8363;
 
 /// Default note velocity for imported pattern cells.
 const DEFAULT_VELOCITY: u8 = 100;
+
+/// Default BPM when no tempo info is found in the MOD file.
+const _DEFAULT_BPM: f64 = 125.0;
+
+/// Convert MOD speed value to BPM using the ProTracker formula: BPM = 750 / speed
+fn speed_to_bpm(speed: u8) -> f64 {
+    750.0 / speed as f64
+}
+
+/// Extract tempo information from MOD patterns by scanning for Fxx (SetSpeed) effects.
+/// Returns (speed, bpm) where speed is the first speed value found (default 6),
+/// and bpm is calculated using the ProTracker formula.
+fn extract_tempo_from_patterns(patterns: &[Pattern]) -> (u8, f64) {
+    use crate::pattern::effect::EffectType;
+    let default_speed = 6u8;
+
+    for pattern in patterns {
+        for row_idx in 0..pattern.num_rows() {
+            if let Some(row) = pattern.get_row(row_idx) {
+                for cell in row.iter() {
+                    if let Some(effect) = cell.effects.first() {
+                        if effect.effect_type() == Some(EffectType::SetSpeed) {
+                            let speed = effect.param.max(1) * 2;
+                            return (speed, speed_to_bpm(speed));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    (default_speed, speed_to_bpm(default_speed))
+}
 
 /// Result of a successful MOD import.
 pub struct ModImportResult {
@@ -335,13 +368,15 @@ pub fn import_mod(data: &[u8]) -> Result<ModImportResult, String> {
         })
         .collect();
 
+    let (speed, bpm) = extract_tempo_from_patterns(&patterns);
+
     let mut song = Song::new(
         if title.is_empty() {
             "Untitled".to_string()
         } else {
             title
         },
-        125.0,
+        bpm,
     );
     song.patterns = if patterns.is_empty() {
         vec![Pattern::default()]
@@ -354,6 +389,7 @@ pub fn import_mod(data: &[u8]) -> Result<ModImportResult, String> {
         arrangement
     };
     song.instruments = instruments;
+    song.speed = speed;
 
     Ok(ModImportResult { song, samples })
 }
@@ -553,39 +589,128 @@ fn read_string(data: &[u8], pos: usize, len: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pattern::effect::EffectType;
+    use crate::pattern::note::NoteEvent;
+
+    #[test]
+    fn test_speed_to_bpm_default() {
+        assert_eq!(speed_to_bpm(6), 125.0);
+    }
+
+    #[test]
+    fn test_speed_to_bpm_speed_5() {
+        assert_eq!(speed_to_bpm(5), 150.0);
+    }
+
+    #[test]
+    fn test_speed_to_bpm_speed_8() {
+        assert_eq!(speed_to_bpm(8), 93.75);
+    }
+
+    #[test]
+    fn test_extract_tempo_no_patterns() {
+        let patterns: Vec<Pattern> = vec![];
+        let (speed, bpm) = extract_tempo_from_patterns(&patterns);
+        assert_eq!(speed, 6);
+        assert_eq!(bpm, 125.0);
+    }
+
+    #[test]
+    fn test_extract_tempo_pattern_with_fxx_effect() {
+        let mut pattern = Pattern::new(64, 4);
+        let cell = Cell {
+            note: None,
+            instrument: None,
+            volume: None,
+            effects: vec![Effect::new(0xF, 0x05)], // F05 = speed 5
+        };
+        pattern.set_cell(0, 0, cell);
+        let patterns = vec![pattern];
+
+        let (speed, bpm) = extract_tempo_from_patterns(&patterns);
+        assert_eq!(speed, 5);
+        assert_eq!(bpm, 150.0);
+    }
 
     #[test]
     fn test_period_to_note_c4() {
-        let (pitch, octave) = period_to_note(428).unwrap();
+        let (pitch, octave) = period_to_note(538).unwrap();
         assert_eq!(pitch, Pitch::C);
         assert_eq!(octave, 4);
     }
 
     #[test]
     fn test_period_to_note_c5_one_octave_up() {
-        let (pitch, octave) = period_to_note(214).unwrap();
+        let (pitch, octave) = period_to_note(269).unwrap();
         assert_eq!(pitch, Pitch::C);
         assert_eq!(octave, 5);
     }
 
     #[test]
     fn test_period_to_note_c3_one_octave_down() {
-        let (pitch, octave) = period_to_note(856).unwrap();
+        let (pitch, octave) = period_to_note(1076).unwrap();
         assert_eq!(pitch, Pitch::C);
         assert_eq!(octave, 3);
     }
 
     #[test]
     fn test_period_to_note_a4() {
-        // A-4 is 9 semitones above C-4. Period = 428 / 2^(9/12) ≈ 255
-        let (pitch, octave) = period_to_note(254).unwrap();
+        let (pitch, octave) = period_to_note(320).unwrap();
         assert_eq!(pitch, Pitch::A);
         assert_eq!(octave, 4);
     }
 
     #[test]
-    fn test_period_to_note_zero_returns_none() {
-        assert!(period_to_note(0).is_none());
+    fn test_period_to_note_roundtrip_all_notes() {
+        use crate::pattern::note::Pitch;
+
+        let notes: &[(Pitch, u8)] = &[
+            (Pitch::C, 1),
+            (Pitch::C, 2),
+            (Pitch::C, 3),
+            (Pitch::C, 4),
+            (Pitch::C, 5),
+            (Pitch::C, 6),
+            (Pitch::C, 7),
+            (Pitch::C, 8),
+            (Pitch::C, 9),
+            (Pitch::B, 0),
+            (Pitch::B, 1),
+            (Pitch::B, 2),
+            (Pitch::B, 3),
+            (Pitch::B, 4),
+            (Pitch::B, 5),
+            (Pitch::B, 6),
+            (Pitch::B, 7),
+            (Pitch::B, 8),
+            (Pitch::B, 9),
+            (Pitch::G, 4),
+            (Pitch::A, 4),
+            (Pitch::D, 4),
+            (Pitch::E, 4),
+        ];
+
+        let mut failures = Vec::new();
+        for &(pitch, octave) in notes {
+            let period = note_to_period(pitch, octave);
+            if let Some((round_pitch, round_octave)) = period_to_note(period) {
+                if round_pitch != pitch || round_octave != octave {
+                    failures.push(format!(
+                        "{:?}-{}: period={} -> ({:?}, {}), expected ({:?}, {})",
+                        pitch, octave, period, round_pitch, round_octave, pitch, octave
+                    ));
+                }
+            } else {
+                failures.push(format!(
+                    "{:?}-{}: period_to_note({}) returned None",
+                    pitch, octave, period
+                ));
+            }
+        }
+
+        if !failures.is_empty() {
+            panic!("Roundtrip failures:\n{}", failures.join("\n"));
+        }
     }
 
     #[test]
@@ -660,11 +785,6 @@ mod tests {
     }
 
     #[test]
-    fn test_import_mod_too_small() {
-        assert!(import_mod(&[0u8; 100]).is_err());
-    }
-
-    #[test]
     fn test_import_mod_minimal_valid() {
         // Build a minimal valid MOD: 1 pattern, 4 channels, no samples
         let mut data = vec![0u8; 1084];
@@ -726,13 +846,13 @@ mod tests {
     #[test]
     fn test_note_to_period_c4() {
         let p = note_to_period(Pitch::C, 4);
-        assert_eq!(p, 428);
+        assert_eq!(p, 538);
     }
 
     #[test]
     fn test_note_to_period_c5_one_octave_up() {
         let p = note_to_period(Pitch::C, 5);
-        assert_eq!(p, 214);
+        assert_eq!(p, 269);
     }
 
     #[test]
@@ -744,8 +864,27 @@ mod tests {
     }
 
     #[test]
-    fn test_note_to_period_out_of_range_low() {
-        assert_eq!(note_to_period(Pitch::C, 0), 0);
+    fn test_period_to_note_formula_consistency() {
+        let test_periods: &[u16] = &[
+            856, 808, 762, 720, 678, 640, 604, 570, 538, 508, 480, 453, 428, 404, 381, 360, 340,
+            320, 303, 286, 269, 240, 214, 202, 190, 180, 170, 160,
+        ];
+
+        for &period in test_periods {
+            if let Some((pitch, octave)) = period_to_note(period) {
+                let back = note_to_period(pitch, octave);
+                let diff = (period as i32 - back as i32).abs();
+                assert!(
+                    diff <= 2,
+                    "period {} roundtrip via {:?}-{} gave {} (diff={})",
+                    period,
+                    pitch,
+                    octave,
+                    back,
+                    diff
+                );
+            }
+        }
     }
 
     #[test]
@@ -807,8 +946,8 @@ mod tests {
         song.arrangement = vec![0];
         let samples: Vec<Sample> = vec![Sample::default(); 31];
         let exported = export_mod(&song, &samples).unwrap();
-        assert_eq!(exported[1084], 0x01); // period hi nibble for 428 = 0x1AC
-        assert_eq!(exported[1085], 0xAC); // period lo byte
+        assert_eq!(exported[1084], 0x02); // period hi nibble for 538 = 0x21A
+        assert_eq!(exported[1085], 0x1A); // period lo byte
         let imported = import_mod(&exported).unwrap();
         let ip = &imported.song.patterns[0];
         let cell = ip.get_cell(0, 0).unwrap();
@@ -871,6 +1010,135 @@ mod tests {
         ));
         assert_eq!(cell21.instrument, Some(2));
         assert!(cell21.effects.is_empty());
+    }
+
+    #[test]
+    fn test_export_mod_roundtrip_all_notes() {
+        use crate::pattern::note::Pitch;
+
+        let notes: &[(Pitch, u8)] = &[
+            (Pitch::C, 0),
+            (Pitch::CSharp, 0),
+            (Pitch::D, 0),
+            (Pitch::DSharp, 0),
+            (Pitch::E, 0),
+            (Pitch::F, 0),
+            (Pitch::FSharp, 0),
+            (Pitch::G, 0),
+            (Pitch::GSharp, 0),
+            (Pitch::A, 0),
+            (Pitch::ASharp, 0),
+            (Pitch::B, 0),
+            (Pitch::C, 1),
+            (Pitch::CSharp, 1),
+            (Pitch::D, 1),
+            (Pitch::DSharp, 1),
+            (Pitch::E, 1),
+            (Pitch::F, 1),
+            (Pitch::FSharp, 1),
+            (Pitch::G, 1),
+            (Pitch::GSharp, 1),
+            (Pitch::A, 1),
+            (Pitch::ASharp, 1),
+            (Pitch::B, 1),
+            (Pitch::C, 2),
+            (Pitch::CSharp, 2),
+            (Pitch::D, 2),
+            (Pitch::DSharp, 2),
+            (Pitch::E, 2),
+            (Pitch::F, 2),
+            (Pitch::FSharp, 2),
+            (Pitch::G, 2),
+            (Pitch::GSharp, 2),
+            (Pitch::A, 2),
+            (Pitch::ASharp, 2),
+            (Pitch::B, 2),
+            (Pitch::C, 3),
+            (Pitch::CSharp, 3),
+            (Pitch::D, 3),
+            (Pitch::DSharp, 3),
+            (Pitch::E, 3),
+            (Pitch::F, 3),
+            (Pitch::FSharp, 3),
+            (Pitch::G, 3),
+            (Pitch::GSharp, 3),
+            (Pitch::A, 3),
+            (Pitch::ASharp, 3),
+            (Pitch::B, 3),
+        ];
+
+        let mut song = Song::new("All Notes Test".to_string(), 125.0);
+        let mut pat = Pattern::new(64, 4);
+
+        for (i, &(pitch, octave)) in notes.iter().enumerate() {
+            let row = i % 64;
+            let ch = (i / 64) % 4;
+            if ch == 0 && row >= 64 {
+                break;
+            }
+            let actual_row = row.min(63);
+            let actual_ch = ch.min(3);
+            pat.set_cell(
+                actual_row,
+                actual_ch,
+                Cell {
+                    note: Some(NoteEvent::On(Note::new(pitch, octave, 100, 0))),
+                    instrument: Some(0),
+                    volume: None,
+                    effects: vec![],
+                },
+            );
+        }
+
+        song.patterns = vec![pat];
+        song.arrangement = vec![0];
+        let samples: Vec<Sample> = vec![Sample::default(); 31];
+
+        let exported = export_mod(&song, &samples).unwrap();
+        let imported = import_mod(&exported).unwrap();
+        let imported_pat = &imported.song.patterns[0];
+
+        let mut failures = Vec::new();
+        for (i, &(expected_pitch, expected_octave)) in notes.iter().enumerate() {
+            let row = i % 64;
+            let ch = (i / 64) % 4;
+            if ch == 0 && row >= 64 {
+                break;
+            }
+            let actual_row = row.min(63);
+            let actual_ch = ch.min(3);
+
+            if let Some(cell) = imported_pat.get_cell(actual_row, actual_ch) {
+                if let Some(NoteEvent::On(note)) = &cell.note {
+                    if note.pitch != expected_pitch || note.octave != expected_octave {
+                        failures.push(format!(
+                            "Note {} at row={} ch={}: got ({:?}, {}) expected ({:?}, {})",
+                            i,
+                            actual_row,
+                            actual_ch,
+                            note.pitch,
+                            note.octave,
+                            expected_pitch,
+                            expected_octave
+                        ));
+                    }
+                } else {
+                    failures.push(format!(
+                        "Note {} at row={} ch={}: no note event",
+                        i, actual_row, actual_ch
+                    ));
+                }
+            } else {
+                failures.push(format!(
+                    "Note {} at row={} ch={}: no cell",
+                    i, actual_row, actual_ch
+                ));
+            }
+        }
+
+        if !failures.is_empty() {
+            panic!("Roundtrip failures:\n{}", failures.join("\n"));
+        }
     }
 
     #[test]

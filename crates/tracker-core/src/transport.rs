@@ -80,6 +80,9 @@ pub struct Transport {
 
     /// Extra rows to delay (EEx effect).
     pattern_delay: u8,
+
+    /// Whether a jump was just applied, so the next advance should not increment.
+    just_jumped: bool,
 }
 
 /// Minimum allowed BPM
@@ -100,8 +103,8 @@ impl Transport {
             speed: 6,
             current_row: 0,
             arrangement_position: 0,
-            loop_enabled: true,
-            playback_mode: PlaybackMode::Pattern,
+            loop_enabled: false,
+            playback_mode: PlaybackMode::Song,
             tick_accumulator: 0.0,
             num_rows: 64,
             arrangement_length: 1,
@@ -110,6 +113,7 @@ impl Transport {
             pattern_loop_row: None,
             pattern_loop_count: 0,
             pattern_delay: 0,
+            just_jumped: false,
         }
     }
 
@@ -134,6 +138,12 @@ impl Transport {
             // Prevent accumulator from building up too much
             if self.tick_accumulator > seconds_per_row {
                 self.tick_accumulator = 0.0;
+            }
+
+            // If a jump was just applied, we stay on the current row for this tick
+            if self.just_jumped {
+                self.just_jumped = false;
+                return AdvanceResult::Row(self.current_row);
             }
 
             // Handle Pattern Delay (EEx)
@@ -165,6 +175,8 @@ impl Transport {
                     PlaybackMode::Pattern => {
                         if self.loop_enabled {
                             self.current_row = 0;
+                            // Note: ProTracker typically keeps E60 loop point within the pattern?
+                            // For simplicity, we'll keep it for now but we could reset it.
                             return AdvanceResult::Row(0);
                         } else {
                             self.state = TransportState::Stopped;
@@ -180,6 +192,9 @@ impl Transport {
                             if self.loop_enabled {
                                 self.arrangement_position = 0;
                                 self.current_row = 0;
+                                // Reset pattern loop state on pattern change
+                                self.pattern_loop_row = None;
+                                self.pattern_loop_count = 0;
                                 return AdvanceResult::PatternChange {
                                     arrangement_pos: 0,
                                     row: 0,
@@ -195,6 +210,9 @@ impl Transport {
                             // Move to next pattern in arrangement
                             self.arrangement_position = next_pos;
                             self.current_row = 0;
+                            // Reset pattern loop state on pattern change
+                            self.pattern_loop_row = None;
+                            self.pattern_loop_count = 0;
                             return AdvanceResult::PatternChange {
                                 arrangement_pos: next_pos,
                                 row: 0,
@@ -428,6 +446,7 @@ impl Transport {
             self.arrangement_position = pos;
             self.current_row = 0;
             self.tick_accumulator = 0.0;
+            self.just_jumped = true;
             true
         } else {
             false
@@ -453,12 +472,18 @@ impl Transport {
         self.arrangement_position = next_pos;
         self.current_row = row.min(self.num_rows.saturating_sub(1));
         self.tick_accumulator = 0.0;
+        self.just_jumped = true;
         true
     }
 
     /// Set the pattern loop row (E60).
     pub fn set_pattern_loop_row(&mut self, row: Option<usize>) {
         self.pattern_loop_row = row;
+    }
+
+    /// Set the pattern loop start point to the current row (E60).
+    pub fn set_pattern_loop_start(&mut self) {
+        self.pattern_loop_row = Some(self.current_row);
     }
 
     /// Get the pattern loop row.
@@ -476,18 +501,46 @@ impl Transport {
         self.pattern_loop_count
     }
 
+    /// Handle a pattern loop jump if the count > 0 (E6x).
+    /// Returns the target row if the jump should occur, else None.
+    pub fn handle_pattern_loop(&mut self, count: u8) -> Option<usize> {
+        if self.pattern_loop_count == 0 {
+            // First time hitting this loop command in the current cycle
+            self.pattern_loop_count = count;
+        } else {
+            // Subsequent times
+            self.pattern_loop_count -= 1;
+        }
+
+        if self.pattern_loop_count > 0 {
+            let target = self.pattern_loop_row.unwrap_or(0);
+            self.current_row = target;
+            self.tick_accumulator = 0.0;
+            self.just_jumped = true;
+            Some(target)
+        } else {
+            // Loop finished
+            self.pattern_loop_row = None;
+            None
+        }
+    }
+
     /// Trigger a pattern loop jump if the count > 0.
     /// Returns the target row if the jump should occur, else None.
+    #[deprecated(note = "Use handle_pattern_loop instead")]
     pub fn trigger_pattern_loop(&mut self) -> Option<usize> {
         if self.pattern_loop_count > 0 {
             self.pattern_loop_count -= 1;
             let target = self.pattern_loop_row.unwrap_or(0);
             self.current_row = target;
             self.tick_accumulator = 0.0;
-            Some(target)
-        } else {
-            None
+            self.just_jumped = true;
+            if self.pattern_loop_count == 0 {
+                self.pattern_loop_row = None;
+            }
+            return Some(target);
         }
+        None
     }
 
     /// Set the pattern delay (EEx).
@@ -534,9 +587,9 @@ mod tests {
         assert_eq!(transport.state(), TransportState::Stopped);
         assert_eq!(transport.bpm(), 120.0);
         assert_eq!(transport.current_row(), 0);
-        assert!(transport.loop_enabled());
+        assert!(!transport.loop_enabled());
         assert!(transport.is_stopped());
-        assert_eq!(transport.playback_mode(), PlaybackMode::Pattern);
+        assert_eq!(transport.playback_mode(), PlaybackMode::Song);
         assert_eq!(transport.arrangement_position(), 0);
     }
 
@@ -623,6 +676,7 @@ mod tests {
         transport.set_bpm(120.0);
         transport.set_num_rows(4);
         transport.set_loop_enabled(true);
+        transport.set_playback_mode(PlaybackMode::Pattern);
         transport.play();
 
         let spr = 0.125;
@@ -641,6 +695,7 @@ mod tests {
         transport.set_bpm(120.0);
         transport.set_num_rows(4);
         transport.set_loop_enabled(false);
+        transport.set_playback_mode(PlaybackMode::Pattern);
         transport.play();
 
         let spr = 0.125;
@@ -725,13 +780,13 @@ mod tests {
     #[test]
     fn test_toggle_loop() {
         let mut transport = Transport::new();
-        assert!(transport.loop_enabled());
-
-        transport.toggle_loop();
         assert!(!transport.loop_enabled());
 
         transport.toggle_loop();
         assert!(transport.loop_enabled());
+
+        transport.toggle_loop();
+        assert!(!transport.loop_enabled());
     }
 
     #[test]
@@ -906,18 +961,23 @@ mod tests {
         transport.jump_to_arrangement_position(2);
         assert_eq!(transport.current_row(), 0);
         assert_eq!(transport.arrangement_position(), 2);
+
+        // Advance should stay on row 0
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(0));
+        // Then proceed to 1
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(1));
     }
 
     #[test]
     fn test_toggle_playback_mode() {
         let mut transport = Transport::new();
-        assert_eq!(transport.playback_mode(), PlaybackMode::Pattern);
-
-        transport.toggle_playback_mode();
         assert_eq!(transport.playback_mode(), PlaybackMode::Song);
 
         transport.toggle_playback_mode();
         assert_eq!(transport.playback_mode(), PlaybackMode::Pattern);
+
+        transport.toggle_playback_mode();
+        assert_eq!(transport.playback_mode(), PlaybackMode::Song);
     }
 
     #[test]
@@ -999,10 +1059,17 @@ mod tests {
         let mut transport = Transport::new();
         transport.set_num_rows(16);
         transport.set_arrangement_length(3);
+        transport.play();
 
         assert!(transport.pattern_break(4));
         assert_eq!(transport.arrangement_position(), 1);
         assert_eq!(transport.current_row(), 4);
+
+        // Advance should stay on row 4 because of just_jumped
+        let spr = 0.125;
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(4));
+        // Next advance should go to 5
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(5));
     }
 
     #[test]
@@ -1010,6 +1077,7 @@ mod tests {
         let mut transport = Transport::new();
         transport.set_num_rows(16);
         transport.set_arrangement_length(2);
+        transport.set_loop_enabled(true);
         transport.jump_to_arrangement_position(1);
 
         // At last position, loop enabled → wraps to 0
@@ -1146,6 +1214,7 @@ mod tests {
         transport.set_loop_region(2, 4);
         // loop_region_active is false by default
         transport.set_loop_enabled(true);
+        transport.set_playback_mode(PlaybackMode::Pattern);
         transport.play();
 
         let spr = 0.125;
@@ -1171,5 +1240,38 @@ mod tests {
         transport.set_num_rows(16);
         transport.set_loop_region(10, 4); // start > end — end clamped up to start
         assert_eq!(transport.loop_region(), Some((10, 10))); // both become start
+    }
+
+    #[test]
+    fn test_pattern_loop_logic() {
+        let mut transport = Transport::new();
+        transport.set_num_rows(32);
+        transport.play();
+
+        // 1. Set loop start at row 10 (E60)
+        transport.set_row(10);
+        transport.set_pattern_loop_start();
+        assert_eq!(transport.pattern_loop_row(), Some(10));
+
+        // 2. Hit loop command at row 20, loop 1 time (E61)
+        transport.set_row(20);
+        let target = transport.handle_pattern_loop(1);
+        assert_eq!(target, Some(10));
+        assert_eq!(transport.current_row(), 10);
+        assert_eq!(transport.pattern_loop_count(), 1);
+
+        // 3. Advance should stay on row 10 because of just_jumped
+        let spr = 0.125;
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(10));
+
+        // 4. Hit loop command at row 20 again
+        transport.set_row(20);
+        let target = transport.handle_pattern_loop(1);
+        assert_eq!(target, None); // Finished loop
+        assert_eq!(transport.pattern_loop_row(), None); // State reset
+        assert_eq!(transport.pattern_loop_count(), 0);
+
+        // 5. Advance should proceed to row 21
+        assert_eq!(transport.advance(spr), AdvanceResult::Row(21));
     }
 }

@@ -117,7 +117,7 @@ mod tests {
         let mut song = Song::new("Data Integrity", 120.0);
 
         // Test various note types
-        let notes_to_test = vec![
+        let notes_to_test = [
             Note::new(Pitch::C, 0, 0, 0),        // minimum values
             Note::new(Pitch::B, 9, 127, 255),    // maximum values
             Note::new(Pitch::FSharp, 4, 64, 42), // mid-range values
