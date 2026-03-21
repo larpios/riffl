@@ -156,6 +156,7 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
     song.patterns.clear();
     let num_channels = module.get_num_channels().max(1);
     let mut last_instrument: Vec<Option<usize>> = vec![None; num_channels];
+    let mut last_sample: Vec<Option<u8>> = vec![None; num_channels];
 
     for xm_pat in &module.pattern {
         let mut pat = crate::pattern::Pattern::new(xm_pat.len().max(1), num_channels);
@@ -177,7 +178,9 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
                     let val = xm_tu.note.value();
                     let octave = val / 12;
                     if let Some(pitch) = crate::pattern::note::Pitch::from_semitone(val % 12) {
-                        let vel = (xm_tu.velocity * 127.0).clamp(0.0, 127.0) as u8;
+                        // XM format relies on instrument volume and volume columns, not per-note velocity.
+                        // Force max velocity here since `xmrs` may provide 0.0 if instrument is omitted.
+                        let vel = 127;
                         note_event = Some(NoteEvent::On(Note::new(pitch, octave, vel, 0)));
                     }
                 }
@@ -214,6 +217,7 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
                             {
                                 if let Some(mapped_idx) = inst_to_tracker_inst[i][sample_idx] {
                                     mapped_sample_idx = Some(mapped_idx as u8);
+                                    last_sample[c_idx] = mapped_sample_idx;
                                     if explicit_inst {
                                         cell.instrument = mapped_sample_idx;
                                     }
@@ -227,8 +231,13 @@ pub fn convert_xmrs_module(module: xmrs::module::Module) -> Result<FormatData, S
                     if let Some(idx) = mapped_sample_idx {
                         n.instrument = idx;
                         cell.note = Some(NoteEvent::On(n));
+                    } else if let Some(fallback_idx) = last_sample[c_idx] {
+                        // Ghost note: no instrument specified and sample lookup failed,
+                        // but we have a previously-used sample on this channel — re-use it.
+                        n.instrument = fallback_idx;
+                        cell.note = Some(NoteEvent::On(n));
                     } else {
-                        // Drop notes that have no valid sample mapped
+                        // No sample ever played on this channel — drop the note
                         cell.note = None;
                     }
                 } else {

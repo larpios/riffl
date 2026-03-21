@@ -283,9 +283,9 @@ impl Mixer {
                 .get(ch)
                 .is_some_and(ChannelStrip::is_silent);
 
-            // In classical trackers, specifying an instrument number resets the channel volume
-            // to the instrument's default, clearing any previous volume slides or overrides.
-            if cell.instrument.is_some() {
+            // In classical trackers, specifying an instrument number OR triggering a new
+            // note resets the channel volume, clearing any previous volume slides or overrides.
+            if cell.instrument.is_some() || matches!(&cell.note, Some(NoteEvent::On(_))) {
                 if let Some(state) = self.effect_processor.channel_state_mut(ch) {
                     state.volume_override = None;
                 }
@@ -301,6 +301,12 @@ impl Mixer {
             let cmds = self
                 .effect_processor
                 .process_row(ch, &cell.effects, note_frequency);
+
+            if let Some(vol) = cell.volume {
+                if let Some(state) = self.effect_processor.channel_state_mut(ch) {
+                    state.volume_override = Some((vol as f32 / 64.0).clamp(0.0, 2.0));
+                }
+            }
 
             for cmd in &cmds {
                 if let TransportCommand::SetTpl(tpl) = cmd {

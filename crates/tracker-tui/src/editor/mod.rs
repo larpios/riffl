@@ -1993,7 +1993,7 @@ mod tests {
         let eff = cell.first_effect().unwrap();
         assert_eq!(eff.command, 0xA);
         assert_eq!(eff.param, 0x04);
-        assert_eq!(format!("{}", eff), "A04");
+        assert_eq!(format!("{}", eff), "0A04");
     }
 
     #[test]
@@ -2008,7 +2008,7 @@ mod tests {
 
         let cell = editor.pattern().get_cell(0, 0).unwrap();
         let eff = cell.first_effect().unwrap();
-        assert_eq!(format!("{}", eff), "C40");
+        assert_eq!(format!("{}", eff), "0C40");
     }
 
     #[test]
@@ -2023,7 +2023,7 @@ mod tests {
 
         let cell = editor.pattern().get_cell(0, 0).unwrap();
         let eff = cell.first_effect().unwrap();
-        assert_eq!(format!("{}", eff), "FFF");
+        assert_eq!(format!("{}", eff), "0FFF");
     }
 
     #[test]
@@ -2184,7 +2184,7 @@ mod tests {
             .unwrap()
             .first_effect()
             .unwrap();
-        assert_eq!(format!("{}", eff0), "A04");
+        assert_eq!(format!("{}", eff0), "0A04");
 
         let eff1 = editor
             .pattern()
@@ -2192,6 +2192,6 @@ mod tests {
             .unwrap()
             .first_effect()
             .unwrap();
-        assert_eq!(format!("{}", eff1), "C40");
+        assert_eq!(format!("{}", eff1), "0C40");
     }
 }
