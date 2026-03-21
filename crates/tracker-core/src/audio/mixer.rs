@@ -55,6 +55,9 @@ struct Voice {
     envelope_tick: usize,
     /// Ratio to convert an absolute frequency (Hz) into relative playback_rate.
     hz_to_rate: f64,
+    /// Fadeout multiplier for IT/XM instruments (0.0 - 1.0).
+    /// Decreased by instrument.fadeout every tick when key_on is false.
+    fadeout_multiplier: f32,
 }
 
 impl Voice {
@@ -76,6 +79,7 @@ impl Voice {
             key_on: true,
             envelope_tick: 0,
             hz_to_rate,
+            fadeout_multiplier: 1.0,
         }
     }
 
@@ -247,6 +251,11 @@ impl Mixer {
         }
     }
 
+    /// Set the global volume multiplier for the song.
+    pub fn set_global_volume(&mut self, volume: f32) {
+        self.effect_processor.global_volume = volume;
+    }
+
     /// Process a pattern row, triggering or stopping samples based on note events.
     ///
     /// For each channel in the row:
@@ -317,7 +326,7 @@ impl Mixer {
             transport_commands.extend(cmds);
 
             // Apply effect-based panning override (8xx) to the channel strip.
-            // xmrs stores panning as 0.0 (left) → 1.0 (right); strip uses -1.0 → 1.0.
+            // Panning is stored as 0.0 (left) → 1.0 (right); strip uses -1.0 → 1.0.
             if let Some(pan_01) = self.effect_processor.channel_panning(ch) {
                 let pan = pan_01 * 2.0 - 1.0;
                 if let Some(strip) = self.channel_strips.get_mut(ch) {
@@ -382,14 +391,15 @@ impl Mixer {
 
                         let playback_rate = target_freq * hz_to_rate;
 
-                        // Map velocity 0-127 to gain 0.0-1.0, scaled by instrument and sample volume
+                        // Map velocity to gain 0.0-1.0, scaled by instrument and sample volume.
+                        // If cell specifies a volume (0-64), it overrides the note's velocity.
                         let inst_vol = self
                             .instruments
                             .get(instrument_idx)
                             .map(|inst| inst.volume)
                             .unwrap_or(1.0);
-                        let velocity_gain =
-                            (note.velocity as f32 / 127.0) * inst_vol * sample.volume;
+                        let velocity = cell.volume.map(|v| (v as f32 / 64.0) * 127.0).unwrap_or(note.velocity as f32);
+                        let velocity_gain = (velocity / 127.0) * inst_vol * sample.volume;
 
                         // Check for Note Delay (EDx)
                         if let Some(delay_tick) = self
@@ -561,9 +571,28 @@ impl Mixer {
                             if retrigger_interval > 0
                                 && current_tick > 0
                                 && tick_frame == 0
-                                && current_tick.is_multiple_of(retrigger_interval as u32)
+                                && current_tick % (retrigger_interval as u32) == 0
                             {
                                 voice.position = 0.0;
+                                // Apply retrigger volume action
+                                match ch_state.retrigger_volume_action {
+                                    0 | 8 => {} // No change
+                                    1 => voice.velocity_gain = (voice.velocity_gain - 1.0/64.0).max(0.0),
+                                    2 => voice.velocity_gain = (voice.velocity_gain - 2.0/64.0).max(0.0),
+                                    3 => voice.velocity_gain = (voice.velocity_gain - 4.0/64.0).max(0.0),
+                                    4 => voice.velocity_gain = (voice.velocity_gain - 8.0/64.0).max(0.0),
+                                    5 => voice.velocity_gain = (voice.velocity_gain - 16.0/64.0).max(0.0),
+                                    6 => voice.velocity_gain *= 2.0 / 3.0,
+                                    7 => voice.velocity_gain *= 0.5,
+                                    9 => voice.velocity_gain = (voice.velocity_gain + 1.0/64.0).min(1.0),
+                                    10 => voice.velocity_gain = (voice.velocity_gain + 2.0/64.0).min(1.0),
+                                    11 => voice.velocity_gain = (voice.velocity_gain + 4.0/64.0).min(1.0),
+                                    12 => voice.velocity_gain = (voice.velocity_gain + 8.0/64.0).min(1.0),
+                                    13 => voice.velocity_gain = (voice.velocity_gain + 16.0/64.0).min(1.0),
+                                    14 => voice.velocity_gain *= 3.0 / 2.0,
+                                    15 => voice.velocity_gain *= 2.0,
+                                    _ => {}
+                                }
                             }
                         }
                     }
@@ -573,14 +602,30 @@ impl Mixer {
                         continue;
                     }
 
-                    // Envelope processing
-                    let mut env_vol = 1.0;
+                    // Instrument base volume and panning
+                    let mut inst_vol = 1.0;
+                    let mut inst_pan = 0.0;
                     if let Some(inst) = self.instruments.get(voice.instrument_index) {
+                        inst_vol = inst.volume;
+                        inst_pan = inst.panning.unwrap_or(0.0);
+
+                        // Fadeout processing
+                        if !voice.key_on && inst.fadeout > 0 {
+                            if tick_frame == frames_per_tick.saturating_sub(1) {
+                                // IT and XM both use a 16-bit fadeout reduction system (effectively 65536 max).
+                                let delta = inst.fadeout as f32 / 65536.0;
+                                voice.fadeout_multiplier = (voice.fadeout_multiplier - delta).max(0.0);
+                                if voice.fadeout_multiplier <= 0.0001 {
+                                    voice.active = false;
+                                }
+                            }
+                        }
+
                         if let Some(vol_env) = &inst.volume_envelope {
                             if vol_env.enabled {
                                 let (val, next_tick) =
                                     vol_env.evaluate(voice.envelope_tick, voice.key_on);
-                                env_vol = val;
+                                inst_vol *= val;
 
                                 if tick_frame == frames_per_tick.saturating_sub(1) {
                                     voice.envelope_tick = next_tick;
@@ -603,6 +648,9 @@ impl Mixer {
                         effect_processor.advance_frame(ch);
                         continue;
                     }
+                    
+                    let env_vol = inst_vol;
+                    let _env_pan = inst_pan; // TODO: apply instrument pan to the final mix if needed
 
                     let sample = match samples.get(voice.sample_index) {
                         Some(s) => s,
@@ -728,13 +776,15 @@ impl Mixer {
                         * effect_gain
                         * left_gain
                         * env_vol
-                        * global_vol_mult;
+                        * global_vol_mult
+                        * voice.fadeout_multiplier;
                     let post_r = right
                         * voice.velocity_gain
                         * effect_gain
                         * right_gain
                         * env_vol
-                        * global_vol_mult;
+                        * global_vol_mult
+                        * voice.fadeout_multiplier;
 
                     output[out_idx] += post_l;
                     output[out_idx + 1] += post_r;

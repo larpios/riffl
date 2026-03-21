@@ -126,6 +126,8 @@ pub struct ChannelEffectState {
     // --- Sub-row Timing (E9x, ECx, EDx) ---
     /// Retrigger interval in ticks (E9x).
     pub retrigger_interval: Option<u8>,
+    /// Volume action for retrigger (0=none, 1..5=down, 6..A=up etc).
+    pub retrigger_volume_action: u8,
     /// Tick to cut the note (ECx).
     pub note_cut_tick: Option<u8>,
     /// Tick to delay the note trigger (EDx).
@@ -138,6 +140,10 @@ pub struct ChannelEffectState {
     pub frames_per_row: u32,
     /// Number of ticks per row (default 6).
     pub ticks_per_row: u8,
+    /// Pitch slide up speed (per row approx).
+    pub pitch_slide_up: u8,
+    /// Pitch slide down speed (per row approx).
+    pub pitch_slide_down: u8,
 
     // --- Advanced XM/IT Effects ---
     /// Base channel volume set by Mxx (0.0 - 1.0).
@@ -202,11 +208,14 @@ impl Default for ChannelEffectState {
             pattern_loop_start_row: None,
             pattern_loop_count: 0,
             retrigger_interval: None,
+            retrigger_volume_action: 0,
             note_cut_tick: None,
             note_delay_tick: None,
             row_frame_counter: 0,
             frames_per_row: 6000, // ~125ms at 48kHz (120 BPM default)
             ticks_per_row: 6,
+            pitch_slide_up: 0,
+            pitch_slide_down: 0,
             channel_volume: 1.0,
             channel_volume_slide_up: 0,
             channel_volume_slide_down: 0,
@@ -227,9 +236,11 @@ impl Default for ChannelEffectState {
 impl ChannelEffectState {
     /// Reset all effect state for this channel.
     pub fn reset(&mut self) {
+        let fpr = self.frames_per_row;
+        let tpr = self.ticks_per_row;
         *self = Self {
-            frames_per_row: self.frames_per_row,
-            ticks_per_row: self.ticks_per_row,
+            frames_per_row: fpr,
+            ticks_per_row: tpr,
             ..Self::default()
         };
     }
@@ -243,6 +254,8 @@ impl ChannelEffectState {
         self.tremolo_active = false;
         self.volume_slide_up = 0;
         self.volume_slide_down = 0;
+        self.pitch_slide_up = 0;
+        self.pitch_slide_down = 0;
         self.sample_offset = None;
         self.channel_volume_slide_up = 0;
         self.channel_volume_slide_down = 0;
@@ -250,6 +263,7 @@ impl ChannelEffectState {
         self.panning_slide_left = 0;
         self.finetune_override = None;
         self.retrigger_interval = None;
+        self.retrigger_volume_action = 0;
         self.note_cut_tick = None;
         self.note_delay_tick = None;
         self.envelope_position_override = None;
@@ -412,7 +426,9 @@ impl ChannelEffectState {
                 return;
             }
 
-            let semitones_per_frame = self.portamento_speed / self.frames_per_row as f64;
+            let active_ticks = (self.ticks_per_row as f64 - 1.0).max(1.0);
+            let semitones_per_row = self.portamento_speed * active_ticks;
+            let semitones_per_frame = semitones_per_row / self.frames_per_row as f64;
             let ratio = 2.0_f64.powf(semitones_per_frame / 12.0);
 
             let new_freq = if freq < target {
@@ -520,16 +536,13 @@ impl TrackerEffectProcessor {
                 }
 
                 EffectType::PitchSlideUp => {
-                    // Slide pitch up: multiply ratio by a factor per row
-                    // Each unit ≈ 1/16 semitone per row
-                    let semitones = effect.param as f64 / 16.0;
-                    state.pitch_ratio *= 2.0_f64.powf(semitones / 12.0);
+                    // Set pitch slide up speed
+                    state.pitch_slide_up = effect.param;
                 }
 
                 EffectType::PitchSlideDown => {
-                    // Slide pitch down: divide ratio by a factor per row
-                    let semitones = effect.param as f64 / 16.0;
-                    state.pitch_ratio *= 2.0_f64.powf(-semitones / 12.0);
+                    // Set pitch slide down speed
+                    state.pitch_slide_down = effect.param;
                 }
 
                 EffectType::PortamentoToNote => {
@@ -553,15 +566,8 @@ impl TrackerEffectProcessor {
                 EffectType::TonePortamentoVolumeSlide => {
                     // 5xy: 3xx + Axy
                     // Uses existing portamento speed, adds volume slide
-                    let up = effect.param_x();
-                    let down = effect.param_y();
-                    state.volume_slide_up = up;
-                    state.volume_slide_down = down;
-
-                    // Apply volume slide immediately for this row
-                    let current_vol = state.volume_override.unwrap_or(1.0);
-                    let delta = (up as f32 - down as f32) / 64.0;
-                    state.volume_override = Some((current_vol + delta).clamp(0.0, 2.0));
+                    state.volume_slide_up = effect.param_x();
+                    state.volume_slide_down = effect.param_y();
 
                     // Portamento target is handled by new notes triggered on this row
                     if let Some(freq) = note_frequency {
@@ -576,15 +582,8 @@ impl TrackerEffectProcessor {
                     // 6xy: 4xy + Axy
                     // Continues vibrato, adds volume slide
                     state.vibrato_active = true;
-                    let up = effect.param_x();
-                    let down = effect.param_y();
-                    state.volume_slide_up = up;
-                    state.volume_slide_down = down;
-
-                    // Apply volume slide immediately for this row
-                    let current_vol = state.volume_override.unwrap_or(1.0);
-                    let delta = (up as f32 - down as f32) / 64.0;
-                    state.volume_override = Some((current_vol + delta).clamp(0.0, 2.0));
+                    state.volume_slide_up = effect.param_x();
+                    state.volume_slide_down = effect.param_y();
                 }
 
                 EffectType::Tremolo => {
@@ -710,7 +709,8 @@ impl TrackerEffectProcessor {
                 }
 
                 EffectType::SetGlobalVolume => {
-                    self.global_volume = (effect.param as f32 / 64.0).clamp(0.0, 1.0);
+                    // IT uses 0-128 for global volume.
+                    self.global_volume = (effect.param as f32 / 128.0).clamp(0.0, 1.0);
                 }
                 EffectType::GlobalVolumeSlide => {
                     self.global_volume_slide_up = effect.param_x();
@@ -724,8 +724,18 @@ impl TrackerEffectProcessor {
                     state.channel_volume = (effect.param as f32 / 64.0).clamp(0.0, 1.0);
                 }
                 EffectType::ChannelVolumeSlide => {
-                    state.channel_volume_slide_up = effect.param_x();
-                    state.channel_volume_slide_down = effect.param_y();
+                    if effect.param_x() == 0x0A {
+                        // NxF: Fine Channel Vol Up
+                        state.channel_volume =
+                            (state.channel_volume + (effect.param_y() as f32 / 64.0)).clamp(0.0, 1.0);
+                    } else if effect.param_x() == 0x0B {
+                        // NFy: Fine Channel Vol Down
+                        state.channel_volume =
+                            (state.channel_volume - (effect.param_y() as f32 / 64.0)).clamp(0.0, 1.0);
+                    } else {
+                        state.channel_volume_slide_up = effect.param_x();
+                        state.channel_volume_slide_down = effect.param_y();
+                    }
                 }
                 EffectType::Tremor => {
                     state.tremor_active = true;
@@ -738,6 +748,7 @@ impl TrackerEffectProcessor {
                 }
                 EffectType::RetrigNoteVolSlide => {
                     state.retrigger_interval = Some(effect.param_y());
+                    state.retrigger_volume_action = effect.param_x();
                 }
                 EffectType::SetEnvelopePosition => {
                     state.envelope_position_override = Some(effect.param as usize);
@@ -769,31 +780,51 @@ impl TrackerEffectProcessor {
             state.advance_tremolo(self.sample_rate);
             state.advance_portamento();
 
+            // Advance pitch slides smoothly across the row (for 1xx, 2xx)
+            if state.pitch_slide_up > 0 || state.pitch_slide_down > 0 {
+                // Pitch slides happen every tick except tick 0.
+                let semitones_per_tick =
+                    (state.pitch_slide_up as f64 - state.pitch_slide_down as f64) / 16.0;
+                let active_ticks = (state.ticks_per_row as f64 - 1.0).max(1.0);
+                let semitones_per_row = semitones_per_tick * active_ticks;
+                let semitones_per_frame = semitones_per_row / state.frames_per_row as f64;
+                state.pitch_ratio *= 2.0_f64.powf(semitones_per_frame / 12.0);
+            }
+
             // Advance volume slides smoothly across the row
             if state.volume_slide_up > 0 || state.volume_slide_down > 0 {
                 let current_vol = state.volume_override.unwrap_or(1.0);
 
-                let delta_per_row =
+                // Volume slides (Axy) happen every tick except tick 0.
+                // To maintain smooth frame-level graduation, we calculate the total row delta
+                // based on the per-tick amount and the number of ticks.
+                let delta_per_tick =
                     (state.volume_slide_up as f32 - state.volume_slide_down as f32) / 64.0;
+                let active_ticks = (state.ticks_per_row as f32 - 1.0).max(1.0);
+                let delta_per_row = delta_per_tick * active_ticks;
 
                 let delta_per_frame = delta_per_row / state.frames_per_row as f32;
                 state.volume_override = Some((current_vol + delta_per_frame).clamp(0.0, 2.0));
             }
 
-            // Channel Volume slides
+            // Channel Volume slides (Hxy)
             if state.channel_volume_slide_up > 0 || state.channel_volume_slide_down > 0 {
-                let delta_per_row = (state.channel_volume_slide_up as f32
+                let delta_per_tick = (state.channel_volume_slide_up as f32
                     - state.channel_volume_slide_down as f32)
                     / 64.0;
+                let active_ticks = (state.ticks_per_row as f32 - 1.0).max(1.0);
+                let delta_per_row = delta_per_tick * active_ticks;
                 let delta_per_frame = delta_per_row / state.frames_per_row as f32;
                 state.channel_volume = (state.channel_volume + delta_per_frame).clamp(0.0, 1.0);
             }
 
-            // Panning slides
+            // Panning slides (Xxy)
             if state.panning_slide_right > 0 || state.panning_slide_left > 0 {
                 let current_pan = state.panning_override.unwrap_or(0.5);
-                let delta_per_row =
-                    (state.panning_slide_right as f32 - state.panning_slide_left as f32) / 255.0;
+                let delta_per_tick =
+                    (state.panning_slide_right as f32 - state.panning_slide_left as f32) / 64.0;
+                let active_ticks = (state.ticks_per_row as f32 - 1.0).max(1.0);
+                let delta_per_row = delta_per_tick * active_ticks;
                 let delta_per_frame = delta_per_row / state.frames_per_row as f32;
                 state.panning_override = Some((current_pan + delta_per_frame).clamp(0.0, 1.0));
             }
@@ -803,11 +834,15 @@ impl TrackerEffectProcessor {
     /// Advance global frame-level modulations.
     pub fn advance_global_frame(&mut self) {
         if self.global_volume_slide_up > 0 || self.global_volume_slide_down > 0 {
-            // Assuming 6000 frames per row for global slides if unknown, but better approx
-            // is tempo_bpm. Since we don't have frames_per_row globally, we use a default approx.
-            let delta_per_row =
-                (self.global_volume_slide_up as f32 - self.global_volume_slide_down as f32) / 64.0;
-            let delta_per_frame = delta_per_row / 6000.0;
+            // Use the frames_per_row from the first channel as a target speed reference
+            let fpr = self.channels.get(0).map(|s| s.frames_per_row).unwrap_or(6000) as f32;
+            let tpr = self.channels.get(0).map(|s| s.ticks_per_row).unwrap_or(6) as f32;
+
+            let delta_per_tick =
+                (self.global_volume_slide_up as f32 - self.global_volume_slide_down as f32) / 128.0;
+            let active_ticks = (tpr - 1.0).max(1.0);
+            let delta_per_row = delta_per_tick * active_ticks;
+            let delta_per_frame = delta_per_row / fpr;
             self.global_volume = (self.global_volume + delta_per_frame).clamp(0.0, 1.0);
         }
     }

@@ -110,6 +110,8 @@ pub struct Instrument {
     pub base_note: Note,
     /// Volume multiplier for this instrument (0.0 to 1.0).
     pub volume: f32,
+    /// Default panning for the instrument (-1.0 to 1.0), if any.
+    pub panning: Option<f32>,
     /// Finetune adjustment (-8 to +7).
     /// Each unit is 1/8th of a semitone (12.5 cents).
     pub finetune: i8,
@@ -119,6 +121,9 @@ pub struct Instrument {
     pub panning_envelope: Option<Envelope>,
     /// Pitch envelope, if any.
     pub pitch_envelope: Option<Envelope>,
+    /// Fadeout speed for the instrument (0-65535).
+    /// Subtracted from the fadeout multiplier every tick after Note Off.
+    pub fadeout: u16,
 }
 
 impl Instrument {
@@ -130,10 +135,12 @@ impl Instrument {
             sample_path: None,
             base_note: Note::simple(Pitch::C, 4),
             volume: 1.0,
+            panning: None,
             finetune: 0,
             volume_envelope: None,
             panning_envelope: None,
             pitch_envelope: None,
+            fadeout: 0,
         }
     }
 
@@ -179,6 +186,8 @@ pub struct Song {
     pub arrangement: Vec<usize>,
     /// Global track metadata (volume, pan, mute, solo, instrument).
     pub tracks: Vec<Track>,
+    /// Global volume multiplier (0.0 - 1.0).
+    pub global_volume: f32,
     /// Instrument definitions linking to samples.
     pub instruments: Vec<Instrument>,
 }
@@ -202,6 +211,7 @@ impl Song {
             patterns: vec![default_pattern],
             arrangement: vec![0],
             tracks,
+            global_volume: 1.0,
             instruments: Vec::new(),
         }
     }
