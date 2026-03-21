@@ -1195,9 +1195,9 @@ fn handle_sample_browser_key(app: &mut App, key: KeyEvent) -> bool {
                         .unwrap_or("")
                         .to_ascii_lowercase();
 
-                    if ext == "mod" {
-                        // MOD files always import the whole song — no choice needed.
-                        match app.import_mod_file(&path) {
+                    if matches!(ext.as_str(), "mod" | "xm" | "it" | "s3m") {
+                        // Module files always import the whole song — no choice needed.
+                        match app.import_file(&path) {
                             Ok(()) => {
                                 let name = path
                                     .file_name()
@@ -1205,7 +1205,7 @@ fn handle_sample_browser_key(app: &mut App, key: KeyEvent) -> bool {
                                     .unwrap_or("file")
                                     .to_string();
                                 app.open_modal(ui::modal::Modal::info(
-                                    "MOD Imported".to_string(),
+                                    "Module Imported".to_string(),
                                     format!("Loaded '{name}'"),
                                 ));
                             }
@@ -1287,18 +1287,21 @@ fn handle_file_browser_key(app: &mut App, key: KeyEvent) {
             app.file_browser.move_up();
         }
         KeyCode::Enter => {
-            let is_mod = app
+            let is_module = app
                 .file_browser
                 .selected_path()
                 .and_then(|p| p.extension())
                 .and_then(|e| e.to_str())
-                .map(|e| e.eq_ignore_ascii_case("mod"))
+                .map(|e| {
+                    let e = e.to_ascii_lowercase();
+                    e == "mod" || e == "xm" || e == "it" || e == "s3m"
+                })
                 .unwrap_or(false);
 
-            if is_mod {
+            if is_module {
                 let path = app.file_browser.selected_path().map(|p| p.to_path_buf());
                 if let Some(path) = path {
-                    match app.import_mod_file(&path) {
+                    match app.import_file(&path) {
                         Ok(()) => {
                             let name = path
                                 .file_name()
@@ -1307,7 +1310,7 @@ fn handle_file_browser_key(app: &mut App, key: KeyEvent) {
                                 .to_string();
                             app.close_file_browser();
                             app.open_modal(ui::modal::Modal::info(
-                                "MOD Imported".to_string(),
+                                "Module Imported".to_string(),
                                 format!("Imported '{}'", name),
                             ));
                         }

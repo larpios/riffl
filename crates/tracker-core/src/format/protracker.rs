@@ -67,15 +67,6 @@ fn extract_tempo_from_patterns(patterns: &[Pattern]) -> (u8, f64) {
     (out_speed, out_bpm)
 }
 
-/// Result of a successful MOD import.
-pub struct ModImportResult {
-    /// Song structure: patterns, arrangement, instrument definitions.
-    pub song: Song,
-    /// Raw audio data for each instrument slot (31 entries, matching
-    /// `song.instruments` index-for-index).
-    pub samples: Vec<Sample>,
-}
-
 /// Export a Song and sample data to ProTracker-compatible MOD format bytes.
 ///
 /// The `samples` vec must have exactly 31 entries (one per instrument slot).
@@ -283,7 +274,7 @@ pub fn export_mod(song: &Song, samples: &[Sample]) -> Result<Vec<u8>, String> {
 /// Import a ProTracker-compatible MOD file from raw bytes.
 ///
 /// Returns an error string if the data is too small or structurally invalid.
-pub fn import_mod(data: &[u8]) -> Result<ModImportResult, String> {
+pub fn import_mod(data: &[u8]) -> Result<super::FormatData, String> {
     // Minimum: 20 title + 31*30 headers + 1 length + 1 restart + 128 order + 4 tag
     if data.len() < 1084 {
         return Err(format!(
@@ -402,7 +393,7 @@ pub fn import_mod(data: &[u8]) -> Result<ModImportResult, String> {
     song.instruments = instruments;
     song.tpl = speed as u32;
 
-    Ok(ModImportResult { song, samples })
+    Ok(super::FormatData { song, samples })
 }
 
 // ── Internal helpers ────────────────────────────────────────────────────────

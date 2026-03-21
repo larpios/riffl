@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 /// Supported file extensions for the sample/MOD browser.
-const AUDIO_EXTENSIONS: &[&str] = &["wav", "flac", "ogg", "mod"];
+const AUDIO_EXTENSIONS: &[&str] = &["wav", "flac", "ogg", "mod", "xm", "it", "s3m"];
 
 /// Interactive file browser state for selecting audio samples.
 #[derive(Debug, Clone)]
