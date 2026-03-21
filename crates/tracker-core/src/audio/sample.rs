@@ -141,6 +141,26 @@ impl Sample {
     pub fn len(&self) -> usize {
         self.data.len()
     }
+
+    /// Get the loop mode and boundaries, if looping is enabled.
+    pub fn loop_info(&self) -> Option<(LoopMode, usize, usize)> {
+        if self.loop_mode == LoopMode::NoLoop || self.loop_end <= self.loop_start {
+            None
+        } else {
+            Some((self.loop_mode, self.loop_start, self.loop_end))
+        }
+    }
+
+    /// Get a reference to the raw audio data buffer.
+    pub fn data_ref(&self) -> &[f32] {
+        &self.data
+    }
+
+    /// Get the header/overhead bytes stored alongside the sample.
+    /// Returns 0 for in-memory samples (no header overhead).
+    pub fn header_size(&self) -> u32 {
+        0
+    }
 }
 
 impl Default for Sample {
