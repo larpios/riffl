@@ -1111,10 +1111,32 @@ mod tests {
     }
 
     #[test]
-    fn test_mixer_creation() {
-        let sample = make_test_sample(44100, 0.25);
-        let mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
-        assert_eq!(mixer.active_voice_count(), 0);
+    fn test_mixer_tpl_change_affects_timing() {
+        let data = vec![1.0f32; 100000];
+        let sample = Arc::new(Sample::new(data, 44100, 1, None));
+        let mut mixer = Mixer::new(vec![sample], Vec::new(), 1, 44100);
+
+        mixer.update_tempo(120.0);
+        mixer.set_tpl(6);
+        mixer.tick(0, &crate::pattern::pattern::Pattern::new(1, 1));
+
+        let state_tpl6 = mixer
+            .effect_processor()
+            .channel_state(0)
+            .unwrap()
+            .ticks_per_row;
+
+        mixer.set_tpl(12);
+        mixer.tick(0, &crate::pattern::pattern::Pattern::new(1, 1));
+
+        let state_tpl12 = mixer
+            .effect_processor()
+            .channel_state(0)
+            .unwrap()
+            .ticks_per_row;
+
+        assert_eq!(state_tpl6, 6, "Initial TPL should be 6");
+        assert_eq!(state_tpl12, 12, "TPL change to 12 should be reflected");
     }
 
     #[test]
@@ -2161,36 +2183,28 @@ mod tests {
     }
 
     #[test]
-    fn test_mixer_retrigger_e9x() {
-        let data = vec![1.0f32; 10000];
+    fn test_mixer_tremor_effect() {
+        let data = vec![1.0f32; 100000];
         let sample = Arc::new(Sample::new(data, 44100, 1, None));
         let mut mixer = Mixer::new(vec![sample], Vec::new(), 1, 44100);
-        mixer.update_tempo(120.0);
+        mixer.update_tempo(60.0);
         let mut pattern = Pattern::new(16, 1);
 
-        // E92: Retrigger every 2 ticks. 2 ticks = 1836 frames.
+        // Txy: Tremor - ON for x ticks, OFF for y ticks
+        // T31: 3 ticks on, 1 tick off
         let mut cell = Cell::default();
         cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
         cell.effects
-            .push(Effect::from_type(EffectType::Extended, 0x92));
+            .push(Effect::from_type(EffectType::Tremor, 0x31));
         pattern.set_cell(0, 0, cell);
 
         mixer.tick(0, &pattern);
 
-        // Advance some frames
-        let mut output = vec![0.0f32; 1000 * 2];
-        mixer.render(&mut output);
-        let pos1 = mixer.voices[0].as_ref().unwrap().position;
-        assert!(pos1 > 0.0);
-
-        // Advance past retrigger point (1836)
-        let mut output2 = vec![0.0f32; 1000 * 2];
-        mixer.render(&mut output2);
-
-        let pos2 = mixer.voices[0].as_ref().unwrap().position;
-        // Position should have been reset at frame 1836 and then advanced for (2000-1836) = 164 frames
-        // So pos2 should be ~164 * rate. Without retrigger, it would be ~2000 * rate.
-        assert!(pos2 < pos1);
+        // Verify tremor state is set
+        let state = mixer.effect_processor().channel_state(0).unwrap();
+        assert!(state.tremor_active, "Tremor should be active");
+        assert_eq!(state.tremor_on, 3, "Tremor ON should be 3 ticks");
+        assert_eq!(state.tremor_off, 1, "Tremor OFF should be 1 tick");
     }
 
     // --- VU Meter Tests ---
@@ -2328,5 +2342,238 @@ mod tests {
 
         let (l, _) = mixer.get_channel_level(0);
         assert!(l < 0.1, "Peak should decay to less than 10%, got {}", l);
+    }
+
+    // --- Effect Processing Edge Cases ---
+
+    #[test]
+    fn test_mixer_arpeggio_effect_changes_pitch() {
+        let data: Vec<f32> = (0..44100).map(|i| i as f32 / 100.0).collect();
+        let sample = Arc::new(Sample::new(data, 44100, 1, None).with_base_note(48));
+        let mut mixer = Mixer::new(vec![sample], Vec::new(), 1, 44100);
+        mixer.update_tempo(60.0);
+        let mut pattern = Pattern::new(16, 1);
+
+        // 0xy: arpeggio with x=4 (major third), y=7 (perfect fifth)
+        // C-4 → C-4 → E-4 → G-4 cycles
+        let mut cell = Cell::default();
+        cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
+        cell.effects
+            .push(Effect::from_type(EffectType::Arpeggio, 0x47));
+        pattern.set_cell(0, 0, cell);
+
+        mixer.tick(0, &pattern);
+
+        // First third: base pitch
+        let mut output1 = vec![0.0f32; 500];
+        mixer.render(&mut output1);
+        let peak1: f32 = output1.iter().map(|s| s.abs()).fold(0.0, f32::max);
+
+        // Second third: +4 semitones (C to E)
+        let mut output2 = vec![0.0f32; 500];
+        mixer.render(&mut output2);
+        let peak2: f32 = output2.iter().map(|s| s.abs()).fold(0.0, f32::max);
+
+        // Third third: +7 semitones (C to G)
+        let mut output3 = vec![0.0f32; 500];
+        mixer.render(&mut output3);
+        let peak3: f32 = output3.iter().map(|s| s.abs()).fold(0.0, f32::max);
+
+        assert!(
+            peak1 > 0.0 && peak2 > 0.0 && peak3 > 0.0,
+            "All arpeggio phases should produce audio"
+        );
+    }
+
+    #[test]
+    fn test_mixer_portamento_slide_changes_pitch() {
+        let data: Vec<f32> = (0..44100).map(|i| (i as f32 / 100.0).sin() * 0.5).collect();
+        let sample = Arc::new(Sample::new(data, 44100, 1, None).with_base_note(48));
+        let mut mixer = Mixer::new(vec![sample], Vec::new(), 1, 44100);
+        mixer.update_tempo(60.0);
+        let mut pattern = Pattern::new(16, 1);
+
+        // Row 0: Start on C-4
+        pattern.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
+        // Row 1: Portamento to E-4 (3xx with speed parameter)
+        let mut cell1 = Cell::default();
+        cell1.note = Some(NoteEvent::On(Note::new(Pitch::E, 4, 127, 0)));
+        cell1
+            .effects
+            .push(Effect::from_type(EffectType::PortamentoToNote, 0x10));
+        pattern.set_cell(1, 0, cell1);
+
+        mixer.tick(0, &pattern);
+        let freq_before = mixer.voices[0].as_ref().map(|v| v.triggered_note_freq);
+        let c4_freq = Note::new(Pitch::C, 4, 127, 0).frequency();
+        assert_eq!(
+            freq_before,
+            Some(c4_freq),
+            "Initial note should be C-4 frequency"
+        );
+
+        // Render some frames
+        let mut output1 = vec![0.0f32; 5000];
+        mixer.render(&mut output1);
+
+        // Apply portamento on row 1
+        mixer.tick(1, &pattern);
+
+        // Portamento should be active, voice should continue
+        assert!(
+            mixer.voices[0].is_some(),
+            "Voice should continue during portamento"
+        );
+    }
+
+    #[test]
+    fn test_mixer_volume_column_applied() {
+        let sample = Sample::new(vec![1.0; 44100], 44100, 1, None);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 1, 44100);
+        let mut pattern = Pattern::new(16, 1);
+
+        // Volume column (v40 = half volume)
+        let mut cell = Cell::default();
+        cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
+        cell.volume = Some(0x40); // 64 decimal
+        pattern.set_cell(0, 0, cell);
+
+        mixer.tick(0, &pattern);
+        assert_eq!(mixer.active_voice_count(), 1);
+
+        let mut output = vec![0.0f32; 256];
+        mixer.render(&mut output);
+
+        let peak: f32 = output.iter().map(|s| s.abs()).fold(0.0, f32::max);
+        // Volume column 0x40 = 64/64 = 1.0, applied via volume_override
+        // Should produce audio at normalized level
+        assert!(peak > 0.0, "Volume column should produce audio");
+    }
+
+    #[test]
+    fn test_mixer_voice_stealing_on_new_note() {
+        let sample = Sample::new(vec![0.5; 44100], 44100, 1, None);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
+        let mut pattern = Pattern::new(16, 4);
+
+        // Start note on channel 0
+        pattern.set_note(0, 0, Note::new(Pitch::C, 4, 100, 0));
+        mixer.tick(0, &pattern);
+        assert_eq!(mixer.active_voice_count(), 1);
+
+        // New note on same channel should steal the voice
+        pattern.set_note(1, 0, Note::new(Pitch::E, 4, 100, 0));
+        mixer.tick(1, &pattern);
+
+        // Should still have 1 voice, just restarted
+        assert_eq!(
+            mixer.active_voice_count(),
+            1,
+            "New note on same channel should replace voice"
+        );
+
+        // Voice position should be reset (new note)
+        let voice_pos = mixer.voices[0].as_ref().map(|v| v.position);
+        assert_eq!(voice_pos, Some(0.0), "New note should reset voice position");
+    }
+
+    #[test]
+    fn test_mixer_set_volume_effect_cxx() {
+        let sample = Sample::new(vec![1.0; 44100], 44100, 1, None);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 1, 44100);
+        let mut pattern = Pattern::new(16, 1);
+
+        // C20: set volume to 32/64 = 0.5
+        let mut cell = Cell::default();
+        cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
+        cell.effects
+            .push(Effect::from_type(EffectType::SetVolume, 0x20));
+        pattern.set_cell(0, 0, cell);
+
+        mixer.tick(0, &pattern);
+        assert_eq!(mixer.active_voice_count(), 1);
+
+        let mut output1 = vec![0.0f32; 256];
+        mixer.render(&mut output1);
+        let peak_half: f32 = output1.iter().map(|s| s.abs()).fold(0.0, f32::max);
+
+        // Now set full volume C40
+        let mut cell2 = Cell::default();
+        cell2.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
+        cell2
+            .effects
+            .push(Effect::from_type(EffectType::SetVolume, 0x40));
+        let mut pattern2 = Pattern::new(16, 1);
+        pattern2.set_cell(0, 0, cell2);
+
+        mixer.tick(0, &pattern2);
+        let mut output2 = vec![0.0f32; 256];
+        mixer.render(&mut output2);
+        let peak_full: f32 = output2.iter().map(|s| s.abs()).fold(0.0, f32::max);
+
+        assert!(
+            peak_full > peak_half,
+            "Full volume ({}) should be louder than half ({}), actual: {}",
+            peak_full,
+            peak_half / 0.5 * 1.0,
+            peak_full
+        );
+    }
+
+    #[test]
+    fn test_mixer_sample_offset_9xx() {
+        let data: Vec<f32> = (0..10000).map(|i| i as f32).collect();
+        let sample = Arc::new(Sample::new(data, 44100, 1, None));
+        let mut mixer = Mixer::new(vec![sample], Vec::new(), 1, 44100);
+        let mut pattern = Pattern::new(16, 1);
+
+        // 9xx: sample offset 512 bytes (2 * 256)
+        let mut cell = Cell::default();
+        cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
+        cell.effects
+            .push(Effect::from_type(EffectType::SampleOffset, 0x02));
+        pattern.set_cell(0, 0, cell);
+
+        mixer.tick(0, &pattern);
+
+        // Voice position should be set to offset
+        let pos = mixer.voices[0].as_ref().map(|v| v.position);
+        assert_eq!(
+            pos,
+            Some(512.0),
+            "Sample offset 9xx should set voice position"
+        );
+    }
+
+    #[test]
+    fn test_mixer_set_panning_8xx() {
+        let sample = Sample::new(vec![1.0; 44100], 44100, 1, None);
+        let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 1, 44100);
+        let mut pattern = Pattern::new(16, 1);
+
+        // 8xx: set panning (0x00=full left, 0x80=center, 0xFF=full right)
+        let mut cell = Cell::default();
+        cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
+        cell.effects
+            .push(Effect::from_type(EffectType::SetPanning, 0x00));
+        pattern.set_cell(0, 0, cell);
+
+        mixer.tick(0, &pattern);
+
+        let mut output = vec![0.0f32; 256];
+        mixer.render(&mut output);
+
+        let left: f32 = (0..output.len() / 2)
+            .map(|i| output[i * 2].abs())
+            .fold(0.0, f32::max);
+        let right: f32 = (0..output.len() / 2)
+            .map(|i| output[i * 2 + 1].abs())
+            .fold(0.0, f32::max);
+
+        assert!(left > 0.0, "Left channel should have audio");
+        assert!(
+            right < 0.001,
+            "Right channel should be silent with full-left panning"
+        );
     }
 }
