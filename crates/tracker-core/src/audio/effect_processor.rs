@@ -606,7 +606,8 @@ impl TrackerEffectProcessor {
 
                     // Apply immediate slide for tick 0 responsiveness
                     let current_vol = state.volume_override.unwrap_or(1.0);
-                    let delta = (state.volume_slide_up as f32 - state.volume_slide_down as f32) / 64.0;
+                    let delta =
+                        (state.volume_slide_up as f32 - state.volume_slide_down as f32) / 64.0;
                     state.volume_override = Some((current_vol + delta).clamp(0.0, 2.0));
 
                     // Portamento target is handled by new notes triggered on this row
@@ -629,7 +630,8 @@ impl TrackerEffectProcessor {
 
                     // Apply immediate slide for tick 0 responsiveness
                     let current_vol = state.volume_override.unwrap_or(1.0);
-                    let delta = (state.volume_slide_up as f32 - state.volume_slide_down as f32) / 64.0;
+                    let delta =
+                        (state.volume_slide_up as f32 - state.volume_slide_down as f32) / 64.0;
                     state.volume_override = Some((current_vol + delta).clamp(0.0, 2.0));
                 }
 
@@ -656,7 +658,8 @@ impl TrackerEffectProcessor {
 
                     // Apply immediate slide for tick 0 responsiveness
                     let current_vol = state.volume_override.unwrap_or(1.0);
-                    let delta = (state.volume_slide_up as f32 - state.volume_slide_down as f32) / 64.0;
+                    let delta =
+                        (state.volume_slide_up as f32 - state.volume_slide_down as f32) / 64.0;
                     state.volume_override = Some((current_vol + delta).clamp(0.0, 2.0));
 
                     // Volume slides in classic trackers are only applied on ticks > 0.
@@ -835,7 +838,7 @@ impl TrackerEffectProcessor {
     pub fn advance_frame(&mut self, channel: usize) {
         if let Some(state) = self.channels.get_mut(channel) {
             state.row_frame_counter += 1;
-            
+
             // Skip continuous effects on the very first frame of the row (tick 0).
             // This matches tracker behavior where slides (Axy, 1xx, 2xx) only
             // happen on ticks > 0. Since row_frame_counter starts at 0 and we just

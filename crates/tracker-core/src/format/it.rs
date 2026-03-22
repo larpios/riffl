@@ -1040,6 +1040,7 @@ fn convert_it_effect(cmd: u8, param: u8) -> Option<Effect> {
                 0x4 => Some(Effect::new(0x0E, 0x70 | lo)), // S4x: Tremolo waveform
                 0x5 => Some(Effect::new(0x0E, 0x50 | lo)), // S5x: Set finetune
                 0x6 => Some(Effect::new(0x0E, 0x60 | lo)), // S6x: Pattern loop
+                0x8 => Some(Effect::new(0x08, lo * 17)),   // S8x: Set panning position
                 0x9 => Some(Effect::new(0x0E, 0x90 | lo)), // S9x: Retrigger note (every x ticks)
                 0xB => Some(Effect::new(0x0E, 0x60 | lo)), // SBx: Pattern loop (alt)
                 0xC => Some(Effect::new(0x0E, 0xC0 | lo)), // SCx: Note cut
@@ -1286,8 +1287,16 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
         // IT channel volume is 0-64.
         t.volume = it_vol as f32 / 64.0;
         // IT channel pan is 0(L) to 32(C) to 64(R). 100 means surround (map to C for now).
-        let pan_val = if it_pan <= 64 { it_pan } else { 32 };
+        // If high bit (128) is set, the channel is muted.
+        let pan_val = if (it_pan & 127) <= 64 {
+            it_pan & 127
+        } else {
+            32
+        };
         t.pan = (pan_val as f32 - 32.0) / 32.0;
+        if (it_pan & 128) != 0 {
+            t.muted = true;
+        }
         tracks.push(t);
     }
     song.tracks = tracks;
