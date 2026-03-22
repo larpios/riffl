@@ -20,3 +20,12 @@ node_modules
 .ralph
 .mcp.json
 .agents
+
+# Beads / Dolt files (added by bd init)
+.beads-credential-key
+
+# bv (beads viewer) local config and caches
+.bv/
+
+research
+.agent/

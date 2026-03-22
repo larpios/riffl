@@ -41,6 +41,7 @@ struct Voice {
     /// Current read position within the sample's audio data (in frames).
     position: f64,
     /// Playback rate relative to the sample's base rate (for pitch shifting).
+    #[allow(dead_code)]
     playback_rate: f64,
     /// Volume multiplier derived from note velocity (0.0 - 1.0).
     velocity_gain: f32,
@@ -594,7 +595,7 @@ impl Mixer {
                             if retrigger_interval > 0
                                 && current_tick > 0
                                 && tick_frame == 0
-                                && current_tick % (retrigger_interval as u32) == 0
+                                && current_tick.is_multiple_of(retrigger_interval as u32)
                             {
                                 voice.position = 0.0;
                                 // Apply retrigger volume action
@@ -659,15 +660,15 @@ impl Mixer {
                     let mut env_vol = 1.0;
                     if let Some(inst) = self.instruments.get(voice.instrument_index) {
                         // Fadeout processing
-                        if !voice.key_on && inst.fadeout > 0 {
-                            if tick_frame == frames_per_tick.saturating_sub(1) {
-                                // IT and XM both use a 16-bit fadeout reduction system (effectively 65536 max).
-                                let delta = inst.fadeout as f32 / 65536.0;
-                                voice.fadeout_multiplier =
-                                    (voice.fadeout_multiplier - delta).max(0.0);
-                                if voice.fadeout_multiplier <= 0.0001 {
-                                    voice.active = false;
-                                }
+                        if !voice.key_on
+                            && inst.fadeout > 0
+                            && tick_frame == frames_per_tick.saturating_sub(1)
+                        {
+                            // IT and XM both use a 16-bit fadeout reduction system (effectively 65536 max).
+                            let delta = inst.fadeout as f32 / 65536.0;
+                            voice.fadeout_multiplier = (voice.fadeout_multiplier - delta).max(0.0);
+                            if voice.fadeout_multiplier <= 0.0001 {
+                                voice.active = false;
                             }
                         }
 

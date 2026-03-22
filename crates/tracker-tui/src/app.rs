@@ -415,10 +415,16 @@ impl App {
                 arrangement_pos,
                 row,
             } => {
+                let saved_cursor_row = self.editor.cursor_row();
+                let saved_cursor_channel = self.editor.cursor_channel();
                 self.flush_editor_pattern(old_arrangement_pos);
                 self.load_arrangement_pattern(arrangement_pos);
                 if self.follow_mode {
                     self.editor.go_to_row(row);
+                } else {
+                    // Preserve cursor position when not following playhead
+                    self.editor.go_to_row(saved_cursor_row);
+                    self.editor.set_cursor_channel(saved_cursor_channel);
                 }
                 if self.live_mode {
                     self.execute_script();
@@ -563,10 +569,21 @@ impl App {
     }
 
     /// Load the pattern at the given arrangement position into the editor.
+    /// Syncs global track state into the pattern so mixing settings persist.
     fn load_arrangement_pattern(&mut self, arrangement_pos: usize) {
         if let Some(&pattern_idx) = self.song.arrangement.get(arrangement_pos) {
             if let Some(pattern) = self.song.patterns.get(pattern_idx) {
-                self.editor = Editor::new(pattern.clone());
+                let mut p = pattern.clone();
+                // Sync tracks from song
+                for (ch, track) in p.tracks_mut().iter_mut().enumerate() {
+                    if let Some(song_track) = self.song.tracks.get(ch) {
+                        track.muted = song_track.muted;
+                        track.solo = song_track.solo;
+                        track.volume = song_track.volume;
+                        track.pan = song_track.pan;
+                    }
+                }
+                self.editor = Editor::new(p);
                 self.transport.set_num_rows(pattern.num_rows());
             }
         }
@@ -972,20 +989,53 @@ impl App {
         }
     }
 
-    /// Toggle mute on the current track (channel under cursor)
+    /// Toggle mute on the current track (channel under cursor).
+    /// Syncs with the global song track state so it persists across pattern changes.
     pub fn toggle_mute_current_track(&mut self) {
         let ch = self.editor.cursor_channel();
+        // Toggle in current pattern for immediate feedback
         if let Some(track) = self.editor.pattern_mut().get_track_mut(ch) {
             track.toggle_mute();
         }
+        // Sync to song tracks for persistence
+        if let Some(track) = self.song.tracks.get_mut(ch) {
+            track.toggle_mute();
+        }
+        self.mark_dirty();
     }
 
-    /// Toggle solo on the current track (channel under cursor)
+    /// Toggle solo on the current track (channel under cursor).
+    /// Syncs with the global song track state so it persists across pattern changes.
     pub fn toggle_solo_current_track(&mut self) {
         let ch = self.editor.cursor_channel();
+        // Toggle in current pattern for immediate feedback
         if let Some(track) = self.editor.pattern_mut().get_track_mut(ch) {
             track.toggle_solo();
         }
+        // Sync to song tracks for persistence
+        if let Some(track) = self.song.tracks.get_mut(ch) {
+            track.toggle_solo();
+        }
+        self.mark_dirty();
+    }
+
+    /// Jump to the very beginning of the song (Pattern 0, Row 0).
+    pub fn jump_to_start(&mut self) {
+        let current = self.transport.arrangement_position();
+        self.flush_editor_pattern(current);
+        self.transport.jump_to_arrangement_position(0);
+        self.load_arrangement_pattern(0);
+        self.editor.go_to_row(0);
+    }
+
+    /// Jump to the very end of the song (Last pattern in arrangement, last row).
+    pub fn jump_to_end(&mut self) {
+        let current = self.transport.arrangement_position();
+        let last_pos = self.song.arrangement.len().saturating_sub(1);
+        self.flush_editor_pattern(current);
+        self.transport.jump_to_arrangement_position(last_pos);
+        self.load_arrangement_pattern(last_pos);
+        self.editor.go_to_row(usize::MAX);
     }
 
     /// Open a modal dialog by adding it to the modal stack
