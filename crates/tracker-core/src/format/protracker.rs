@@ -379,12 +379,13 @@ pub fn import_mod(data: &[u8]) -> Result<super::FormatData, String> {
 
     // Initialize tracks with Amiga panning
     // Amiga hardware: Ch 0(L), 1(R), 2(R), 3(L)
+    // Stereo separation is roughly 80/127 (around 63%), matching Furnace's default
     let mut tracks = Vec::with_capacity(num_channels);
     for i in 0..num_channels {
         let mut t = Track::with_number(i + 1);
         let pan = match i % 4 {
-            0 | 3 => -0.8, // Left (somewhat softer than hard -1.0)
-            1 | 2 => 0.8,  // Right
+            0 | 3 => -0.63, // Left
+            1 | 2 => 0.63,  // Right
             _ => 0.0,
         };
         t.pan = pan;
@@ -560,6 +561,16 @@ fn decode_effect(cmd: u8, param: u8) -> Option<Effect> {
     // Arpeggio with param 0 is a no-op in ProTracker
     if cmd == 0 && param == 0 {
         return None;
+    }
+    // Map MOD 8xx panning (0-128) to our 0-255 range
+    if cmd == 0x8 {
+        let mapped = (param.min(128) as u16 * 255 / 128) as u8;
+        return Some(Effect::new(0x8, mapped));
+    }
+    // Map MOD E8x panning (0-15) to our 0-255 range
+    if cmd == 0xE && (param >> 4) == 0x8 {
+        let mapped = (param & 0x0F) * 17;
+        return Some(Effect::new(0x8, mapped));
     }
     // MOD Fxx effect: param < 32 sets tick speed, param >= 32 sets BPM.
     // Both use command 0xF — SetSpeed handler checks the param range.

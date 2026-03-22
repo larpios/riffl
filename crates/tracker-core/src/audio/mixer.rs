@@ -405,7 +405,9 @@ impl Mixer {
                         let velocity_gain = (velocity / 127.0) * inst_vol * sample.volume;
 
                         // Apply instrument panning override to the effect processor
-                        if let Some(inst_pan) = self.instruments.get(instrument_idx).and_then(|i| i.panning) {
+                        if let Some(inst_pan) =
+                            self.instruments.get(instrument_idx).and_then(|i| i.panning)
+                        {
                             if let Some(state) = self.effect_processor.channel_state_mut(ch) {
                                 state.panning_override = Some((inst_pan + 1.0) / 2.0);
                             }
@@ -1488,7 +1490,8 @@ mod tests {
         // All samples are 0.8, so output should be ~0.8 * (100/127) * pan_gain
         // Default center pan with equal-power law: gain = 1/√2 ≈ 0.707
         let velocity_gain = 100.0 / 127.0;
-        let center_pan_gain = std::f32::consts::FRAC_1_SQRT_2;
+        // Center pan gain is cos(45 deg)
+        let center_pan_gain = std::f32::consts::FRAC_PI_4.cos();
         let expected_val = 0.8 * velocity_gain * center_pan_gain;
         assert!(
             (output[0] - expected_val).abs() < 0.01,
@@ -1940,8 +1943,8 @@ mod tests {
         let mut output = vec![0.0f32; 2];
         mixer.render(&mut output);
 
-        // Center pan gain is ~0.707
-        let expected = 0.5 * 0.70710677;
+        // Center pan gain is ~0.707 (cos(pi/4))
+        let expected = 0.5 * std::f32::consts::FRAC_PI_4.cos();
         assert!(
             (output[0] - expected).abs() < 0.01,
             "Expected ~{}, got {}",

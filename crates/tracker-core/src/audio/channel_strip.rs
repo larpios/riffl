@@ -158,12 +158,13 @@ impl ChannelStrip {
     /// Linear pan gains from pan position (matching classic tracker behavior).
     fn pan_gains(pan: f32) -> (f32, f32) {
         let pan = pan.clamp(-1.0, 1.0);
-        // Linear panning:
-        // Left: 1.0 at pan=-1.0, 0.5 at pan=0.0, 0.0 at pan=1.0
-        // Right: 0.0 at pan=-1.0, 0.5 at pan=0.0, 1.0 at pan=1.0
-        let left = (1.0 - pan) * 0.5;
-        let right = (1.0 + pan) * 0.5;
-        (left, right)
+        // Equal-power panning (-3dB center)
+        // Map pan (-1.0 to 1.0) to an angle from 0 to pi/2 (90 degrees).
+        // At pan = -1.0: angle = 0
+        // At pan = 0.0: angle = pi/4 (45 degrees)
+        // At pan = 1.0: angle = pi/2 (90 degrees)
+        let angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
+        (angle.cos(), angle.sin())
     }
 }
 

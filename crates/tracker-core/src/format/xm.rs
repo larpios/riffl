@@ -601,7 +601,15 @@ fn convert_xm_effect(eff_type: u8, param: u8) -> Option<Effect> {
         0x0B => Some(Effect::new(0x0B, param)), // Position jump
         0x0C => Some(Effect::new(0x0C, param)), // Set volume
         0x0D => Some(Effect::new(0x0D, param)), // Pattern break
-        0x0E => Some(Effect::new(0x0E, param)), // Extended effects (Exy)
+        0x0E => {
+            // Extended effects (Exy)
+            // E8x is Set Panning
+            if (param >> 4) == 0x8 {
+                Some(Effect::new(0x08, (param & 0x0F) * 17))
+            } else {
+                Some(Effect::new(0x0E, param))
+            }
+        }
         0x0F => Some(Effect::new(0x0F, param)), // Set speed/BPM
         // Extended XM effects (0x10+)
         0x10 => Some(Effect::new(0x10, param)), // Set global volume (Gxx)
