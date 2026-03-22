@@ -826,7 +826,8 @@ impl Mixer {
                         (l1 + (l2 - l1) * frac, r1 + (r2 - r1) * frac)
                     };
 
-                    let effect_gain = render_state.gain.unwrap_or(1.0);
+                    let combined_channel_gain =
+                        render_state.gain.unwrap_or(render_state.channel_volume);
                     if let Some(pan_01) = render_state.pan_override {
                         strip.set_effect_pan_immediate(pan_01 * 2.0 - 1.0);
                     }
@@ -836,16 +837,14 @@ impl Mixer {
                     let global_vol_mult = effect_processor.global_volume;
                     let post_l = left
                         * voice.velocity_gain
-                        * effect_gain
-                        * render_state.channel_volume
+                        * combined_channel_gain
                         * left_gain
                         * env_vol
                         * global_vol_mult
                         * voice.fadeout_multiplier;
                     let post_r = right
                         * voice.velocity_gain
-                        * effect_gain
-                        * render_state.channel_volume
+                        * combined_channel_gain
                         * right_gain
                         * env_vol
                         * global_vol_mult

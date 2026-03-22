@@ -152,7 +152,7 @@ impl EffectType {
             EffectType::TonePortamentoVolumeSlide => "Porta+Vol",
             EffectType::VibratoVolumeSlide => "Vib+Vol",
             EffectType::Tremolo => "Tremolo",
-            EffectType::SetPanning => "Set Tempo",
+            EffectType::SetPanning => "Set Pan",
             EffectType::SampleOffset => "Offset",
             EffectType::VolumeSlide => "Vol Slide",
             EffectType::PositionJump => "Pos Jump",
