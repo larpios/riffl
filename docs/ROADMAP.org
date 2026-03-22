@@ -413,6 +413,212 @@ Per-instrument ADSR + LFO for volume, pitch, and panning.
 :COMPLEXITY: Medium
 :END:
 
+* Milestone 1.5 — Effect Command Bug Fixes
+:PROPERTIES:
+:STATUS: in-progress
+:PRIORITY: A
+:IMPORTANCE: Critical
+:COMPLEXITY: High
+:END:
+
+Critical fixes for effect command implementations to match Furnace/modern tracker behavior.
+Reference: [[https://github.com/tildearrow/furnace][Furnace Tracker]] playback.cpp.
+
+** Reference Implementation Notes
+- Furnace uses 64-entry vibrato sine table: ~127 * sin(i/64 * 2π)~
+- Furnace uses 128-entry tremolo table: ~255 * 0.5 * (1 - cos(i/128 * 2π))~
+- Portamento speed is raw param value (0-255), not divided
+- Pitch/volume slides do NOT happen on tick 0 (first tick)
+- Vibrato position advances by rate per tick, wraps at 64
+- 5xy uses last stored 3xx portamento speed when param is 0
+
+** Phase 1 — Critical Portamento & Tick-0 Slides
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: Critical
+:COMPLEXITY: Low
+:END:
+*** TODO 3xx Portamento Speed Fix
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: Critical
+:COMPLEXITY: Low
+:END:
+- File: effect_processor.rs:575-587
+- Bug: Divides param by 16 (should use raw value)
+- Fix: Use ~effect.param as f64~ directly
+- Furnace: ~chan[i].portaSpeed=effectVal;~
+*** TODO 1xx/2xx Tick-0 Slide Fix
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: Critical
+:COMPLEXITY: Low
+:END:
+- File: effect_processor.rs:559-573
+- Bug: Applies slide immediately on tick 0
+- Fix: Remove immediate application; only advance in ~advance_frame()~
+*** TODO Axy Tick-0 Slide Fix  
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: Critical
+:COMPLEXITY: Low
+:END:
+- File: effect_processor.rs:653-667
+- Bug: Same tick-0 issue as 1xx/2xx
+- Fix: Remove immediate application in ~process_row()~
+
+** Phase 2 — Vibrato & Tremolo Overhaul
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
+*** TODO Add Vibrato/Tremolo Lookup Tables
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
+- File: effect_processor.rs
+- Add 64-entry vibrato sine table
+- Add 128-entry tremolo cosine table
+- Match Furnace ~vibTable~ and ~tremTable~
+*** TODO Fix Vibrato Waveform Implementation
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
+- File: effect_processor.rs:307-330 (~vibrato_pitch_ratio~)
+- Implement proper waveform selection (sine, ramp, square, random)
+- Use lookup table instead of sin() calls
+*** TODO Fix Vibrato Position Advance
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
+- File: effect_processor.rs:332-350 (~advance_vibrato~)
+- Furnace: ~pos += rate; pos &= 63;~
+*** TODO Fix Tremolo Implementation
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
+- File: effect_processor.rs:355-394 (~tremolo_amplitude_modulation~, ~advance_tremolo~)
+- Use 128-entry lookup table
+- Match Furnace tremolo behavior
+
+** Phase 3 — Memory Fields & 5xy Fix
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
+*** TODO Add last_porta_speed Field
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Low
+:END:
+- File: effect_processor.rs
+- Add to ~ChannelEffectState~ struct
+- Purpose: 5xy needs to remember last 3xx portamento speed
+*** TODO Add last_vibrato Field
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Low
+:END:
+- File: effect_processor.rs
+- Add to ~ChannelEffectState~ struct
+- Purpose: 5xy/6xy need last vibrato params for fallback
+*** TODO Fix 5xy to Use Stored Values
+:PROPERTIES:
+:PRIORITY: A
+:IMPORTANCE: High
+:COMPLEXITY: Medium
+:END:
+- File: effect_processor.rs:599-620 (~TonePortamentoVolumeSlide~)
+- Bug: Doesn't use last_porta_speed when no new 3xx
+- Fix: Check if portamento set this row, else use stored
+
+** Phase 4 — XM Format & Extended Effects
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Medium
+:END:
+*** TODO Fix XM Volume Column Tone Portamento (0xF)
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
+- File: xm.rs:570-574
+- Bug: Shifts param left by 4 (~param << 4~)
+- Fix: Pass param directly
+*** TODO Fix Arpeggio Tick Timing
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Medium
+:END:
+- File: effect_processor.rs:282-302 (~arpeggio_semitone_offset~)
+- Bug: Uses frame counter instead of tick
+- Fix: Divide row into 3 parts based on ticks_per_row
+*** TODO Fix E1x/E2x Fine Portamento Scale
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Low
+:END:
+- File: effect_processor.rs:688-697
+- Bug: Uses / 256.0 scale
+- Fix: Match FT2 fine slide behavior
+*** TODO Implement E9x Retrigger Properly
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Medium
+:END:
+- File: effect_processor.rs:724-727
+- Add tick-based retrigger with volume action handling
+*** TODO Implement ECx/EDx Tick-Based Triggering
+:PROPERTIES:
+:PRIORITY: B
+:IMPORTANCE: Medium
+:COMPLEXITY: Medium
+:END:
+- File: effect_processor.rs:740-746
+- Note cut/delay should happen at correct tick
+
+** Phase 5 — Volume Column Vibra
+:PROPERTIES:
+:PRIORITY: C
+:IMPORTANCE: Low
+:COMPLEXITY: Low
+:END:
+*** TODO Volume Column Vibrato Memory
+:PROPERTIES:
+:PRIORITY: C
+:IMPORTANCE: Low
+:COMPLEXITY: Low
+:END:
+- File: xm.rs:537-554
+- Store last vibrato params for 0xA/0xB columns
+
+** Summary
+| Phase | Priority | Bugs | Files |
+|-------|----------|------|-------|
+| Phase 1 | Critical | 3 | 1 |
+| Phase 2 | High | 4 | 1 |
+| Phase 3 | High | 3 | 1 |
+| Phase 4 | Medium | 5 | 2 |
+| Phase 5 | Low | 1 | 1 |
+| *Total* | - | *16* | *2* |
+
 * Milestone 2.5 — Pattern Editor & Transport Essentials
 :PROPERTIES:
 :STATUS: in-progress
