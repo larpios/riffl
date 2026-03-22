@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "sessionId": "d0f042b0-f2cc-4520-9b50-34ab168c829a",
+  "status": "running",
+  "startedAt": "2026-03-22T14:56:07.519Z",
+  "updatedAt": "2026-03-22T14:58:29.170Z",
+  "currentIteration": 0,
+  "maxIterations": 10,
+  "tasksCompleted": 0,
+  "isPaused": false,
+  "agentPlugin": "opencode",
+  "trackerState": {
+    "plugin": "beads",
+    "epicId": "riffl-j60",
+    "totalTasks": 5,
+    "tasks": [
+      {
+        "id": "riffl-j60.1",
+        "title": "US-001: Fix tracker-core clippy warnings and compile errors",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "riffl-j60.2",
+        "title": "US-002: Fix tracker-tui keybindings match errors",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "riffl-j60.3",
+        "title": "US-003: Add CPU usage display to TUI status bar",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "riffl-j60.4",
+        "title": "US-004: Add test coverage for mixer tick/render cycle",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "riffl-j60.5",
+        "title": "US-005: Document effect commands in code and README",
+        "status": "open",
+        "completedInSession": false
+      }
+    ]
+  },
+  "iterations": [],
+  "skippedTaskIds": [],
+  "cwd": "/Users/ray/repos/riffl",
+  "activeTaskIds": [],
+  "subagentPanelVisible": false
+}

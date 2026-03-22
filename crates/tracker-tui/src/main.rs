@@ -583,6 +583,10 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::GoToBottom => app.editor.go_to_row(usize::MAX),
         // Go to first row (gg)
         Action::GoToTop => app.editor.go_to_row(0),
+        // Go to start of song (Ctrl+Home)
+        Action::GoToStart => app.jump_to_start(),
+        // Go to end of song (Ctrl+End)
+        Action::GoToEnd => app.jump_to_end(),
         // Go to specific row (prompt)
         Action::GoToRow => app.editor.go_to_row(usize::MAX),
 

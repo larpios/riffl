@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "skills": {
+    "ralph-tui-create-beads": {
+      "source": "subsy/ralph-tui",
+      "sourceType": "github",
+      "computedHash": "9525e98bc0eec3824d0a980a9653b0021fb71cb7e8c476f2145554fc181a63d8"
+    },
+    "ralph-tui-create-beads-rust": {
+      "source": "subsy/ralph-tui",
+      "sourceType": "github",
+      "computedHash": "6097e6e9cd71f80f015fe572a6b9c767645ea946ac96417edbddbc01e05fdfeb"
+    },
+    "ralph-tui-create-json": {
+      "source": "subsy/ralph-tui",
+      "sourceType": "github",
+      "computedHash": "395b8c2dc5c2e45f927f1cde33fc771ad7d989f5accb993999c5135df061eb01"
+    },
+    "ralph-tui-prd": {
+      "source": "subsy/ralph-tui",
+      "sourceType": "github",
+      "computedHash": "016fe0409dbae7bd8019a90c78f147985f63dabd50b7a78804453f5fc5091b2f"
+    }
+  }
+}

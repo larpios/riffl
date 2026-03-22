@@ -910,10 +910,10 @@ impl TrackerEffectProcessor {
             // Use the frames_per_row from the first channel as a target speed reference
             let fpr = self
                 .channels
-                .get(0)
+                .first()
                 .map(|s| s.frames_per_row)
                 .unwrap_or(6000) as f32;
-            let tpr = self.channels.get(0).map(|s| s.ticks_per_row).unwrap_or(6) as f32;
+            let tpr = self.channels.first().map(|s| s.ticks_per_row).unwrap_or(6) as f32;
 
             let delta_per_tick =
                 (self.global_volume_slide_up as f32 - self.global_volume_slide_down as f32) / 128.0;

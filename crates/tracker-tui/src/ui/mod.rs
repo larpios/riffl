@@ -383,9 +383,9 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     // Pre-compute track audibility for muted/solo display
     let any_soloed = pattern.any_track_soloed();
 
-    // During playback, auto-scroll to keep the playback row visible.
-    // When stopped, follow the editor cursor instead.
-    let scroll_target = if app.transport.is_playing() {
+    // During playback, auto-scroll to keep the playback row visible if follow mode is active.
+    // When stopped or not in follow mode, follow the editor cursor instead.
+    let scroll_target = if app.transport.is_playing() && app.follow_mode {
         playback_row
     } else {
         cursor_row
@@ -961,104 +961,77 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         Span::raw(" "),
     ];
 
-    // Show context-specific state indicators (not a cheatsheet — press ? for that)
-    // Only for pattern editor — skip when code editor is active.
-    if app.is_code_editor_active() {
-        // No pattern-editor context in code editor mode
-    } else {
-        match mode {
-            EditorMode::Normal => {
-                let hints: &[(&str, &str)] = match app.current_view {
-                    AppView::PatternEditor => &[
-                        ("Space", "play"),
-                        ("i", "insert"),
-                        ("v", "select"),
-                        ("x", "del"),
-                        ("y/p", "copy"),
-                        ("[/]", "pat"),
-                        ("A-[/]", "loop"),
-                        ("^⇧L", "loop on/off"),
-                        ("f", "follow"),
-                        ("t", "tap bpm"),
-                        ("^B", "set bpm"),
-                        ("^P", "set len"),
-                    ],
-                    AppView::InstrumentList => &[
-                        ("j/k", "nav"),
-                        ("Enter", "edit"),
-                        ("n", "new"),
-                        ("d", "del"),
-                    ],
-                    AppView::SampleBrowser => &[
-                        ("j/k", "nav"),
-                        ("Space", "preview"),
-                        ("l", "enter"),
-                        ("h", "up"),
-                    ],
-                    AppView::PatternList => &[("j/k", "nav"), ("Enter", "load"), ("c", "clone")],
-                    _ => &[],
-                };
-                for (k, desc) in hints {
-                    footer_spans.push(Span::styled(*k, key_style));
-                    footer_spans.push(Span::raw(format!(":{} ", desc)));
-                }
-            }
-            EditorMode::Insert => {
-                footer_spans.push(Span::styled(
-                    format!("Oct:{}", app.editor.current_octave()),
-                    Style::default().fg(theme.warning_color()),
-                ));
-                footer_spans.push(Span::raw(" "));
-                footer_spans.push(Span::styled(
-                    format!("Ins:{:02X}", app.editor.current_instrument()),
-                    Style::default().fg(Color::Yellow),
-                ));
-                footer_spans.push(Span::raw(" "));
-                footer_spans.push(Span::styled(
-                    format!("Stp:{}", app.editor.step_size()),
-                    Style::default().fg(Color::Cyan),
-                ));
-                if app.editor.sub_column() == SubColumn::Effect {
-                    let cell = app
-                        .editor
-                        .pattern()
-                        .get_cell(app.editor.cursor_row(), app.editor.cursor_channel());
-                    let mnemonic = cell
-                        .and_then(|c| c.first_effect())
-                        .map(|e| e.mnemonic())
-                        .unwrap_or("---");
-                    footer_spans.push(Span::raw(" "));
-                    footer_spans.push(Span::styled(
-                        format!("Eff:{}", mnemonic),
-                        Style::default().fg(theme.warning_color()),
-                    ));
-                    let pos = app.editor.effect_digit_position();
-                    let pos_label = match pos {
-                        0 => "cmd",
-                        1 => "hi",
-                        _ => "lo",
-                    };
-                    footer_spans.push(Span::raw(" "));
-                    footer_spans.push(Span::styled(
-                        format!("[{}]", pos_label),
-                        Style::default().fg(theme.info_color()),
-                    ));
-                }
-            }
-            EditorMode::Visual => {}
+    // Show status indicators instead of keybinding hints
+    if !app.is_code_editor_active() && app.current_view == AppView::PatternEditor {
+        // Octave
+        footer_spans.push(Span::styled(
+            "OCT:",
+            Style::default().fg(theme.text_secondary),
+        ));
+        footer_spans.push(Span::styled(
+            format!(" {} ", app.editor.current_octave()),
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD),
+        ));
+
+        // Instrument
+        footer_spans.push(Span::styled(
+            "INS:",
+            Style::default().fg(theme.text_secondary),
+        ));
+        footer_spans.push(Span::styled(
+            format!(" {:02X} ", app.editor.current_instrument()),
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD),
+        ));
+
+        // Step size
+        footer_spans.push(Span::styled(
+            "STP:",
+            Style::default().fg(theme.text_secondary),
+        ));
+        footer_spans.push(Span::styled(
+            format!(" {} ", app.editor.step_size()),
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD),
+        ));
+
+        footer_spans.push(Span::raw(" | "));
+
+        // Location status
+        let pos = app.transport.arrangement_position();
+        let total = app.song.arrangement.len();
+        footer_spans.push(Span::styled(
+            "POS:",
+            Style::default().fg(theme.text_secondary),
+        ));
+        footer_spans.push(Span::styled(
+            format!(" {:02}/{:02} ", pos, total),
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD),
+        ));
+
+        if let Some(&pat_idx) = app.song.arrangement.get(pos) {
+            footer_spans.push(Span::styled(
+                "PAT:",
+                Style::default().fg(theme.text_secondary),
+            ));
+            footer_spans.push(Span::styled(
+                format!(" {:02} ", pat_idx),
+                Style::default()
+                    .fg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
+            ));
         }
 
-        // Step size (always visible — affects note entry row advance)
-        if mode == EditorMode::Normal {
-            footer_spans.extend([
-                Span::raw("  "),
-                Span::styled(
-                    format!("Stp:{}", app.editor.step_size()),
-                    Style::default().fg(Color::Cyan),
-                ),
-            ]);
-        }
-    } // end else (not code editor)
+        footer_spans.push(Span::raw("| "));
+    } else if !app.is_code_editor_active() {
+        // Fallback for other views
+    }
 
     // Help hint
     footer_spans.extend([

@@ -42,6 +42,26 @@ const KEY_MAPPINGS: &[KeyMapping] = &[
         mode: EditorMode::Normal,
     },
     KeyMapping {
+        key: "g",
+        action: Action::GoToStart,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "G",
+        action: Action::GoToBottom,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Home",
+        action: Action::GoToTop,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "End",
+        action: Action::GoToBottom,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
         key: "PgUp",
         action: Action::PageUp,
         mode: EditorMode::Normal,
@@ -352,6 +372,8 @@ pub enum Action {
     GoToRow,
     GoToTop,
     GoToBottom,
+    GoToStart,
+    GoToEnd,
 
     // Track management
     AddTrack,

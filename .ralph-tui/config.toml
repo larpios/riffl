@@ -1,0 +1,16 @@
+configVersion = "2.1"
+defaultAgent = "gemini"
+defaultTracker = "beads"
+maxIterations = 10
+agent = "gemini"
+tracker = "beads"
+autoCommit = true
+subagentTracingDetail = "off"
+
+[agentOptions]
+[trackerOptions]
+beadsDir = ".beads"
+labels = ""
+
+[notifications]
+sound = "system"
