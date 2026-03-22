@@ -33,6 +33,102 @@ pub struct Envelope {
     pub loop_end_point: usize,
 }
 
+/// ADSR (Attack, Decay, Sustain, Release) envelope parameters.
+/// Times are in milliseconds, sustain level is 0.0 to 1.0.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+pub struct Adsr {
+    /// Attack time in milliseconds (0 to max).
+    pub attack: f32,
+    /// Decay time in milliseconds.
+    pub decay: f32,
+    /// Sustain level (0.0 to 1.0).
+    pub sustain: f32,
+    /// Release time in milliseconds.
+    pub release: f32,
+}
+
+impl Adsr {
+    pub fn new(attack: f32, decay: f32, sustain: f32, release: f32) -> Self {
+        Self {
+            attack: attack.max(0.0),
+            decay: decay.max(0.0),
+            sustain: sustain.clamp(0.0, 1.0),
+            release: release.max(0.0),
+        }
+    }
+}
+
+/// LFO (Low Frequency Oscillator) waveform types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum LfoWaveform {
+    #[default]
+    Sine,
+    Triangle,
+    Square,
+    Sawtooth,
+    ReverseSaw,
+    Random,
+}
+
+/// An LFO (Low Frequency Oscillator) for modulating parameters.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Lfo {
+    /// Waveform shape of the LFO.
+    pub waveform: LfoWaveform,
+    /// Rate in Hz (cycles per second).
+    pub rate: f32,
+    /// Depth/intensity of the modulation (0.0 to 1.0).
+    pub depth: f32,
+    /// DC offset added to the LFO output (-1.0 to 1.0).
+    pub offset: f32,
+    /// Whether the LFO is enabled.
+    pub enabled: bool,
+    /// Phase offset for synchronization (0.0 to 1.0).
+    pub phase: f32,
+}
+
+impl Default for Lfo {
+    fn default() -> Self {
+        Self {
+            waveform: LfoWaveform::Sine,
+            rate: 0.0,
+            depth: 0.0,
+            offset: 0.0,
+            enabled: true,
+            phase: 0.0,
+        }
+    }
+}
+
+impl Lfo {
+    pub fn new(waveform: LfoWaveform, rate: f32, depth: f32, offset: f32) -> Self {
+        Self {
+            waveform,
+            rate: rate.max(0.0),
+            depth: depth.clamp(0.0, 1.0),
+            offset: offset.clamp(-1.0, 1.0),
+            enabled: true,
+            phase: 0.0,
+        }
+    }
+
+    pub fn sine(rate: f32, depth: f32) -> Self {
+        Self::new(LfoWaveform::Sine, rate, depth, 0.0)
+    }
+
+    pub fn triangle(rate: f32, depth: f32) -> Self {
+        Self::new(LfoWaveform::Triangle, rate, depth, 0.0)
+    }
+
+    pub fn square(rate: f32, depth: f32) -> Self {
+        Self::new(LfoWaveform::Square, rate, depth, 0.0)
+    }
+
+    pub fn sawtooth(rate: f32, depth: f32) -> Self {
+        Self::new(LfoWaveform::Sawtooth, rate, depth, 0.0)
+    }
+}
+
 impl Envelope {
     /// Evaluates the envelope value at the given tick, handling sustain and loop points.
     /// Returns a tuple of `(value, next_tick)`.
@@ -121,6 +217,18 @@ pub struct Instrument {
     pub panning_envelope: Option<Envelope>,
     /// Pitch envelope, if any.
     pub pitch_envelope: Option<Envelope>,
+    /// ADSR volume envelope parameters.
+    pub volume_adsr: Option<Adsr>,
+    /// ADSR panning envelope parameters.
+    pub panning_adsr: Option<Adsr>,
+    /// ADSR pitch envelope parameters.
+    pub pitch_adsr: Option<Adsr>,
+    /// LFO for volume modulation.
+    pub volume_lfo: Option<Lfo>,
+    /// LFO for panning modulation.
+    pub panning_lfo: Option<Lfo>,
+    /// LFO for pitch modulation.
+    pub pitch_lfo: Option<Lfo>,
     /// Fadeout speed for the instrument (0-65535).
     /// Subtracted from the fadeout multiplier every tick after Note Off.
     pub fadeout: u16,
@@ -140,6 +248,12 @@ impl Instrument {
             volume_envelope: None,
             panning_envelope: None,
             pitch_envelope: None,
+            volume_adsr: None,
+            panning_adsr: None,
+            pitch_adsr: None,
+            volume_lfo: None,
+            panning_lfo: None,
+            pitch_lfo: None,
             fadeout: 0,
         }
     }
@@ -506,5 +620,101 @@ mod tests {
     fn test_song_tracks_match_pattern_channels() {
         let song = Song::default();
         assert_eq!(song.tracks.len(), song.patterns[0].num_channels());
+    }
+
+    #[test]
+    fn test_adsr_new() {
+        let adsr = Adsr::new(10.0, 100.0, 0.7, 200.0);
+        assert_eq!(adsr.attack, 10.0);
+        assert_eq!(adsr.decay, 100.0);
+        assert_eq!(adsr.sustain, 0.7);
+        assert_eq!(adsr.release, 200.0);
+    }
+
+    #[test]
+    fn test_adsr_clamping() {
+        let adsr = Adsr::new(-5.0, -10.0, 1.5, -1.0);
+        assert_eq!(adsr.attack, 0.0);
+        assert_eq!(adsr.decay, 0.0);
+        assert_eq!(adsr.sustain, 1.0);
+        assert_eq!(adsr.release, 0.0);
+    }
+
+    #[test]
+    fn test_lfo_default() {
+        let lfo = Lfo::default();
+        assert_eq!(lfo.waveform, LfoWaveform::Sine);
+        assert_eq!(lfo.rate, 0.0);
+        assert_eq!(lfo.depth, 0.0);
+        assert_eq!(lfo.offset, 0.0);
+        assert!(lfo.enabled);
+    }
+
+    #[test]
+    fn test_lfo_new() {
+        let lfo = Lfo::new(LfoWaveform::Triangle, 4.0, 0.5, 0.2);
+        assert_eq!(lfo.waveform, LfoWaveform::Triangle);
+        assert_eq!(lfo.rate, 4.0);
+        assert_eq!(lfo.depth, 0.5);
+        assert_eq!(lfo.offset, 0.2);
+        assert!(lfo.enabled);
+    }
+
+    #[test]
+    fn test_lfo_factory_methods() {
+        let sine_lfo = Lfo::sine(2.0, 0.8);
+        assert_eq!(sine_lfo.waveform, LfoWaveform::Sine);
+        assert_eq!(sine_lfo.rate, 2.0);
+        assert_eq!(sine_lfo.depth, 0.8);
+
+        let tri_lfo = Lfo::triangle(1.0, 0.5);
+        assert_eq!(tri_lfo.waveform, LfoWaveform::Triangle);
+
+        let sq_lfo = Lfo::square(3.0, 0.3);
+        assert_eq!(sq_lfo.waveform, LfoWaveform::Square);
+
+        let saw_lfo = Lfo::sawtooth(0.5, 1.0);
+        assert_eq!(saw_lfo.waveform, LfoWaveform::Sawtooth);
+    }
+
+    #[test]
+    fn test_lfo_clamping() {
+        let lfo = Lfo::new(LfoWaveform::Sine, -5.0, 1.5, 2.0);
+        assert_eq!(lfo.rate, 0.0);
+        assert_eq!(lfo.depth, 1.0);
+        assert_eq!(lfo.offset, 1.0);
+    }
+
+    #[test]
+    fn test_instrument_with_lfo() {
+        let mut inst = Instrument::new("Lead");
+        inst.volume_lfo = Some(Lfo::sine(4.0, 0.5));
+        inst.pitch_lfo = Some(Lfo::triangle(2.0, 0.3));
+        inst.panning_lfo = Some(Lfo::square(1.0, 0.2));
+
+        assert!(inst.volume_lfo.is_some());
+        assert!(inst.pitch_lfo.is_some());
+        assert!(inst.panning_lfo.is_some());
+
+        let vol_lfo = inst.volume_lfo.unwrap();
+        assert_eq!(vol_lfo.waveform, LfoWaveform::Sine);
+        assert_eq!(vol_lfo.rate, 4.0);
+        assert_eq!(vol_lfo.depth, 0.5);
+    }
+
+    #[test]
+    fn test_instrument_with_adsr() {
+        let mut inst = Instrument::new("Pad");
+        inst.volume_adsr = Some(Adsr::new(5.0, 100.0, 0.8, 300.0));
+        inst.pitch_adsr = Some(Adsr::new(10.0, 50.0, 1.0, 100.0));
+
+        assert!(inst.volume_adsr.is_some());
+        assert!(inst.pitch_adsr.is_some());
+
+        let vol_adsr = inst.volume_adsr.unwrap();
+        assert_eq!(vol_adsr.attack, 5.0);
+        assert_eq!(vol_adsr.decay, 100.0);
+        assert_eq!(vol_adsr.sustain, 0.8);
+        assert_eq!(vol_adsr.release, 300.0);
     }
 }
