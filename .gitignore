@@ -18,6 +18,7 @@ Auto\ Run\ Docs/
 .rtk
 node_modules
 .ralph
+.ralph-tui
 .mcp.json
 .agents
 
