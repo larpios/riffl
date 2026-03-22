@@ -94,6 +94,8 @@ pub enum EditorMode {
     Insert,
     /// Selection mode — select ranges of cells.
     Visual,
+    /// Replace mode — overwrite cells without advancing cursor on each keystroke.
+    Replace,
 }
 
 impl EditorMode {
@@ -103,6 +105,7 @@ impl EditorMode {
             EditorMode::Normal => "NORMAL",
             EditorMode::Insert => "INSERT",
             EditorMode::Visual => "VISUAL",
+            EditorMode::Replace => "REPLACE",
         }
     }
 }
@@ -442,6 +445,17 @@ impl Editor {
         self.effect_digit_position = 0;
     }
 
+    /// Enter Replace mode — edits overwrite cells without cursor advancement.
+    pub fn enter_replace_mode(&mut self) {
+        self.mode = EditorMode::Replace;
+        self.effect_digit_position = 0;
+    }
+
+    /// Whether the editor is in a data-entry mode (Insert or Replace).
+    pub fn is_entry_mode(&self) -> bool {
+        matches!(self.mode, EditorMode::Insert | EditorMode::Replace)
+    }
+
     /// Enter Visual mode, anchoring at the current position.
     pub fn enter_visual_mode(&mut self) {
         self.mode = EditorMode::Visual;
@@ -518,7 +532,7 @@ impl Editor {
 
     /// Enter a note-off event at the current cursor position.
     pub fn enter_note_off(&mut self) {
-        if self.mode != EditorMode::Insert {
+        if !self.is_entry_mode() {
             return;
         }
         self.save_history();
@@ -533,7 +547,7 @@ impl Editor {
     /// Enter a note-cut event at the current cursor position.
     /// Hard-silences the voice immediately (no envelope release, displayed as ^^^).
     pub fn enter_note_cut(&mut self) {
-        if self.mode != EditorMode::Insert {
+        if !self.is_entry_mode() {
             return;
         }
         self.save_history();
@@ -588,7 +602,7 @@ impl Editor {
     ///
     /// Only works in Insert mode on the Effect sub-column.
     pub fn enter_effect_digit(&mut self, digit: u8) {
-        if self.mode != EditorMode::Insert || self.sub_column != SubColumn::Effect {
+        if !self.is_entry_mode() || self.sub_column != SubColumn::Effect {
             return;
         }
         let digit = digit & 0x0F; // clamp to single nibble
@@ -632,7 +646,7 @@ impl Editor {
     /// First digit sets the high nibble, second sets the low nibble and advances the row.
     /// Only works in Insert mode on the Instrument sub-column.
     pub fn enter_instrument_digit(&mut self, digit: u8) {
-        if self.mode != EditorMode::Insert || self.sub_column != SubColumn::Instrument {
+        if !self.is_entry_mode() || self.sub_column != SubColumn::Instrument {
             return;
         }
         let digit = digit & 0x0F;
@@ -659,7 +673,7 @@ impl Editor {
     /// First digit sets the high nibble, second sets the low nibble and advances the row.
     /// Only works in Insert mode on the Volume sub-column.
     pub fn enter_volume_digit(&mut self, digit: u8) {
-        if self.mode != EditorMode::Insert || self.sub_column != SubColumn::Volume {
+        if !self.is_entry_mode() || self.sub_column != SubColumn::Volume {
             return;
         }
         let digit = digit & 0x0F;
@@ -749,7 +763,7 @@ impl Editor {
     /// Enter a note at the current cursor position with an explicit octave.
     /// Only works in Insert mode on the Note sub-column.
     pub fn enter_note_with_octave(&mut self, pitch: Pitch, octave: u8) {
-        if self.mode != EditorMode::Insert {
+        if !self.is_entry_mode() {
             return;
         }
         self.save_history();
@@ -995,6 +1009,30 @@ mod tests {
         assert_eq!(EditorMode::Normal.label(), "NORMAL");
         assert_eq!(EditorMode::Insert.label(), "INSERT");
         assert_eq!(EditorMode::Visual.label(), "VISUAL");
+        assert_eq!(EditorMode::Replace.label(), "REPLACE");
+    }
+
+    #[test]
+    fn test_replace_mode_enter_and_exit() {
+        let mut editor = test_editor();
+        assert_eq!(editor.mode(), EditorMode::Normal);
+        editor.enter_replace_mode();
+        assert_eq!(editor.mode(), EditorMode::Replace);
+        assert!(editor.is_entry_mode());
+        editor.enter_normal_mode();
+        assert_eq!(editor.mode(), EditorMode::Normal);
+    }
+
+    #[test]
+    fn test_is_entry_mode() {
+        let mut editor = test_editor();
+        assert!(!editor.is_entry_mode());
+        editor.enter_insert_mode();
+        assert!(editor.is_entry_mode());
+        editor.enter_replace_mode();
+        assert!(editor.is_entry_mode());
+        editor.enter_visual_mode();
+        assert!(!editor.is_entry_mode());
     }
 
     // --- Navigation Tests ---

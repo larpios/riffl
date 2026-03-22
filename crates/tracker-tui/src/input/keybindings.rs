@@ -344,6 +344,7 @@ pub enum Action {
     EnterInsertMode,
     EnterNormalMode,
     EnterVisualMode,
+    EnterReplaceMode,
 
     // Editing (Insert mode)
     EnterNote(char),
@@ -486,6 +487,7 @@ impl ActionMetadata for Action {
             Action::EnterInsertMode => "Insert Mode",
             Action::EnterNormalMode => "Normal Mode",
             Action::EnterVisualMode => "Visual Mode",
+            Action::EnterReplaceMode => "Replace Mode",
             Action::EnterNote(_) => "Enter Note",
             Action::SetOctave(_) => "Set Octave",
             Action::Copy => "Copy",
@@ -577,6 +579,7 @@ impl ActionMetadata for Action {
             Action::EnterInsertMode => "Enter insert mode for note entry",
             Action::EnterNormalMode => "Return to normal mode",
             Action::EnterVisualMode => "Enter visual mode for selection",
+            Action::EnterReplaceMode => "Enter replace mode for overwriting cells",
             Action::EnterNote(_) => "Enter musical note",
             Action::SetOctave(_) => "Set current octave (0-9)",
             Action::Copy => "Copy selection to clipboard",
@@ -672,9 +675,10 @@ impl ActionMetadata for Action {
             | Action::GoToEnd
             | Action::NextTrack => ActionCategory::Navigation,
 
-            Action::EnterInsertMode | Action::EnterNormalMode | Action::EnterVisualMode => {
-                ActionCategory::Application
-            }
+            Action::EnterInsertMode
+            | Action::EnterNormalMode
+            | Action::EnterVisualMode
+            | Action::EnterReplaceMode => ActionCategory::Application,
 
             Action::EnterNote(_)
             | Action::SetOctave(_)
@@ -761,7 +765,7 @@ impl ActionMetadata for Action {
 pub fn map_key_to_action(key: KeyEvent, mode: EditorMode) -> Action {
     match mode {
         EditorMode::Normal => map_normal_mode(key),
-        EditorMode::Insert => map_insert_mode(key),
+        EditorMode::Insert | EditorMode::Replace => map_insert_mode(key),
         EditorMode::Visual => map_visual_mode(key),
     }
 }
@@ -865,6 +869,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         // Mode transitions
         KeyCode::Char('i') => Action::EnterInsertMode,
         KeyCode::Char('v') => Action::EnterVisualMode,
+        KeyCode::Char('R') => Action::EnterReplaceMode,
 
         // Clipboard
         KeyCode::Char('y') => Action::Copy,

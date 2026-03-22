@@ -198,6 +198,147 @@ impl ScriptEngine {
             Err(e) => Err(format_rhai_error(&e)),
         }
     }
+
+    /// Evaluate a Rhai script in "macro mode" against a selection within a pattern.
+    ///
+    /// The script sees `sel_rows` and `sel_channels` as the selection dimensions.
+    /// Row/channel coordinates in script commands (set_note, clear_cell) are
+    /// relative to the selection and remapped to absolute pattern coordinates.
+    pub fn eval_with_selection(
+        &self,
+        code: &str,
+        pattern: &Pattern,
+        selection: &PatternSelection,
+    ) -> Result<(ScriptResult, Vec<PatternCommand>), String> {
+        let commands = std::sync::Arc::new(std::sync::Mutex::new(Vec::<PatternCommand>::new()));
+
+        let mut engine = Engine::new();
+        register_music_functions(&mut engine);
+
+        let row_offset = selection.row_start;
+        let ch_offset = selection.channel_start;
+        let sel_rows = selection.num_rows() as INT;
+        let sel_channels = selection.num_channels() as INT;
+
+        // set_note: coordinates are relative to the selection
+        let cmds_clone = commands.clone();
+        engine.register_fn(
+            "set_note",
+            move |row: INT, channel: INT, note: rhai::Map| {
+                if row < 0 || channel < 0 || row >= sel_rows || channel >= sel_channels {
+                    return;
+                }
+                if let Some(mut cmd) = map_to_set_note_command(
+                    row + row_offset as INT,
+                    channel + ch_offset as INT,
+                    &note,
+                ) {
+                    // Coordinates are already absolute from the offset addition
+                    if let PatternCommand::SetNote { .. } = &mut cmd {
+                        cmds_clone
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .push(cmd);
+                    }
+                }
+            },
+        );
+
+        let cmds_clone = commands.clone();
+        let sel_rows_copy = sel_rows;
+        let sel_channels_copy = sel_channels;
+        engine.register_fn("clear_cell", move |row: INT, channel: INT| {
+            if row >= 0 && channel >= 0 && row < sel_rows_copy && channel < sel_channels_copy {
+                cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).push(
+                    PatternCommand::ClearCell {
+                        row: (row as usize) + row_offset,
+                        channel: (channel as usize) + ch_offset,
+                    },
+                );
+            }
+        });
+
+        let cmds_clone = commands.clone();
+        engine.register_fn("clear_selection", move || {
+            for r in 0..sel_rows {
+                for c in 0..sel_channels {
+                    cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).push(
+                        PatternCommand::ClearCell {
+                            row: (r as usize) + row_offset,
+                            channel: (c as usize) + ch_offset,
+                        },
+                    );
+                }
+            }
+        });
+
+        // Expose selection-relative note reading: get_note(row, channel) -> note map or ()
+        let pat_clone = pattern.clone();
+        engine.register_fn("get_note", move |row: INT, channel: INT| -> Dynamic {
+            if row < 0 || channel < 0 || row >= sel_rows || channel >= sel_channels {
+                return Dynamic::UNIT;
+            }
+            let abs_row = row as usize + row_offset;
+            let abs_ch = channel as usize + ch_offset;
+            if let Some(cell) = pat_clone.get_cell(abs_row, abs_ch) {
+                if let Some(crate::pattern::NoteEvent::On(note)) = &cell.note {
+                    return note_to_dynamic(*note);
+                }
+            }
+            Dynamic::UNIT
+        });
+
+        let mut scope = Scope::new();
+        scope.push("sel_rows", selection.num_rows() as INT);
+        scope.push("sel_channels", selection.num_channels() as INT);
+        scope.push("num_rows", pattern.num_rows() as INT);
+        scope.push("num_channels", pattern.num_channels() as INT);
+
+        match engine.eval_with_scope::<Dynamic>(&mut scope, code) {
+            Ok(result) => {
+                let cmds = commands.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                let script_result = if result.is_unit() {
+                    ScriptResult::Unit
+                } else {
+                    ScriptResult::Value(format!("{}", result))
+                };
+                Ok((script_result, cmds))
+            }
+            Err(e) => Err(format_rhai_error(&e)),
+        }
+    }
+}
+
+/// A rectangular selection within a pattern for macro mode operations.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PatternSelection {
+    /// First row of the selection (inclusive).
+    pub row_start: usize,
+    /// Last row of the selection (inclusive).
+    pub row_end: usize,
+    /// First channel of the selection (inclusive).
+    pub channel_start: usize,
+    /// Last channel of the selection (inclusive).
+    pub channel_end: usize,
+}
+
+impl PatternSelection {
+    pub fn new(row_start: usize, row_end: usize, channel_start: usize, channel_end: usize) -> Self {
+        Self {
+            row_start: row_start.min(row_end),
+            row_end: row_start.max(row_end),
+            channel_start: channel_start.min(channel_end),
+            channel_end: channel_start.max(channel_end),
+        }
+    }
+
+    pub fn num_rows(&self) -> usize {
+        self.row_end - self.row_start + 1
+    }
+
+    pub fn num_channels(&self) -> usize {
+        self.channel_end - self.channel_start + 1
+    }
 }
 
 /// Commands that a script can issue to modify a pattern.
@@ -1648,5 +1789,125 @@ mod tests {
         let mut lock = arc_mutex.lock().unwrap_or_else(|e| e.into_inner());
         lock.push(PatternCommand::ClearPattern);
         assert_eq!(lock.len(), 1);
+    }
+
+    #[test]
+    fn test_pattern_selection_new() {
+        let sel = PatternSelection::new(2, 5, 0, 3);
+        assert_eq!(sel.row_start, 2);
+        assert_eq!(sel.row_end, 5);
+        assert_eq!(sel.num_rows(), 4);
+        assert_eq!(sel.num_channels(), 4);
+    }
+
+    #[test]
+    fn test_pattern_selection_inverted_order() {
+        let sel = PatternSelection::new(5, 2, 3, 0);
+        assert_eq!(sel.row_start, 2);
+        assert_eq!(sel.row_end, 5);
+        assert_eq!(sel.channel_start, 0);
+        assert_eq!(sel.channel_end, 3);
+    }
+
+    #[test]
+    fn test_eval_with_selection_set_note() {
+        let engine = ScriptEngine::new();
+        let mut pattern = Pattern::new(16, 4);
+        let sel = PatternSelection::new(4, 7, 1, 2);
+
+        let code = r#"
+            let n = note("C", 4);
+            set_note(0, 0, n);
+        "#;
+        let (_, commands) = engine.eval_with_selection(code, &pattern, &sel).unwrap();
+        assert_eq!(commands.len(), 1);
+
+        // Row 0 in selection = row 4 in pattern, channel 0 = channel 1
+        match &commands[0] {
+            PatternCommand::SetNote { row, channel, .. } => {
+                assert_eq!(*row, 4);
+                assert_eq!(*channel, 1);
+            }
+            _ => panic!("Expected SetNote"),
+        }
+
+        apply_commands(&mut pattern, &commands);
+        assert!(pattern.get_cell(4, 1).unwrap().note.is_some());
+    }
+
+    #[test]
+    fn test_eval_with_selection_bounds_check() {
+        let engine = ScriptEngine::new();
+        let pattern = Pattern::new(16, 4);
+        let sel = PatternSelection::new(0, 3, 0, 0); // 4 rows, 1 channel
+
+        // Try to set note outside selection bounds
+        let code = r#"
+            let n = note("C", 4);
+            set_note(5, 0, n);
+        "#;
+        let (_, commands) = engine.eval_with_selection(code, &pattern, &sel).unwrap();
+        assert!(
+            commands.is_empty(),
+            "Out-of-selection writes should be ignored"
+        );
+    }
+
+    #[test]
+    fn test_eval_with_selection_clear_selection() {
+        let engine = ScriptEngine::new();
+        let mut pattern = Pattern::new(8, 2);
+        pattern.set_note(2, 0, Note::simple(Pitch::C, 4));
+        pattern.set_note(3, 0, Note::simple(Pitch::E, 4));
+        pattern.set_note(4, 0, Note::simple(Pitch::G, 4));
+
+        let sel = PatternSelection::new(2, 3, 0, 0);
+        let code = r#"clear_selection();"#;
+        let (_, commands) = engine.eval_with_selection(code, &pattern, &sel).unwrap();
+        apply_commands(&mut pattern, &commands);
+
+        assert!(pattern.get_cell(2, 0).unwrap().note.is_none());
+        assert!(pattern.get_cell(3, 0).unwrap().note.is_none());
+        // Row 4 outside selection should be untouched
+        assert!(pattern.get_cell(4, 0).unwrap().note.is_some());
+    }
+
+    #[test]
+    fn test_eval_with_selection_get_note() {
+        let engine = ScriptEngine::new();
+        let mut pattern = Pattern::new(8, 2);
+        pattern.set_note(4, 1, Note::simple(Pitch::A, 4));
+
+        let sel = PatternSelection::new(4, 7, 1, 1);
+        let code = r#"
+            let n = get_note(0, 0);
+            n.pitch
+        "#;
+        let (result, _) = engine.eval_with_selection(code, &pattern, &sel).unwrap();
+        match result {
+            ScriptResult::Value(v) => assert_eq!(v, "A"),
+            _ => panic!("Expected Value result"),
+        }
+    }
+
+    #[test]
+    fn test_eval_with_selection_dimensions_in_scope() {
+        let engine = ScriptEngine::new();
+        let pattern = Pattern::new(16, 4);
+        let sel = PatternSelection::new(2, 5, 1, 3);
+
+        let code = r#"[sel_rows, sel_channels]"#;
+        let (result, _) = engine.eval_with_selection(code, &pattern, &sel).unwrap();
+        match result {
+            ScriptResult::Value(v) => {
+                assert!(v.contains("4"), "Expected 4 rows in selection, got: {}", v);
+                assert!(
+                    v.contains("3"),
+                    "Expected 3 channels in selection, got: {}",
+                    v
+                );
+            }
+            _ => panic!("Expected Value result"),
+        }
     }
 }

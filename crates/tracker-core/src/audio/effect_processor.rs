@@ -26,6 +26,9 @@ pub enum TransportCommand {
     PatternLoop(u8),
     /// Pattern delay (EEx): delay advancing by x extra row-lengths.
     PatternDelay(u8),
+    /// Zxx: Custom effect command triggering a Rhai script macro.
+    /// The parameter (0x00-0xFF) is passed to the script handler.
+    ScriptTrigger { channel: usize, param: u8 },
 }
 
 /// Output from the effect processor for a single channel.
@@ -824,7 +827,12 @@ impl TrackerEffectProcessor {
                         state.panbrello_depth = effect.param_y();
                     }
                 }
-                EffectType::MidiMacro => {}
+                EffectType::MidiMacro => {
+                    commands.push(TransportCommand::ScriptTrigger {
+                        channel,
+                        param: effect.param,
+                    });
+                }
             }
         }
 
@@ -1784,5 +1792,41 @@ mod tests {
         // 0x1F (31) = speed 31, not BPM (just below boundary)
         let cmds = proc.process_row(0, &[Effect::from_type(EffectType::SetSpeed, 0x1F)], None);
         assert_eq!(cmds, vec![TransportCommand::SetTpl(31)]);
+    }
+
+    #[test]
+    fn test_zxx_script_trigger() {
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
+        let cmds = proc.process_row(0, &[Effect::from_type(EffectType::MidiMacro, 0x42)], None);
+        assert_eq!(cmds.len(), 1);
+        match cmds[0] {
+            TransportCommand::ScriptTrigger { channel, param } => {
+                assert_eq!(channel, 0);
+                assert_eq!(param, 0x42);
+            }
+            _ => panic!("Expected ScriptTrigger"),
+        }
+    }
+
+    #[test]
+    fn test_zxx_script_trigger_different_channels() {
+        let mut proc = TrackerEffectProcessor::new(4, 48000);
+        let cmds1 = proc.process_row(0, &[Effect::from_type(EffectType::MidiMacro, 0x10)], None);
+        let cmds2 = proc.process_row(2, &[Effect::from_type(EffectType::MidiMacro, 0x20)], None);
+
+        match cmds1[0] {
+            TransportCommand::ScriptTrigger { channel, param } => {
+                assert_eq!(channel, 0);
+                assert_eq!(param, 0x10);
+            }
+            _ => panic!("Expected ScriptTrigger on channel 0"),
+        }
+        match cmds2[0] {
+            TransportCommand::ScriptTrigger { channel, param } => {
+                assert_eq!(channel, 2);
+                assert_eq!(param, 0x20);
+            }
+            _ => panic!("Expected ScriptTrigger on channel 2"),
+        }
     }
 }
