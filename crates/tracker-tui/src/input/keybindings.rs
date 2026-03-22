@@ -501,6 +501,8 @@ impl ActionMetadata for Action {
             Action::GoToRow => "Go to Row",
             Action::GoToTop => "Go to Top",
             Action::GoToBottom => "Go to Bottom",
+            Action::GoToStart => "Go to Start",
+            Action::GoToEnd => "Go to End",
             Action::AddTrack => "Add Track",
             Action::DeleteTrack => "Delete Track",
             Action::CloneTrack => "Clone Track",
@@ -590,6 +592,8 @@ impl ActionMetadata for Action {
             Action::GoToRow => "Jump to specific row",
             Action::GoToTop => "Jump to top of pattern",
             Action::GoToBottom => "Jump to bottom of pattern",
+            Action::GoToStart => "Jump to start of row",
+            Action::GoToEnd => "Jump to end of row",
             Action::AddTrack => "Add a new track",
             Action::DeleteTrack => "Delete current track",
             Action::CloneTrack => "Clone current track",
@@ -664,6 +668,8 @@ impl ActionMetadata for Action {
             | Action::GoToRow
             | Action::GoToTop
             | Action::GoToBottom
+            | Action::GoToStart
+            | Action::GoToEnd
             | Action::NextTrack => ActionCategory::Navigation,
 
             Action::EnterInsertMode | Action::EnterNormalMode | Action::EnterVisualMode => {

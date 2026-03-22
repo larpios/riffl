@@ -241,6 +241,12 @@ impl Editor {
         self.cursor_row = row.min(max_row);
     }
 
+    /// Set cursor channel.
+    pub fn set_cursor_channel(&mut self, channel: usize) {
+        let max_channel = self.pattern.num_channels().saturating_sub(1);
+        self.cursor_channel = channel.min(max_channel);
+    }
+
     /// Quantize: snap all notes in selection to grid (4-row intervals).
     pub fn quantize(&mut self) {
         if let Some(((r0, c0), (r1, c1))) = self.visual_selection() {
