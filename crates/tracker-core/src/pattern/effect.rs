@@ -481,7 +481,7 @@ mod tests {
         assert_eq!(Effect::new(0x5, 0x00).mnemonic(), "Porta+Vol");
         assert_eq!(Effect::new(0x6, 0x00).mnemonic(), "Vib+Vol");
         assert_eq!(Effect::new(0x7, 0x00).mnemonic(), "Tremolo");
-        assert_eq!(Effect::new(0x8, 0x80).mnemonic(), "Set Tempo");
+        assert_eq!(Effect::new(0x8, 0x80).mnemonic(), "Set Pan");
         assert_eq!(Effect::new(0x9, 0x00).mnemonic(), "Offset");
         assert_eq!(Effect::new(0xA, 0x04).mnemonic(), "Vol Slide");
         assert_eq!(Effect::new(0xB, 0x02).mnemonic(), "Pos Jump");

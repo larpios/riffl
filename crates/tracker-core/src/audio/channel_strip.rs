@@ -102,12 +102,31 @@ impl ChannelStrip {
     /// - pan = 0.0: center (L≈0.707, R≈0.707)
     /// - pan = 1.0: full right (L=0.0, R=1.0)
     pub fn next_gains(&mut self) -> (f32, f32) {
-        let vol = self.volume.next();
-        let pan = self.pan.next();
+        self.next_gains_modulated(1.0, 0.0, None)
+    }
+
+    /// Compute modulated gains incorporating per-voice envelopes and LFOs.
+    ///
+    /// Advances all internal ramp parameters by one sample.
+    /// `mod_vol` is a multiplier for volume.
+    /// `mod_pan` is an offset added to the current panning position.
+    /// `pan_override` optionally overrides the track-level panning (e.g. from effects).
+    pub fn next_gains_modulated(
+        &mut self,
+        mod_vol: f32,
+        mod_pan: f32,
+        pan_override: Option<f32>,
+    ) -> (f32, f32) {
+        let vol = self.volume.next() * mod_vol;
         let mute = self.mute_gain.next();
         let solo = self.solo_gain.next();
 
-        let (pan_l, pan_r) = Self::pan_gains(pan);
+        // Advance the pan ramp anyway to keep it in sync
+        let strip_pan = self.pan.next();
+        let base_pan = pan_override.unwrap_or(strip_pan);
+
+        let total_pan = (base_pan + mod_pan).clamp(-1.0, 1.0);
+        let (pan_l, pan_r) = Self::pan_gains(total_pan);
         let combined = vol * mute * solo;
 
         (combined * pan_l, combined * pan_r)
@@ -148,6 +167,21 @@ impl ChannelStrip {
         let combined = vol * mute * solo;
 
         (combined * pan_l, combined * pan_r)
+    }
+
+    /// Get the current volume/mute/solo gain without panning, advancing the ramp.
+    /// Use this when applying custom panning (e.g., from a panning LFO).
+    pub fn next_volume_gain(&mut self) -> f32 {
+        let vol = self.volume.next();
+        let mute = self.mute_gain.next();
+        let solo = self.solo_gain.next();
+        vol * mute * solo
+    }
+
+    /// Get the current pan position (in strip coordinates: -1=left, 0=center, 1=right).
+    /// Does not advance any ramp parameters.
+    pub fn current_pan(&self) -> f32 {
+        self.pan.current()
     }
 
     /// Returns true if the channel is effectively silent (muted or silenced by solo).
