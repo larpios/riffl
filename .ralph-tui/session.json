@@ -3,10 +3,10 @@
   "sessionId": "d0f042b0-f2cc-4520-9b50-34ab168c829a",
   "status": "running",
   "startedAt": "2026-03-22T14:56:07.519Z",
-  "updatedAt": "2026-03-22T14:58:29.170Z",
-  "currentIteration": 0,
+  "updatedAt": "2026-03-22T15:01:19.806Z",
+  "currentIteration": 1,
   "maxIterations": 10,
-  "tasksCompleted": 0,
+  "tasksCompleted": 1,
   "isPaused": false,
   "agentPlugin": "opencode",
   "trackerState": {
@@ -17,8 +17,8 @@
       {
         "id": "riffl-j60.1",
         "title": "US-001: Fix tracker-core clippy warnings and compile errors",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "riffl-j60.2",
@@ -46,7 +46,18 @@
       }
     ]
   },
-  "iterations": [],
+  "iterations": [
+    {
+      "iteration": 1,
+      "status": "completed",
+      "taskId": "riffl-j60.1",
+      "taskTitle": "US-001: Fix tracker-core clippy warnings and compile errors",
+      "taskCompleted": true,
+      "durationMs": 120785,
+      "startedAt": "2026-03-22T14:56:27.948Z",
+      "endedAt": "2026-03-22T14:58:28.733Z"
+    }
+  ],
   "skippedTaskIds": [],
   "cwd": "/Users/ray/repos/riffl",
   "activeTaskIds": [],

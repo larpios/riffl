@@ -5,8 +5,23 @@ after each iteration and it's included in prompts for context.
 
 ## Codebase Patterns (Study These First)
 
+- When adding new `Action` enum variants, ensure they're added to ALL three `ActionMetadata` trait implementations: `name()`, `description()`, and `category()`. Missing any one causes compile errors.
+- Pre-existing bugs unrelated to your fix may block CI. Check if build failures existed before your changes.
+
 *Add reusable patterns discovered during development here.*
 
+---
+
+## 2026-03-23 - riffl-j60.2
+- Fixed non-exhaustive match errors for `GoToStart` and `GoToEnd` actions in `keybindings.rs`
+- Added `GoToStart`/`GoToEnd` to `name()`, `description()`, and `category()` match arms
+- Also fixed pre-existing bug: added `set_cursor_channel()` method to `Editor` struct (was being called in `app.rs` but didn't exist)
+- Files changed:
+  - `crates/tracker-tui/src/input/keybindings.rs`: Added match arms for `GoToStart` and `GoToEnd` in 3 locations
+  - `crates/tracker-tui/src/editor/mod.rs`: Added `set_cursor_channel()` setter method
+- **Learnings:**
+  - When adding Action variants, must update ALL three trait methods (`name`, `description`, `category`)
+  - Always verify if build errors are pre-existing vs introduced by your changes
 ---
 
 ## 2026-03-22 - riffl-j60.1
