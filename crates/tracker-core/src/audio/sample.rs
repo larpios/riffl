@@ -49,6 +49,8 @@ pub struct Sample {
     pub sustain_loop_start: usize,
     /// End of sustain loop in frames (inclusive).
     pub sustain_loop_end: usize,
+    /// Slice points for beat-sliced playback.
+    pub slices: Vec<Slice>,
 }
 
 impl Sample {
@@ -69,6 +71,7 @@ impl Sample {
             sustain_loop_mode: LoopMode::NoLoop,
             sustain_loop_start: 0,
             sustain_loop_end: 0,
+            slices: Vec::new(),
         }
     }
 
@@ -182,6 +185,112 @@ impl Sample {
     }
 }
 
+/// A slice point within a sample, defining a sub-region that can be triggered independently.
+///
+/// Used for sample-based beat slicing (e.g., breakbeats, drum loops). Each slice
+/// represents a segment of the parent sample that can be triggered by note number.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Slice {
+    /// Start position in frames (inclusive).
+    pub start_frame: usize,
+    /// End position in frames (exclusive).
+    pub end_frame: usize,
+}
+
+impl Slice {
+    pub fn new(start_frame: usize, end_frame: usize) -> Self {
+        Self {
+            start_frame,
+            end_frame: end_frame.max(start_frame),
+        }
+    }
+
+    /// Length of this slice in frames.
+    pub fn len(&self) -> usize {
+        self.end_frame.saturating_sub(self.start_frame)
+    }
+
+    /// Whether this slice has zero length.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl Sample {
+    /// Get the slice list for this sample.
+    pub fn slices(&self) -> &[Slice] {
+        &self.slices
+    }
+
+    /// Set manual slice points.
+    pub fn set_slices(&mut self, slices: Vec<Slice>) {
+        self.slices = slices;
+    }
+
+    /// Generate evenly-spaced slices by dividing the sample into `count` equal parts.
+    pub fn slice_even(&mut self, count: usize) {
+        if count == 0 || self.frame_count() == 0 {
+            self.slices.clear();
+            return;
+        }
+        let total = self.frame_count();
+        let slice_len = total / count;
+        self.slices = (0..count)
+            .map(|i| {
+                let start = i * slice_len;
+                let end = if i == count - 1 {
+                    total
+                } else {
+                    start + slice_len
+                };
+                Slice::new(start, end)
+            })
+            .collect();
+    }
+
+    /// Add a single manual slice point, splitting at the given frame.
+    /// If there are no existing slices, creates two slices (before and after the point).
+    pub fn add_slice_point(&mut self, frame: usize) {
+        let total = self.frame_count();
+        if frame == 0 || frame >= total {
+            return;
+        }
+
+        if self.slices.is_empty() {
+            self.slices.push(Slice::new(0, frame));
+            self.slices.push(Slice::new(frame, total));
+            return;
+        }
+
+        // Find the slice that contains this frame and split it
+        if let Some(idx) = self
+            .slices
+            .iter()
+            .position(|s| frame > s.start_frame && frame < s.end_frame)
+        {
+            let old_end = self.slices[idx].end_frame;
+            self.slices[idx].end_frame = frame;
+            self.slices.insert(idx + 1, Slice::new(frame, old_end));
+        }
+    }
+
+    /// Remove a slice by index, merging it with the next slice.
+    pub fn remove_slice(&mut self, index: usize) {
+        if self.slices.len() <= 1 || index >= self.slices.len() {
+            return;
+        }
+        if index + 1 < self.slices.len() {
+            self.slices[index + 1].start_frame = self.slices[index].start_frame;
+        }
+        self.slices.remove(index);
+    }
+
+    /// Get the slice at the given index, if it exists.
+    pub fn get_slice(&self, index: usize) -> Option<&Slice> {
+        self.slices.get(index)
+    }
+}
+
 impl Default for Sample {
     fn default() -> Self {
         Self {
@@ -198,6 +307,7 @@ impl Default for Sample {
             sustain_loop_mode: LoopMode::NoLoop,
             sustain_loop_start: 0,
             sustain_loop_end: 0,
+            slices: Vec::new(),
         }
     }
 }
@@ -283,5 +393,97 @@ mod tests {
     fn test_sample_finetune_property() {
         let sample = Sample::new(vec![0.0; 100], 44100, 1, None).with_finetune(50);
         assert_eq!(sample.finetune, 50);
+    }
+
+    #[test]
+    fn test_slice_new() {
+        let s = Slice::new(100, 200);
+        assert_eq!(s.start_frame, 100);
+        assert_eq!(s.end_frame, 200);
+        assert_eq!(s.len(), 100);
+        assert!(!s.is_empty());
+    }
+
+    #[test]
+    fn test_slice_inverted_range() {
+        let s = Slice::new(200, 100);
+        assert_eq!(s.end_frame, 200); // clamped to start
+        assert_eq!(s.len(), 0);
+        assert!(s.is_empty());
+    }
+
+    #[test]
+    fn test_slice_even() {
+        let mut sample = Sample::new(vec![0.0; 1000], 44100, 1, None);
+        sample.slice_even(4);
+        assert_eq!(sample.slices().len(), 4);
+        assert_eq!(sample.slices()[0].start_frame, 0);
+        assert_eq!(sample.slices()[0].end_frame, 250);
+        assert_eq!(sample.slices()[1].start_frame, 250);
+        assert_eq!(sample.slices()[1].end_frame, 500);
+        assert_eq!(sample.slices()[3].start_frame, 750);
+        assert_eq!(sample.slices()[3].end_frame, 1000);
+    }
+
+    #[test]
+    fn test_slice_even_zero() {
+        let mut sample = Sample::new(vec![0.0; 1000], 44100, 1, None);
+        sample.slice_even(0);
+        assert!(sample.slices().is_empty());
+    }
+
+    #[test]
+    fn test_add_slice_point_empty() {
+        let mut sample = Sample::new(vec![0.0; 1000], 44100, 1, None);
+        sample.add_slice_point(500);
+        assert_eq!(sample.slices().len(), 2);
+        assert_eq!(sample.slices()[0], Slice::new(0, 500));
+        assert_eq!(sample.slices()[1], Slice::new(500, 1000));
+    }
+
+    #[test]
+    fn test_add_slice_point_split() {
+        let mut sample = Sample::new(vec![0.0; 1000], 44100, 1, None);
+        sample.slice_even(2); // [0,500) [500,1000)
+        sample.add_slice_point(250);
+        assert_eq!(sample.slices().len(), 3);
+        assert_eq!(sample.slices()[0], Slice::new(0, 250));
+        assert_eq!(sample.slices()[1], Slice::new(250, 500));
+        assert_eq!(sample.slices()[2], Slice::new(500, 1000));
+    }
+
+    #[test]
+    fn test_add_slice_point_boundary_ignored() {
+        let mut sample = Sample::new(vec![0.0; 1000], 44100, 1, None);
+        sample.add_slice_point(0); // at start -- ignored
+        assert!(sample.slices().is_empty());
+        sample.add_slice_point(1000); // at end -- ignored
+        assert!(sample.slices().is_empty());
+    }
+
+    #[test]
+    fn test_remove_slice() {
+        let mut sample = Sample::new(vec![0.0; 1000], 44100, 1, None);
+        sample.slice_even(4); // [0,250) [250,500) [500,750) [750,1000)
+        sample.remove_slice(1); // remove [250,500), merge into next
+        assert_eq!(sample.slices().len(), 3);
+        assert_eq!(sample.slices()[1], Slice::new(250, 750));
+    }
+
+    #[test]
+    fn test_remove_slice_single_noop() {
+        let mut sample = Sample::new(vec![0.0; 1000], 44100, 1, None);
+        sample.slice_even(1);
+        sample.remove_slice(0); // can't remove the only slice
+        assert_eq!(sample.slices().len(), 1);
+    }
+
+    #[test]
+    fn test_get_slice() {
+        let mut sample = Sample::new(vec![0.0; 1000], 44100, 1, None);
+        sample.slice_even(3);
+        assert!(sample.get_slice(0).is_some());
+        assert!(sample.get_slice(2).is_some());
+        assert!(sample.get_slice(3).is_none());
     }
 }

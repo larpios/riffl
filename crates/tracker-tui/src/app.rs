@@ -200,6 +200,18 @@ pub struct App {
 
     /// Current scrub start offset in sample-native frames.
     pub browser_preview_offset_frames: usize,
+
+    /// Pending Zxx script triggers from the last tick (channel, param).
+    pub pending_script_triggers: Vec<(usize, u8)>,
+
+    /// Cached system info for CPU/memory status bar display.
+    sys_info: sysinfo::System,
+    /// Cached CPU usage percentage (updated periodically).
+    cached_cpu_percent: f32,
+    /// Cached memory usage percentage (updated periodically).
+    cached_mem_percent: f32,
+    /// Last time system stats were refreshed.
+    sys_info_last_update: Instant,
 }
 
 impl App {
@@ -318,6 +330,11 @@ impl App {
             browser_preview_sample: None,
             browser_preview_rate: 1.0,
             browser_preview_offset_frames: 0,
+            pending_script_triggers: Vec::new(),
+            sys_info: sysinfo::System::new(),
+            cached_cpu_percent: 0.0,
+            cached_mem_percent: 0.0,
+            sys_info_last_update: Instant::now(),
         }
     }
 
@@ -555,6 +572,11 @@ impl App {
                 TransportCommand::PatternDelay(delay) => {
                     // EEx: pattern delay
                     self.transport.set_pattern_delay(delay);
+                }
+                TransportCommand::ScriptTrigger { channel, param } => {
+                    // Zxx: custom effect command for Rhai script triggering.
+                    // Store for the app layer to process (e.g., invoke a registered macro).
+                    self.pending_script_triggers.push((channel, param));
                 }
             }
         }
@@ -1615,6 +1637,36 @@ impl App {
     /// Get loaded instrument count.
     pub fn instrument_count(&self) -> usize {
         self.instrument_names.len()
+    }
+
+    /// Get system CPU and memory usage as (cpu_percent, memory_percent).
+    pub fn system_stats(&self) -> Option<(f32, f32)> {
+        Some((self.cached_cpu_percent, self.cached_mem_percent))
+    }
+
+    /// Refresh system stats (called periodically from the update loop).
+    pub fn refresh_system_stats(&mut self) {
+        if self.sys_info_last_update.elapsed().as_secs() < 2 {
+            return;
+        }
+        self.sys_info_last_update = Instant::now();
+
+        self.sys_info.refresh_memory();
+        self.sys_info.refresh_cpu_all();
+
+        let total_mem = self.sys_info.total_memory() as f64;
+        let used_mem = self.sys_info.used_memory() as f64;
+        self.cached_mem_percent = if total_mem > 0.0 {
+            (used_mem / total_mem * 100.0) as f32
+        } else {
+            0.0
+        };
+
+        let cpus = self.sys_info.cpus();
+        if !cpus.is_empty() {
+            let total_cpu: f32 = cpus.iter().map(|c| c.cpu_usage()).sum::<f32>();
+            self.cached_cpu_percent = total_cpu / cpus.len() as f32;
+        }
     }
 
     /// Get the currently selected instrument index.

@@ -16,6 +16,12 @@ use crate::song::{Adsr, Instrument, LfoWaveform};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
+/// Number of samples in each per-channel oscilloscope ring buffer.
+pub const OSCILLOSCOPE_BUF_SIZE: usize = 512;
+
+/// Number of samples in the master bus FFT capture buffer.
+pub const FFT_BUF_SIZE: usize = 1024;
+
 fn f32_to_u32_bits(f: f32) -> u32 {
     f.to_bits()
 }
@@ -362,6 +368,16 @@ pub struct Mixer {
     /// Per-channel peak levels for VU meters (left, right) as atomic u32 bit patterns.
     /// Updated during render(), read by UI thread.
     channel_levels: Vec<(AtomicU32, AtomicU32)>,
+    /// Per-channel oscilloscope ring buffers (mono mix of L+R).
+    /// Written by the audio thread in render(), read by the UI thread for display.
+    /// Each buffer is OSCILLOSCOPE_BUF_SIZE samples, written circularly.
+    oscilloscope_bufs: Vec<Vec<f32>>,
+    /// Per-channel write position into the oscilloscope ring buffer.
+    oscilloscope_write_pos: Vec<AtomicU32>,
+    /// Master bus FFT capture ring buffer (mono).
+    fft_buf: Vec<f32>,
+    /// Write position into the FFT ring buffer.
+    fft_write_pos: AtomicU32,
 }
 
 impl Mixer {
@@ -398,6 +414,12 @@ impl Mixer {
             .map(|_| (AtomicU32::new(0), AtomicU32::new(0)))
             .collect();
 
+        let oscilloscope_bufs: Vec<Vec<f32>> = (0..num_channels)
+            .map(|_| vec![0.0f32; OSCILLOSCOPE_BUF_SIZE])
+            .collect();
+        let oscilloscope_write_pos: Vec<AtomicU32> =
+            (0..num_channels).map(|_| AtomicU32::new(0)).collect();
+
         Self {
             samples,
             instruments,
@@ -412,6 +434,10 @@ impl Mixer {
             preview_pos: 0.0,
             preview_rate: 1.0,
             channel_levels,
+            oscilloscope_bufs,
+            oscilloscope_write_pos,
+            fft_buf: vec![0.0f32; FFT_BUF_SIZE],
+            fft_write_pos: AtomicU32::new(0),
         }
     }
 
@@ -434,12 +460,17 @@ impl Mixer {
                     std::sync::atomic::AtomicU32::new(0),
                     std::sync::atomic::AtomicU32::new(0),
                 ));
+                self.oscilloscope_bufs
+                    .push(vec![0.0f32; OSCILLOSCOPE_BUF_SIZE]);
+                self.oscilloscope_write_pos.push(AtomicU32::new(0));
             }
         } else {
             // trim tracks if shrinking
             self.voices.truncate(num_channels);
             self.channel_strips.truncate(num_channels);
             self.channel_levels.truncate(num_channels);
+            self.oscilloscope_bufs.truncate(num_channels);
+            self.oscilloscope_write_pos.truncate(num_channels);
         }
 
         // Push the changes down to the effect processor as well
@@ -575,102 +606,120 @@ impl Mixer {
                     if has_tone_porta && self.voices[ch].is_some() {
                         // A tone portamento effect exists and a voice is already playing.
                         // Do not trigger a new sample. The TrackerEffectProcessor handles target pitch updates.
-                    } else if instrument_idx < self.samples.len() {
-                        let sample = &self.samples[instrument_idx];
-                        // Calculate playback rate to pitch the sample to the desired note.
-                        // The sample's base_note (default C-4) plays at original speed.
-                        // Higher notes play faster, lower notes play slower.
-                        let base_freq = sample.base_frequency();
-                        let target_freq = note.frequency();
-                        let sample_rate_ratio =
-                            sample.sample_rate() as f64 / self.output_sample_rate as f64;
+                    } else {
+                        // Resolve sample index: use keyzone matching if instrument has keyzones,
+                        // otherwise fall back to instrument_idx as the sample index.
+                        let resolved_sample_idx =
+                            if let Some(inst) = self.instruments.get(instrument_idx) {
+                                if inst.keyzones.is_empty() {
+                                    Some(instrument_idx)
+                                } else {
+                                    inst.resolve_sample_index(note.midi_note(), note.velocity)
+                                }
+                            } else {
+                                Some(instrument_idx)
+                            };
 
-                        let mut hz_to_rate = (1.0 / base_freq) * sample_rate_ratio;
+                        if let Some(resolved_sample_idx) = resolved_sample_idx {
+                            if resolved_sample_idx < self.samples.len() {
+                                let sample = &self.samples[resolved_sample_idx];
+                                // Calculate playback rate to pitch the sample to the desired note.
+                                // The sample's base_note (default C-4) plays at original speed.
+                                // Higher notes play faster, lower notes play slower.
+                                let base_freq = sample.base_frequency();
+                                let target_freq = note.frequency();
+                                let sample_rate_ratio =
+                                    sample.sample_rate() as f64 / self.output_sample_rate as f64;
 
-                        // Apply sample-level finetune (in cents)
-                        if sample.finetune != 0 {
-                            hz_to_rate *= 2.0_f64.powf(sample.finetune as f64 / 1200.0);
-                        }
+                                let mut hz_to_rate = (1.0 / base_freq) * sample_rate_ratio;
 
-                        // Apply finetune from instrument or effect override
-                        let finetune = if let Some(ft_override) =
-                            self.effect_processor.finetune_override(ch)
-                        {
-                            ft_override
-                        } else {
-                            self.instruments
-                                .get(instrument_idx)
-                                .map(|inst| inst.finetune)
-                                .unwrap_or(0)
-                        };
+                                // Apply sample-level finetune (in cents)
+                                if sample.finetune != 0 {
+                                    hz_to_rate *= 2.0_f64.powf(sample.finetune as f64 / 1200.0);
+                                }
 
-                        if finetune != 0 {
-                            // ProTracker finetune formula: 1 unit = 1/8th of a semitone
-                            hz_to_rate *= 2.0_f64.powf(finetune as f64 / (12.0 * 8.0));
-                        }
+                                // Apply finetune from instrument or effect override
+                                let finetune = if let Some(ft_override) =
+                                    self.effect_processor.finetune_override(ch)
+                                {
+                                    ft_override
+                                } else {
+                                    self.instruments
+                                        .get(instrument_idx)
+                                        .map(|inst| inst.finetune)
+                                        .unwrap_or(0)
+                                };
 
-                        let playback_rate = target_freq * hz_to_rate;
+                                if finetune != 0 {
+                                    // ProTracker finetune formula: 1 unit = 1/8th of a semitone
+                                    hz_to_rate *= 2.0_f64.powf(finetune as f64 / (12.0 * 8.0));
+                                }
 
-                        let inst_vol = self
-                            .instruments
-                            .get(instrument_idx)
-                            .map(|inst| inst.volume)
-                            .unwrap_or(1.0);
-                        let velocity = note.velocity as f32;
-                        let velocity_gain = (velocity / 127.0) * inst_vol * sample.volume;
+                                let playback_rate = target_freq * hz_to_rate;
 
-                        // Apply instrument panning override to the effect processor
-                        if let Some(inst_pan) =
-                            self.instruments.get(instrument_idx).and_then(|i| i.panning)
-                        {
-                            if let Some(state) = self.effect_processor.channel_state_mut(ch) {
-                                state.panning_override = Some((inst_pan + 1.0) / 2.0);
+                                let inst_vol = self
+                                    .instruments
+                                    .get(instrument_idx)
+                                    .map(|inst| inst.volume)
+                                    .unwrap_or(1.0);
+                                let velocity = note.velocity as f32;
+                                let velocity_gain = (velocity / 127.0) * inst_vol * sample.volume;
+
+                                // Apply instrument panning override to the effect processor
+                                if let Some(inst_pan) =
+                                    self.instruments.get(instrument_idx).and_then(|i| i.panning)
+                                {
+                                    if let Some(state) = self.effect_processor.channel_state_mut(ch)
+                                    {
+                                        state.panning_override = Some((inst_pan + 1.0) / 2.0);
+                                    }
+                                }
+
+                                // Check for Note Delay (EDx)
+                                if let Some(delay_tick) = self
+                                    .effect_processor
+                                    .channel_state(ch)
+                                    .and_then(|s| s.note_delay_tick)
+                                {
+                                    let frames_per_row = self
+                                        .effect_processor
+                                        .channel_state(ch)
+                                        .map(|s| s.frames_per_row)
+                                        .unwrap_or(6000);
+                                    let frames_per_tick = frames_per_row / self.tpl;
+                                    let trigger_frame = delay_tick as u32 * frames_per_tick;
+
+                                    let offset = self.effect_processor.sample_offset(ch);
+
+                                    self.pending_notes.push(PendingNote {
+                                        channel: ch,
+                                        instrument_index: instrument_idx,
+                                        sample_index: resolved_sample_idx,
+                                        playback_rate,
+                                        velocity_gain,
+                                        hz_to_rate,
+                                        triggered_note_freq: target_freq,
+                                        offset,
+                                        trigger_frame,
+                                    });
+                                } else {
+                                    let mut voice = Voice::new(
+                                        self.instruments.get(instrument_idx),
+                                        instrument_idx,
+                                        resolved_sample_idx,
+                                        playback_rate,
+                                        velocity_gain,
+                                        hz_to_rate,
+                                        target_freq,
+                                    );
+                                    if let Some(offset) = self.effect_processor.sample_offset(ch) {
+                                        voice = voice.with_position(offset as f64);
+                                    }
+
+                                    self.voices[ch] = Some(voice);
+                                }
                             }
-                        }
-
-                        // Check for Note Delay (EDx)
-                        if let Some(delay_tick) = self
-                            .effect_processor
-                            .channel_state(ch)
-                            .and_then(|s| s.note_delay_tick)
-                        {
-                            let frames_per_row = self
-                                .effect_processor
-                                .channel_state(ch)
-                                .map(|s| s.frames_per_row)
-                                .unwrap_or(6000);
-                            let frames_per_tick = frames_per_row / self.tpl;
-                            let trigger_frame = delay_tick as u32 * frames_per_tick;
-
-                            let offset = self.effect_processor.sample_offset(ch);
-
-                            self.pending_notes.push(PendingNote {
-                                channel: ch,
-                                instrument_index: instrument_idx,
-                                sample_index: instrument_idx,
-                                playback_rate,
-                                velocity_gain,
-                                hz_to_rate,
-                                triggered_note_freq: target_freq,
-                                offset,
-                                trigger_frame,
-                            });
-                        } else {
-                            let mut voice = Voice::new(
-                                self.instruments.get(instrument_idx),
-                                instrument_idx,
-                                instrument_idx,
-                                playback_rate,
-                                velocity_gain,
-                                hz_to_rate,
-                                target_freq,
-                            );
-                            if let Some(offset) = self.effect_processor.sample_offset(ch) {
-                                voice = voice.with_position(offset as f64);
-                            }
-
-                            self.voices[ch] = Some(voice);
-                        }
+                        } // if let Some(resolved_sample_idx)
                     }
                 }
                 Some(NoteEvent::Off) => {
@@ -1137,6 +1186,20 @@ impl Mixer {
                     atomic_max_f32(peak_l, post_l.abs());
                     atomic_max_f32(peak_r, post_r.abs());
 
+                    // Write mono mix to oscilloscope ring buffer
+                    if let (Some(buf), Some(pos_atomic)) = (
+                        self.oscilloscope_bufs.get_mut(ch),
+                        self.oscilloscope_write_pos.get(ch),
+                    ) {
+                        let pos =
+                            pos_atomic.load(Ordering::Relaxed) as usize % OSCILLOSCOPE_BUF_SIZE;
+                        buf[pos] = (post_l + post_r) * 0.5;
+                        pos_atomic.store(
+                            ((pos + 1) % OSCILLOSCOPE_BUF_SIZE) as u32,
+                            Ordering::Relaxed,
+                        );
+                    }
+
                     for bus_idx in 0..num_buses {
                         let send_level = strip.next_send_level(bus_idx);
                         if send_level > 0.0001 {
@@ -1185,6 +1248,15 @@ impl Mixer {
         };
         if preview_done {
             self.preview_sample = None;
+        }
+
+        // Write mono mix to FFT capture buffer
+        for frame in 0..num_frames {
+            let mono = (output[frame * 2] + output[frame * 2 + 1]) * 0.5;
+            let pos = self.fft_write_pos.load(Ordering::Relaxed) as usize % FFT_BUF_SIZE;
+            self.fft_buf[pos] = mono;
+            self.fft_write_pos
+                .store(((pos + 1) % FFT_BUF_SIZE) as u32, Ordering::Relaxed);
         }
 
         // Clamp output to [-1.0, 1.0] to prevent clipping distortion
@@ -1347,6 +1419,36 @@ impl Mixer {
             l.store(0u32, Ordering::Relaxed);
             r.store(0u32, Ordering::Relaxed);
         }
+    }
+
+    /// Read the oscilloscope waveform for a channel.
+    /// Returns a slice of the ring buffer in chronological order (oldest first).
+    /// The returned Vec has exactly `OSCILLOSCOPE_BUF_SIZE` samples.
+    pub fn oscilloscope_data(&self, channel: usize) -> Vec<f32> {
+        if let (Some(buf), Some(pos_atomic)) = (
+            self.oscilloscope_bufs.get(channel),
+            self.oscilloscope_write_pos.get(channel),
+        ) {
+            let write_pos = pos_atomic.load(Ordering::Relaxed) as usize % OSCILLOSCOPE_BUF_SIZE;
+            let mut result = Vec::with_capacity(OSCILLOSCOPE_BUF_SIZE);
+            // Read from write_pos (oldest) wrapping around to write_pos-1 (newest)
+            for i in 0..OSCILLOSCOPE_BUF_SIZE {
+                result.push(buf[(write_pos + i) % OSCILLOSCOPE_BUF_SIZE]);
+            }
+            result
+        } else {
+            vec![0.0; OSCILLOSCOPE_BUF_SIZE]
+        }
+    }
+
+    /// Read the master bus FFT capture buffer in chronological order.
+    pub fn fft_data(&self) -> Vec<f32> {
+        let write_pos = self.fft_write_pos.load(Ordering::Relaxed) as usize % FFT_BUF_SIZE;
+        let mut result = Vec::with_capacity(FFT_BUF_SIZE);
+        for i in 0..FFT_BUF_SIZE {
+            result.push(self.fft_buf[(write_pos + i) % FFT_BUF_SIZE]);
+        }
+        result
     }
 
     /// Decay all channel levels by the given factor (0.0 to 1.0).
@@ -3136,5 +3238,81 @@ mod tests {
             has_audio,
             "Voice should still produce audio with zero-rate LFO"
         );
+    }
+
+    #[test]
+    fn test_mixer_keyzone_sample_selection() {
+        use crate::song::Keyzone;
+
+        // Two samples: low-pitched sine and high-pitched sine
+        let low_sample = Arc::new(make_test_sample(44100, 0.25));
+        let high_sample = Arc::new(make_test_sample(44100, 0.25));
+
+        let mut inst = Instrument::new("Piano");
+        inst.keyzones = vec![
+            Keyzone::new(0).with_note_range(0, 59),   // low sample
+            Keyzone::new(1).with_note_range(60, 119), // high sample
+        ];
+
+        let mut mixer = Mixer::new(vec![low_sample, high_sample], vec![inst], 4, 44100);
+
+        // Trigger a low note (C-3 = MIDI 36) on instrument 0
+        let mut pattern = Pattern::new(16, 4);
+        let low_note = Note::new(Pitch::C, 3, 100, 0);
+        pattern.set_note(0, 0, low_note);
+
+        mixer.tick(0, &pattern);
+        assert_eq!(mixer.active_voice_count(), 1);
+
+        // Verify it picked sample index 0 (low keyzone)
+        let voice = mixer.voices[0].as_ref().unwrap();
+        assert_eq!(voice.sample_index, 0);
+
+        // Now trigger a high note (C-6 = MIDI 72) on instrument 0
+        let mut pattern2 = Pattern::new(16, 4);
+        let high_note = Note::new(Pitch::C, 6, 100, 0);
+        pattern2.set_note(0, 1, high_note);
+
+        mixer.tick(0, &pattern2);
+        mixer.tick(1, &pattern2);
+        let voice = mixer.voices[1].as_ref().unwrap();
+        assert_eq!(voice.sample_index, 1);
+    }
+
+    #[test]
+    fn test_mixer_keyzone_no_match_silent() {
+        use crate::song::Keyzone;
+
+        let sample = Arc::new(make_test_sample(44100, 0.25));
+
+        let mut inst = Instrument::new("Sparse");
+        // Only covers notes 60-72
+        inst.keyzones = vec![Keyzone::new(0).with_note_range(60, 72)];
+
+        let mut mixer = Mixer::new(vec![sample], vec![inst], 4, 44100);
+
+        // Trigger note outside keyzone range (C-3 = MIDI 36)
+        let mut pattern = Pattern::new(16, 4);
+        pattern.set_note(0, 0, Note::new(Pitch::C, 3, 100, 0));
+
+        mixer.tick(0, &pattern);
+        // No keyzone matches, so no voice should be triggered
+        assert_eq!(mixer.active_voice_count(), 0);
+    }
+
+    #[test]
+    fn test_mixer_no_keyzones_backward_compat() {
+        let sample = Arc::new(make_test_sample(44100, 0.25));
+        let inst = Instrument::new("Simple");
+        // No keyzones -- should use instrument_idx as sample_index directly
+
+        let mut mixer = Mixer::new(vec![sample], vec![inst], 4, 44100);
+
+        let mut pattern = Pattern::new(16, 4);
+        pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+
+        mixer.tick(0, &pattern);
+        assert_eq!(mixer.active_voice_count(), 1);
+        assert_eq!(mixer.voices[0].as_ref().unwrap().sample_index, 0);
     }
 }

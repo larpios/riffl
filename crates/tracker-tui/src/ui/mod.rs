@@ -21,12 +21,14 @@ use tracker_core::transport::{PlaybackMode, TransportState};
 pub mod arrangement;
 pub mod code_editor;
 pub mod export_dialog;
+pub mod fft_analyzer;
 pub mod file_browser;
 pub mod help;
 pub mod instrument_editor;
 pub mod instrument_list;
 pub mod layout;
 pub mod modal;
+pub mod oscilloscope;
 pub mod pattern_list;
 pub mod sample_browser;
 pub mod theme;
@@ -553,11 +555,15 @@ fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             let (note_str, inst_str, vol_str, eff_str) = format_cell_parts(cell);
 
             if is_cursor
-                && (mode == EditorMode::Insert || mode == EditorMode::Normal)
+                && matches!(
+                    mode,
+                    EditorMode::Insert | EditorMode::Normal | EditorMode::Replace
+                )
                 && !is_playback_row
             {
-                // Insert/Normal mode: highlight only the active sub-column
-                let (active, inactive) = if mode == EditorMode::Insert {
+                // Insert/Normal/Replace mode: highlight only the active sub-column
+                let (active, inactive) = if matches!(mode, EditorMode::Insert | EditorMode::Replace)
+                {
                     (theme.insert_cursor_style(), theme.insert_inactive_style())
                 } else {
                     (theme.highlight_style(), theme.normal_inactive_style())
@@ -1140,6 +1146,34 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             Style::default().fg(theme.text_secondary),
         ),
     ]);
+
+    // System resource indicators (CPU, Memory)
+    if let Some((cpu, mem)) = app.system_stats() {
+        footer_spans.extend([
+            Span::raw(" "),
+            Span::styled(
+                format!("CPU:{:.0}%", cpu),
+                Style::default().fg(if cpu > 80.0 {
+                    theme.status_error
+                } else if cpu > 50.0 {
+                    theme.status_warning
+                } else {
+                    theme.text_dimmed
+                }),
+            ),
+            Span::raw(" "),
+            Span::styled(
+                format!("MEM:{:.0}%", mem),
+                Style::default().fg(if mem > 80.0 {
+                    theme.status_error
+                } else if mem > 50.0 {
+                    theme.status_warning
+                } else {
+                    theme.text_dimmed
+                }),
+            ),
+        ]);
+    }
 
     let footer = Paragraph::new(Line::from(footer_spans)).style(theme.footer_style());
 

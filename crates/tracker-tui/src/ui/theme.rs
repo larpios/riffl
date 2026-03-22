@@ -1,21 +1,24 @@
 /// Theme and color scheme management
 use ratatui::style::{Color, Modifier, Style};
+use std::path::Path;
 
 /// Available built-in themes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ThemeKind {
     #[default]
     Dark,
     CatppuccinMocha,
     Nord,
+    Custom(String),
 }
 
 impl ThemeKind {
-    pub fn name(self) -> &'static str {
+    pub fn name(&self) -> &str {
         match self {
             Self::Dark => "dark",
             Self::CatppuccinMocha => "mocha",
             Self::Nord => "nord",
+            Self::Custom(name) => name.as_str(),
         }
     }
 
@@ -82,6 +85,7 @@ impl Theme {
             ThemeKind::Dark => Self::dark(),
             ThemeKind::CatppuccinMocha => Self::catppuccin_mocha(),
             ThemeKind::Nord => Self::nord(),
+            ThemeKind::Custom(_) => Self::dark(), // fallback; use load_from_toml for custom
         }
     }
 
@@ -310,6 +314,75 @@ impl Theme {
     pub fn info_color(&self) -> Color {
         self.status_info
     }
+
+    /// Load a theme from a TOML file.
+    ///
+    /// The TOML file should contain `[colors]` table with keys matching the
+    /// Theme struct field names, each with an RGB hex string like `"#RRGGBB"`.
+    /// Missing fields fall back to the dark theme defaults.
+    pub fn load_from_toml(path: &Path) -> Result<Self, String> {
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read theme file: {}", e))?;
+        let table: toml::Table = content
+            .parse()
+            .map_err(|e| format!("Failed to parse theme TOML: {}", e))?;
+
+        let colors = table
+            .get("colors")
+            .and_then(|v| v.as_table())
+            .ok_or_else(|| "Missing [colors] table in theme file".to_string())?;
+
+        let mut theme = Self::dark();
+
+        fn parse_color(val: &toml::Value) -> Option<Color> {
+            let s = val.as_str()?;
+            if s.len() == 7 && s.starts_with('#') {
+                let r = u8::from_str_radix(&s[1..3], 16).ok()?;
+                let g = u8::from_str_radix(&s[3..5], 16).ok()?;
+                let b = u8::from_str_radix(&s[5..7], 16).ok()?;
+                Some(Color::Rgb(r, g, b))
+            } else {
+                None
+            }
+        }
+
+        macro_rules! set_color {
+            ($field:ident) => {
+                if let Some(val) = colors.get(stringify!($field)) {
+                    if let Some(color) = parse_color(val) {
+                        theme.$field = color;
+                    }
+                }
+            };
+        }
+
+        set_color!(bg);
+        set_color!(bg_surface);
+        set_color!(bg_highlight);
+        set_color!(bg_header);
+        set_color!(bg_footer);
+        set_color!(primary);
+        set_color!(secondary);
+        set_color!(border);
+        set_color!(border_focused);
+        set_color!(text);
+        set_color!(text_secondary);
+        set_color!(text_dimmed);
+        set_color!(cursor_normal_bg);
+        set_color!(cursor_insert_bg);
+        set_color!(cursor_visual_bg);
+        set_color!(cursor_fg);
+        set_color!(status_success);
+        set_color!(status_warning);
+        set_color!(status_error);
+        set_color!(status_info);
+        set_color!(note_color);
+        set_color!(inst_color);
+        set_color!(vol_color);
+        set_color!(eff_color);
+
+        Ok(theme)
+    }
 }
 
 impl Default for Theme {
@@ -330,7 +403,7 @@ mod tests {
     #[test]
     fn test_from_kind_roundtrip() {
         for kind in [ThemeKind::Dark, ThemeKind::CatppuccinMocha, ThemeKind::Nord] {
-            let t = Theme::from_kind(kind);
+            let t = Theme::from_kind(kind.clone());
             assert_eq!(t, Theme::from_kind(kind));
         }
     }
@@ -409,5 +482,59 @@ mod tests {
         assert_eq!(t.highlight_style().bg, Some(t.cursor_normal_bg));
         assert_eq!(t.text_style().fg, Some(t.text));
         assert_eq!(t.dimmed_style().fg, Some(t.text_dimmed));
+    }
+
+    #[test]
+    fn test_load_from_toml_valid() {
+        let dir = std::env::temp_dir().join("riffl_test_theme");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test_theme.toml");
+        std::fs::write(
+            &path,
+            r##"
+[colors]
+bg = "#1a1a2e"
+primary = "#e94560"
+text = "#ffffff"
+"##,
+        )
+        .unwrap();
+
+        let theme = Theme::load_from_toml(&path).unwrap();
+        assert_eq!(theme.bg, Color::Rgb(0x1a, 0x1a, 0x2e));
+        assert_eq!(theme.primary, Color::Rgb(0xe9, 0x45, 0x60));
+        assert_eq!(theme.text, Color::Rgb(0xff, 0xff, 0xff));
+        // Non-specified fields should be dark theme defaults
+        assert_eq!(theme.secondary, Theme::dark().secondary);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_load_from_toml_missing_colors_table() {
+        let dir = std::env::temp_dir().join("riffl_test_theme2");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bad_theme.toml");
+        std::fs::write(&path, "title = \"no colors\"").unwrap();
+
+        let result = Theme::load_from_toml(&path);
+        assert!(result.is_err());
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_load_from_toml_nonexistent_file() {
+        let result = Theme::load_from_toml(Path::new("/nonexistent/theme.toml"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_theme_kind_custom() {
+        let kind = ThemeKind::Custom("cyberpunk".to_string());
+        assert_eq!(kind.name(), "cyberpunk");
+        let theme = Theme::from_kind(kind);
+        // Custom falls back to dark
+        assert_eq!(theme, Theme::dark());
     }
 }

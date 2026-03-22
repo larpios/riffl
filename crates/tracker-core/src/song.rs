@@ -193,6 +193,70 @@ impl Envelope {
     }
 }
 
+/// A keyzone maps a MIDI note and velocity range to a specific sample.
+///
+/// Multi-sample instruments use multiple keyzones to select different samples
+/// based on the incoming note pitch and velocity. Keyzones may overlap;
+/// the first matching zone (sorted by note_min) wins.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Keyzone {
+    /// Minimum MIDI note number for this zone (inclusive, 0-119).
+    pub note_min: u8,
+    /// Maximum MIDI note number for this zone (inclusive, 0-119).
+    pub note_max: u8,
+    /// Minimum velocity for this zone (inclusive, 0-127).
+    pub velocity_min: u8,
+    /// Maximum velocity for this zone (inclusive, 0-127).
+    pub velocity_max: u8,
+    /// Index into the sample pool for this zone.
+    pub sample_index: usize,
+    /// Base note override for pitch calculation in this zone (MIDI note number).
+    /// If `None`, uses the sample's own base_note.
+    pub base_note_override: Option<u8>,
+}
+
+impl Keyzone {
+    /// Create a new keyzone spanning the full note and velocity range.
+    pub fn new(sample_index: usize) -> Self {
+        Self {
+            note_min: 0,
+            note_max: 119,
+            velocity_min: 0,
+            velocity_max: 127,
+            sample_index,
+            base_note_override: None,
+        }
+    }
+
+    /// Create a keyzone with a specific note range.
+    pub fn with_note_range(mut self, min: u8, max: u8) -> Self {
+        self.note_min = min.min(119);
+        self.note_max = max.min(119);
+        self
+    }
+
+    /// Create a keyzone with a specific velocity range.
+    pub fn with_velocity_range(mut self, min: u8, max: u8) -> Self {
+        self.velocity_min = min.min(127);
+        self.velocity_max = max.min(127);
+        self
+    }
+
+    /// Set a base note override for this zone.
+    pub fn with_base_note(mut self, base_note: u8) -> Self {
+        self.base_note_override = Some(base_note);
+        self
+    }
+
+    /// Check whether a given MIDI note and velocity fall within this keyzone.
+    pub fn matches(&self, midi_note: u8, velocity: u8) -> bool {
+        midi_note >= self.note_min
+            && midi_note <= self.note_max
+            && velocity >= self.velocity_min
+            && velocity <= self.velocity_max
+    }
+}
+
 /// An instrument definition linking a name to a sample.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Instrument {
@@ -232,6 +296,10 @@ pub struct Instrument {
     /// Fadeout speed for the instrument (0-65535).
     /// Subtracted from the fadeout multiplier every tick after Note Off.
     pub fadeout: u16,
+    /// Multi-sample keyzones. When non-empty, sample selection uses keyzone
+    /// matching instead of `sample_index`. Sorted by `note_min` for lookup.
+    #[serde(default)]
+    pub keyzones: Vec<Keyzone>,
 }
 
 impl Instrument {
@@ -255,6 +323,7 @@ impl Instrument {
             panning_lfo: None,
             pitch_lfo: None,
             fadeout: 0,
+            keyzones: Vec::new(),
         }
     }
 
@@ -268,6 +337,26 @@ impl Instrument {
     pub fn with_volume(mut self, volume: f32) -> Self {
         self.volume = volume.clamp(0.0, 1.0);
         self
+    }
+
+    /// Find the matching keyzone for a MIDI note and velocity.
+    /// Returns the keyzone reference, or `None` if no zone matches.
+    pub fn find_keyzone(&self, midi_note: u8, velocity: u8) -> Option<&Keyzone> {
+        self.keyzones
+            .iter()
+            .find(|kz| kz.matches(midi_note, velocity))
+    }
+
+    /// Resolve the sample index for a given note and velocity.
+    /// If keyzones are defined and a match is found, returns the keyzone's sample index.
+    /// Otherwise falls back to `self.sample_index`.
+    pub fn resolve_sample_index(&self, midi_note: u8, velocity: u8) -> Option<usize> {
+        if !self.keyzones.is_empty() {
+            self.find_keyzone(midi_note, velocity)
+                .map(|kz| kz.sample_index)
+        } else {
+            self.sample_index
+        }
     }
 }
 
@@ -716,5 +805,153 @@ mod tests {
         assert_eq!(vol_adsr.decay, 100.0);
         assert_eq!(vol_adsr.sustain, 0.8);
         assert_eq!(vol_adsr.release, 300.0);
+    }
+
+    #[test]
+    fn test_keyzone_new() {
+        let kz = Keyzone::new(0);
+        assert_eq!(kz.note_min, 0);
+        assert_eq!(kz.note_max, 119);
+        assert_eq!(kz.velocity_min, 0);
+        assert_eq!(kz.velocity_max, 127);
+        assert_eq!(kz.sample_index, 0);
+        assert_eq!(kz.base_note_override, None);
+    }
+
+    #[test]
+    fn test_keyzone_with_note_range() {
+        let kz = Keyzone::new(1).with_note_range(36, 59);
+        assert_eq!(kz.note_min, 36);
+        assert_eq!(kz.note_max, 59);
+        assert_eq!(kz.sample_index, 1);
+    }
+
+    #[test]
+    fn test_keyzone_with_velocity_range() {
+        let kz = Keyzone::new(2).with_velocity_range(64, 127);
+        assert_eq!(kz.velocity_min, 64);
+        assert_eq!(kz.velocity_max, 127);
+    }
+
+    #[test]
+    fn test_keyzone_matches() {
+        let kz = Keyzone::new(0)
+            .with_note_range(36, 59)
+            .with_velocity_range(1, 100);
+
+        assert!(kz.matches(48, 64));
+        assert!(kz.matches(36, 1));
+        assert!(kz.matches(59, 100));
+        assert!(!kz.matches(35, 64)); // below note range
+        assert!(!kz.matches(60, 64)); // above note range
+        assert!(!kz.matches(48, 0)); // below velocity range
+        assert!(!kz.matches(48, 101)); // above velocity range
+    }
+
+    #[test]
+    fn test_keyzone_with_base_note() {
+        let kz = Keyzone::new(0).with_base_note(60);
+        assert_eq!(kz.base_note_override, Some(60));
+    }
+
+    #[test]
+    fn test_instrument_find_keyzone() {
+        let mut inst = Instrument::new("Piano");
+        inst.keyzones = vec![
+            Keyzone::new(0).with_note_range(0, 47),
+            Keyzone::new(1).with_note_range(48, 71),
+            Keyzone::new(2).with_note_range(72, 119),
+        ];
+
+        let kz = inst.find_keyzone(48, 100);
+        assert!(kz.is_some());
+        assert_eq!(kz.unwrap().sample_index, 1);
+
+        let kz = inst.find_keyzone(30, 100);
+        assert_eq!(kz.unwrap().sample_index, 0);
+
+        let kz = inst.find_keyzone(90, 100);
+        assert_eq!(kz.unwrap().sample_index, 2);
+    }
+
+    #[test]
+    fn test_instrument_find_keyzone_velocity_layers() {
+        let mut inst = Instrument::new("Drums");
+        inst.keyzones = vec![
+            Keyzone::new(0)
+                .with_note_range(36, 36)
+                .with_velocity_range(0, 63),
+            Keyzone::new(1)
+                .with_note_range(36, 36)
+                .with_velocity_range(64, 127),
+        ];
+
+        assert_eq!(inst.find_keyzone(36, 32).unwrap().sample_index, 0);
+        assert_eq!(inst.find_keyzone(36, 100).unwrap().sample_index, 1);
+        assert!(inst.find_keyzone(37, 100).is_none());
+    }
+
+    #[test]
+    fn test_instrument_resolve_sample_index_with_keyzones() {
+        let mut inst = Instrument::new("Multi");
+        inst.sample_index = Some(99);
+        inst.keyzones = vec![
+            Keyzone::new(5).with_note_range(0, 59),
+            Keyzone::new(6).with_note_range(60, 119),
+        ];
+
+        assert_eq!(inst.resolve_sample_index(48, 100), Some(5));
+        assert_eq!(inst.resolve_sample_index(72, 100), Some(6));
+    }
+
+    #[test]
+    fn test_instrument_resolve_sample_index_fallback() {
+        let mut inst = Instrument::new("Single");
+        inst.sample_index = Some(3);
+
+        assert_eq!(inst.resolve_sample_index(48, 100), Some(3));
+    }
+
+    #[test]
+    fn test_instrument_resolve_sample_index_no_match() {
+        let mut inst = Instrument::new("Sparse");
+        inst.sample_index = Some(3);
+        inst.keyzones = vec![Keyzone::new(0).with_note_range(60, 72)];
+
+        // Note 48 doesn't match any keyzone
+        assert_eq!(inst.resolve_sample_index(48, 100), None);
+    }
+
+    #[test]
+    fn test_keyzone_serde_roundtrip() {
+        let kz = Keyzone::new(5)
+            .with_note_range(36, 59)
+            .with_velocity_range(32, 96)
+            .with_base_note(48);
+
+        let json = serde_json::to_string(&kz).unwrap();
+        let restored: Keyzone = serde_json::from_str(&json).unwrap();
+        assert_eq!(kz, restored);
+    }
+
+    #[test]
+    fn test_instrument_keyzones_serde_roundtrip() {
+        let mut inst = Instrument::new("Multi");
+        inst.keyzones = vec![
+            Keyzone::new(0).with_note_range(0, 59),
+            Keyzone::new(1).with_note_range(60, 119),
+        ];
+
+        let json = serde_json::to_string(&inst).unwrap();
+        let restored: Instrument = serde_json::from_str(&json).unwrap();
+        assert_eq!(inst.keyzones, restored.keyzones);
+    }
+
+    #[test]
+    fn test_instrument_empty_keyzones_serde() {
+        let inst = Instrument::new("NoZones");
+        let json = serde_json::to_string(&inst).unwrap();
+        let restored: Instrument = serde_json::from_str(&json).unwrap();
+        assert!(restored.keyzones.is_empty());
     }
 }

@@ -70,8 +70,8 @@ fn main() -> Result<()> {
 
     // Apply config: set theme from config file (or default "mocha")
     let theme_kind = config.theme_kind();
+    app.theme = crate::ui::theme::Theme::from_kind(theme_kind.clone());
     app.theme_kind = theme_kind;
-    app.theme = crate::ui::theme::Theme::from_kind(theme_kind);
     app.config = config;
     // Re-apply roots so persisted bookmarks from config appear at startup.
     // set_sample_dirs (above) ran before app.config was assigned, so bookmarks
@@ -121,6 +121,7 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
             }
         }
 
+        app.refresh_system_stats();
         app.update()?;
     }
 
@@ -366,7 +367,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
 
     // In Insert mode on Effect/Instrument/Volume sub-columns, intercept hex digit
     // keys (0-9, A-F) for data entry instead of their normal note/octave mappings.
-    if app.editor.mode() == EditorMode::Insert
+    if matches!(app.editor.mode(), EditorMode::Insert | EditorMode::Replace)
         && key.modifiers == crossterm::event::KeyModifiers::NONE
     {
         if let crossterm::event::KeyCode::Char(c) = key.code {
@@ -485,7 +486,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                 app.instrument_selection_down();
             } else if app.current_view == AppView::PatternList {
                 app.pattern_selection_down();
-            } else if app.editor.mode() == EditorMode::Insert {
+            } else if matches!(app.editor.mode(), EditorMode::Insert | EditorMode::Replace) {
                 app.editor.extend_down();
                 app.apply_draw_note();
             } else {
@@ -510,6 +511,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::EnterInsertMode => app.editor.enter_insert_mode(),
         Action::EnterNormalMode => app.editor.enter_normal_mode(),
         Action::EnterVisualMode => app.editor.enter_visual_mode(),
+        Action::EnterReplaceMode => app.editor.enter_replace_mode(),
 
         // Note entry (Insert mode) — piano keyboard layout
         Action::EnterNote(c) => {
