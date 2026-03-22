@@ -1,0 +1,66 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: riffl-j60.2
+- **Task Title**: US-002: Fix tracker-tui keybindings match errors
+- **Description**: Fix non-exhaustive pattern matches in keybindings.rs for `GoToStart` and `GoToEnd` actions.
+
+## Specific issues to fix:
+
+1. **keybindings.rs:568** - Add match arms for GoToStart and GoToEnd in `Action...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-03-22T14:58:30.908Z
+- **Ended At**: 2026-03-22T15:01:19.410Z
+- **Duration**: 2m 48s
+- **Agent**: opencode
+- **Epic**: riffl-j60
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[read][0m
+[94m[read][0m
+[94m[grep][0m [95m/Users/ray/repos/riffl/crates/tracker-tui/src/input[0m pattern: [96mGoToStart|GoToEnd[0m
+Now I'll add the missing match arms for `GoToStart` and `GoToEnd` in both functions:
+[94m[edit][0m
+[94m[edit][0m
+There's still an issue at line 479. Let me check what's there:
+[94m[read][0m
+[94m[read][0m
+[94m[edit][0m
+[94m[read][0m
+The edits are applied. Let me verify with cargo build:
+[94m[bash][0m Build workspace to verify fixes $ cargo build --workspace --all-features 2>&1
+There's a pre-existing error unrelated to my changes. Let me check if this method is supposed to exist:
+[94m[grep][0m [95m/Users/ray/repos/riffl/crates/tracker-tui/src/editor[0m pattern: [96mset_cursor_channel[0m
+[94m[bash][0m Check git status $ git status
+[94m[grep][0m [95m/Users/ray/repos/riffl/crates/tracker-tui/src[0m pattern: [96mset_cursor_channel[0m
+[94m[read][0m
+[94m[grep][0m [95m/Users/ray/repos/riffl/crates/tracker-tui/src/editor[0m pattern: [96mpub fn cursor[0m
+[94m[read][0m
+[94m[grep][0m [95m/Users/ray/repos/riffl/crates/tracker-tui/src/editor[0m pattern: [96mpub fn set_cursor[0m
+[94m[grep][0m [95m/Users/ray/repos/riffl/crates/tracker-tui/src/editor[0m pattern: [96mgo_to_row[0m
+[94m[read][0m
+[94m[edit][0m
+[94m[bash][0m Build workspace to verify fixes $ cargo build --workspace --all-features 2>&1
+[94m[bash][0m Run clippy with warnings-as-errors $ cargo clippy --workspace --all-features -- -D warnings 2>&1
+Now let me update the progress.md file and close the bead:
+[94m[edit][0m
+[94m[edit][0m
+[94m[bash][0m Close the completed bead $ bd close riffl-j60.2 --db /Users/ray/repos/riffl/.beads/beads.db --reason "Fixed GoToStart/GoToEnd m...
+[94m[bash][0m Check final git status $ git status
+
+**Completed riffl-j60.2:**
+
+Fixed non-exhaustive match errors for `GoToStart`/`GoToEnd` in `keybindings.rs`:
+- Added to `name()` (line 504-505)
+- Added to `description()` (line 593-594)  
+- Added to `category()` as Navigation (line 668-669)
+
+Also fixed pre-existing bug: added missing `set_cursor_channel()` setter to `Editor` struct.
+
+`cargo build --workspace --all-features` and clippy now pass.
+[94m[todowrite][0m
+<promise>COMPLETE</promise>
