@@ -1,6 +1,6 @@
-# Riffl: Rust Music Tracker ⚡
+# PROMPT
 
-Riffl is an ambitious music tracker blending the structured pattern workflow of a traditional tracker with the expressive live-coding power of [Strudel](https://strudel.cc/).
+Run `bd list` to check issues and choose the most important ones to work on.
 
 ## 🎯 Project Identity
 - **Goal:** Really capable, visually appealing, and ergonomic TUI/GUI app.
