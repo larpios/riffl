@@ -1369,8 +1369,6 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         if let Some(((r0, c0), (r1, c1))) = app.editor.visual_selection() {
             let sel_text = if r0 == r1 && c0 == c1 {
                 format!("SEL:{}:{:02X}", c0, r0)
-            } else if r0 == r1 {
-                format!("SEL:{}:{:02X}-{}:{:02X}", c0, r0, c1, r1)
             } else {
                 format!("SEL:{}:{:02X}-{}:{:02X}", c0, r0, c1, r1)
             };

@@ -1402,6 +1402,7 @@ impl Mixer {
         self.pending_notes.clear();
         self.effect_processor.reset_all();
         self.bus_system.reset();
+        self.reset_channel_levels();
     }
 
     /// Set the ticks per line (TPL) for the mixer and its effect processor.
