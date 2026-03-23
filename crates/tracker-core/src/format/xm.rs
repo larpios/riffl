@@ -11,6 +11,27 @@ use crate::pattern::{Cell, NoteEvent, Pattern};
 use crate::song::{Envelope, EnvelopePoint, Instrument, Song};
 
 use super::FormatData;
+use super::ModuleLoader;
+
+pub struct XmLoader;
+
+impl ModuleLoader for XmLoader {
+    fn name(&self) -> &'static str {
+        "FastTracker II"
+    }
+
+    fn extensions(&self) -> &[&str] {
+        &["xm"]
+    }
+
+    fn detect(&self, data: &[u8]) -> bool {
+        data.starts_with(b"Extended Module: ")
+    }
+
+    fn load(&self, data: &[u8]) -> Result<FormatData, String> {
+        import_xm(data)
+    }
+}
 
 // ─── Binary Helpers ──────────────────────────────────────────────────────────
 
@@ -629,8 +650,8 @@ fn convert_xm_effect(eff_type: u8, param: u8) -> Option<Effect> {
             let sub = param >> 4;
             let val = param & 0x0F;
             match sub {
-                1 => Some(Effect::new(0x0E, 0x10 | val)), // Extra fine porta up
-                2 => Some(Effect::new(0x0E, 0x20 | val)), // Extra fine porta down
+                1 => Some(Effect::new(0x21, val)), // Extra fine porta up
+                2 => Some(Effect::new(0x22, val)), // Extra fine porta down
                 _ => None,
             }
         }

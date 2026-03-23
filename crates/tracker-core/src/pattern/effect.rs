@@ -66,6 +66,10 @@ pub enum EffectType {
     Panbrello,
     /// `Zxx` — MIDI Macro. (0x19)
     MidiMacro,
+    /// `X1x` — Extra fine portamento up. (0x21)
+    ExtraFinePortaUp,
+    /// `X2x` — Extra fine portamento down. (0x22)
+    ExtraFinePortaDown,
 }
 
 impl EffectType {
@@ -100,6 +104,8 @@ impl EffectType {
             0x17 => Some(EffectType::SetEnvelopePosition),
             0x18 => Some(EffectType::Panbrello),
             0x19 => Some(EffectType::MidiMacro),
+            0x21 => Some(EffectType::ExtraFinePortaUp),
+            0x22 => Some(EffectType::ExtraFinePortaDown),
             _ => None,
         }
     }
@@ -138,6 +144,8 @@ impl EffectType {
             EffectType::SetEnvelopePosition => 0x17,
             EffectType::Panbrello => 0x18,
             EffectType::MidiMacro => 0x19,
+            EffectType::ExtraFinePortaUp => 0x21,
+            EffectType::ExtraFinePortaDown => 0x22,
         }
     }
 
@@ -170,6 +178,8 @@ impl EffectType {
             EffectType::SetEnvelopePosition => "Env Pos",
             EffectType::Panbrello => "Panbrello",
             EffectType::MidiMacro => "Midi Macro",
+            EffectType::ExtraFinePortaUp => "XFine Up",
+            EffectType::ExtraFinePortaDown => "XFine Down",
         }
     }
 
