@@ -18,6 +18,26 @@ pub enum EffectMode {
     Compatible,
 }
 
+/// Format for effect parameters to guide human-readable display.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ParamFormat {
+    /// No specific formatting (default).
+    #[default]
+    Hex,
+    /// Split byte into two 4-bit nibbles (x, y).
+    Nibbles,
+    /// Absolute decimal value.
+    Decimal,
+    /// Frequency in Hz.
+    Frequency,
+    /// Percentage (00=0%, FF=100%).
+    Percentage,
+    /// Semitones (for arpeggio, etc).
+    Semitones,
+    /// Cents (for fine tuning).
+    Cents,
+}
+
 /// Metadata describing an effect for help and interpretation.
 #[derive(Debug, Clone)]
 pub struct EffectMetadata {
@@ -29,6 +49,8 @@ pub struct EffectMetadata {
     pub description: &'static str,
     /// Human-readable parameter meaning (e.g., "xy: speed/depth").
     pub param_label: &'static str,
+    /// How the parameter should be formatted for display.
+    pub param_format: ParamFormat,
     /// Whether this effect supports continuation (param 00).
     pub supports_continuation: bool,
     /// Whether this effect is Riffl-native or compatibility-only.
@@ -190,6 +212,7 @@ impl EffectType {
                 summary: "Arpeggio: cycle base, +x, +y semitones",
                 description: "Rapidly cycles between the base note and two offsets (x and y semitones), creating a chord-like texture characteristic of 8-bit music.",
                 param_label: "xy: offsets",
+                param_format: ParamFormat::Nibbles,
                 supports_continuation: false,
                 is_native: true,
             },
@@ -198,6 +221,7 @@ impl EffectType {
                 summary: "Pitch Up: slide pitch up by xx",
                 description: "Continuously slides the pitch of the current note upwards at a speed defined by the parameter xx.",
                 param_label: "xx: speed",
+                param_format: ParamFormat::Hex,
                 supports_continuation: true,
                 is_native: true,
             },
@@ -206,6 +230,7 @@ impl EffectType {
                 summary: "Pitch Down: slide pitch down by xx",
                 description: "Continuously slides the pitch of the current note downwards at a speed defined by the parameter xx.",
                 param_label: "xx: speed",
+                param_format: ParamFormat::Hex,
                 supports_continuation: true,
                 is_native: true,
             },
@@ -214,6 +239,7 @@ impl EffectType {
                 summary: "Porta Note: slide to target note at speed xx",
                 description: "Automatically slides the pitch from the previous note towards the newly triggered note at speed xx. If xx is 0, the previous speed is continued in Compatibility mode.",
                 param_label: "xx: speed",
+                param_format: ParamFormat::Hex,
                 supports_continuation: true,
                 is_native: true,
             },
@@ -222,6 +248,7 @@ impl EffectType {
                 summary: "Vibrato: pitch oscillation (speed x, depth y)",
                 description: "Modulates the pitch with a periodic oscillator (LFO). x defines the speed, and y defines the depth of the oscillation.",
                 param_label: "xy: speed/depth",
+                param_format: ParamFormat::Nibbles,
                 supports_continuation: true,
                 is_native: true,
             },
@@ -230,6 +257,7 @@ impl EffectType {
                 summary: "Porta+Vol: Tone Porta (3xx) + Volume Slide (Axy)",
                 description: "Combines tone portamento (sliding to target note) with a volume slide. Uses the previously set portamento speed.",
                 param_label: "xy: vol up/down",
+                param_format: ParamFormat::Nibbles,
                 supports_continuation: true,
                 is_native: true,
             },
@@ -238,6 +266,7 @@ impl EffectType {
                 summary: "Vib+Vol: Vibrato (4xy) + Volume Slide (Axy)",
                 description: "Combines vibrato with a volume slide. Uses the previously set vibrato speed and depth.",
                 param_label: "xy: vol up/down",
+                param_format: ParamFormat::Nibbles,
                 supports_continuation: true,
                 is_native: true,
             },
@@ -246,6 +275,7 @@ impl EffectType {
                 summary: "Tremolo: volume oscillation (speed x, depth y)",
                 description: "Modulates the volume with a periodic oscillator (LFO). x defines the speed, and y defines the depth of the oscillation.",
                 param_label: "xy: speed/depth",
+                param_format: ParamFormat::Nibbles,
                 supports_continuation: true,
                 is_native: true,
             },
@@ -254,6 +284,7 @@ impl EffectType {
                 summary: "Set Pan: set panning position to xx",
                 description: "Sets the stereo panning position. 00 is full left, 80 is center, and FF is full right.",
                 param_label: "xx: position",
+                param_format: ParamFormat::Hex,
                 supports_continuation: false,
                 is_native: true,
             },
@@ -262,6 +293,7 @@ impl EffectType {
                 summary: "Offset: start sample at xx * 256 frames",
                 description: "Starts sample playback from a specific offset rather than the beginning. The offset is xx multiplied by 256 sample frames.",
                 param_label: "xx: offset",
+                param_format: ParamFormat::Hex,
                 supports_continuation: true,
                 is_native: true,
             },
@@ -270,6 +302,7 @@ impl EffectType {
                 summary: "Vol Slide: slide volume up (x) or down (y)",
                 description: "Continuously changes the volume of the channel. If x is non-zero, volume increases; if y is non-zero, volume decreases.",
                 param_label: "xy: up/down",
+                param_format: ParamFormat::Nibbles,
                 supports_continuation: true,
                 is_native: true,
             },
@@ -278,6 +311,7 @@ impl EffectType {
                 summary: "Pos Jump: jump to arrangement position xx",
                 description: "Immediately jumps to the specified position in the song arrangement sequence after the current row finishes.",
                 param_label: "xx: position",
+                param_format: ParamFormat::Hex,
                 supports_continuation: false,
                 is_native: true,
             },
@@ -286,6 +320,7 @@ impl EffectType {
                 summary: "Set Vol: set volume to xx",
                 description: "Sets the channel volume to the specified value xx (00-40, where 40 is 100%). Values above 40 provide amplification.",
                 param_label: "xx: volume",
+                param_format: ParamFormat::Hex,
                 supports_continuation: false,
                 is_native: true,
             },
@@ -294,6 +329,7 @@ impl EffectType {
                 summary: "Pat Break: jump to next pattern at row xx",
                 description: "Stop playing the current pattern and jump to the specified row xx of the next pattern in the arrangement.",
                 param_label: "xx: row",
+                param_format: ParamFormat::Hex,
                 supports_continuation: false,
                 is_native: true,
             },
@@ -302,6 +338,7 @@ impl EffectType {
                 summary: "Extended: sub-command x, parameter y",
                 description: "A collection of specialized commands (E1x-EFx) for fine-grained control over portamento, loops, retriggering, etc.",
                 param_label: "xy: cmd/param",
+                param_format: ParamFormat::Nibbles,
                 supports_continuation: false,
                 is_native: true,
             },
@@ -310,6 +347,7 @@ impl EffectType {
                 summary: "Set Speed: set TPL (01-1F) or BPM (20-FF)",
                 description: "Sets either the ticks per line (TPL) if xx < 32, or the tempo (BPM) if xx >= 32.",
                 param_label: "xx: speed/bpm",
+                param_format: ParamFormat::Hex,
                 supports_continuation: false,
                 is_native: true,
             },
@@ -318,6 +356,7 @@ impl EffectType {
                 summary: "Global Vol: set global volume to xx",
                 description: "Sets the overall master volume of the entire song (00-80).",
                 param_label: "xx: volume",
+                param_format: ParamFormat::Hex,
                 supports_continuation: false,
                 is_native: true,
             },
@@ -326,6 +365,7 @@ impl EffectType {
                 summary: "GVol Slide: slide global volume up (x) or down (y)",
                 description: "Continuously changes the master volume of the song.",
                 param_label: "xy: up/down",
+                param_format: ParamFormat::Nibbles,
                 supports_continuation: true,
                 is_native: true,
             },
@@ -334,6 +374,7 @@ impl EffectType {
                 summary: "Pan Slide: slide panning left (x) or right (y)",
                 description: "Continuously slides the stereo panning position of the channel.",
                 param_label: "xy: left/right",
+                param_format: ParamFormat::Nibbles,
                 supports_continuation: true,
                 is_native: true,
             },
@@ -342,6 +383,7 @@ impl EffectType {
                 summary: "Chan Vol: set channel volume (IT-style)",
                 description: "Sets the base channel volume (00-40) as used in Impulse Tracker format.",
                 param_label: "xx: volume",
+                param_format: ParamFormat::Hex,
                 supports_continuation: false,
                 is_native: true,
             },
@@ -350,6 +392,7 @@ impl EffectType {
                 summary: "CVol Slide: slide channel volume (IT-style)",
                 description: "Continuously slides the base channel volume (00-40).",
                 param_label: "xy: up/down",
+                param_format: ParamFormat::Nibbles,
                 supports_continuation: true,
                 is_native: true,
             },
@@ -358,6 +401,7 @@ impl EffectType {
                 summary: "Tremor: periodic volume muting (on x, off y)",
                 description: "Rapidly alternates the volume between its current level and silence. x and y define the number of ticks for the 'on' and 'off' phases.",
                 param_label: "xy: on/off",
+                param_format: ParamFormat::Nibbles,
                 supports_continuation: true,
                 is_native: true,
             },
@@ -366,6 +410,7 @@ impl EffectType {
                 summary: "Retrig Vol: retrigger note with volume slide",
                 description: "Retriggers the current note every y ticks, while simultaneously sliding the volume based on x.",
                 param_label: "xy: slide/ticks",
+                param_format: ParamFormat::Nibbles,
                 supports_continuation: true,
                 is_native: true,
             },
@@ -374,6 +419,7 @@ impl EffectType {
                 summary: "Env Pos: set instrument envelope position to xx",
                 description: "Forces the instrument's volume or panning envelope to jump to the specified frame position xx.",
                 param_label: "xx: position",
+                param_format: ParamFormat::Hex,
                 supports_continuation: false,
                 is_native: true,
             },
@@ -382,6 +428,7 @@ impl EffectType {
                 summary: "Panbrello: panning oscillation (speed x, depth y)",
                 description: "Modulates the stereo panning position with a periodic oscillator (LFO). x is speed, y is depth.",
                 param_label: "xy: speed/depth",
+                param_format: ParamFormat::Nibbles,
                 supports_continuation: true,
                 is_native: true,
             },
@@ -390,6 +437,7 @@ impl EffectType {
                 summary: "Midi Macro: trigger MIDI or Zxx macro",
                 description: "Triggers a pre-defined MIDI macro or internal script macro with parameter xx.",
                 param_label: "xx: param",
+                param_format: ParamFormat::Hex,
                 supports_continuation: false,
                 is_native: true,
             },
@@ -398,6 +446,7 @@ impl EffectType {
                 summary: "XFine Up: extra-fine pitch slide up",
                 description: "Slides the pitch up by an extremely small amount (1/4 of a fine slide unit).",
                 param_label: "x: speed",
+                param_format: ParamFormat::Hex,
                 supports_continuation: false,
                 is_native: true,
             },
@@ -406,6 +455,7 @@ impl EffectType {
                 summary: "XFine Down: extra-fine pitch slide down",
                 description: "Slides the pitch down by an extremely small amount (1/4 of a fine slide unit).",
                 param_label: "x: speed",
+                param_format: ParamFormat::Hex,
                 supports_continuation: false,
                 is_native: true,
             },
@@ -487,6 +537,51 @@ impl Effect {
             .map(|t| t.metadata().supports_continuation)
             .unwrap_or(false)
     }
+
+    /// Get a human-readable description of this effect and its parameter.
+    ///
+    /// The description adapts based on the `EffectMode` (Native vs Compatible).
+    pub fn describe(&self, mode: EffectMode) -> String {
+        let Some(effect_type) = self.effect_type() else {
+            return format!("Unknown effect {:02X}", self.command);
+        };
+
+        let meta = effect_type.metadata();
+        let param = self.param;
+        let x = self.param_x();
+        let y = self.param_y();
+
+        let param_desc = match meta.param_format {
+            ParamFormat::Hex => format!("{:02X}", param),
+            ParamFormat::Decimal => format!("{}", param),
+            ParamFormat::Nibbles => format!("{}, {}", x, y),
+            ParamFormat::Percentage => format!("{}%", (param as f32 / 255.0 * 100.0) as u32),
+            ParamFormat::Frequency => format!("{}Hz", param), // Simplified
+            ParamFormat::Semitones => {
+                if x == 0 && y == 0 {
+                    "None".to_string()
+                } else {
+                    format!("+{}, +{}", x, y)
+                }
+            }
+            ParamFormat::Cents => format!("{} cents", param),
+        };
+
+        match mode {
+            EffectMode::RifflNative => {
+                format!("{}: {}", meta.name, param_desc)
+            }
+            EffectMode::Compatible => {
+                // In compatibility mode, we might want to surface legacy-specific info
+                let legacy_note = match effect_type {
+                    EffectType::Arpeggio => " (Hardware cycle)",
+                    EffectType::PitchSlideUp | EffectType::PitchSlideDown => " (Period-based)",
+                    _ => "",
+                };
+                format!("{}: {}{}", meta.name, param_desc, legacy_note)
+            }
+        }
+    }
 }
 
 impl fmt::Display for Effect {
@@ -524,6 +619,31 @@ mod tests {
         assert_eq!(format!("{}", max), "0FFF");
     }
 
+    #[test]
+    fn test_effect_describe() {
+        // Arpeggio (037)
+        let arp = Effect::new(0x0, 0x37);
+        assert_eq!(arp.describe(EffectMode::RifflNative), "Arpeggio: 3, 7");
+        assert_eq!(
+            arp.describe(EffectMode::Compatible),
+            "Arpeggio: 3, 7 (Hardware cycle)"
+        );
+
+        // Pitch Up (104)
+        let pitch_up = Effect::new(0x1, 0x04);
+        assert_eq!(pitch_up.describe(EffectMode::RifflNative), "Pitch Up: 04");
+        assert_eq!(
+            pitch_up.describe(EffectMode::Compatible),
+            "Pitch Up: 04 (Period-based)"
+        );
+
+        // Unknown
+        let unknown = Effect::new(0x99, 0x00);
+        assert_eq!(
+            unknown.describe(EffectMode::RifflNative),
+            "Unknown effect 99"
+        );
+    }
     #[test]
     fn test_effect_display_all_commands() {
         // Verify each standard command byte displays correctly
