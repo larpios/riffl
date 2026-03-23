@@ -184,6 +184,26 @@ pub fn create_split_layout(area: Rect, direction: Direction, split_percent: u16)
     (chunks[0], chunks[1])
 }
 
+pub fn create_pattern_layout(area: Rect) -> (Rect, Rect) {
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ])
+        .split(area);
+
+    (chunks[1], chunks[0])
+}
+
+pub fn create_pattern_inner_layout(area: Rect) -> Rect {
+    Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(0)])
+        .split(area)[1]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

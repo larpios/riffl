@@ -99,6 +99,16 @@ impl ArrangementView {
             self.cursor = arrangement_len - 1;
         }
     }
+
+    /// Scroll up (move cursor up one position).
+    pub fn scroll_up(&mut self) {
+        self.move_up();
+    }
+
+    /// Scroll down (move cursor down one position).
+    pub fn scroll_down(&mut self, arrangement_len: usize) {
+        self.move_down(arrangement_len);
+    }
 }
 
 impl Default for ArrangementView {

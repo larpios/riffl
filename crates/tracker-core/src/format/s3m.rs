@@ -175,6 +175,21 @@ fn parse_s3m_header(data: &[u8]) -> Result<S3mHeader, String> {
 
 // ─── Instruments ─────────────────────────────────────────────────────────────
 
+#[derive(Debug, Clone)]
+pub struct AdlibData {
+    pub registers: Vec<u8>,
+    pub is_opl3: bool,
+}
+
+impl Default for AdlibData {
+    fn default() -> Self {
+        Self {
+            registers: vec![0u8; 256],
+            is_opl3: false,
+        }
+    }
+}
+
 struct S3mInstrument {
     name: String,
     sample_data: Option<Vec<f32>>,
@@ -185,6 +200,8 @@ struct S3mInstrument {
     volume: u8,
     c2spd: u32,
     flags: u8,
+    #[allow(dead_code)]
+    adlib_data: Option<AdlibData>,
 }
 
 fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, String> {
@@ -197,22 +214,30 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
     let type_byte = read_u8(data, &mut off);
     let _dos_filename = read_string(data, &mut off, 12);
 
-    // If not a PCM instrument (type 1), we return a dummy
-    // Types: 0=Empty, 1=Sample, 2+=Adlib/OPL
+    // If not a PCM instrument (type 1), parse as Adlib
+    // Types: 0=Empty, 1=Sample, 2=Adlib/OPL2, 3=ODetune/OPL3
     if type_byte != 1 {
-        // Return placeholder for Adlib/Empty
-        // We still need to read the name though
-        off = offset + 0x30;
         let name = read_string(data, &mut off, 28);
+        let _id = read_string(data, &mut off, 4);
+
+        let is_opl3 = type_byte == 3;
+        let reg_size = if is_opl3 { 512 } else { 256 };
+        let mut registers = vec![0u8; reg_size.min(data.len().saturating_sub(offset + 0x50))];
+
+        let reg_start = offset + 0x50;
+        let reg_end = (reg_start + registers.len()).min(data.len());
+        registers[..reg_end.saturating_sub(reg_start)].copy_from_slice(&data[reg_start..reg_end]);
+
         return Ok(S3mInstrument {
             name,
             sample_data: None,
             sample_len: 0,
             loop_begin: 0,
             loop_end: 0,
-            volume: 0,
+            volume: 64,
             c2spd: 8363,
             flags: 0,
+            adlib_data: Some(AdlibData { registers, is_opl3 }),
         });
     }
 
@@ -257,6 +282,7 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
             volume,
             c2spd,
             flags,
+            adlib_data: None,
         });
     }
 
@@ -298,6 +324,7 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
         volume,
         c2spd,
         flags,
+        adlib_data: None,
     })
 }
 

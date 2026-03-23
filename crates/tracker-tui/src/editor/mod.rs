@@ -124,6 +124,12 @@ const PAGE_SIZE: usize = 16;
 /// Maximum undo history depth.
 const MAX_HISTORY: usize = 100;
 
+/// Width of a single channel column (including separator): "│ C#4 01 40 C20 " = 2 + 14 + 1 = 17
+const CHANNEL_COL_WIDTH: u16 = 17;
+
+/// Width of the row number column: "  XX  " = 6
+const ROW_NUM_WIDTH: u16 = 6;
+
 /// The pattern editor wrapping a `Pattern` with cursor, mode, and edit history.
 #[derive(Debug, Clone)]
 pub struct Editor {
@@ -462,6 +468,11 @@ impl Editor {
         self.visual_anchor = Some((self.cursor_row, self.cursor_channel));
     }
 
+    /// Set the visual anchor position directly (used during mouse drag selection).
+    pub fn set_visual_anchor(&mut self, row: usize, channel: usize) {
+        self.visual_anchor = Some((row, channel));
+    }
+
     /// Get the visual selection range as ((start_row, start_ch), (end_row, end_ch)),
     /// normalized so start <= end.
     pub fn visual_selection(&self) -> Option<((usize, usize), (usize, usize))> {
@@ -782,6 +793,40 @@ impl Editor {
         let max_ch = self.pattern.num_channels().saturating_sub(1);
         self.cursor_row = self.cursor_row.min(max_row);
         self.cursor_channel = self.cursor_channel.min(max_ch);
+    }
+
+    /// Set cursor position from mouse coordinates within the pattern grid.
+    ///
+    /// `mouse_y` is the row offset within the visible pattern area (excluding header).
+    /// `mouse_x` is the column offset within the pattern area (excluding row number).
+    /// `scroll_offset` is the current vertical scroll position.
+    /// `channel_scroll` is the current horizontal channel scroll position.
+    /// Returns the actual row and channel the cursor was placed at.
+    pub fn set_cursor_from_mouse(
+        &mut self,
+        mouse_y: u16,
+        mouse_x: u16,
+        scroll_offset: usize,
+        channel_scroll: usize,
+    ) -> (usize, usize) {
+        let row_offset = mouse_y as usize;
+        let new_row = scroll_offset.saturating_add(row_offset);
+        self.cursor_row = new_row.min(self.pattern.num_rows().saturating_sub(1));
+        self.cursor_row = self.cursor_row.max(0);
+
+        let col_offset = mouse_x.saturating_sub(ROW_NUM_WIDTH);
+        let channel_offset = (col_offset / CHANNEL_COL_WIDTH) as usize;
+        let new_channel = channel_scroll.saturating_add(channel_offset);
+        self.cursor_channel = new_channel.min(self.pattern.num_channels().saturating_sub(1));
+        self.cursor_channel = self.cursor_channel.max(0);
+
+        (self.cursor_row, self.cursor_channel)
+    }
+
+    /// Set cursor position directly to specific row and channel.
+    pub fn set_cursor(&mut self, row: usize, channel: usize) {
+        self.cursor_row = row.min(self.pattern.num_rows().saturating_sub(1));
+        self.cursor_channel = channel.min(self.pattern.num_channels().saturating_sub(1));
     }
 
     // --- Clipboard Operations ---

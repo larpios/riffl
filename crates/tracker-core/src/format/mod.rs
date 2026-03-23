@@ -9,6 +9,7 @@ pub struct FormatData {
 }
 
 pub mod it;
+pub mod nsf;
 pub mod protracker;
 pub mod s3m;
 pub mod xm;
@@ -35,6 +36,7 @@ pub fn get_loaders() -> Vec<Box<dyn ModuleLoader>> {
         Box::new(it::ItLoader),
         Box::new(s3m::S3mLoader),
         Box::new(protracker::ModLoader),
+        Box::new(nsf::NsfLoader),
     ]
 }
 

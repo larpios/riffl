@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use crossterm::{
-    event::{self, Event, KeyEvent, KeyEventKind},
+    event::{self, Event, KeyEvent, KeyEventKind, MouseButton, MouseEvent, MouseEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -94,12 +94,14 @@ fn init_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
+    execute!(stdout, event::EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let terminal = Terminal::new(backend)?;
     Ok(terminal)
 }
 
 fn restore_terminal() -> Result<()> {
+    execute!(io::stdout(), event::DisableMouseCapture)?;
     disable_raw_mode()?;
     execute!(io::stdout(), LeaveAlternateScreen)?;
     Ok(())
@@ -115,6 +117,9 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
                     if key.kind == KeyEventKind::Press {
                         handle_key_event(app, key);
                     }
+                }
+                Event::Mouse(mouse) => {
+                    handle_mouse_event(app, mouse);
                 }
                 Event::Resize(_width, _height) => {}
                 _ => {}
@@ -1673,6 +1678,215 @@ fn hex_char_to_digit(c: char) -> Option<u8> {
         'a'..='f' => Some(c as u8 - b'a' + 10),
         'A'..='F' => Some(c as u8 - b'A' + 10),
         _ => None,
+    }
+}
+
+/// Handle mouse events for pattern editor navigation and selection.
+fn handle_mouse_event(app: &mut App, mouse: MouseEvent) {
+    use crate::ui::layout;
+
+    if app.has_modal() || app.has_export_dialog() || app.has_file_browser() {
+        return;
+    }
+
+    if app.show_help || app.show_tutor {
+        match mouse.kind {
+            MouseEventKind::ScrollDown => {
+                if app.show_help {
+                    app.help_scroll = app.help_scroll.saturating_add(3);
+                } else if app.show_tutor {
+                    app.tutor_scroll = app.tutor_scroll.saturating_add(3);
+                }
+            }
+            MouseEventKind::ScrollUp => {
+                if app.show_help {
+                    app.help_scroll = app.help_scroll.saturating_sub(3);
+                } else if app.show_tutor {
+                    app.tutor_scroll = app.tutor_scroll.saturating_sub(3);
+                }
+            }
+            _ => {}
+        }
+        return;
+    }
+
+    match mouse.kind {
+        MouseEventKind::ScrollDown => {
+            if app.current_view == AppView::PatternEditor {
+                app.editor.page_down();
+            } else if app.current_view == AppView::Arrangement {
+                let len = app.song.arrangement.len();
+                app.arrangement_view.move_down(len);
+            } else if app.current_view == AppView::PatternList {
+                app.pattern_selection_down();
+            }
+        }
+        MouseEventKind::ScrollUp => {
+            if app.current_view == AppView::PatternEditor {
+                app.editor.page_up();
+            } else if app.current_view == AppView::Arrangement {
+                app.arrangement_view.move_up();
+            } else if app.current_view == AppView::PatternList {
+                app.pattern_selection_up();
+            }
+        }
+        MouseEventKind::Down(btn) | MouseEventKind::Drag(btn) | MouseEventKind::Up(btn) => {
+            if btn != MouseButton::Left && btn != MouseButton::Right {
+                return;
+            }
+
+            let full_area = ratatui::layout::Rect::new(0, 0, 80, 24);
+            let (_header_area, content_area, _footer_area) =
+                layout::create_main_layout(full_area, 3, 1);
+
+            if mouse.column < content_area.x
+                || mouse.column >= content_area.x + content_area.width
+                || mouse.row < content_area.y
+                || mouse.row >= content_area.y + content_area.height
+            {
+                return;
+            }
+
+            let mouse_x = mouse.column;
+            let mouse_y = mouse.row;
+
+            let pattern_width = content_area.width.saturating_sub(2);
+            let pattern_height = content_area.height.saturating_sub(2);
+            let pattern_x = content_area.x + 1;
+            let pattern_y = content_area.y + 1;
+
+            let _pattern_area =
+                ratatui::layout::Rect::new(pattern_x, pattern_y, pattern_width, pattern_height);
+
+            let ch_scroll = calculate_channel_scroll_for_mouse(
+                app.editor.cursor_channel(),
+                pattern_width,
+                app.editor.pattern().num_channels(),
+            );
+
+            let header_height = 1u16;
+            let visible_rows = pattern_height.saturating_sub(header_height) as usize;
+            let scroll_offset = calculate_scroll_offset_for_mouse(
+                app.editor.cursor_row(),
+                visible_rows,
+                app.editor.pattern().num_rows(),
+            );
+
+            match btn {
+                MouseButton::Left => match mouse.kind {
+                    MouseEventKind::Down(_) => {
+                        if app.current_view == AppView::PatternEditor {
+                            let local_x = mouse_x.saturating_sub(pattern_x);
+                            let local_y = mouse_y.saturating_sub(pattern_y);
+
+                            if local_y < header_height {
+                                return;
+                            }
+
+                            let (row, ch) = app.editor.set_cursor_from_mouse(
+                                local_y.saturating_sub(header_height),
+                                local_x,
+                                scroll_offset,
+                                ch_scroll,
+                            );
+
+                            if app.editor.mode() != EditorMode::Visual {
+                                if app.editor.mode() == EditorMode::Insert {
+                                    app.editor.enter_normal_mode();
+                                }
+                                app.editor.enter_visual_mode();
+                                app.editor.set_visual_anchor(row, ch);
+                            } else {
+                                app.editor.set_visual_anchor(row, ch);
+                            }
+                        }
+                    }
+                    MouseEventKind::Drag(_) => {
+                        if app.current_view == AppView::PatternEditor
+                            && app.editor.mode() == EditorMode::Visual
+                        {
+                            let local_x = mouse_x.saturating_sub(pattern_x);
+                            let local_y = mouse_y.saturating_sub(pattern_y);
+
+                            if local_y < header_height {
+                                return;
+                            }
+
+                            let (row, ch) = app.editor.set_cursor_from_mouse(
+                                local_y.saturating_sub(header_height),
+                                local_x,
+                                scroll_offset,
+                                ch_scroll,
+                            );
+                            app.editor.set_cursor(row, ch);
+                        }
+                    }
+                    MouseEventKind::Up(_) => {}
+                    _ => {}
+                },
+                MouseButton::Right => {
+                    if app.current_view == AppView::PatternEditor {
+                        let local_x = mouse_x.saturating_sub(pattern_x);
+                        let local_y = mouse_y.saturating_sub(pattern_y);
+
+                        if local_y < header_height {
+                            return;
+                        }
+
+                        let _ = app.editor.set_cursor_from_mouse(
+                            local_y.saturating_sub(header_height),
+                            local_x,
+                            scroll_offset,
+                            ch_scroll,
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+        _ => {}
+    }
+}
+
+fn calculate_channel_scroll_for_mouse(
+    cursor_channel: usize,
+    available_width: u16,
+    num_channels: usize,
+) -> usize {
+    const CHANNEL_COL_WIDTH: u16 = 17;
+    const ROW_NUM_WIDTH: u16 = 6;
+
+    let channel_space = available_width.saturating_sub(ROW_NUM_WIDTH);
+    let visible_channels = (channel_space / CHANNEL_COL_WIDTH) as usize;
+    if visible_channels == 0 {
+        return 0;
+    }
+    if visible_channels >= num_channels {
+        return 0;
+    }
+    if cursor_channel < visible_channels / 2 {
+        0
+    } else if cursor_channel + visible_channels / 2 >= num_channels {
+        num_channels.saturating_sub(visible_channels)
+    } else {
+        cursor_channel.saturating_sub(visible_channels / 2)
+    }
+}
+
+fn calculate_scroll_offset_for_mouse(
+    cursor_row: usize,
+    visible_rows: usize,
+    total_rows: usize,
+) -> usize {
+    if visible_rows >= total_rows {
+        return 0;
+    }
+    if cursor_row < visible_rows / 2 {
+        0
+    } else if cursor_row + visible_rows / 2 >= total_rows {
+        total_rows.saturating_sub(visible_rows)
+    } else {
+        cursor_row.saturating_sub(visible_rows / 2)
     }
 }
 
