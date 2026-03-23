@@ -650,8 +650,8 @@ fn convert_xm_effect(eff_type: u8, param: u8) -> Option<Effect> {
             let sub = param >> 4;
             let val = param & 0x0F;
             match sub {
-                1 => Some(Effect::new(0x0E, 0x10 | val)), // Extra fine porta up
-                2 => Some(Effect::new(0x0E, 0x20 | val)), // Extra fine porta down
+                1 => Some(Effect::new(0x21, val)), // Extra fine porta up
+                2 => Some(Effect::new(0x22, val)), // Extra fine porta down
                 _ => None,
             }
         }
