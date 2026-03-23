@@ -1496,21 +1496,8 @@ impl App {
     /// Returns Ok(()) on success, or an error message.
     pub fn import_file(&mut self, path: &std::path::Path) -> Result<(), String> {
         let data = std::fs::read(path).map_err(|e| format!("Read error: {e}"))?;
-        let ext = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("")
-            .to_lowercase();
-        let result = match ext.as_str() {
-            "xm" => tracker_core::format::xm::import_xm(&data)
-                .map_err(|e| format!("XM parse error: {e}")),
-            "it" => tracker_core::format::it::import_it(&data)
-                .map_err(|e| format!("IT parse error: {e}")),
-            "s3m" => tracker_core::format::s3m::import_s3m(&data)
-                .map_err(|e| format!("S3M parse error: {e}")),
-            _ => tracker_core::format::protracker::import_mod(&data)
-                .map_err(|e| format!("MOD parse error: {e}")),
-        }?;
+
+        let result = tracker_core::format::load(&data).map_err(|e| format!("Import error: {e}"))?;
 
         if let Ok(mut mixer) = self.mixer.lock() {
             mixer.clear_samples();

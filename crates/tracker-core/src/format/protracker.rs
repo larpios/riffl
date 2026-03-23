@@ -4,12 +4,46 @@
 //! 2, 6, 8 or more channels. Converts MOD patterns, instruments, and
 //! sample data into tracker-core's native types.
 
+use super::{FormatData, ModuleLoader};
 use crate::audio::sample::{LoopMode, Sample, C4_MIDI};
 use crate::pattern::effect::Effect;
 use crate::pattern::note::{Note, NoteEvent, Pitch};
 use crate::pattern::pattern::Pattern;
 use crate::pattern::{Cell, Track};
 use crate::song::{Instrument, Song};
+
+pub struct ModLoader;
+
+impl ModuleLoader for ModLoader {
+    fn name(&self) -> &'static str {
+        "Protracker"
+    }
+
+    fn extensions(&self) -> &[&str] {
+        &["mod"]
+    }
+
+    fn detect(&self, data: &[u8]) -> bool {
+        if data.len() < 1084 {
+            return false;
+        }
+        let tag = &data[1080..1084];
+        match tag {
+            b"M.K." | b"M!K!" | b"4CHN" | b"FLT4" | b"FLT8" | b"6CHN" | b"8CHN" | b"CD81"
+            | b"OCTA" => true,
+            _ => {
+                tag[2] == b'C'
+                    && tag[3] == b'H'
+                    && tag[0].is_ascii_digit()
+                    && tag[1].is_ascii_digit()
+            }
+        }
+    }
+
+    fn load(&self, data: &[u8]) -> Result<FormatData, String> {
+        import_mod(data)
+    }
+}
 
 /// The ProTracker period value for a C-2 note (which we map to our C4_MIDI base note).
 /// Period 428 is the standard PAL Amiga period for C-2.
