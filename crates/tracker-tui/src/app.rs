@@ -1999,6 +1999,85 @@ impl App {
         }
     }
 
+    /// Adjust the minimum note of the selected keyzone.
+    pub fn adjust_keyzone_note_min(&mut self, delta: i32) {
+        if let Some(idx) = self.instrument_selection {
+            if let Some(kz_idx) = self.inst_editor.selected_keyzone_index() {
+                if idx < self.song.instruments.len() {
+                    let inst = &mut self.song.instruments[idx];
+                    if kz_idx < inst.keyzones.len() {
+                        let current = inst.keyzones[kz_idx].note_min as i32;
+                        let new_val = (current + delta).clamp(0, 119) as u8;
+                        inst.keyzones[kz_idx].note_min = new_val;
+                        if inst.keyzones[kz_idx].note_max < new_val {
+                            inst.keyzones[kz_idx].note_max = new_val;
+                        }
+                        self.mark_dirty();
+                    }
+                }
+            }
+        }
+    }
+
+    /// Adjust the maximum note of the selected keyzone.
+    pub fn adjust_keyzone_note_max(&mut self, delta: i32) {
+        if let Some(idx) = self.instrument_selection {
+            if let Some(kz_idx) = self.inst_editor.selected_keyzone_index() {
+                if idx < self.song.instruments.len() {
+                    let inst = &mut self.song.instruments[idx];
+                    if kz_idx < inst.keyzones.len() {
+                        let current = inst.keyzones[kz_idx].note_max as i32;
+                        let new_val = (current + delta).clamp(0, 119) as u8;
+                        inst.keyzones[kz_idx].note_max = new_val;
+                        if inst.keyzones[kz_idx].note_min > new_val {
+                            inst.keyzones[kz_idx].note_min = new_val;
+                        }
+                        self.mark_dirty();
+                    }
+                }
+            }
+        }
+    }
+
+    /// Adjust the minimum velocity of the selected keyzone.
+    pub fn adjust_keyzone_velocity_min(&mut self, delta: i32) {
+        if let Some(idx) = self.instrument_selection {
+            if let Some(kz_idx) = self.inst_editor.selected_keyzone_index() {
+                if idx < self.song.instruments.len() {
+                    let inst = &mut self.song.instruments[idx];
+                    if kz_idx < inst.keyzones.len() {
+                        let current = inst.keyzones[kz_idx].velocity_min as i32;
+                        let new_val = (current + delta).clamp(0, 127) as u8;
+                        inst.keyzones[kz_idx].velocity_min = new_val;
+                        if inst.keyzones[kz_idx].velocity_max < new_val {
+                            inst.keyzones[kz_idx].velocity_max = new_val;
+                        }
+                        self.mark_dirty();
+                    }
+                }
+            }
+        }
+    }
+
+    /// Adjust the maximum velocity of the selected keyzone.
+    pub fn adjust_keyzone_velocity_max(&mut self, delta: i32) {
+        if let Some(idx) = self.instrument_selection {
+            if let Some(kz_idx) = self.inst_editor.selected_keyzone_index() {
+                if idx < self.song.instruments.len() {
+                    let inst = &mut self.song.instruments[idx];
+                    if kz_idx < inst.keyzones.len() {
+                        let current = inst.keyzones[kz_idx].velocity_max as i32;
+                        let new_val = (current + delta).clamp(0, 127) as u8;
+                        inst.keyzones[kz_idx].velocity_max = new_val;
+                        if inst.keyzones[kz_idx].velocity_min > new_val {
+                            inst.keyzones[kz_idx].velocity_min = new_val;
+                        }
+                        self.mark_dirty();
+                    }
+                }
+            }
+        }
+    }
     /// Select instrument for use in pattern editor.
     pub fn select_instrument(&mut self) {
         if let Some(idx) = self.instrument_selection {

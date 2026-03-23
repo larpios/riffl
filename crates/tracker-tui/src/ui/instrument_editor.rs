@@ -15,6 +15,7 @@ use ratatui::{
 };
 
 use tracker_core::audio::sample::Sample;
+use tracker_core::pattern::note::{Note, Pitch};
 use tracker_core::song::Instrument;
 
 use crate::ui::theme::Theme;
@@ -29,6 +30,13 @@ pub enum InstrumentField {
     LoopMode,
     LoopStart,
     LoopEnd,
+    KeyzoneList,
+    KeyzoneNoteMin,
+    KeyzoneNoteMax,
+    KeyzoneVelMin,
+    KeyzoneVelMax,
+    KeyzoneSample,
+    KeyzoneBaseNote,
 }
 
 impl InstrumentField {
@@ -40,6 +48,13 @@ impl InstrumentField {
         InstrumentField::LoopMode,
         InstrumentField::LoopStart,
         InstrumentField::LoopEnd,
+        InstrumentField::KeyzoneList,
+        InstrumentField::KeyzoneNoteMin,
+        InstrumentField::KeyzoneNoteMax,
+        InstrumentField::KeyzoneVelMin,
+        InstrumentField::KeyzoneVelMax,
+        InstrumentField::KeyzoneSample,
+        InstrumentField::KeyzoneBaseNote,
     ];
 
     pub fn next(self) -> Self {
@@ -50,19 +65,33 @@ impl InstrumentField {
             Self::Finetune => Self::LoopMode,
             Self::LoopMode => Self::LoopStart,
             Self::LoopStart => Self::LoopEnd,
-            Self::LoopEnd => Self::Name,
+            Self::LoopEnd => Self::KeyzoneList,
+            Self::KeyzoneList => Self::KeyzoneNoteMin,
+            Self::KeyzoneNoteMin => Self::KeyzoneNoteMax,
+            Self::KeyzoneNoteMax => Self::KeyzoneVelMin,
+            Self::KeyzoneVelMin => Self::KeyzoneVelMax,
+            Self::KeyzoneVelMax => Self::KeyzoneSample,
+            Self::KeyzoneSample => Self::KeyzoneBaseNote,
+            Self::KeyzoneBaseNote => Self::Name,
         }
     }
 
     pub fn prev(self) -> Self {
         match self {
-            Self::Name => Self::LoopEnd,
+            Self::Name => Self::KeyzoneBaseNote,
             Self::BaseNote => Self::Name,
             Self::Volume => Self::BaseNote,
             Self::Finetune => Self::Volume,
             Self::LoopMode => Self::Finetune,
             Self::LoopStart => Self::LoopMode,
             Self::LoopEnd => Self::LoopStart,
+            Self::KeyzoneList => Self::LoopEnd,
+            Self::KeyzoneNoteMin => Self::KeyzoneList,
+            Self::KeyzoneNoteMax => Self::KeyzoneNoteMin,
+            Self::KeyzoneVelMin => Self::KeyzoneNoteMax,
+            Self::KeyzoneVelMax => Self::KeyzoneVelMin,
+            Self::KeyzoneSample => Self::KeyzoneVelMax,
+            Self::KeyzoneBaseNote => Self::KeyzoneSample,
         }
     }
 
@@ -75,6 +104,13 @@ impl InstrumentField {
             Self::LoopMode => "Loop Mode",
             Self::LoopStart => "Loop Start",
             Self::LoopEnd => "Loop End",
+            Self::KeyzoneList => "Keyzones",
+            Self::KeyzoneNoteMin => "Key Min",
+            Self::KeyzoneNoteMax => "Key Max",
+            Self::KeyzoneVelMin => "Vel Min",
+            Self::KeyzoneVelMax => "Vel Max",
+            Self::KeyzoneSample => "Sample",
+            Self::KeyzoneBaseNote => "Root Note",
         }
     }
 
@@ -82,7 +118,15 @@ impl InstrumentField {
     pub fn is_draggable(self) -> bool {
         matches!(
             self,
-            Self::BaseNote | Self::Volume | Self::Finetune | Self::LoopStart | Self::LoopEnd
+            Self::BaseNote
+                | Self::Volume
+                | Self::Finetune
+                | Self::LoopStart
+                | Self::LoopEnd
+                | Self::KeyzoneNoteMin
+                | Self::KeyzoneNoteMax
+                | Self::KeyzoneVelMin
+                | Self::KeyzoneVelMax
         )
     }
 }
@@ -99,6 +143,13 @@ pub fn field_at_row(row_offset: u16) -> Option<InstrumentField> {
         9 => Some(InstrumentField::LoopMode),
         11 => Some(InstrumentField::LoopStart),
         13 => Some(InstrumentField::LoopEnd),
+        15 => Some(InstrumentField::KeyzoneList),
+        17 => Some(InstrumentField::KeyzoneNoteMin),
+        19 => Some(InstrumentField::KeyzoneNoteMax),
+        21 => Some(InstrumentField::KeyzoneVelMin),
+        23 => Some(InstrumentField::KeyzoneVelMax),
+        25 => Some(InstrumentField::KeyzoneSample),
+        27 => Some(InstrumentField::KeyzoneBaseNote),
         _ => None,
     }
 }
@@ -118,6 +169,8 @@ pub struct InstrumentEditorState {
     pub dragging_field: Option<InstrumentField>,
     /// Last mouse position seen during a drag.
     pub drag_last_position: Option<(u16, u16)>,
+    /// Currently selected keyzone index (for editing).
+    pub selected_keyzone: Option<usize>,
 }
 
 impl Default for InstrumentEditorState {
@@ -129,6 +182,7 @@ impl Default for InstrumentEditorState {
             input_buffer: String::new(),
             dragging_field: None,
             drag_last_position: None,
+            selected_keyzone: None,
         }
     }
 }
@@ -198,6 +252,11 @@ impl InstrumentEditorState {
     /// Get the currently dragging field, if any.
     pub fn dragging(&self) -> Option<InstrumentField> {
         self.dragging_field
+    }
+
+    /// Get the currently selected keyzone index for editing, if any.
+    pub fn selected_keyzone_index(&self) -> Option<usize> {
+        self.selected_keyzone
     }
 
     /// Update the drag position and return the delta from the previous event.
@@ -582,6 +641,151 @@ pub fn render_instrument_editor(
 
     lines.push(Line::from(""));
 
+    // ── Keyzones ─────────────────────────────────────────────────────
+    let keyzones = &instrument.keyzones;
+    let keyzone_count = keyzones.len();
+    let keyzone_str = if keyzone_count == 0 {
+        "— none —".to_string()
+    } else {
+        format!("{} zone(s)", keyzone_count)
+    };
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        Span::styled(
+            format!("{:<10}", InstrumentField::KeyzoneList.label()),
+            label_style(InstrumentField::KeyzoneList),
+        ),
+        Span::raw("  "),
+        Span::styled(keyzone_str, field_style(InstrumentField::KeyzoneList)),
+        Span::raw("   "),
+        Span::styled("n/N: prev/next", Style::default().fg(theme.text_dimmed)),
+    ]));
+
+    // If there's a selected keyzone, show its details
+    if let Some(kz_idx) = state.selected_keyzone.filter(|&i| i < keyzone_count) {
+        let kz = &keyzones[kz_idx];
+        let note_min_str = (|| {
+            let octave = kz.note_min / 12;
+            let semitone = kz.note_min % 12;
+            let pitch = Pitch::from_semitone(semitone)?;
+            Some(Note::simple(pitch, octave).display_str())
+        })()
+        .unwrap_or_else(|| "---".to_string());
+        let note_max_str = (|| {
+            let octave = kz.note_max / 12;
+            let semitone = kz.note_max % 12;
+            let pitch = Pitch::from_semitone(semitone)?;
+            Some(Note::simple(pitch, octave).display_str())
+        })()
+        .unwrap_or_else(|| "---".to_string());
+
+        // Keyzone Note Min
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                format!("{:<10}", InstrumentField::KeyzoneNoteMin.label()),
+                label_style(InstrumentField::KeyzoneNoteMin),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                format!("{:<6}", note_min_str),
+                field_style(InstrumentField::KeyzoneNoteMin),
+            ),
+            Span::raw("   "),
+            Span::styled(
+                format!("MIDI {}", kz.note_min),
+                Style::default().fg(theme.text_dimmed),
+            ),
+        ]));
+
+        // Keyzone Note Max
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                format!("{:<10}", InstrumentField::KeyzoneNoteMax.label()),
+                label_style(InstrumentField::KeyzoneNoteMax),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                format!("{:<6}", note_max_str),
+                field_style(InstrumentField::KeyzoneNoteMax),
+            ),
+            Span::raw("   "),
+            Span::styled(
+                format!("MIDI {}", kz.note_max),
+                Style::default().fg(theme.text_dimmed),
+            ),
+        ]));
+
+        // Keyzone Velocity Min
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                format!("{:<10}", InstrumentField::KeyzoneVelMin.label()),
+                label_style(InstrumentField::KeyzoneVelMin),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                format!("{:>3}", kz.velocity_min),
+                field_style(InstrumentField::KeyzoneVelMin),
+            ),
+            Span::raw("   "),
+            Span::styled("+/-: adjust", Style::default().fg(theme.text_dimmed)),
+        ]));
+
+        // Keyzone Velocity Max
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                format!("{:<10}", InstrumentField::KeyzoneVelMax.label()),
+                label_style(InstrumentField::KeyzoneVelMax),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                format!("{:>3}", kz.velocity_max),
+                field_style(InstrumentField::KeyzoneVelMax),
+            ),
+        ]));
+
+        // Keyzone Sample Index
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                format!("{:<10}", InstrumentField::KeyzoneSample.label()),
+                label_style(InstrumentField::KeyzoneSample),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                format!("{:>3}", kz.sample_index),
+                field_style(InstrumentField::KeyzoneSample),
+            ),
+        ]));
+
+        // Keyzone Base Note Override
+        let base_note_str = (|| {
+            let midi = kz.base_note_override?;
+            let octave = midi / 12;
+            let semitone = midi % 12;
+            let pitch = Pitch::from_semitone(semitone)?;
+            Some(Note::simple(pitch, octave).display_str())
+        })()
+        .unwrap_or_else(|| "—".to_string());
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                format!("{:<10}", InstrumentField::KeyzoneBaseNote.label()),
+                label_style(InstrumentField::KeyzoneBaseNote),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                format!("{:<6}", base_note_str),
+                field_style(InstrumentField::KeyzoneBaseNote),
+            ),
+        ]));
+    }
+
+    lines.push(Line::from(""));
+
     // ── Sample path ──────────────────────────────────────────────────
     let sample_str = instrument
         .sample_path
@@ -690,6 +894,20 @@ mod tests {
         assert_eq!(s.field, InstrumentField::LoopStart);
         s.next_field();
         assert_eq!(s.field, InstrumentField::LoopEnd);
+        s.next_field();
+        assert_eq!(s.field, InstrumentField::KeyzoneList);
+        s.next_field();
+        assert_eq!(s.field, InstrumentField::KeyzoneNoteMin);
+        s.next_field();
+        assert_eq!(s.field, InstrumentField::KeyzoneNoteMax);
+        s.next_field();
+        assert_eq!(s.field, InstrumentField::KeyzoneVelMin);
+        s.next_field();
+        assert_eq!(s.field, InstrumentField::KeyzoneVelMax);
+        s.next_field();
+        assert_eq!(s.field, InstrumentField::KeyzoneSample);
+        s.next_field();
+        assert_eq!(s.field, InstrumentField::KeyzoneBaseNote);
         s.next_field();
         assert_eq!(s.field, InstrumentField::Name);
     }

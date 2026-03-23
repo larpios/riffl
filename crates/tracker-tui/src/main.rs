@@ -1168,8 +1168,18 @@ fn handle_instrument_editor_key(app: &mut App, key: crossterm::event::KeyEvent) 
                 InstrumentField::Finetune => app.adjust_instrument_finetune(1),
                 InstrumentField::LoopStart => app.adjust_instrument_loop_start(100),
                 InstrumentField::LoopEnd => app.adjust_instrument_loop_end(100),
+                InstrumentField::KeyzoneNoteMin => app.adjust_keyzone_note_min(1),
+                InstrumentField::KeyzoneNoteMax => app.adjust_keyzone_note_max(1),
+                InstrumentField::KeyzoneVelMin => app.adjust_keyzone_velocity_min(1),
+                InstrumentField::KeyzoneVelMax => app.adjust_keyzone_velocity_max(1),
                 InstrumentField::Name => {}
-                InstrumentField::LoopMode => {}
+                InstrumentField::LoopMode
+                | InstrumentField::KeyzoneList
+                | InstrumentField::KeyzoneSample
+                | InstrumentField::KeyzoneBaseNote => {}
+                InstrumentField::KeyzoneList => {}
+                InstrumentField::KeyzoneSample => {}
+                InstrumentField::KeyzoneBaseNote => {}
             }
             return true;
         }
@@ -1180,8 +1190,18 @@ fn handle_instrument_editor_key(app: &mut App, key: crossterm::event::KeyEvent) 
                 InstrumentField::Finetune => app.adjust_instrument_finetune(-1),
                 InstrumentField::LoopStart => app.adjust_instrument_loop_start(-100),
                 InstrumentField::LoopEnd => app.adjust_instrument_loop_end(-100),
+                InstrumentField::KeyzoneNoteMin => app.adjust_keyzone_note_min(-1),
+                InstrumentField::KeyzoneNoteMax => app.adjust_keyzone_note_max(-1),
+                InstrumentField::KeyzoneVelMin => app.adjust_keyzone_velocity_min(-1),
+                InstrumentField::KeyzoneVelMax => app.adjust_keyzone_velocity_max(-1),
                 InstrumentField::Name => {}
-                InstrumentField::LoopMode => {}
+                InstrumentField::LoopMode
+                | InstrumentField::KeyzoneList
+                | InstrumentField::KeyzoneSample
+                | InstrumentField::KeyzoneBaseNote => {}
+                InstrumentField::KeyzoneList => {}
+                InstrumentField::KeyzoneSample => {}
+                InstrumentField::KeyzoneBaseNote => {}
             }
             return true;
         }
@@ -1827,8 +1847,23 @@ fn apply_instrument_field_drag(
         crate::ui::instrument_editor::InstrumentField::LoopEnd => {
             app.adjust_instrument_loop_end(delta as i32 * 128);
         }
+        crate::ui::instrument_editor::InstrumentField::KeyzoneNoteMin => {
+            app.adjust_keyzone_note_min(delta as i32);
+        }
+        crate::ui::instrument_editor::InstrumentField::KeyzoneNoteMax => {
+            app.adjust_keyzone_note_max(delta as i32);
+        }
+        crate::ui::instrument_editor::InstrumentField::KeyzoneVelMin => {
+            app.adjust_keyzone_velocity_min(delta as i32);
+        }
+        crate::ui::instrument_editor::InstrumentField::KeyzoneVelMax => {
+            app.adjust_keyzone_velocity_max(delta as i32);
+        }
         crate::ui::instrument_editor::InstrumentField::Name
-        | crate::ui::instrument_editor::InstrumentField::LoopMode => {}
+        | crate::ui::instrument_editor::InstrumentField::LoopMode
+        | crate::ui::instrument_editor::InstrumentField::KeyzoneList
+        | crate::ui::instrument_editor::InstrumentField::KeyzoneSample
+        | crate::ui::instrument_editor::InstrumentField::KeyzoneBaseNote => {}
     }
 }
 
