@@ -2,7 +2,8 @@
 //!
 //! This module handles audio output, sample loading, and playback control.
 
-// pub mod adlib;
+#[cfg(feature = "adlib")]
+pub mod adlib;
 pub mod bus;
 pub mod channel_strip;
 pub mod chip;

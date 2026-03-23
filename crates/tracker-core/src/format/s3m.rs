@@ -3,6 +3,8 @@
 //! Parses S3M files from raw bytes, supporting PCM samples and standard effects.
 //! Maps S3M-specific features to the tracker-core internal format.
 
+#[cfg(feature = "adlib")]
+use crate::audio::adlib::AdlibSynthesizer;
 use crate::audio::sample::{LoopMode, Sample};
 use crate::pattern::effect::{Effect, EffectMode};
 use crate::pattern::note::{Note, Pitch};
@@ -595,7 +597,7 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
             let base_note = 60.0 - 12.0 * (s3m_inst.c2spd as f64 / 8363.0).log2();
             sample = sample.with_base_note(base_note.round() as u8);
 
-            let mut inst = Instrument::new(s3m_inst.name);
+            let mut inst = Instrument::new(s3m_inst.name.clone());
             inst.sample_index = Some(samples.len());
             inst.volume = 1.0; // S3M applies volume at sample level mostly, but we can put it here too?
                                // Actually S3M default volume is per-sample.
@@ -610,9 +612,43 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
             // To maintain indices, we might want to map to a dummy, or just None.
             // S3M patterns reference instrument by index (1-based).
             // If we skip, we break references.
-            let inst = Instrument::new(s3m_inst.name);
+            let name = s3m_inst.name.clone();
+            let mut inst = Instrument::new(name.clone());
+            let sample = if let Some(_adlib) = s3m_inst.adlib_data {
+                #[cfg(feature = "adlib")]
+                {
+                    // Generate audio using AdlibSynthesizer
+                    const SAMPLE_RATE: u32 = 48000;
+                    const DURATION_SECS: f32 = 0.5;
+                    let num_samples = (SAMPLE_RATE as f32 * DURATION_SECS) as usize;
+
+                    let mut synth = AdlibSynthesizer::new(SAMPLE_RATE);
+                    synth.init(&_adlib.registers);
+                    // Trigger note C4 (middle C) with moderate velocity
+                    synth.note_on(0, 60, 64);
+                    let data = synth.render_samples(num_samples).to_vec();
+                    synth.note_off(0);
+
+                    let mut sample = Sample::new(data, SAMPLE_RATE, 1, Some(name));
+                    sample.volume = s3m_inst.volume as f32 / 64.0;
+                    // Compute base note similar to PCM (C2SPD defaults to 8363)
+                    let base_note = 60.0 - 12.0 * (s3m_inst.c2spd as f64 / 8363.0).log2();
+                    sample = sample.with_base_note(base_note.round() as u8);
+                    sample
+                }
+                #[cfg(not(feature = "adlib"))]
+                {
+                    // Adlib synthesis disabled, treat as empty instrument
+                    Sample::default()
+                }
+            } else {
+                // Empty instrument - keep dummy sample (will be replaced by sine wave injection)
+                Sample::default()
+            };
+            inst.sample_index = Some(samples.len());
+            inst.volume = 1.0;
             inst_map[i] = Some(instruments.len());
-            samples.push(Sample::default());
+            samples.push(sample);
             instruments.push(inst);
         }
     }

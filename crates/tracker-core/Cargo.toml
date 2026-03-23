@@ -3,6 +3,10 @@ name = "tracker-core"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+adlib = ["opl-emu"]
+
 [dependencies]
 anyhow = "1.0"
 cpal = "0.15"
@@ -16,7 +20,7 @@ thiserror = "1.0"
 glicol_synth = "0.13.5"
 petgraph = "0.6"
 game-music-emu = { version = "0.3", default-features = false, features = ["nsf"] }
-opl-emu = { version = "0.4", default-features = false, features = ["chip"] }
+opl-emu = { version = "0.4", default-features = true, features = ["chip"], optional = true }
 
 [[bench]]
 name = "mixer_bench"

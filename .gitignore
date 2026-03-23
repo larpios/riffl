@@ -38,3 +38,6 @@ research
 .codex
 research/
 openspec
+
+# Test OPL build artifacts
+test-opl/target

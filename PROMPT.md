@@ -27,11 +27,11 @@ When a build/test fails:
 ### Step 1 — Diagnose
 
 Identify failure: Compile, Runtime, Logic, or Missing Context.
-**CRITICAL:** Write this diagnosis and the current failed code snippet to `.ralph/scratchpad.md`.
+**CRITICAL:** Write this diagnosis and the current failed code snippet to `.ralph/scratchpad/`.
 
 ### Step 2 — Retry (Strict Strategy Rotation)
 
-Check `.ralph/scratchpad.md` for previous attempts. You MUST shift strategy based on the attempt count:
+Check `.ralph/scratchpad/` for previous attempts. You MUST shift strategy based on the attempt count:
 
 - **1st retry:** Fix directly (logical correction).
 - **2nd retry:** Simplify (remove complexity, use primitives).
