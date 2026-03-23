@@ -17,6 +17,7 @@ use crate::ui::envelope_editor::EnvelopeEditorState;
 use crate::ui::export_dialog::ExportDialog;
 use crate::ui::file_browser::FileBrowser;
 use crate::ui::instrument_editor::InstrumentEditorState;
+use crate::ui::lfo_editor::LfoEditorState;
 use crate::ui::modal::Modal;
 use crate::ui::sample_browser::SampleBrowser;
 use crate::ui::theme::{Theme, ThemeKind};
@@ -208,6 +209,9 @@ pub struct App {
     /// Envelope editor state for visual envelope editing
     pub env_editor: EnvelopeEditorState,
 
+    /// LFO editor state for LFO configuration
+    pub lfo_editor: LfoEditorState,
+
     /// Waveform editor state for manual sample editing
     pub waveform_editor: WaveformEditorState,
 
@@ -237,6 +241,9 @@ pub struct App {
 
     /// Horizontal channel scroll offset (reset to 0 with Home/Ctrl+L)
     pub channel_scroll: usize,
+
+    pub command_history: Vec<String>,
+    pub command_history_index: Option<usize>,
 }
 
 impl App {
@@ -358,6 +365,7 @@ impl App {
             draw_note: None,
             inst_editor: InstrumentEditorState::default(),
             env_editor: EnvelopeEditorState::default(),
+            lfo_editor: LfoEditorState::default(),
             waveform_editor: WaveformEditorState::default(),
             browser_preview_active: false,
             browser_preview_sample: None,
@@ -369,6 +377,8 @@ impl App {
             cached_mem_percent: 0.0,
             sys_info_last_update: Instant::now(),
             channel_scroll: 0,
+            command_history: Vec::new(),
+            command_history_index: None,
         }
     }
 
@@ -552,6 +562,31 @@ impl App {
         }
     }
 
+    /// Return oscilloscope waveform data for each channel.
+    ///
+    /// Locks the mixer briefly and reads the ring buffer waveform data.
+    /// Returns empty vectors for missing channels.
+    pub fn oscilloscope_data(&self, num_channels: usize) -> Vec<Vec<f32>> {
+        if let Ok(mixer) = self.mixer.lock() {
+            (0..num_channels)
+                .map(|ch| mixer.oscilloscope_data(ch))
+                .collect()
+        } else {
+            vec![Vec::new(); num_channels]
+        }
+    }
+
+    /// Return FFT spectrum data from the master bus.
+    ///
+    /// Locks the mixer briefly and reads the FFT ring buffer.
+    pub fn fft_data(&self) -> Vec<f32> {
+        if let Ok(mixer) = self.mixer.lock() {
+            mixer.fft_data()
+        } else {
+            Vec::new()
+        }
+    }
+
     /// Apply transport commands produced by effect processing (Fxx, Bxx, Dxx).
     ///
     /// These commands are returned by `mixer.tick()` when pattern effects fire:
@@ -690,6 +725,10 @@ impl App {
     /// Execute the current command-line input and exit command mode.
     pub fn execute_command(&mut self) {
         let cmd = self.command_input.trim().to_string();
+        if !cmd.is_empty() {
+            self.command_history.push(cmd.clone());
+            self.command_history_index = None;
+        }
         self.command_mode = false;
         self.command_input.clear();
 
@@ -753,6 +792,53 @@ impl App {
         if parts[0] == "e" && parts.len() == 2 {
             let path = PathBuf::from(parts[1].trim());
             self.load_project(&path);
+            return;
+        }
+
+        // :load filename — open/load a project file (alias for :e)
+        if parts[0] == "load" && parts.len() == 2 {
+            let path = PathBuf::from(parts[1].trim());
+            self.load_project(&path);
+            return;
+        }
+
+        // :save filename — save project (alias for :w)
+        if parts[0] == "save" && parts.len() == 2 {
+            let path = PathBuf::from(parts[1].trim());
+            let current_pos = self.transport.arrangement_position();
+            self.flush_editor_pattern(current_pos);
+            match project::save_project(&path, &self.song) {
+                Ok(()) => {
+                    self.project_path = Some(path.clone());
+                    self.is_dirty = false;
+                    self.open_modal(Modal::info(
+                        "Project Saved".to_string(),
+                        format!("Saved to: {}", path.display()),
+                    ));
+                }
+                Err(e) => {
+                    self.open_modal(Modal::error("Save Failed".to_string(), format!("{}", e)));
+                }
+            }
+            return;
+        }
+
+        // :volume N — set global volume (0-100)
+        if parts[0] == "volume" {
+            if let Some(val) = parts.get(1).and_then(|s| s.trim().parse::<f64>().ok()) {
+                let clamped = (val / 100.0).clamp(0.0, 1.0) as f32;
+                self.song.global_volume = clamped;
+                if let Ok(mut mixer) = self.mixer.lock() {
+                    mixer.set_global_volume(clamped);
+                }
+                self.mark_dirty();
+            } else {
+                let current_vol = (self.song.global_volume * 100.0).round() as i32;
+                self.open_modal(Modal::info(
+                    "Volume".to_string(),
+                    format!("Current: {}%. Usage: :volume <0-100>", current_vol),
+                ));
+            }
             return;
         }
 

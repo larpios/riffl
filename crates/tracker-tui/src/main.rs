@@ -181,14 +181,50 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             KeyCode::Esc => {
                 app.command_mode = false;
                 app.command_input.clear();
+                app.command_history_index = None;
             }
             KeyCode::Backspace => {
                 app.command_input.pop();
+            }
+            KeyCode::Up => {
+                if let Some(idx) = app.command_history_index {
+                    if idx + 1 < app.command_history.len() {
+                        app.command_history_index = Some(idx + 1);
+                        app.command_input =
+                            app.command_history[app.command_history.len() - 1 - (idx + 1)].clone();
+                    }
+                } else if !app.command_history.is_empty() {
+                    app.command_history_index = Some(0);
+                    app.command_input = app.command_history.last().unwrap().clone();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(idx) = app.command_history_index {
+                    if idx == 0 {
+                        app.command_history_index = None;
+                        app.command_input.clear();
+                    } else {
+                        app.command_history_index = Some(idx - 1);
+                        app.command_input =
+                            app.command_history[app.command_history.len() - 1 - (idx - 1)].clone();
+                    }
+                }
+            }
+            KeyCode::Tab => {
+                let input = app.command_input.trim();
+                let candidates = [
+                    "bpm", "t", "tempo", "step", "load", "save", "volume", "quit", "q", "q!", "w",
+                    "wq", "e", "tutor",
+                ];
+                if let Some(match_idx) = candidates.iter().position(|c| c.starts_with(input)) {
+                    app.command_input = candidates[match_idx].to_string();
+                }
             }
             KeyCode::Char(c)
                 if key.modifiers == KeyModifiers::NONE || key.modifiers == KeyModifiers::SHIFT =>
             {
                 app.command_input.push(c);
+                app.command_history_index = None;
             }
             _ => {}
         }
