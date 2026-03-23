@@ -1,5 +1,4 @@
 use std::fs;
-use tracker_core::audio::sample::LoopMode;
 use tracker_core::format::it::import_it;
 
 fn main() {

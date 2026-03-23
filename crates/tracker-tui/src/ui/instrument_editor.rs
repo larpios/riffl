@@ -77,6 +77,30 @@ impl InstrumentField {
             Self::LoopEnd => "Loop End",
         }
     }
+
+    /// Returns true if this field can be adjusted via mouse drag.
+    pub fn is_draggable(self) -> bool {
+        matches!(
+            self,
+            Self::BaseNote | Self::Volume | Self::Finetune | Self::LoopStart | Self::LoopEnd
+        )
+    }
+}
+
+/// Get the InstrumentField at the given row offset within the instrument editor.
+/// Returns None if the row doesn't correspond to any field or the field isn't draggable.
+/// The row offset is relative to the inner area (after border).
+pub fn field_at_row(row_offset: u16) -> Option<InstrumentField> {
+    match row_offset {
+        1 => Some(InstrumentField::Name),
+        3 => Some(InstrumentField::BaseNote),
+        5 => Some(InstrumentField::Volume),
+        7 => Some(InstrumentField::Finetune),
+        9 => Some(InstrumentField::LoopMode),
+        11 => Some(InstrumentField::LoopStart),
+        13 => Some(InstrumentField::LoopEnd),
+        _ => None,
+    }
 }
 
 /// State for the instrument editor panel.
@@ -90,6 +114,10 @@ pub struct InstrumentEditorState {
     pub text_editing: bool,
     /// Text buffer used when editing the Name field.
     pub input_buffer: String,
+    /// Currently dragging field (for mouse drag interaction).
+    pub dragging_field: Option<InstrumentField>,
+    /// Last mouse position seen during a drag.
+    pub drag_last_position: Option<(u16, u16)>,
 }
 
 impl Default for InstrumentEditorState {
@@ -99,6 +127,8 @@ impl Default for InstrumentEditorState {
             field: InstrumentField::Name,
             text_editing: false,
             input_buffer: String::new(),
+            dragging_field: None,
+            drag_last_position: None,
         }
     }
 }
@@ -151,6 +181,33 @@ impl InstrumentEditorState {
     pub fn cancel_text_edit(&mut self) {
         self.text_editing = false;
         self.input_buffer.clear();
+    }
+
+    /// Start dragging a field (on mouse down).
+    pub fn start_drag(&mut self, field: InstrumentField, column: u16, row: u16) {
+        self.dragging_field = Some(field);
+        self.drag_last_position = Some((column, row));
+    }
+
+    /// End dragging (on mouse up).
+    pub fn end_drag(&mut self) {
+        self.dragging_field = None;
+        self.drag_last_position = None;
+    }
+
+    /// Get the currently dragging field, if any.
+    pub fn dragging(&self) -> Option<InstrumentField> {
+        self.dragging_field
+    }
+
+    /// Update the drag position and return the delta from the previous event.
+    pub fn update_drag_position(&mut self, column: u16, row: u16) -> Option<(i16, i16)> {
+        let (prev_col, prev_row) = self.drag_last_position?;
+        self.drag_last_position = Some((column, row));
+        Some((
+            column as i16 - prev_col as i16,
+            row as i16 - prev_row as i16,
+        ))
     }
 }
 
@@ -647,6 +704,19 @@ mod tests {
         let result = s.finish_text_edit();
         assert_eq!(result, Some("hello".to_string()));
         assert!(!s.text_editing);
+    }
+
+    #[test]
+    fn test_drag_tracking() {
+        let mut s = InstrumentEditorState::default();
+        s.start_drag(InstrumentField::Volume, 10, 5);
+
+        assert_eq!(s.dragging(), Some(InstrumentField::Volume));
+        assert_eq!(s.update_drag_position(13, 7), Some((3, 2)));
+
+        s.end_drag();
+        assert_eq!(s.dragging(), None);
+        assert_eq!(s.update_drag_position(14, 8), None);
     }
 
     #[test]

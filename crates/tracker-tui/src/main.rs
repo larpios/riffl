@@ -1757,6 +1757,247 @@ fn hex_char_to_digit(c: char) -> Option<u8> {
     }
 }
 
+fn point_in_rect(rect: ratatui::layout::Rect, column: u16, row: u16) -> bool {
+    column >= rect.x && column < rect.x + rect.width && row >= rect.y && row < rect.y + rect.height
+}
+
+fn instrument_view_chunks(content_area: ratatui::layout::Rect) -> [ratatui::layout::Rect; 4] {
+    let chunks = ratatui::layout::Layout::default()
+        .direction(ratatui::layout::Direction::Vertical)
+        .constraints([
+            ratatui::layout::Constraint::Percentage(30),
+            ratatui::layout::Constraint::Percentage(25),
+            ratatui::layout::Constraint::Percentage(25),
+            ratatui::layout::Constraint::Percentage(20),
+        ])
+        .split(content_area);
+
+    [chunks[0], chunks[1], chunks[2], chunks[3]]
+}
+
+fn apply_instrument_field_drag(
+    app: &mut App,
+    field: crate::ui::instrument_editor::InstrumentField,
+    delta: i16,
+) {
+    if delta == 0 {
+        return;
+    }
+
+    match field {
+        crate::ui::instrument_editor::InstrumentField::BaseNote => {
+            app.adjust_instrument_base_note(delta as i32);
+        }
+        crate::ui::instrument_editor::InstrumentField::Volume => {
+            app.adjust_instrument_volume(delta as i32 * 5);
+        }
+        crate::ui::instrument_editor::InstrumentField::Finetune => {
+            app.adjust_instrument_finetune(delta as i32);
+        }
+        crate::ui::instrument_editor::InstrumentField::LoopStart => {
+            app.adjust_instrument_loop_start(delta as i32 * 128);
+        }
+        crate::ui::instrument_editor::InstrumentField::LoopEnd => {
+            app.adjust_instrument_loop_end(delta as i32 * 128);
+        }
+        crate::ui::instrument_editor::InstrumentField::Name
+        | crate::ui::instrument_editor::InstrumentField::LoopMode => {}
+    }
+}
+
+fn handle_instrument_editor_mouse(app: &mut App, mouse: MouseEvent, area: ratatui::layout::Rect) {
+    use crate::ui::instrument_editor::{field_at_row, InstrumentField};
+
+    let inner = ratatui::widgets::Block::default()
+        .borders(ratatui::widgets::Borders::ALL)
+        .inner(area);
+
+    match mouse.kind {
+        MouseEventKind::Down(MouseButton::Left) => {
+            if !point_in_rect(area, mouse.column, mouse.row) {
+                return;
+            }
+
+            app.inst_editor.focus();
+            if mouse.row < inner.y || mouse.row >= inner.y + inner.height {
+                return;
+            }
+
+            let row_offset = mouse.row.saturating_sub(inner.y);
+            let Some(field) = field_at_row(row_offset) else {
+                return;
+            };
+            app.inst_editor.field = field;
+
+            match field {
+                InstrumentField::LoopMode => app.cycle_instrument_loop_mode(),
+                InstrumentField::Name => {}
+                _ if field.is_draggable() => {
+                    app.inst_editor.start_drag(field, mouse.column, mouse.row);
+                }
+                _ => {}
+            }
+        }
+        MouseEventKind::Drag(MouseButton::Left) => {
+            let Some(field) = app.inst_editor.dragging() else {
+                return;
+            };
+            let Some((dx, dy)) = app
+                .inst_editor
+                .update_drag_position(mouse.column, mouse.row)
+            else {
+                return;
+            };
+            apply_instrument_field_drag(app, field, dx - dy);
+        }
+        MouseEventKind::Up(MouseButton::Left) => {
+            app.inst_editor.end_drag();
+        }
+        _ => {}
+    }
+}
+
+fn handle_envelope_mouse(app: &mut App, mouse: MouseEvent, area: ratatui::layout::Rect) {
+    let inner = ratatui::widgets::Block::default()
+        .borders(ratatui::widgets::Borders::ALL)
+        .inner(area);
+    if inner.width == 0 || inner.height < 4 {
+        return;
+    }
+
+    let graph_height = inner.height.saturating_sub(3);
+    if graph_height == 0 {
+        return;
+    }
+
+    match mouse.kind {
+        MouseEventKind::Down(MouseButton::Left) => {
+            if !point_in_rect(area, mouse.column, mouse.row) {
+                return;
+            }
+
+            app.env_editor.focus();
+            if mouse.column < inner.x
+                || mouse.column >= inner.x + inner.width
+                || mouse.row < inner.y
+                || mouse.row >= inner.y + graph_height
+            {
+                return;
+            }
+
+            let Some(idx) = app.instrument_selection() else {
+                return;
+            };
+            let env_type = app.env_editor.envelope_type;
+            let envelope = app.env_editor.get_envelope(&app.song.instruments[idx]);
+            let local_x = mouse.column.saturating_sub(inner.x);
+            let local_y = mouse.row.saturating_sub(inner.y);
+
+            let selected = crate::ui::envelope_editor::point_at_position(
+                envelope,
+                env_type,
+                inner.width as usize,
+                graph_height as usize,
+                local_x,
+                local_y,
+            );
+            app.env_editor.select_point(selected);
+            if selected.is_some() {
+                app.env_editor.start_drag(0.0);
+            }
+        }
+        MouseEventKind::Drag(MouseButton::Left) => {
+            if !app.env_editor.is_dragging() {
+                return;
+            }
+            let Some(idx) = app.instrument_selection() else {
+                return;
+            };
+            if mouse.column < inner.x || mouse.row < inner.y {
+                return;
+            }
+
+            let local_x = mouse.column.saturating_sub(inner.x);
+            let local_y = mouse.row.saturating_sub(inner.y);
+            let env_type = app.env_editor.envelope_type;
+            if let Some(selected_point) = app.env_editor.selected_point {
+                let envelope = app
+                    .env_editor
+                    .get_envelope_mut(&mut app.song.instruments[idx]);
+                crate::ui::envelope_editor::update_point_from_position(
+                    envelope,
+                    env_type,
+                    selected_point,
+                    inner.width as usize,
+                    graph_height as usize,
+                    local_x,
+                    local_y.min(graph_height.saturating_sub(1)),
+                );
+                app.mark_dirty();
+            }
+        }
+        MouseEventKind::Up(MouseButton::Left) => {
+            app.env_editor.end_drag();
+        }
+        _ => {}
+    }
+}
+
+fn handle_instrument_view_mouse(
+    app: &mut App,
+    mouse: MouseEvent,
+    content_area: ratatui::layout::Rect,
+) {
+    let [list_area, editor_area, envelope_area, waveform_area] =
+        instrument_view_chunks(content_area);
+
+    if matches!(mouse.kind, MouseEventKind::Up(MouseButton::Left)) {
+        app.inst_editor.end_drag();
+        app.env_editor.end_drag();
+        app.waveform_editor.end_loop_marker_drag();
+    }
+
+    if matches!(mouse.kind, MouseEventKind::ScrollDown) {
+        app.instrument_selection_down();
+        return;
+    }
+    if matches!(mouse.kind, MouseEventKind::ScrollUp) {
+        app.instrument_selection_up();
+        return;
+    }
+
+    if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
+        && point_in_rect(list_area, mouse.column, mouse.row)
+    {
+        let inner = ratatui::widgets::Block::default()
+            .borders(ratatui::widgets::Borders::ALL)
+            .inner(list_area);
+        let row = mouse.row.saturating_sub(inner.y);
+        let instrument_idx = row.saturating_sub(1) as usize;
+        if row >= 1 && instrument_idx < app.song.instruments.len() {
+            app.set_instrument_selection(Some(instrument_idx));
+        }
+    }
+
+    if app.instrument_selection().is_none() {
+        return;
+    }
+
+    let inst_dragging = app.inst_editor.dragging().is_some();
+    let env_dragging = app.env_editor.is_dragging();
+    let wf_dragging = app.waveform_editor.is_loop_marker_dragging();
+
+    if point_in_rect(editor_area, mouse.column, mouse.row) || inst_dragging {
+        handle_instrument_editor_mouse(app, mouse, editor_area);
+    }
+    if point_in_rect(envelope_area, mouse.column, mouse.row) || env_dragging {
+        handle_envelope_mouse(app, mouse, envelope_area);
+    }
+    if point_in_rect(waveform_area, mouse.column, mouse.row) || wf_dragging {
+        handle_waveform_mouse(app, mouse, waveform_area);
+    }
+}
+
 /// Handle mouse events for pattern editor navigation and selection.
 fn handle_mouse_event(app: &mut App, mouse: MouseEvent) {
     use crate::ui::layout;
@@ -1786,6 +2027,14 @@ fn handle_mouse_event(app: &mut App, mouse: MouseEvent) {
         return;
     }
 
+    let full_area = ratatui::layout::Rect::new(0, 0, 80, 24);
+    let (_header_area, content_area, _footer_area) = layout::create_main_layout(full_area, 3, 1);
+
+    if app.current_view == AppView::InstrumentList {
+        handle_instrument_view_mouse(app, mouse, content_area);
+        return;
+    }
+
     match mouse.kind {
         MouseEventKind::ScrollDown => {
             if app.current_view == AppView::PatternEditor {
@@ -1810,10 +2059,6 @@ fn handle_mouse_event(app: &mut App, mouse: MouseEvent) {
             if btn != MouseButton::Left && btn != MouseButton::Right {
                 return;
             }
-
-            let full_area = ratatui::layout::Rect::new(0, 0, 80, 24);
-            let (_header_area, content_area, _footer_area) =
-                layout::create_main_layout(full_area, 3, 1);
 
             // Check if click is in header area - reset horizontal view
             if mouse.row < content_area.y && app.channel_scroll > 0 {
@@ -1930,30 +2175,9 @@ fn handle_mouse_event(app: &mut App, mouse: MouseEvent) {
         }
         _ => {}
     }
-
-    // Handle mouse clicks on waveform editor for loop markers
-    if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
-        handle_waveform_mouse(app, mouse);
-    }
 }
 
-fn handle_waveform_mouse(app: &mut App, mouse: MouseEvent) {
-    use ratatui::layout::Constraint;
-
-    let full_area = ratatui::layout::Rect::new(0, 0, 80, 24);
-    let (_header_area, content_area, _footer_area) =
-        crate::ui::layout::create_main_layout(full_area, 3, 1);
-
-    // Calculate waveform area (20% at bottom of content)
-    let waveform_height_pct = 20u16;
-    let waveform_height = (content_area.height * waveform_height_pct / 100).max(4);
-    let waveform_area = ratatui::layout::Rect::new(
-        content_area.x,
-        content_area.y + content_area.height - waveform_height,
-        content_area.width,
-        waveform_height,
-    );
-
+fn handle_waveform_mouse(app: &mut App, mouse: MouseEvent, waveform_area: ratatui::layout::Rect) {
     // Check if click is within waveform area
     if mouse.column < waveform_area.x
         || mouse.column >= waveform_area.x + waveform_area.width

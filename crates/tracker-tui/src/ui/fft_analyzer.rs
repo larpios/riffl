@@ -157,7 +157,7 @@ mod tests {
 
     #[test]
     fn test_fft_dc() {
-        let mut samples = vec![1.0f32; 1024];
+        let samples = vec![1.0f32; 1024];
         // DC signal should show energy in bin 0
         let spectrum = compute_spectrum(&samples);
         assert!(spectrum[0] > spectrum[10]);

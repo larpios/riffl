@@ -252,6 +252,40 @@ impl EnvelopeEditorState {
             }
         }
     }
+
+    /// Start dragging from the current selected point position.
+    pub fn start_drag(&mut self, _initial_delta: f32) {
+        if self.selected_point.is_some() {
+            self.drag_value_delta = Some(0.0);
+        }
+    }
+
+    /// Update the drag delta (call during drag).
+    pub fn update_drag(&mut self, delta: f32) {
+        if let Some(current) = self.drag_value_delta.take() {
+            self.drag_value_delta = Some(current + delta);
+        }
+    }
+
+    /// Apply the current drag delta to the envelope point and reset.
+    pub fn apply_drag(&mut self, envelope: &mut Envelope) {
+        if let (Some(idx), Some(delta)) = (self.selected_point, self.drag_value_delta.take()) {
+            if let Some(point) = envelope.points.get_mut(idx) {
+                let (min_val, max_val) = self.envelope_type.value_range();
+                point.value = (point.value + delta).clamp(min_val, max_val);
+            }
+        }
+    }
+
+    /// End dragging without applying.
+    pub fn end_drag(&mut self) {
+        self.drag_value_delta = None;
+    }
+
+    /// Check if currently dragging.
+    pub fn is_dragging(&self) -> bool {
+        self.drag_value_delta.is_some()
+    }
 }
 
 static EMPTY_ENVELOPE: Envelope = Envelope {
@@ -267,6 +301,36 @@ static EMPTY_ENVELOPE: Envelope = Envelope {
 
 const MIN_ENVELOPE_FRAMES: u16 = 0;
 const MAX_ENVELOPE_FRAMES: u16 = 256;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct EnvelopeGraphMetrics {
+    label_width: usize,
+    grid_width: usize,
+    grid_height: usize,
+}
+
+fn value_label_width(env_type: EnvelopeType) -> usize {
+    match env_type {
+        EnvelopeType::Volume | EnvelopeType::Panning => 7,
+        EnvelopeType::Pitch => 6,
+    }
+}
+
+fn graph_metrics(
+    env_type: EnvelopeType,
+    width: usize,
+    height: usize,
+) -> Option<EnvelopeGraphMetrics> {
+    if width < 4 || height < 2 {
+        return None;
+    }
+
+    Some(EnvelopeGraphMetrics {
+        label_width: value_label_width(env_type),
+        grid_width: width - 2,
+        grid_height: height.saturating_sub(1),
+    })
+}
 
 fn format_value(value: f32, env_type: EnvelopeType) -> String {
     match env_type {
@@ -302,12 +366,12 @@ fn draw_envelope_graphic(
 ) -> Vec<Line<'static>> {
     let mut lines = Vec::with_capacity(height);
 
-    if width < 4 || height < 2 {
+    let Some(metrics) = graph_metrics(env_type, width, height) else {
         return vec![Line::from(vec![Span::raw("")])];
-    }
+    };
 
-    let grid_width = width - 2;
-    let grid_height = height.saturating_sub(1);
+    let grid_width = metrics.grid_width;
+    let grid_height = metrics.grid_height;
 
     let (min_val, max_val) = env_type.value_range();
     let val_range = max_val - min_val;
@@ -409,6 +473,126 @@ fn draw_envelope_graphic(
     }
 
     lines
+}
+
+pub fn point_at_position(
+    envelope: &Envelope,
+    env_type: EnvelopeType,
+    width: usize,
+    height: usize,
+    local_x: u16,
+    local_y: u16,
+) -> Option<usize> {
+    let metrics = graph_metrics(env_type, width, height)?;
+    if envelope.points.is_empty()
+        || (local_x as usize) < metrics.label_width
+        || (local_y as usize) >= metrics.grid_height
+    {
+        return None;
+    }
+
+    let graph_x = (local_x as usize).saturating_sub(metrics.label_width);
+    if graph_x >= metrics.grid_width {
+        return None;
+    }
+
+    let (min_val, max_val) = env_type.value_range();
+    let val_range = max_val - min_val;
+    let max_frame = envelope
+        .points
+        .iter()
+        .map(|p| p.frame)
+        .max()
+        .unwrap_or(1)
+        .max(1);
+
+    envelope
+        .points
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, point)| {
+            let px =
+                ((point.frame as f32 / max_frame as f32) * (metrics.grid_width - 1) as f32) as i32;
+            let py =
+                ((point.value - min_val) / val_range * (metrics.grid_height - 1) as f32) as usize;
+            let py = metrics.grid_height.saturating_sub(1).min(py) as i32;
+            let py = metrics.grid_height as i32 - 1 - py;
+
+            let dx = px - graph_x as i32;
+            let dy = py - local_y as i32;
+            let dist_sq = dx * dx + dy * dy;
+
+            if dist_sq <= 4 {
+                Some((idx, dist_sq))
+            } else {
+                None
+            }
+        })
+        .min_by_key(|(_, dist_sq)| *dist_sq)
+        .map(|(idx, _)| idx)
+}
+
+pub fn update_point_from_position(
+    envelope: &mut Envelope,
+    env_type: EnvelopeType,
+    selected_point: usize,
+    width: usize,
+    height: usize,
+    local_x: u16,
+    local_y: u16,
+) {
+    let Some(metrics) = graph_metrics(env_type, width, height) else {
+        return;
+    };
+    if selected_point >= envelope.points.len()
+        || (local_x as usize) < metrics.label_width
+        || (local_y as usize) >= metrics.grid_height
+    {
+        return;
+    }
+
+    let graph_x = (local_x as usize)
+        .saturating_sub(metrics.label_width)
+        .min(metrics.grid_width.saturating_sub(1));
+    let graph_y = (local_y as usize).min(metrics.grid_height.saturating_sub(1));
+
+    let max_frame = envelope
+        .points
+        .iter()
+        .map(|p| p.frame)
+        .max()
+        .unwrap_or(1)
+        .clamp(1, MAX_ENVELOPE_FRAMES);
+    let (min_val, max_val) = env_type.value_range();
+    let normalized_x = if metrics.grid_width <= 1 {
+        0.0
+    } else {
+        graph_x as f32 / (metrics.grid_width - 1) as f32
+    };
+    let normalized_y = if metrics.grid_height <= 1 {
+        0.0
+    } else {
+        1.0 - graph_y as f32 / (metrics.grid_height - 1) as f32
+    };
+
+    let min_frame = if selected_point == 0 {
+        MIN_ENVELOPE_FRAMES
+    } else {
+        envelope.points[selected_point - 1].frame.saturating_add(1)
+    };
+    let max_frame_for_point = if selected_point + 1 >= envelope.points.len() {
+        max_frame
+    } else {
+        envelope.points[selected_point + 1].frame.saturating_sub(1)
+    };
+
+    let frame = (normalized_x * max_frame as f32).round() as u16;
+    let value = min_val + normalized_y * (max_val - min_val);
+
+    if let Some(point) = envelope.points.get_mut(selected_point) {
+        point.frame = frame.clamp(min_frame, max_frame_for_point.max(min_frame));
+        point.value = value.clamp(min_val, max_val);
+    }
 }
 
 pub fn render_envelope_editor(
@@ -652,6 +836,24 @@ mod tests {
         let graphic = draw_envelope_graphic(&envelope, EnvelopeType::Volume, 40, 10, &theme, None);
 
         assert!(!graphic.is_empty());
+    }
+
+    #[test]
+    fn test_point_at_position_selects_nearby_point() {
+        let envelope = make_envelope();
+        let idx = point_at_position(&envelope, EnvelopeType::Volume, 40, 10, 7, 8);
+        assert_eq!(idx, Some(0));
+    }
+
+    #[test]
+    fn test_update_point_from_position_updates_frame_and_value() {
+        let mut envelope = make_envelope();
+        update_point_from_position(&mut envelope, EnvelopeType::Volume, 1, 40, 10, 20, 2);
+
+        let point = &envelope.points[1];
+        assert!(point.frame >= envelope.points[0].frame);
+        assert!(point.frame <= envelope.points[2].frame);
+        assert!(point.value > 0.5);
     }
 
     #[test]

@@ -5,6 +5,7 @@
 /// metadata, and instrument definitions.
 use serde::{Deserialize, Serialize};
 
+use crate::pattern::effect::EffectMode;
 use crate::pattern::{Note, Pattern, Pitch, Track};
 
 /// A point in an envelope.
@@ -388,6 +389,8 @@ pub struct Song {
     pub lpb: u32,
     /// Ticks per row (line), defines sub-row resolution.
     pub tpl: u32,
+    /// Effect interpretation mode.
+    pub effect_mode: EffectMode,
     /// Pattern pool (up to 256 patterns).
     pub patterns: Vec<Pattern>,
     /// Arrangement: ordered list of pattern indices forming the song sequence.
@@ -416,6 +419,7 @@ impl Song {
             bpm,
             lpb: 4,
             tpl: 6,
+            effect_mode: EffectMode::RifflNative,
             patterns: vec![default_pattern],
             arrangement: vec![0],
             tracks,

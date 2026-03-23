@@ -1883,22 +1883,18 @@ impl App {
     pub fn adjust_instrument_loop_start(&mut self, delta: i32) {
         if let Some(idx) = self.instrument_selection {
             if let Some(sample_idx) = self.song.instruments[idx].sample_index {
-                let (loop_mode, loop_end, frame_count) = {
+                let (loop_mode, loop_start, loop_end) = {
                     let mixer = match self.mixer.lock() {
                         Ok(m) => m,
                         Err(_) => return,
                     };
                     if let Some(sample) = mixer.samples().get(sample_idx) {
-                        (
-                            sample.loop_mode,
-                            sample.loop_end,
-                            sample.frame_count() as i32,
-                        )
+                        (sample.loop_mode, sample.loop_start, sample.loop_end)
                     } else {
                         return;
                     }
                 };
-                let new_val = (loop_end as i32 + delta).clamp(0, frame_count.saturating_sub(1));
+                let new_val = (loop_start as i32 + delta).clamp(0, loop_end as i32);
                 if let Ok(mut m) = self.mixer.lock() {
                     m.set_sample_loop(sample_idx, loop_mode, new_val as usize, loop_end);
                 }
@@ -1911,7 +1907,7 @@ impl App {
     pub fn adjust_instrument_loop_end(&mut self, delta: i32) {
         if let Some(idx) = self.instrument_selection {
             if let Some(sample_idx) = self.song.instruments[idx].sample_index {
-                let (loop_mode, loop_start, frame_count) = {
+                let (loop_mode, loop_start, loop_end, frame_count) = {
                     let mixer = match self.mixer.lock() {
                         Ok(m) => m,
                         Err(_) => return,
@@ -1920,13 +1916,15 @@ impl App {
                         (
                             sample.loop_mode,
                             sample.loop_start,
+                            sample.loop_end,
                             sample.frame_count() as i32,
                         )
                     } else {
                         return;
                     }
                 };
-                let new_val = (loop_start as i32 + delta).clamp(0, frame_count.saturating_sub(1));
+                let new_val = (loop_end as i32 + delta)
+                    .clamp(loop_start as i32, frame_count.saturating_sub(1));
                 if let Ok(mut m) = self.mixer.lock() {
                     m.set_sample_loop(sample_idx, loop_mode, loop_start, new_val as usize);
                 }

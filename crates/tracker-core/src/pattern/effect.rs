@@ -7,6 +7,34 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+/// Project-level effect interpretation mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum EffectMode {
+    /// Riffl native effects: strict interpretation, standard Riffl behavior.
+    #[default]
+    RifflNative,
+    /// Compatibility mode: preserves source tracker semantics (e.g., XM, IT, ProTracker).
+    /// Used when importing foreign modules to maintain playback fidelity.
+    Compatible,
+}
+
+/// Metadata describing an effect for help and interpretation.
+#[derive(Debug, Clone)]
+pub struct EffectMetadata {
+    /// Display name of the effect.
+    pub name: &'static str,
+    /// Short description for status bar.
+    pub summary: &'static str,
+    /// Detailed description for help view.
+    pub description: &'static str,
+    /// Human-readable parameter meaning (e.g., "xy: speed/depth").
+    pub param_label: &'static str,
+    /// Whether this effect supports continuation (param 00).
+    pub supports_continuation: bool,
+    /// Whether this effect is Riffl-native or compatibility-only.
+    pub is_native: bool,
+}
+
 /// Standard tracker effect command types.
 ///
 /// Effect commands follow classic tracker conventions where the command
@@ -151,35 +179,236 @@ impl EffectType {
 
     /// Get the mnemonic name for this effect type.
     pub fn mnemonic(&self) -> &'static str {
+        self.metadata().name
+    }
+
+    /// Get metadata for this effect type.
+    pub fn metadata(&self) -> EffectMetadata {
         match self {
-            EffectType::Arpeggio => "Arpeggio",
-            EffectType::PitchSlideUp => "Pitch Up",
-            EffectType::PitchSlideDown => "Pitch Down",
-            EffectType::PortamentoToNote => "Porta Note",
-            EffectType::Vibrato => "Vibrato",
-            EffectType::TonePortamentoVolumeSlide => "Porta+Vol",
-            EffectType::VibratoVolumeSlide => "Vib+Vol",
-            EffectType::Tremolo => "Tremolo",
-            EffectType::SetPanning => "Set Pan",
-            EffectType::SampleOffset => "Offset",
-            EffectType::VolumeSlide => "Vol Slide",
-            EffectType::PositionJump => "Pos Jump",
-            EffectType::SetVolume => "Set Vol",
-            EffectType::PatternBreak => "Pat Break",
-            EffectType::Extended => "Extended",
-            EffectType::SetSpeed => "Set Speed",
-            EffectType::SetGlobalVolume => "Global Vol",
-            EffectType::GlobalVolumeSlide => "GVol Slide",
-            EffectType::PanningSlide => "Pan Slide",
-            EffectType::ChannelVolume => "Chan Vol",
-            EffectType::ChannelVolumeSlide => "CVol Slide",
-            EffectType::Tremor => "Tremor",
-            EffectType::RetrigNoteVolSlide => "Retrig Vol",
-            EffectType::SetEnvelopePosition => "Env Pos",
-            EffectType::Panbrello => "Panbrello",
-            EffectType::MidiMacro => "Midi Macro",
-            EffectType::ExtraFinePortaUp => "XFine Up",
-            EffectType::ExtraFinePortaDown => "XFine Down",
+            EffectType::Arpeggio => EffectMetadata {
+                name: "Arpeggio",
+                summary: "Arpeggio: cycle base, +x, +y semitones",
+                description: "Rapidly cycles between the base note and two offsets (x and y semitones), creating a chord-like texture characteristic of 8-bit music.",
+                param_label: "xy: offsets",
+                supports_continuation: false,
+                is_native: true,
+            },
+            EffectType::PitchSlideUp => EffectMetadata {
+                name: "Pitch Up",
+                summary: "Pitch Up: slide pitch up by xx",
+                description: "Continuously slides the pitch of the current note upwards at a speed defined by the parameter xx.",
+                param_label: "xx: speed",
+                supports_continuation: true,
+                is_native: true,
+            },
+            EffectType::PitchSlideDown => EffectMetadata {
+                name: "Pitch Down",
+                summary: "Pitch Down: slide pitch down by xx",
+                description: "Continuously slides the pitch of the current note downwards at a speed defined by the parameter xx.",
+                param_label: "xx: speed",
+                supports_continuation: true,
+                is_native: true,
+            },
+            EffectType::PortamentoToNote => EffectMetadata {
+                name: "Porta Note",
+                summary: "Porta Note: slide to target note at speed xx",
+                description: "Automatically slides the pitch from the previous note towards the newly triggered note at speed xx. If xx is 0, the previous speed is continued in Compatibility mode.",
+                param_label: "xx: speed",
+                supports_continuation: true,
+                is_native: true,
+            },
+            EffectType::Vibrato => EffectMetadata {
+                name: "Vibrato",
+                summary: "Vibrato: pitch oscillation (speed x, depth y)",
+                description: "Modulates the pitch with a periodic oscillator (LFO). x defines the speed, and y defines the depth of the oscillation.",
+                param_label: "xy: speed/depth",
+                supports_continuation: true,
+                is_native: true,
+            },
+            EffectType::TonePortamentoVolumeSlide => EffectMetadata {
+                name: "Porta+Vol",
+                summary: "Porta+Vol: Tone Porta (3xx) + Volume Slide (Axy)",
+                description: "Combines tone portamento (sliding to target note) with a volume slide. Uses the previously set portamento speed.",
+                param_label: "xy: vol up/down",
+                supports_continuation: true,
+                is_native: true,
+            },
+            EffectType::VibratoVolumeSlide => EffectMetadata {
+                name: "Vib+Vol",
+                summary: "Vib+Vol: Vibrato (4xy) + Volume Slide (Axy)",
+                description: "Combines vibrato with a volume slide. Uses the previously set vibrato speed and depth.",
+                param_label: "xy: vol up/down",
+                supports_continuation: true,
+                is_native: true,
+            },
+            EffectType::Tremolo => EffectMetadata {
+                name: "Tremolo",
+                summary: "Tremolo: volume oscillation (speed x, depth y)",
+                description: "Modulates the volume with a periodic oscillator (LFO). x defines the speed, and y defines the depth of the oscillation.",
+                param_label: "xy: speed/depth",
+                supports_continuation: true,
+                is_native: true,
+            },
+            EffectType::SetPanning => EffectMetadata {
+                name: "Set Pan",
+                summary: "Set Pan: set panning position to xx",
+                description: "Sets the stereo panning position. 00 is full left, 80 is center, and FF is full right.",
+                param_label: "xx: position",
+                supports_continuation: false,
+                is_native: true,
+            },
+            EffectType::SampleOffset => EffectMetadata {
+                name: "Offset",
+                summary: "Offset: start sample at xx * 256 frames",
+                description: "Starts sample playback from a specific offset rather than the beginning. The offset is xx multiplied by 256 sample frames.",
+                param_label: "xx: offset",
+                supports_continuation: true,
+                is_native: true,
+            },
+            EffectType::VolumeSlide => EffectMetadata {
+                name: "Vol Slide",
+                summary: "Vol Slide: slide volume up (x) or down (y)",
+                description: "Continuously changes the volume of the channel. If x is non-zero, volume increases; if y is non-zero, volume decreases.",
+                param_label: "xy: up/down",
+                supports_continuation: true,
+                is_native: true,
+            },
+            EffectType::PositionJump => EffectMetadata {
+                name: "Pos Jump",
+                summary: "Pos Jump: jump to arrangement position xx",
+                description: "Immediately jumps to the specified position in the song arrangement sequence after the current row finishes.",
+                param_label: "xx: position",
+                supports_continuation: false,
+                is_native: true,
+            },
+            EffectType::SetVolume => EffectMetadata {
+                name: "Set Vol",
+                summary: "Set Vol: set volume to xx",
+                description: "Sets the channel volume to the specified value xx (00-40, where 40 is 100%). Values above 40 provide amplification.",
+                param_label: "xx: volume",
+                supports_continuation: false,
+                is_native: true,
+            },
+            EffectType::PatternBreak => EffectMetadata {
+                name: "Pat Break",
+                summary: "Pat Break: jump to next pattern at row xx",
+                description: "Stop playing the current pattern and jump to the specified row xx of the next pattern in the arrangement.",
+                param_label: "xx: row",
+                supports_continuation: false,
+                is_native: true,
+            },
+            EffectType::Extended => EffectMetadata {
+                name: "Extended",
+                summary: "Extended: sub-command x, parameter y",
+                description: "A collection of specialized commands (E1x-EFx) for fine-grained control over portamento, loops, retriggering, etc.",
+                param_label: "xy: cmd/param",
+                supports_continuation: false,
+                is_native: true,
+            },
+            EffectType::SetSpeed => EffectMetadata {
+                name: "Set Speed",
+                summary: "Set Speed: set TPL (01-1F) or BPM (20-FF)",
+                description: "Sets either the ticks per line (TPL) if xx < 32, or the tempo (BPM) if xx >= 32.",
+                param_label: "xx: speed/bpm",
+                supports_continuation: false,
+                is_native: true,
+            },
+            EffectType::SetGlobalVolume => EffectMetadata {
+                name: "Global Vol",
+                summary: "Global Vol: set global volume to xx",
+                description: "Sets the overall master volume of the entire song (00-80).",
+                param_label: "xx: volume",
+                supports_continuation: false,
+                is_native: true,
+            },
+            EffectType::GlobalVolumeSlide => EffectMetadata {
+                name: "GVol Slide",
+                summary: "GVol Slide: slide global volume up (x) or down (y)",
+                description: "Continuously changes the master volume of the song.",
+                param_label: "xy: up/down",
+                supports_continuation: true,
+                is_native: true,
+            },
+            EffectType::PanningSlide => EffectMetadata {
+                name: "Pan Slide",
+                summary: "Pan Slide: slide panning left (x) or right (y)",
+                description: "Continuously slides the stereo panning position of the channel.",
+                param_label: "xy: left/right",
+                supports_continuation: true,
+                is_native: true,
+            },
+            EffectType::ChannelVolume => EffectMetadata {
+                name: "Chan Vol",
+                summary: "Chan Vol: set channel volume (IT-style)",
+                description: "Sets the base channel volume (00-40) as used in Impulse Tracker format.",
+                param_label: "xx: volume",
+                supports_continuation: false,
+                is_native: true,
+            },
+            EffectType::ChannelVolumeSlide => EffectMetadata {
+                name: "CVol Slide",
+                summary: "CVol Slide: slide channel volume (IT-style)",
+                description: "Continuously slides the base channel volume (00-40).",
+                param_label: "xy: up/down",
+                supports_continuation: true,
+                is_native: true,
+            },
+            EffectType::Tremor => EffectMetadata {
+                name: "Tremor",
+                summary: "Tremor: periodic volume muting (on x, off y)",
+                description: "Rapidly alternates the volume between its current level and silence. x and y define the number of ticks for the 'on' and 'off' phases.",
+                param_label: "xy: on/off",
+                supports_continuation: true,
+                is_native: true,
+            },
+            EffectType::RetrigNoteVolSlide => EffectMetadata {
+                name: "Retrig Vol",
+                summary: "Retrig Vol: retrigger note with volume slide",
+                description: "Retriggers the current note every y ticks, while simultaneously sliding the volume based on x.",
+                param_label: "xy: slide/ticks",
+                supports_continuation: true,
+                is_native: true,
+            },
+            EffectType::SetEnvelopePosition => EffectMetadata {
+                name: "Env Pos",
+                summary: "Env Pos: set instrument envelope position to xx",
+                description: "Forces the instrument's volume or panning envelope to jump to the specified frame position xx.",
+                param_label: "xx: position",
+                supports_continuation: false,
+                is_native: true,
+            },
+            EffectType::Panbrello => EffectMetadata {
+                name: "Panbrello",
+                summary: "Panbrello: panning oscillation (speed x, depth y)",
+                description: "Modulates the stereo panning position with a periodic oscillator (LFO). x is speed, y is depth.",
+                param_label: "xy: speed/depth",
+                supports_continuation: true,
+                is_native: true,
+            },
+            EffectType::MidiMacro => EffectMetadata {
+                name: "Midi Macro",
+                summary: "Midi Macro: trigger MIDI or Zxx macro",
+                description: "Triggers a pre-defined MIDI macro or internal script macro with parameter xx.",
+                param_label: "xx: param",
+                supports_continuation: false,
+                is_native: true,
+            },
+            EffectType::ExtraFinePortaUp => EffectMetadata {
+                name: "XFine Up",
+                summary: "XFine Up: extra-fine pitch slide up",
+                description: "Slides the pitch up by an extremely small amount (1/4 of a fine slide unit).",
+                param_label: "x: speed",
+                supports_continuation: false,
+                is_native: true,
+            },
+            EffectType::ExtraFinePortaDown => EffectMetadata {
+                name: "XFine Down",
+                summary: "XFine Down: extra-fine pitch slide down",
+                description: "Slides the pitch down by an extremely small amount (1/4 of a fine slide unit).",
+                param_label: "x: speed",
+                supports_continuation: false,
+                is_native: true,
+            },
         }
     }
 
@@ -247,6 +476,16 @@ impl Effect {
         self.effect_type()
             .map(|t| t.mnemonic())
             .unwrap_or("Unknown")
+    }
+
+    /// Check if this effect is a continuation (param 00) for its type.
+    pub fn is_continuation(&self) -> bool {
+        if self.param != 0 {
+            return false;
+        }
+        self.effect_type()
+            .map(|t| t.metadata().supports_continuation)
+            .unwrap_or(false)
     }
 }
 
