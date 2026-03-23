@@ -1,22 +1,22 @@
-# PROMPT
+# PROMPT (Optimized for Ralph)
 
-## 🔁 PRIMARY LOOP (SELF-HEALING)
+## 🔁 PRIMARY LOOP
 
 For each iteration:
 
-1. Select ONE task from `br list`
-2. Implement the smallest correct solution
-3. Run verification (build/tests/reasoning)
+1. Select ONE task from `br list`. **(If no tasks remain, signal LOOP_COMPLETE)**.
+2. Implement the smallest correct solution.
+3. Run verification via `br test`.
 
 ### If success:
 
-- Commit
-- Update docs if needed
-- Mark task done
+- Commit with a clear message.
+- Update docs if logic changed.
+- Mark task done in `br`.
 
 ### If failure:
 
-- Enter SELF-HEALING loop
+- Enter SELF-HEALING loop.
 
 ---
 
@@ -26,102 +26,31 @@ When a build/test fails:
 
 ### Step 1 — Diagnose
 
-Identify failure type:
+Identify failure: Compile, Runtime, Logic, or Missing Context.
+**CRITICAL:** Write this diagnosis and the current failed code snippet to `.ralph/scratchpad.md`.
 
-- Compile error
-- Runtime bug
-- Logic error
-- Missing context / unclear spec
+### Step 2 — Retry (Strict Strategy Rotation)
 
-Write a short diagnosis.
+Check `.ralph/scratchpad.md` for previous attempts. You MUST shift strategy based on the attempt count:
 
----
+- **1st retry:** Fix directly (logical correction).
+- **2nd retry:** Simplify (remove complexity, use primitives).
+- **3rd retry:** Isolate (create a standalone `repro.rs` or minimal test case).
 
-### Step 2 — Retry (max 3 times)
-
-Each retry MUST change strategy:
-
-1st retry → fix directly  
-2nd retry → simplify approach  
-3rd retry → isolate or reduce scope
-
-DO NOT repeat the same attempt.
-
----
+**DO NOT** repeat an approach documented in the scratchpad.
 
 ### Step 3 — Decide
 
-If resolved:
-→ continue normally
+If still failing after 3 attempts:
 
-If still failing after retries:
-→ mark task as BLOCKED in `br`
-→ explain why clearly
-→ pick next task
-
----
-
-## 🧠 FAILURE STRATEGIES
-
-Use these patterns:
-
-- **Simplify:** remove abstractions, make it dumb but correct
-- **Isolate:** reduce to minimal reproducible case
-- **Fallback:** implement partial or degraded behavior
-
-Avoid:
-
-- large rewrites
-- guessing without evidence
-- infinite retries
-
----
-
-## 🧾 FAILURE MEMORY
-
-Before retrying:
-
-- Check `.ralph/scratchpad.md`
-- Avoid repeating known failed approaches
-- Record new insights after each failure
-
----
-
-## 🎯 PRIORITIZATION
-
-1. Fix broken core functionality first
-2. Then unblock blocked tasks
-3. Then implement features
+- Mark task as **BLOCKED** in `br`.
+- Append the "Final Blocker Reason" to the task description.
+- Pick next task.
 
 ---
 
 ## 🧪 DEFINITION OF DONE
 
-- Builds successfully
-- Behavior is correct or acceptable
-- No obvious regressions
-- Docs updated if needed
-
----
-
-## 🧨 BLOCKING RULE
-
-A task is BLOCKED if:
-
-- Requires missing architecture decision
-- Requires unclear spec
-- Fails after 3 meaningful retries
-
-When blocked:
-
-- Log reason in `br`
-- Suggest next action
-
----
-
-## 🏁 LOOP TERMINATION
-
-Signal LOOP_COMPLETE only if:
-
-- No meaningful tasks remain
-- OR all remaining tasks are blocked
+- `br test` passes $100\%$.
+- No regressions in core functionality.
+- Task status updated in `br`.

@@ -13,51 +13,83 @@ event_loop:
 core:
   scratchpad: ".ralph/scratchpad.md"
   specs_dir: "openspec/"
+  # Guardrails enforce the "Failure Strategy" rules from your PROMPT.md
+  guardrails:
+    - "Never repeat a failed strategy documented in .ralph/scratchpad.md."
+    - "If a task fails 3 times, it MUST be marked as BLOCKED in 'br'."
+    - "Prioritize fixing broken core functionality over adding new features."
+    - "Do NOT ever push."
+    - "Once finished, use jujutsu to commit, so don't think about beig in a detached state."
 
-self_healing:
-  max_retries_per_task: 3
-  backoff_strategy: "simplify"
-  failure_memory: true
 
 hats:
+  scouter:
+    name: "Scouter"
+    description: "Responsible for task discovery and prioritization using Beads Rust."
+    triggers: ["loop.start", "task.done", "task.blocked"]
+    publishes: ["task.selected"]
+    instructions: |
+      1. Run `br list` to fetch the current state of all tasks.
+      2. Identify the highest priority task based on the 'Prioritization' section of PROMPT.md.
+      3. If no tasks remain or all are blocked, publish LOOP_COMPLETE.
+      4. Otherwise, publish `task.selected`.
+
   planner:
     name: "Planner"
-    description: "Selects the highest-impact task and creates a minimal execution plan."
-    triggers: ["loop.start", "task.done", "task.blocked"]
+    description: "Analyzes the selected task and creates a minimal execution plan."
+    triggers: ["task.selected"]
     publishes: ["plan.updated"]
+    instructions: "Break the task down into the smallest correct solution possible. Do not over-engineer."
 
   builder:
     name: "Builder"
-    description: "Implements the planned task with minimal, correct, and testable code."
+    description: "Implements code changes in the Beads Rust environment."
     triggers: ["plan.updated", "retry.requested"]
     publishes: ["build.done", "build.failed"]
+    instructions: |
+      - Read the current strategy from the Healer (Direct, Simplify, or Isolate).
+      - Implement the change using the most conservative approach first.
+      - Do not write code if the strategy is 'Isolate'; create a reproduction case instead.
 
   tester:
     name: "Tester"
-    description: "Verifies correctness via compilation, tests, and basic behavioral checks."
+    description: "Executes the verification suite (build/tests/reasoning)."
     triggers: ["build.done"]
     publishes: ["test.passed", "test.failed"]
+    instructions: "Run 'br test'. If it fails, capture the full stdout/stderr for the Diagnostician."
 
   diagnostician:
     name: "Diagnostician"
-    description: "Analyzes failures, classifies root causes, and proposes recovery strategies."
+    description: "Analyzes failures and updates the Failure Memory."
     triggers: ["build.failed", "test.failed"]
     publishes: ["diagnosis.ready"]
+    instructions: |
+      - Identify failure type: Compile, Runtime, Logic, or Missing Context.
+      - Write the diagnosis and the specific failed approach to .ralph/scratchpad.md.
 
   healer:
     name: "Healer"
-    description: "Decides whether to retry, change strategy, or mark the task as blocked based on diagnosis."
+    description: "Controls the self-healing loop and strategy rotation."
     triggers: ["diagnosis.ready"]
     publishes: ["retry.requested", "task.blocked"]
-
-  reviewer:
-    name: "Reviewer"
-    description: "Ensures code quality, correctness, and adherence to project rules before completion."
-    triggers: ["test.passed"]
-    publishes: ["review.approved", "review.changes_requested"]
+    instructions: |
+      - Check the retry count for the current task.
+      - Assign the next strategy: 1st (Fix Direct), 2nd (Simplify), 3rd (Isolate).
+      - If 3 attempts have failed, publish `task.blocked` and provide a clear explanation.
 
   operator:
     name: "Operator"
-    description: "Finalizes the task by committing changes and marking completion."
-    triggers: ["review.approved"]
+    description: "Finalizes the task and cleans up the environment."
+    triggers: ["test.passed"]
     publishes: ["task.done"]
+    instructions: |
+      - Commit the changes with a concise message.
+      - Update the task status in 'br'.
+      - Ensure 'Definition of Done' is met (docs updated, no regressions).
+
+  reporter:
+    name: "Reporter"
+    description: "Handles administrative updates for blocked or complex tasks."
+    triggers: ["task.blocked"]
+    publishes: ["loop.start"] # Restarts the loop to pick a new task
+    instructions: "Update the 'br' entry with the BLOCKED status and the reason found in the scratchpad."
