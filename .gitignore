@@ -13,7 +13,6 @@ Auto\ Run\ Docs/
 .dolt/
 *.db
 
-.beads
 .claude*
 .rtk
 node_modules

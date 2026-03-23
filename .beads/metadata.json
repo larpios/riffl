@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "riffl",
+  "project_id": "ea3c06fb-3b6e-467a-99fa-91406852de77"
+}
