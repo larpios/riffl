@@ -1139,7 +1139,10 @@ fn handle_instrument_editor_key(app: &mut App, key: crossterm::event::KeyEvent) 
                 InstrumentField::Volume => app.adjust_instrument_volume(5),
                 InstrumentField::BaseNote => app.adjust_instrument_base_note(1),
                 InstrumentField::Finetune => app.adjust_instrument_finetune(1),
+                InstrumentField::LoopStart => app.adjust_instrument_loop_start(100),
+                InstrumentField::LoopEnd => app.adjust_instrument_loop_end(100),
                 InstrumentField::Name => {}
+                InstrumentField::LoopMode => {}
             }
             return true;
         }
@@ -1148,7 +1151,16 @@ fn handle_instrument_editor_key(app: &mut App, key: crossterm::event::KeyEvent) 
                 InstrumentField::Volume => app.adjust_instrument_volume(-5),
                 InstrumentField::BaseNote => app.adjust_instrument_base_note(-1),
                 InstrumentField::Finetune => app.adjust_instrument_finetune(-1),
+                InstrumentField::LoopStart => app.adjust_instrument_loop_start(-100),
+                InstrumentField::LoopEnd => app.adjust_instrument_loop_end(-100),
                 InstrumentField::Name => {}
+                InstrumentField::LoopMode => {}
+            }
+            return true;
+        }
+        KeyCode::Char(' ') => {
+            if app.inst_editor.field == InstrumentField::LoopMode {
+                app.cycle_instrument_loop_mode();
             }
             return true;
         }

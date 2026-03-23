@@ -1845,6 +1845,96 @@ impl App {
         }
     }
 
+    /// Cycle the loop mode of the selected instrument's sample (Off -> Forward -> PingPong -> Off).
+    pub fn cycle_instrument_loop_mode(&mut self) {
+        if let Some(idx) = self.instrument_selection {
+            if let Some(sample_idx) = self.song.instruments[idx].sample_index {
+                let (current, frame_count) = {
+                    let mixer = match self.mixer.lock() {
+                        Ok(m) => m,
+                        Err(_) => return,
+                    };
+                    if let Some(sample) = mixer.samples().get(sample_idx) {
+                        (sample.loop_mode, sample.frame_count())
+                    } else {
+                        return;
+                    }
+                };
+                let next = match current {
+                    tracker_core::audio::sample::LoopMode::NoLoop => {
+                        tracker_core::audio::sample::LoopMode::Forward
+                    }
+                    tracker_core::audio::sample::LoopMode::Forward => {
+                        tracker_core::audio::sample::LoopMode::PingPong
+                    }
+                    tracker_core::audio::sample::LoopMode::PingPong => {
+                        tracker_core::audio::sample::LoopMode::NoLoop
+                    }
+                };
+                if let Ok(mut m) = self.mixer.lock() {
+                    m.set_sample_loop(sample_idx, next, 0, frame_count.saturating_sub(1));
+                }
+                self.mark_dirty();
+            }
+        }
+    }
+
+    /// Adjust loop start position of the selected instrument's sample.
+    pub fn adjust_instrument_loop_start(&mut self, delta: i32) {
+        if let Some(idx) = self.instrument_selection {
+            if let Some(sample_idx) = self.song.instruments[idx].sample_index {
+                let (loop_mode, loop_end, frame_count) = {
+                    let mixer = match self.mixer.lock() {
+                        Ok(m) => m,
+                        Err(_) => return,
+                    };
+                    if let Some(sample) = mixer.samples().get(sample_idx) {
+                        (
+                            sample.loop_mode,
+                            sample.loop_end,
+                            sample.frame_count() as i32,
+                        )
+                    } else {
+                        return;
+                    }
+                };
+                let new_val = (loop_end as i32 + delta).clamp(0, frame_count.saturating_sub(1));
+                if let Ok(mut m) = self.mixer.lock() {
+                    m.set_sample_loop(sample_idx, loop_mode, new_val as usize, loop_end);
+                }
+                self.mark_dirty();
+            }
+        }
+    }
+
+    /// Adjust loop end position of the selected instrument's sample.
+    pub fn adjust_instrument_loop_end(&mut self, delta: i32) {
+        if let Some(idx) = self.instrument_selection {
+            if let Some(sample_idx) = self.song.instruments[idx].sample_index {
+                let (loop_mode, loop_start, frame_count) = {
+                    let mixer = match self.mixer.lock() {
+                        Ok(m) => m,
+                        Err(_) => return,
+                    };
+                    if let Some(sample) = mixer.samples().get(sample_idx) {
+                        (
+                            sample.loop_mode,
+                            sample.loop_start,
+                            sample.frame_count() as i32,
+                        )
+                    } else {
+                        return;
+                    }
+                };
+                let new_val = (loop_start as i32 + delta).clamp(0, frame_count.saturating_sub(1));
+                if let Ok(mut m) = self.mixer.lock() {
+                    m.set_sample_loop(sample_idx, loop_mode, loop_start, new_val as usize);
+                }
+                self.mark_dirty();
+            }
+        }
+    }
+
     /// Select instrument for use in pattern editor.
     pub fn select_instrument(&mut self) {
         if let Some(idx) = self.instrument_selection {

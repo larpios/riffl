@@ -26,6 +26,9 @@ pub enum InstrumentField {
     BaseNote,
     Volume,
     Finetune,
+    LoopMode,
+    LoopStart,
+    LoopEnd,
 }
 
 impl InstrumentField {
@@ -34,6 +37,9 @@ impl InstrumentField {
         InstrumentField::BaseNote,
         InstrumentField::Volume,
         InstrumentField::Finetune,
+        InstrumentField::LoopMode,
+        InstrumentField::LoopStart,
+        InstrumentField::LoopEnd,
     ];
 
     pub fn next(self) -> Self {
@@ -41,16 +47,22 @@ impl InstrumentField {
             Self::Name => Self::BaseNote,
             Self::BaseNote => Self::Volume,
             Self::Volume => Self::Finetune,
-            Self::Finetune => Self::Name,
+            Self::Finetune => Self::LoopMode,
+            Self::LoopMode => Self::LoopStart,
+            Self::LoopStart => Self::LoopEnd,
+            Self::LoopEnd => Self::Name,
         }
     }
 
     pub fn prev(self) -> Self {
         match self {
-            Self::Name => Self::Finetune,
+            Self::Name => Self::LoopEnd,
             Self::BaseNote => Self::Name,
             Self::Volume => Self::BaseNote,
             Self::Finetune => Self::Volume,
+            Self::LoopMode => Self::Finetune,
+            Self::LoopStart => Self::LoopMode,
+            Self::LoopEnd => Self::LoopStart,
         }
     }
 
@@ -60,6 +72,9 @@ impl InstrumentField {
             Self::BaseNote => "Base Note",
             Self::Volume => "Volume",
             Self::Finetune => "Finetune",
+            Self::LoopMode => "Loop Mode",
+            Self::LoopStart => "Loop Start",
+            Self::LoopEnd => "Loop End",
         }
     }
 }
@@ -440,6 +455,76 @@ pub fn render_instrument_editor(
 
     lines.push(Line::from(""));
 
+    // ── Loop Mode ───────────────────────────────────────────────────────
+    let loop_mode_str = sample
+        .map(|s| match s.loop_mode {
+            tracker_core::audio::sample::LoopMode::NoLoop => "Off",
+            tracker_core::audio::sample::LoopMode::Forward => "Forward",
+            tracker_core::audio::sample::LoopMode::PingPong => "Ping-Pong",
+        })
+        .unwrap_or("Off");
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        Span::styled(
+            format!("{:<10}", InstrumentField::LoopMode.label()),
+            label_style(InstrumentField::LoopMode),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            format!("{:<10}", loop_mode_str),
+            field_style(InstrumentField::LoopMode),
+        ),
+        Span::raw("   "),
+        Span::styled("space: cycle", Style::default().fg(theme.text_dimmed)),
+    ]));
+
+    lines.push(Line::from(""));
+
+    // ── Loop Start ─────────────────────────────────────────────────────
+    let loop_start_val = sample.map(|s| s.loop_start).unwrap_or(0);
+    let sample_rate = sample.map(|s| s.sample_rate()).unwrap_or(44100);
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        Span::styled(
+            format!("{:<10}", InstrumentField::LoopStart.label()),
+            label_style(InstrumentField::LoopStart),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            format!("{:>6}", loop_start_val),
+            field_style(InstrumentField::LoopStart),
+        ),
+        Span::raw("   "),
+        Span::styled(
+            format!("({:.2}s)", loop_start_val as f32 / sample_rate as f32),
+            Style::default().fg(theme.text_dimmed),
+        ),
+    ]));
+
+    lines.push(Line::from(""));
+
+    // ── Loop End ───────────────────────────────────────────────────────
+    let loop_end_val = sample.map(|s| s.loop_end).unwrap_or(0);
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        Span::styled(
+            format!("{:<10}", InstrumentField::LoopEnd.label()),
+            label_style(InstrumentField::LoopEnd),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            format!("{:>6}", loop_end_val),
+            field_style(InstrumentField::LoopEnd),
+        ),
+        Span::raw("   "),
+        Span::styled(
+            format!("({:.2}s)", loop_end_val as f32 / sample_rate as f32),
+            Style::default().fg(theme.text_dimmed),
+        ),
+    ]));
+
+    lines.push(Line::from(""));
+
     // ── Sample path ──────────────────────────────────────────────────
     let sample_str = instrument
         .sample_path
@@ -506,7 +591,7 @@ pub fn render_instrument_editor(
         lines.push(Line::from(vec![
             Span::raw("  "),
             Span::styled(
-                "Tab: next field   +/-: change   e/Enter: edit name   Esc: back to list",
+                "Tab: next  +/-: change  e/Enter: edit  space: loop mode  Esc: back",
                 Style::default().fg(theme.text_dimmed),
             ),
         ]));
@@ -542,6 +627,12 @@ mod tests {
         assert_eq!(s.field, InstrumentField::Volume);
         s.next_field();
         assert_eq!(s.field, InstrumentField::Finetune);
+        s.next_field();
+        assert_eq!(s.field, InstrumentField::LoopMode);
+        s.next_field();
+        assert_eq!(s.field, InstrumentField::LoopStart);
+        s.next_field();
+        assert_eq!(s.field, InstrumentField::LoopEnd);
         s.next_field();
         assert_eq!(s.field, InstrumentField::Name);
     }
