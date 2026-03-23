@@ -648,3 +648,43 @@ fn read_string(data: &[u8], offset: &mut usize, len: usize) -> String {
     *offset += len;
     s
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_minimal_s3m() {
+        let mut data = vec![0u8; 0x60]; // Header is 96 bytes
+
+        // Magic "SCRM" at 0x2C
+        data[0x2C] = b'S';
+        data[0x2C + 1] = b'C';
+        data[0x2C + 2] = b'R';
+        data[0x2C + 3] = b'M';
+
+        // OrdNum = 1 at 0x20
+        data[0x20] = 1;
+        // InsNum = 0 at 0x22
+        data[0x22] = 0;
+        // PatNum = 0 at 0x24
+        data[0x24] = 0;
+
+        // Channel settings at 0x40 (all 255 = unused)
+        for i in 0..32 {
+            data[0x40 + i] = 255;
+        }
+
+        // Orders at 0x60 (len = OrdNum = 1)
+        data.push(255); // End of song marker
+
+        // Parapointers (InsNum=0, PatNum=0) -> 0 bytes added
+
+        let result = import_s3m(&data);
+        assert!(result.is_ok(), "Failed to parse minimal S3M: {:?}", result.err());
+        
+        let format_data = result.unwrap();
+        assert_eq!(format_data.song.tracks.len(), 32);
+        assert_eq!(format_data.song.arrangement.len(), 1);
+    }
+}
