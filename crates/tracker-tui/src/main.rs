@@ -1177,9 +1177,6 @@ fn handle_instrument_editor_key(app: &mut App, key: crossterm::event::KeyEvent) 
                 | InstrumentField::KeyzoneList
                 | InstrumentField::KeyzoneSample
                 | InstrumentField::KeyzoneBaseNote => {}
-                InstrumentField::KeyzoneList => {}
-                InstrumentField::KeyzoneSample => {}
-                InstrumentField::KeyzoneBaseNote => {}
             }
             return true;
         }
@@ -1199,9 +1196,6 @@ fn handle_instrument_editor_key(app: &mut App, key: crossterm::event::KeyEvent) 
                 | InstrumentField::KeyzoneList
                 | InstrumentField::KeyzoneSample
                 | InstrumentField::KeyzoneBaseNote => {}
-                InstrumentField::KeyzoneList => {}
-                InstrumentField::KeyzoneSample => {}
-                InstrumentField::KeyzoneBaseNote => {}
             }
             return true;
         }
