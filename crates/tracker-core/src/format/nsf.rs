@@ -7,7 +7,7 @@ use crate::audio::sample::Sample;
 use crate::pattern::effect::EffectMode;
 use crate::song::{Instrument, Song};
 
-use super::{FormatData, ModuleLoader};
+use super::{FormatData, FormatError, FormatResult, ModuleLoader};
 
 pub struct NsfLoader;
 
@@ -27,8 +27,8 @@ impl ModuleLoader for NsfLoader {
         (&data[0..5] == b"NESM\x1A") || (&data[0..4] == b"NSFE")
     }
 
-    fn load(&self, data: &[u8]) -> Result<FormatData, String> {
-        import_nsf(data)
+    fn load(&self, data: &[u8]) -> FormatResult<FormatData> {
+        import_nsf(data).map_err(FormatError::from)
     }
 }
 

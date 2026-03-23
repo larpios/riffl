@@ -1,5 +1,14 @@
 use crate::audio::sample::Sample;
 
+pub mod error;
+pub mod it;
+pub mod nsf;
+pub mod protracker;
+pub mod s3m;
+pub mod xm;
+
+pub use error::{FormatError, FormatResult};
+
 /// Result of a successful format import.
 pub struct FormatData {
     /// Song structure: patterns, arrangement, instrument definitions.
@@ -7,12 +16,6 @@ pub struct FormatData {
     /// Raw audio data for each instrument slot.
     pub samples: Vec<Sample>,
 }
-
-pub mod it;
-pub mod nsf;
-pub mod protracker;
-pub mod s3m;
-pub mod xm;
 
 /// Trait for module loaders.
 pub trait ModuleLoader {
@@ -26,7 +29,7 @@ pub trait ModuleLoader {
     fn detect(&self, data: &[u8]) -> bool;
 
     /// Parse the data into a FormatData structure.
-    fn load(&self, data: &[u8]) -> Result<FormatData, String>;
+    fn load(&self, data: &[u8]) -> FormatResult<FormatData>;
 }
 
 /// List of all supported loaders.
@@ -44,15 +47,16 @@ pub fn get_loaders() -> Vec<Box<dyn ModuleLoader>> {
 ///
 /// This tries to detect the format by magic bytes first.
 /// If that fails, it tries all loaders.
-pub fn load(data: &[u8]) -> Result<FormatData, String> {
+pub fn load(data: &[u8]) -> FormatResult<FormatData> {
     let loaders = get_loaders();
 
-    // 1. Try to detect by content
     for loader in &loaders {
         if loader.detect(data) {
             return loader.load(data);
         }
     }
 
-    Err("Unknown or unsupported format".to_string())
+    Err(FormatError::unsupported_format(
+        "Unknown or unsupported format",
+    ))
 }

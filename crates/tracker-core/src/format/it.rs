@@ -10,8 +10,7 @@ use crate::pattern::note::{Note, Pitch};
 use crate::pattern::{Cell, NoteEvent, Pattern, Track};
 use crate::song::{Envelope, EnvelopePoint, Instrument, Song};
 
-use super::FormatData;
-use super::ModuleLoader;
+use super::{FormatData, FormatError, FormatResult, ModuleLoader};
 
 pub struct ItLoader;
 
@@ -28,8 +27,8 @@ impl ModuleLoader for ItLoader {
         data.starts_with(b"IMPM")
     }
 
-    fn load(&self, data: &[u8]) -> Result<FormatData, String> {
-        import_it(data)
+    fn load(&self, data: &[u8]) -> FormatResult<FormatData> {
+        import_it(data).map_err(FormatError::from)
     }
 }
 

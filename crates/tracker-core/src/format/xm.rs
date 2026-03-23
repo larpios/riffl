@@ -10,8 +10,7 @@ use crate::pattern::note::{Note, Pitch};
 use crate::pattern::{Cell, NoteEvent, Pattern};
 use crate::song::{Envelope, EnvelopePoint, Instrument, Song};
 
-use super::FormatData;
-use super::ModuleLoader;
+use super::{FormatData, FormatError, FormatResult, ModuleLoader};
 
 pub struct XmLoader;
 
@@ -28,8 +27,8 @@ impl ModuleLoader for XmLoader {
         data.starts_with(b"Extended Module: ")
     }
 
-    fn load(&self, data: &[u8]) -> Result<FormatData, String> {
-        import_xm(data)
+    fn load(&self, data: &[u8]) -> FormatResult<FormatData> {
+        import_xm(data).map_err(FormatError::from)
     }
 }
 

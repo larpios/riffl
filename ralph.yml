@@ -16,34 +16,48 @@ core:
 
 self_healing:
   max_retries_per_task: 3
-  backoff_strategy: "simplify"   # simplify → isolate → fallback
+  backoff_strategy: "simplify"
   failure_memory: true
 
 hats:
   planner:
+    name: "Planner"
+    description: "Selects the highest-impact task and creates a minimal execution plan."
     triggers: ["loop.start", "task.done", "task.blocked"]
     publishes: ["plan.updated"]
 
   builder:
+    name: "Builder"
+    description: "Implements the planned task with minimal, correct, and testable code."
     triggers: ["plan.updated", "retry.requested"]
     publishes: ["build.done", "build.failed"]
 
   tester:
+    name: "Tester"
+    description: "Verifies correctness via compilation, tests, and basic behavioral checks."
     triggers: ["build.done"]
     publishes: ["test.passed", "test.failed"]
 
   diagnostician:
+    name: "Diagnostician"
+    description: "Analyzes failures, classifies root causes, and proposes recovery strategies."
     triggers: ["build.failed", "test.failed"]
     publishes: ["diagnosis.ready"]
 
+  healer:
+    name: "Healer"
+    description: "Decides whether to retry, change strategy, or mark the task as blocked based on diagnosis."
+    triggers: ["diagnosis.ready"]
+    publishes: ["retry.requested", "task.blocked"]
+
   reviewer:
+    name: "Reviewer"
+    description: "Ensures code quality, correctness, and adherence to project rules before completion."
     triggers: ["test.passed"]
     publishes: ["review.approved", "review.changes_requested"]
 
   operator:
+    name: "Operator"
+    description: "Finalizes the task by committing changes and marking completion."
     triggers: ["review.approved"]
     publishes: ["task.done"]
-
-  healer:
-    triggers: ["diagnosis.ready"]
-    publishes: ["retry.requested", "task.blocked"]

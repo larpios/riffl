@@ -4,7 +4,7 @@
 //! 2, 6, 8 or more channels. Converts MOD patterns, instruments, and
 //! sample data into tracker-core's native types.
 
-use super::{FormatData, ModuleLoader};
+use super::{FormatData, FormatError, FormatResult, ModuleLoader};
 use crate::audio::sample::{LoopMode, Sample, C4_MIDI};
 use crate::pattern::effect::{Effect, EffectMode};
 use crate::pattern::note::{Note, NoteEvent, Pitch};
@@ -40,8 +40,8 @@ impl ModuleLoader for ModLoader {
         }
     }
 
-    fn load(&self, data: &[u8]) -> Result<FormatData, String> {
-        import_mod(data)
+    fn load(&self, data: &[u8]) -> FormatResult<FormatData> {
+        import_mod(data).map_err(FormatError::from)
     }
 }
 

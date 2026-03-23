@@ -12,6 +12,7 @@ serde_json = "1.0"
 hound = "3.5"
 rhai = "1"
 rand = "0.8"
+thiserror = "1.0"
 glicol_synth = "0.13.5"
 petgraph = "0.6"
 game-music-emu = { version = "0.3", default-features = false, features = ["nsf"] }

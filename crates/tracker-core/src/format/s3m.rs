@@ -9,7 +9,7 @@ use crate::pattern::note::{Note, Pitch};
 use crate::pattern::{Cell, NoteEvent, Pattern, Track};
 use crate::song::{Instrument, Song};
 
-use super::{FormatData, ModuleLoader};
+use super::{FormatData, FormatError, FormatResult, ModuleLoader};
 
 pub struct S3mLoader;
 
@@ -29,8 +29,8 @@ impl ModuleLoader for S3mLoader {
         &data[0x2C..0x30] == b"SCRM"
     }
 
-    fn load(&self, data: &[u8]) -> Result<FormatData, String> {
-        import_s3m(data)
+    fn load(&self, data: &[u8]) -> FormatResult<FormatData> {
+        import_s3m(data).map_err(FormatError::from)
     }
 }
 
