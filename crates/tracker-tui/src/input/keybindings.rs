@@ -470,6 +470,7 @@ pub enum Action {
     GoToBottom,
     GoToStart,
     GoToEnd,
+    ResetHorizontalView,
 
     // Track management
     AddTrack,
@@ -629,6 +630,7 @@ impl ActionMetadata for Action {
             Action::GoToBottom => "Go to Bottom",
             Action::GoToStart => "Go to Start",
             Action::GoToEnd => "Go to End",
+            Action::ResetHorizontalView => "Reset Horizontal View",
             Action::AddTrack => "Add Track",
             Action::DeleteTrack => "Delete Track",
             Action::CloneTrack => "Clone Track",
@@ -746,6 +748,7 @@ impl ActionMetadata for Action {
             Action::GoToBottom => "Jump to bottom of pattern",
             Action::GoToStart => "Jump to start of row",
             Action::GoToEnd => "Jump to end of row",
+            Action::ResetHorizontalView => "Reset horizontal view to leftmost channel",
             Action::AddTrack => "Add a new track",
             Action::DeleteTrack => "Delete current track",
             Action::CloneTrack => "Clone current track",
@@ -847,6 +850,7 @@ impl ActionMetadata for Action {
             | Action::GoToBottom
             | Action::GoToStart
             | Action::GoToEnd
+            | Action::ResetHorizontalView
             | Action::NextTrack => ActionCategory::Navigation,
 
             Action::EnterInsertMode
@@ -1009,6 +1013,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             KeyCode::Char('p') => Action::OpenLenPrompt,
             KeyCode::Enter => Action::ExecuteScript,
             KeyCode::Delete => Action::DeleteRow,
+            KeyCode::Left => Action::ResetHorizontalView,
             _ => Action::None,
         };
     }

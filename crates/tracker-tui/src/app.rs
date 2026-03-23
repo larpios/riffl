@@ -226,6 +226,9 @@ pub struct App {
     cached_mem_percent: f32,
     /// Last time system stats were refreshed.
     sys_info_last_update: Instant,
+
+    /// Horizontal channel scroll offset (reset to 0 with Home/Ctrl+L)
+    pub channel_scroll: usize,
 }
 
 impl App {
@@ -353,6 +356,7 @@ impl App {
             cached_cpu_percent: 0.0,
             cached_mem_percent: 0.0,
             sys_info_last_update: Instant::now(),
+            channel_scroll: 0,
         }
     }
 
@@ -1973,6 +1977,11 @@ impl App {
     /// Toggle instrument expanded view (full-screen deep editing).
     pub fn toggle_instrument_expanded(&mut self) {
         self.instrument_expanded = !self.instrument_expanded;
+    }
+
+    /// Reset horizontal view to the leftmost channel.
+    pub fn reset_horizontal_view(&mut self) {
+        self.channel_scroll = 0;
     }
 
     /// Toggle live mode on/off.

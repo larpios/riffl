@@ -597,6 +597,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         // Go to specific row (prompt)
         Action::GoToRow => app.editor.go_to_row(usize::MAX),
 
+        // Reset horizontal view to leftmost channel (Ctrl+Left)
+        Action::ResetHorizontalView => app.reset_horizontal_view(),
+
         // Quantize
         Action::Quantize => {
             app.editor.quantize();
@@ -1799,6 +1802,14 @@ fn handle_mouse_event(app: &mut App, mouse: MouseEvent) {
             let full_area = ratatui::layout::Rect::new(0, 0, 80, 24);
             let (_header_area, content_area, _footer_area) =
                 layout::create_main_layout(full_area, 3, 1);
+
+            // Check if click is in header area - reset horizontal view
+            if mouse.row < content_area.y && app.channel_scroll > 0 {
+                if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+                    app.reset_horizontal_view();
+                }
+                return;
+            }
 
             if mouse.column < content_area.x
                 || mouse.column >= content_area.x + content_area.width

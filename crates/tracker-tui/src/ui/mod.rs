@@ -394,6 +394,15 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         ));
     }
 
+    // Show channel scroll position and reset hint
+    if app.channel_scroll > 0 {
+        status_spans.push(Span::raw("  "));
+        status_spans.push(Span::styled(
+            format!("CH:{} \u{2190}", app.channel_scroll),
+            Style::default().fg(theme.text_secondary),
+        ));
+    }
+
     let header_text = Paragraph::new(Line::from(status_spans))
         .block(header_block)
         .alignment(Alignment::Center)
@@ -494,12 +503,12 @@ fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout::Rect, app:
     let inner = content_block.inner(area);
     let visible_rows = inner.height as usize;
 
-    // Calculate horizontal channel scrolling
-    let ch_scroll = calculate_channel_scroll(cursor_channel, inner.width, pattern.num_channels());
+    // Use persistent horizontal channel scroll offset (reset with Ctrl+Left)
+    let num_channels = pattern.num_channels();
+    let ch_scroll = app.channel_scroll.min(num_channels.saturating_sub(1));
     let channel_space = inner.width.saturating_sub(ROW_NUM_WIDTH);
-    let visible_channels =
-        ((channel_space / CHANNEL_COL_WIDTH) as usize).min(pattern.num_channels());
-    let ch_end = (ch_scroll + visible_channels).min(pattern.num_channels());
+    let visible_channels = ((channel_space / CHANNEL_COL_WIDTH) as usize).min(num_channels);
+    let ch_end = (ch_scroll + visible_channels).min(num_channels);
 
     // Pre-compute track audibility for muted/solo display
     let any_soloed = pattern.any_track_soloed();
