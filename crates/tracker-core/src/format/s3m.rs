@@ -4,7 +4,7 @@
 //! Maps S3M-specific features to the tracker-core internal format.
 
 use crate::audio::sample::{LoopMode, Sample};
-use crate::pattern::effect::{Effect, EffectType};
+use crate::pattern::effect::Effect;
 use crate::pattern::note::{Note, Pitch};
 use crate::pattern::{Cell, NoteEvent, Pattern, Track};
 use crate::song::{Instrument, Song};
@@ -66,6 +66,7 @@ struct S3mHeader {
     #[allow(dead_code)]
     ord_num: u16,
     ins_num: u16,
+    #[allow(dead_code)]
     pat_num: u16,
     #[allow(dead_code)]
     flags: u16,
