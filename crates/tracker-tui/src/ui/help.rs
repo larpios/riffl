@@ -7,12 +7,28 @@ use ratatui::{
 };
 
 use super::theme::Theme;
+use tracker_core::pattern::effect::{EffectMode, EffectType};
 
 /// Total line count of the taller help column. Used to cap scroll offset.
 pub fn content_line_count() -> u16 {
     left_column(&Theme::default())
         .len()
         .max(right_column(&Theme::default()).len()) as u16
+}
+
+/// Total line count for effect help.
+pub fn effect_help_line_count(mode: EffectMode) -> u16 {
+    let mut count = 0;
+    // Iterate over all possible command values (0x00 to 0x22)
+    for i in 0..=0x22 {
+        if let Some(t) = EffectType::from_command(i) {
+            let meta = t.metadata();
+            if meta.is_native || mode == EffectMode::Compatible {
+                count += 4; // command/name line + summary + description + blank line
+            }
+        }
+    }
+    count as u16
 }
 
 /// Render help/cheatsheet overlay — two-column scrollable layout.
@@ -50,6 +66,83 @@ pub fn render_help(frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme
             .scroll((scroll, 0))
             .style(col_style),
         cols[1],
+    );
+}
+
+/// Render effect command explorer overlay.
+pub fn render_effect_help(
+    frame: &mut Frame,
+    area: ratatui::layout::Rect,
+    theme: &Theme,
+    scroll: u16,
+    mode: EffectMode,
+) {
+    let help_area = super::layout::create_centered_rect(area, 84, 85);
+    frame.render_widget(Clear, help_area);
+
+    let mode_str = match mode {
+        EffectMode::RifflNative => "RIFFL NATIVE",
+        EffectMode::Compatible => "COMPATIBLE",
+    };
+    let title = format!(
+        " EFFECT COMMAND EXPLORER ({})  (j/k scroll · K/Esc close) ",
+        mode_str
+    );
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.info_color()))
+        .title(title)
+        .title_alignment(Alignment::Center)
+        .style(Style::default().bg(theme.bg_surface));
+
+    let inner = block.inner(help_area);
+    frame.render_widget(block, help_area);
+
+    let mut lines = Vec::new();
+
+    for i in 0..=0x22 {
+        if let Some(t) = EffectType::from_command(i) {
+            let meta = t.metadata();
+            if !meta.is_native && mode == EffectMode::RifflNative {
+                continue;
+            }
+
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("{:01X}xx - ", t.to_command()),
+                    Style::default()
+                        .fg(theme.success_color())
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    meta.name,
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("      ", Style::default()),
+                Span::styled(meta.summary, Style::default().fg(theme.text_secondary)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("      ", Style::default()),
+                Span::styled(
+                    meta.description,
+                    Style::default()
+                        .fg(theme.text)
+                        .add_modifier(Modifier::ITALIC),
+                ),
+            ]));
+            lines.push(Line::from(""));
+        }
+    }
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .scroll((scroll, 0))
+            .style(Style::default().fg(theme.text).bg(theme.bg_surface)),
+        inner,
     );
 }
 
@@ -113,6 +206,7 @@ fn left_column(theme: &Theme) -> Vec<Line<'static>> {
         key("~ (tilde)", "Enter note-off (===)", theme),
         key("0–9", "Set octave", theme),
         key("0–F  (inst/vol/eff)", "Enter hex digit", theme),
+        key("K", "Effect command help", theme),
         blank(),
         section("STEP SIZE", theme),
         key("{ / }", "Step -1 / +1", theme),

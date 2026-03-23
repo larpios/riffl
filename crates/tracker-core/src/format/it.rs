@@ -5,7 +5,7 @@
 //! our internal Effect format with no float intermediary.
 
 use crate::audio::sample::{LoopMode, Sample};
-use crate::pattern::effect::Effect;
+use crate::pattern::effect::{Effect, EffectMode};
 use crate::pattern::note::{Note, Pitch};
 use crate::pattern::{Cell, NoteEvent, Pattern, Track};
 use crate::song::{Envelope, EnvelopePoint, Instrument, Song};
@@ -1476,6 +1476,8 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
     if song.arrangement.is_empty() {
         song.arrangement.push(0);
     }
+
+    song.effect_mode = EffectMode::Compatible;
 
     Ok(FormatData {
         song,

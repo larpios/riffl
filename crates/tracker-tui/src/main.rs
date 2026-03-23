@@ -298,6 +298,35 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    // If effect help overlay is open, handle navigation and close
+    if app.show_effect_help {
+        // Compute max scroll: estimate 25 effects * 4 lines each = 100 lines
+        let max_scroll = 100u16.saturating_sub(20);
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('K') | KeyCode::Char('q') => {
+                app.show_effect_help = false;
+                app.effect_help_scroll = 0;
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                app.effect_help_scroll = app.effect_help_scroll.saturating_add(1).min(max_scroll);
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                app.effect_help_scroll = app.effect_help_scroll.saturating_sub(1);
+            }
+            KeyCode::PageDown => {
+                app.effect_help_scroll = app.effect_help_scroll.saturating_add(10).min(max_scroll);
+            }
+            KeyCode::PageUp => {
+                app.effect_help_scroll = app.effect_help_scroll.saturating_sub(10);
+            }
+            KeyCode::Home | KeyCode::Char('g') => {
+                app.effect_help_scroll = 0;
+            }
+            _ => {}
+        }
+        return;
+    }
+
     // If help overlay is open, handle navigation and close
     if app.show_help {
         // Compute max scroll: content lines minus visible inner height (85% of terminal - 2 borders)
@@ -722,6 +751,10 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::ToggleHelp => {
             app.show_help = !app.show_help;
             app.help_scroll = 0; // always start from the top
+        }
+        Action::ToggleEffectHelp => {
+            app.show_effect_help = !app.show_effect_help;
+            app.effect_help_scroll = 0;
         }
         Action::OpenModal => app.open_test_modal(),
         Action::OpenFileBrowser => app.open_file_browser(),

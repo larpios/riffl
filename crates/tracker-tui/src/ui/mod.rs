@@ -14,6 +14,7 @@ use crate::app::{App, AppView};
 use crate::editor::{EditorMode, SubColumn};
 use crate::input::keybindings::KeybindingRegistry;
 use crate::registry::{CommandMetadata, CommandRegistry};
+use tracker_core::pattern::effect::EffectMode;
 use tracker_core::pattern::note::NoteEvent;
 use tracker_core::transport::{PlaybackMode, TransportState};
 
@@ -37,7 +38,7 @@ pub mod tutor;
 pub mod vu_meters;
 pub mod waveform_editor;
 
-use help::render_help;
+use help::{render_effect_help, render_help};
 use tutor::render_tutor;
 
 /// Render the application UI
@@ -257,6 +258,17 @@ pub fn render(frame: &mut Frame, app: &App) {
     // Render help overlay on top if active
     if app.show_help {
         render_help(frame, full_area, &app.theme, app.help_scroll);
+    }
+
+    // Render effect help overlay on top if active
+    if app.show_effect_help {
+        render_effect_help(
+            frame,
+            full_area,
+            &app.theme,
+            app.effect_help_scroll,
+            app.song.effect_mode,
+        );
     }
 
     // Render tutor view on top if active
@@ -1160,6 +1172,26 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     .fg(theme.primary)
                     .add_modifier(Modifier::BOLD),
             ));
+        }
+
+        // Effect Description
+        if app.editor.sub_column() == SubColumn::Effect {
+            if let Some(cell) = app
+                .editor
+                .pattern()
+                .get_cell(app.editor.cursor_row(), app.editor.cursor_channel())
+            {
+                if let Some(effect) = cell.first_effect() {
+                    let desc = effect.describe(app.song.effect_mode);
+                    footer_spans.push(Span::raw(" | "));
+                    footer_spans.push(Span::styled(
+                        format!("[ {} ]", desc),
+                        Style::default()
+                            .fg(theme.info_color())
+                            .add_modifier(Modifier::BOLD),
+                    ));
+                }
+            }
         }
 
         footer_spans.push(Span::raw("| "));

@@ -4,7 +4,7 @@
 //! Maps S3M-specific features to the tracker-core internal format.
 
 use crate::audio::sample::{LoopMode, Sample};
-use crate::pattern::effect::Effect;
+use crate::pattern::effect::{Effect, EffectMode};
 use crate::pattern::note::{Note, Pitch};
 use crate::pattern::{Cell, NoteEvent, Pattern, Track};
 use crate::song::{Instrument, Song};
@@ -719,6 +719,8 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
     song.patterns = patterns;
     song.arrangement = arrangement;
     song.tracks = tracks;
+
+    song.effect_mode = EffectMode::Compatible;
 
     Ok(FormatData { song, samples })
 }

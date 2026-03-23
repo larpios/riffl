@@ -142,6 +142,11 @@ const KEY_MAPPINGS: &[KeyMapping] = &[
         mode: EditorMode::Normal,
     },
     KeyMapping {
+        key: "K",
+        action: Action::ToggleEffectHelp,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
         key: "1-6",
         action: Action::SwitchView(AppView::PatternEditor),
         mode: EditorMode::Normal,
@@ -552,6 +557,7 @@ pub enum Action {
     Cancel,
     OpenModal,
     ToggleHelp,
+    ToggleEffectHelp,
     OpenFileBrowser,
 
     // Instrument management
@@ -680,6 +686,7 @@ impl ActionMetadata for Action {
             Action::Cancel => "Cancel",
             Action::OpenModal => "Open Modal",
             Action::ToggleHelp => "Help",
+            Action::ToggleEffectHelp => "Effect Help",
             Action::OpenFileBrowser => "File Browser",
             Action::AddInstrument => "Add Instrument",
             Action::DeleteInstrument => "Delete Instrument",
@@ -798,6 +805,7 @@ impl ActionMetadata for Action {
             Action::Cancel => "Cancel action or choice",
             Action::OpenModal => "Open a modal dialog",
             Action::ToggleHelp => "Show help screen",
+            Action::ToggleEffectHelp => "Show effect command explorer",
             Action::OpenFileBrowser => "Open file browser",
             Action::AddInstrument => "Add a new instrument",
             Action::DeleteInstrument => "Delete current instrument",
@@ -958,6 +966,7 @@ impl ActionMetadata for Action {
             | Action::Cancel
             | Action::OpenModal
             | Action::ToggleHelp
+            | Action::ToggleEffectHelp
             | Action::OpenFileBrowser => ActionCategory::Application,
 
             Action::None => ActionCategory::None,
@@ -1138,6 +1147,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         // Application
         KeyCode::Char('m') => Action::OpenModal,
         KeyCode::Char('?') => Action::ToggleHelp,
+        KeyCode::Char('K') => Action::ToggleEffectHelp,
         KeyCode::Enter => Action::Confirm,
         KeyCode::Esc => Action::Cancel,
 

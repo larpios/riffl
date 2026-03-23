@@ -6,7 +6,7 @@
 
 use super::{FormatData, ModuleLoader};
 use crate::audio::sample::{LoopMode, Sample, C4_MIDI};
-use crate::pattern::effect::Effect;
+use crate::pattern::effect::{Effect, EffectMode};
 use crate::pattern::note::{Note, NoteEvent, Pitch};
 use crate::pattern::pattern::Pattern;
 use crate::pattern::{Cell, Track};
@@ -439,6 +439,8 @@ pub fn import_mod(data: &[u8]) -> Result<super::FormatData, String> {
     };
     song.instruments = instruments;
     song.tpl = speed as u32;
+
+    song.effect_mode = EffectMode::Compatible;
 
     Ok(super::FormatData { song, samples })
 }

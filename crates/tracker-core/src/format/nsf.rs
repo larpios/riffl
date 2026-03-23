@@ -4,6 +4,7 @@
 //! This module uses the game-music-emu library for emulation and playback.
 
 use crate::audio::sample::Sample;
+use crate::pattern::effect::EffectMode;
 use crate::song::{Instrument, Song};
 
 use super::{FormatData, ModuleLoader};
@@ -115,6 +116,8 @@ pub fn import_nsf(data: &[u8]) -> Result<FormatData, String> {
         2,
         Some(format!("NSF: {}", meta.song_name)),
     );
+
+    song.effect_mode = EffectMode::Compatible;
 
     Ok(FormatData {
         song,
