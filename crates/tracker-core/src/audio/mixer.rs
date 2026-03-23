@@ -7,7 +7,7 @@ use crate::audio::bus::{self, BusSystem};
 use crate::audio::channel_strip::ChannelStrip;
 use crate::audio::dsp::ProcessSpec;
 use crate::audio::effect_processor::{TrackerEffectProcessor, TransportCommand};
-use crate::audio::sample::Sample;
+use crate::audio::sample::{LoopMode, Sample};
 use crate::pattern::note::NoteEvent;
 use crate::pattern::pattern::Pattern;
 use crate::pattern::track::Track;
@@ -1350,6 +1350,23 @@ impl Mixer {
     /// Get a reference to the loaded samples.
     pub fn samples(&self) -> &[Arc<Sample>] {
         &self.samples
+    }
+
+    /// Update loop settings for a sample by index.
+    pub fn set_sample_loop(
+        &mut self,
+        index: usize,
+        mode: LoopMode,
+        loop_start: usize,
+        loop_end: usize,
+    ) {
+        if let Some(sample) = self.samples.get(index) {
+            let mut s = (**sample).clone();
+            s.loop_mode = mode;
+            s.loop_start = loop_start;
+            s.loop_end = loop_end;
+            self.samples[index] = Arc::new(s);
+        }
     }
 
     /// Stop all voices immediately and reset effect state.

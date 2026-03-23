@@ -21,12 +21,21 @@ pub enum WaveformEditMode {
     Pencil,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoopMarkerDrag {
+    None,
+    Start,
+    End,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct WaveformEditorState {
     pub focused: bool,
     pub edit_mode: WaveformEditMode,
     pub cursor_sample: usize,
     pub pencil_value: f32,
+    pub dragging_loop_marker: LoopMarkerDrag,
+    pub loop_mode_toggle: bool,
 }
 
 impl Default for WaveformEditorState {
@@ -36,6 +45,8 @@ impl Default for WaveformEditorState {
             edit_mode: WaveformEditMode::Navigate,
             cursor_sample: 0,
             pencil_value: 0.0,
+            dragging_loop_marker: LoopMarkerDrag::None,
+            loop_mode_toggle: false,
         }
     }
 }
@@ -96,6 +107,30 @@ impl WaveformEditorState {
             sample.set_sample(self.cursor_sample, self.pencil_value);
         }
     }
+
+    pub fn start_loop_marker_drag(&mut self, marker: LoopMarkerDrag) {
+        self.dragging_loop_marker = marker;
+    }
+
+    pub fn end_loop_marker_drag(&mut self) {
+        self.dragging_loop_marker = LoopMarkerDrag::None;
+    }
+
+    pub fn is_loop_marker_dragging(&self) -> bool {
+        self.dragging_loop_marker != LoopMarkerDrag::None
+    }
+
+    pub fn dragging_loop_marker(&self) -> LoopMarkerDrag {
+        self.dragging_loop_marker
+    }
+
+    pub fn is_loop_mode_enabled(&self) -> bool {
+        self.loop_mode_toggle
+    }
+
+    pub fn toggle_loop_mode(&mut self) {
+        self.loop_mode_toggle = !self.loop_mode_toggle;
+    }
 }
 
 const MAX_WAVEFORM_DISPLAY_HEIGHT: usize = 8;
@@ -138,6 +173,18 @@ fn draw_waveform_graphic(
     let cursor_char = match edit_mode {
         WaveformEditMode::Pencil => '◆',
         WaveformEditMode::Navigate => '│',
+    };
+
+    let has_loop = sample.loop_mode != tracker_core::audio::sample::LoopMode::NoLoop;
+    let loop_start_col = if has_loop {
+        Some(sample.loop_start * grid_width / frame_count.max(1))
+    } else {
+        None
+    };
+    let loop_end_col = if has_loop {
+        Some(sample.loop_end * grid_width / frame_count.max(1))
+    } else {
+        None
     };
 
     for col in 0..grid_width {
@@ -234,6 +281,35 @@ fn draw_waveform_graphic(
         }
     }
 
+    let loop_start_style = Style::default()
+        .fg(theme.status_success)
+        .add_modifier(Modifier::BOLD);
+    let loop_end_style = Style::default()
+        .fg(theme.status_error)
+        .add_modifier(Modifier::BOLD);
+
+    if let Some(col) = loop_start_col {
+        let line_idx = center_row.min(lines.len().saturating_sub(1));
+        if let Some(line) = lines.get_mut(line_idx) {
+            let mut spans = line.spans.clone();
+            if col < spans.len() {
+                spans[col] = Span::styled("◁", loop_start_style);
+            }
+            lines[line_idx] = Line::from(spans);
+        }
+    }
+
+    if let Some(col) = loop_end_col {
+        let line_idx = center_row.min(lines.len().saturating_sub(1));
+        if let Some(line) = lines.get_mut(line_idx) {
+            let mut spans = line.spans.clone();
+            if col < spans.len() {
+                spans[col] = Span::styled("▷", loop_end_style);
+            }
+            lines[line_idx] = Line::from(spans);
+        }
+    }
+
     lines
 }
 
@@ -294,7 +370,19 @@ pub fn render_waveform_editor(
             let sr = s.sample_rate();
             let frames = s.frame_count();
             let dur = s.duration();
-            format!("{:.2}s · {}Hz · {}ch · {} frames", dur, sr, ch, frames)
+            let loop_info = if s.loop_mode != tracker_core::audio::sample::LoopMode::NoLoop {
+                format!(
+                    " · ◁{:05} ▷{:05}",
+                    s.loop_start.min(frames.saturating_sub(1)),
+                    s.loop_end.min(frames.saturating_sub(1))
+                )
+            } else {
+                String::new()
+            };
+            format!(
+                "{:.2}s · {}Hz · {}ch · {} frames{}",
+                dur, sr, ch, frames, loop_info
+            )
         }
     } else {
         "No sample".to_string()
@@ -302,7 +390,7 @@ pub fn render_waveform_editor(
 
     let help_text = if state.focused {
         match state.edit_mode {
-            WaveformEditMode::Navigate => "←→: navigate  p: pencil mode  Esc: exit",
+            WaveformEditMode::Navigate => "←→: navigate  p: pencil mode  l: toggle loop  Esc: exit",
             WaveformEditMode::Pencil => "↑↓: draw value  ←→: move  Enter: draw  p: exit",
         }
     } else {

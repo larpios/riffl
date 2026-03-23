@@ -956,6 +956,67 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                 app.waveform_editor.toggle_pencil_mode();
             }
         }
+        Action::WfToggleLoop => {
+            if let Some(idx) = app.instrument_selection() {
+                app.waveform_editor.focus();
+                app.waveform_editor.toggle_loop_mode();
+                let sample_idx = app.song.instruments[idx].sample_index;
+                if let Some(si) = sample_idx {
+                    if let Some(sample) = app.loaded_samples().get(si) {
+                        let mut s = sample.as_ref().clone();
+                        if app.waveform_editor.is_loop_mode_enabled() {
+                            let frame_count = s.frame_count();
+                            s.loop_mode = tracker_core::audio::sample::LoopMode::Forward;
+                            s.loop_start = 0;
+                            s.loop_end = frame_count.saturating_sub(1);
+                        } else {
+                            s.loop_mode = tracker_core::audio::sample::LoopMode::NoLoop;
+                        }
+                        app.set_sample_loop_settings(
+                            idx,
+                            si,
+                            s.loop_mode,
+                            s.loop_start,
+                            s.loop_end,
+                        );
+                    }
+                }
+            }
+        }
+        Action::WfSetLoopStart => {
+            if let Some(idx) = app.instrument_selection() {
+                app.waveform_editor.focus();
+                if let Some(si) = app.song.instruments[idx].sample_index {
+                    if let Some(sample) = app.loaded_samples().get(si) {
+                        let s = sample.as_ref();
+                        app.set_sample_loop_settings(
+                            idx,
+                            si,
+                            tracker_core::audio::sample::LoopMode::Forward,
+                            app.waveform_editor.cursor_sample,
+                            s.loop_end,
+                        );
+                    }
+                }
+            }
+        }
+        Action::WfSetLoopEnd => {
+            if let Some(idx) = app.instrument_selection() {
+                app.waveform_editor.focus();
+                if let Some(si) = app.song.instruments[idx].sample_index {
+                    if let Some(sample) = app.loaded_samples().get(si) {
+                        let s = sample.as_ref();
+                        app.set_sample_loop_settings(
+                            idx,
+                            si,
+                            tracker_core::audio::sample::LoopMode::Forward,
+                            s.loop_start,
+                            app.waveform_editor.cursor_sample,
+                        );
+                    }
+                }
+            }
+        }
         Action::WfMoveCursorLeft => {
             if let Some(idx) = app.instrument_selection() {
                 if let Some(sample) = app
@@ -1843,6 +1904,133 @@ fn handle_mouse_event(app: &mut App, mouse: MouseEvent) {
                 }
                 _ => {}
             }
+        }
+        _ => {}
+    }
+
+    // Handle mouse clicks on waveform editor for loop markers
+    if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
+        handle_waveform_mouse(app, mouse);
+    }
+}
+
+fn handle_waveform_mouse(app: &mut App, mouse: MouseEvent) {
+    use ratatui::layout::Constraint;
+
+    let full_area = ratatui::layout::Rect::new(0, 0, 80, 24);
+    let (_header_area, content_area, _footer_area) =
+        crate::ui::layout::create_main_layout(full_area, 3, 1);
+
+    // Calculate waveform area (20% at bottom of content)
+    let waveform_height_pct = 20u16;
+    let waveform_height = (content_area.height * waveform_height_pct / 100).max(4);
+    let waveform_area = ratatui::layout::Rect::new(
+        content_area.x,
+        content_area.y + content_area.height - waveform_height,
+        content_area.width,
+        waveform_height,
+    );
+
+    // Check if click is within waveform area
+    if mouse.column < waveform_area.x
+        || mouse.column >= waveform_area.x + waveform_area.width
+        || mouse.row < waveform_area.y
+        || mouse.row >= waveform_area.y + waveform_area.height
+    {
+        return;
+    }
+
+    let idx = match app.instrument_selection() {
+        Some(i) if i < app.song.instruments.len() => i,
+        _ => return,
+    };
+
+    let sample_idx = match app.song.instruments[idx].sample_index {
+        Some(si) => si,
+        None => return,
+    };
+
+    let samples = app.loaded_samples();
+    let sample = match samples.get(sample_idx) {
+        Some(s) => s.as_ref(),
+        None => return,
+    };
+
+    let frame_count = sample.frame_count();
+    if frame_count == 0 {
+        return;
+    }
+
+    // Calculate which sample frame the mouse is pointing to
+    let local_x = mouse.column.saturating_sub(waveform_area.x + 2); // Account for left padding
+    let grid_width = (waveform_area.width.saturating_sub(4)).max(1) as usize;
+    let frame_at_cursor = if local_x < grid_width as u16 {
+        ((local_x as usize * frame_count) / grid_width).min(frame_count.saturating_sub(1))
+    } else {
+        frame_count.saturating_sub(1)
+    };
+
+    match mouse.kind {
+        MouseEventKind::Down(MouseButton::Left) => {
+            // Check for Shift key to set loop start
+            if mouse
+                .modifiers
+                .contains(crossterm::event::KeyModifiers::SHIFT)
+            {
+                app.waveform_editor
+                    .start_loop_marker_drag(crate::ui::waveform_editor::LoopMarkerDrag::Start);
+                app.set_sample_loop_settings(
+                    idx,
+                    sample_idx,
+                    tracker_core::audio::sample::LoopMode::Forward,
+                    frame_at_cursor,
+                    sample.loop_end,
+                );
+            }
+            // Check for Ctrl key to set loop end
+            else if mouse
+                .modifiers
+                .contains(crossterm::event::KeyModifiers::CONTROL)
+            {
+                app.set_sample_loop_settings(
+                    idx,
+                    sample_idx,
+                    tracker_core::audio::sample::LoopMode::Forward,
+                    sample.loop_start,
+                    frame_at_cursor,
+                );
+            }
+            // Normal click: move cursor to position
+            else {
+                app.waveform_editor.set_cursor(frame_at_cursor);
+            }
+        }
+        MouseEventKind::Drag(MouseButton::Left) => {
+            // Drag while holding left button: update loop marker being dragged
+            match app.waveform_editor.dragging_loop_marker() {
+                crate::ui::waveform_editor::LoopMarkerDrag::Start => {
+                    app.set_sample_loop_settings(
+                        idx,
+                        sample_idx,
+                        tracker_core::audio::sample::LoopMode::Forward,
+                        frame_at_cursor.min(sample.loop_end.saturating_sub(1)),
+                        sample.loop_end,
+                    );
+                }
+                crate::ui::waveform_editor::LoopMarkerDrag::End => {
+                    app.set_sample_loop_settings(
+                        idx,
+                        sample_idx,
+                        tracker_core::audio::sample::LoopMode::Forward,
+                        sample.loop_start,
+                        frame_at_cursor.max(sample.loop_start + 1),
+                    );
+                }
+                crate::ui::waveform_editor::LoopMarkerDrag::None => {}
+            }
+        }
+        MouseEventKind::Up(MouseButton::Left) => {
+            app.waveform_editor.end_loop_marker_drag();
         }
         _ => {}
     }

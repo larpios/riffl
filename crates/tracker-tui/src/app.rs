@@ -1783,6 +1783,22 @@ impl App {
         }
     }
 
+    /// Set loop settings for the sample of the specified instrument.
+    #[allow(dead_code)]
+    pub fn set_sample_loop_settings(
+        &mut self,
+        _inst_idx: usize,
+        sample_idx: usize,
+        mode: tracker_core::audio::sample::LoopMode,
+        loop_start: usize,
+        loop_end: usize,
+    ) {
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.set_sample_loop(sample_idx, mode, loop_start, loop_end);
+        }
+        self.mark_dirty();
+    }
+
     /// Adjust volume of the selected instrument by `delta` percentage points (clamped 0..=100).
     pub fn adjust_instrument_volume(&mut self, delta: i32) {
         if let Some(idx) = self.instrument_selection {

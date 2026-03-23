@@ -182,19 +182,26 @@ fn build_waveform(sample: &Sample, width: usize, theme: &Theme) -> [Line<'static
     }
 
     // Loop marker column positions (if the sample has loop points).
-    let loop_start_col = if sample.loop_mode != tracker_core::audio::sample::LoopMode::NoLoop {
+    let has_loop = sample.loop_mode != tracker_core::audio::sample::LoopMode::NoLoop;
+    let loop_start_col = if has_loop {
         Some(sample.loop_start * width / frame_count.max(1))
     } else {
         None
     };
-    let loop_end_col = if sample.loop_mode != tracker_core::audio::sample::LoopMode::NoLoop {
+    let loop_end_col = if has_loop {
         Some(sample.loop_end * width / frame_count.max(1))
     } else {
         None
     };
 
     let wf_style = Style::default().fg(theme.primary);
-    let loop_style = Style::default().fg(theme.text_secondary);
+    let loop_start_style = Style::default()
+        .fg(theme.status_success)
+        .add_modifier(Modifier::BOLD);
+    let loop_end_style = Style::default()
+        .fg(theme.status_error)
+        .add_modifier(Modifier::BOLD);
+    let loop_region_style = Style::default().fg(theme.text_dimmed);
     let center_style = Style::default().fg(theme.text_dimmed);
 
     // Threshold below which we treat the signal as silence at that level.
@@ -204,14 +211,24 @@ fn build_waveform(sample: &Sample, width: usize, theme: &Theme) -> [Line<'static
     let mut bot_styles: Vec<(String, Style)> = Vec::new();
 
     for (col, &(peak_pos, peak_neg)) in peaks.iter().enumerate().take(width) {
-        let is_loop_marker = loop_start_col == Some(col) || loop_end_col == Some(col);
+        let is_loop_start = loop_start_col == Some(col);
+        let is_loop_end = loop_end_col == Some(col);
 
-        if is_loop_marker {
-            // Vertical bar for loop points overrides waveform.
-            top_styles.push(("│".to_string(), loop_style));
-            bot_styles.push(("│".to_string(), loop_style));
+        if is_loop_start {
+            top_styles.push(("◁".to_string(), loop_start_style));
+            bot_styles.push(("◁".to_string(), loop_start_style));
             continue;
         }
+
+        if is_loop_end {
+            top_styles.push(("▷".to_string(), loop_end_style));
+            bot_styles.push(("▷".to_string(), loop_end_style));
+            continue;
+        }
+
+        let in_loop_region = has_loop
+            && loop_start_col.is_some_and(|s| col > s)
+            && loop_end_col.is_some_and(|e| col < e);
 
         // Top row: upper half = positive peak > 0.5, lower half = positive peak > THRESH.
         let top_upper = peak_pos > 0.5;
@@ -222,7 +239,11 @@ fn build_waveform(sample: &Sample, width: usize, theme: &Theme) -> [Line<'static
             _ => '─',
         };
         let top_style = if top_upper || top_lower {
-            wf_style
+            if in_loop_region {
+                loop_region_style
+            } else {
+                wf_style
+            }
         } else {
             center_style
         };
@@ -236,7 +257,11 @@ fn build_waveform(sample: &Sample, width: usize, theme: &Theme) -> [Line<'static
             _ => '─',
         };
         let bot_style = if bot_upper || bot_lower {
-            wf_style
+            if in_loop_region {
+                loop_region_style
+            } else {
+                wf_style
+            }
         } else {
             center_style
         };

@@ -344,6 +344,11 @@ const KEY_MAPPINGS: &[KeyMapping] = &[
         mode: EditorMode::Normal,
     },
     KeyMapping {
+        key: "l",
+        action: Action::WfToggleLoop,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
         key: "Left",
         action: Action::WfMoveCursorLeft,
         mode: EditorMode::Normal,
@@ -579,6 +584,9 @@ pub enum Action {
 
     // Waveform editor
     WfTogglePencil,
+    WfToggleLoop,
+    WfSetLoopStart,
+    WfSetLoopEnd,
     WfMoveCursorLeft,
     WfMoveCursorRight,
     WfDrawSample,
@@ -695,6 +703,9 @@ impl ActionMetadata for Action {
             Action::EnvChangeValue => "Env Change Value",
             Action::EnvToggleEnabled => "Env Toggle Enabled",
             Action::WfTogglePencil => "Wf Toggle Pencil",
+            Action::WfToggleLoop => "Wf Toggle Loop",
+            Action::WfSetLoopStart => "Wf Set Loop Start",
+            Action::WfSetLoopEnd => "Wf Set Loop End",
             Action::WfMoveCursorLeft => "Wf Move Cursor Left",
             Action::WfMoveCursorRight => "Wf Move Cursor Right",
             Action::WfDrawSample => "Wf Draw Sample",
@@ -809,6 +820,9 @@ impl ActionMetadata for Action {
             Action::EnvChangeValue => "Change envelope point value",
             Action::EnvToggleEnabled => "Toggle envelope enabled",
             Action::WfTogglePencil => "Toggle pencil mode for waveform editing",
+            Action::WfToggleLoop => "Toggle loop mode for sample",
+            Action::WfSetLoopStart => "Set loop start at cursor",
+            Action::WfSetLoopEnd => "Set loop end at cursor",
             Action::WfMoveCursorLeft => "Move waveform cursor left",
             Action::WfMoveCursorRight => "Move waveform cursor right",
             Action::WfDrawSample => "Draw sample value at cursor",
@@ -895,6 +909,9 @@ impl ActionMetadata for Action {
             | Action::EnvChangeValue
             | Action::EnvToggleEnabled
             | Action::WfTogglePencil
+            | Action::WfToggleLoop
+            | Action::WfSetLoopStart
+            | Action::WfSetLoopEnd
             | Action::WfMoveCursorLeft
             | Action::WfMoveCursorRight
             | Action::WfDrawSample
