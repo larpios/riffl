@@ -11,6 +11,27 @@ use crate::pattern::{Cell, NoteEvent, Pattern, Track};
 use crate::song::{Envelope, EnvelopePoint, Instrument, Song};
 
 use super::FormatData;
+use super::ModuleLoader;
+
+pub struct ItLoader;
+
+impl ModuleLoader for ItLoader {
+    fn name(&self) -> &'static str {
+        "Impulse Tracker"
+    }
+
+    fn extensions(&self) -> &[&str] {
+        &["it"]
+    }
+
+    fn detect(&self, data: &[u8]) -> bool {
+        data.starts_with(b"IMPM")
+    }
+
+    fn load(&self, data: &[u8]) -> Result<FormatData, String> {
+        import_it(data)
+    }
+}
 
 // ─── Binary Helpers ──────────────────────────────────────────────────────────
 
