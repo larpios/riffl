@@ -1051,14 +1051,8 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             app.waveform_editor.pencil_value_down();
         }
         Action::WfDrawSample => {
-            if let Some(idx) = app.instrument_selection() {
-                let sample_idx = app.song.instruments[idx].sample_index;
-                if let Some(si) = sample_idx {
-                    if let Some(sample) = app.loaded_samples().get(si) {
-                        app.waveform_editor
-                            .draw_at_cursor(&mut sample.as_ref().clone());
-                    }
-                }
+            if app.draw_waveform_sample().is_ok() {
+                app.waveform_editor.focus();
             }
         }
         Action::WfFocus => {

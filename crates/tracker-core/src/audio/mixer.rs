@@ -1352,6 +1352,13 @@ impl Mixer {
         &self.samples
     }
 
+    /// Replace a loaded sample by index.
+    pub fn replace_sample(&mut self, index: usize, sample: Arc<Sample>) {
+        if let Some(slot) = self.samples.get_mut(index) {
+            *slot = sample;
+        }
+    }
+
     /// Update loop settings for a sample by index.
     pub fn set_sample_loop(
         &mut self,

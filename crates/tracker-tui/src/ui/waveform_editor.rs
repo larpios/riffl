@@ -323,6 +323,15 @@ fn format_sample_value(value: f32) -> String {
     }
 }
 
+fn format_chip_preview(bytes: &[u8], count: usize) -> String {
+    bytes
+        .iter()
+        .take(count)
+        .map(|byte| format!("{byte:02X}"))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 #[allow(unused_variables)]
 pub fn render_waveform_editor(
     frame: &mut Frame,
@@ -403,6 +412,23 @@ pub fn render_waveform_editor(
         Span::raw("  "),
         Span::styled(sample_info, Style::default().fg(theme.text_secondary)),
     ]));
+
+    if let Some(chip) = instrument.chip_render.as_ref() {
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                format!(
+                    "Chip WT32 [{}] e={:.03} · DPCM{} [{}] e={:.03}",
+                    format_chip_preview(&chip.wavetable_2a03, 8),
+                    chip.wavetable_error,
+                    chip.dpcm.len(),
+                    format_chip_preview(&chip.dpcm, 6),
+                    chip.dpcm_error
+                ),
+                Style::default().fg(theme.text_dimmed),
+            ),
+        ]));
+    }
 
     lines.push(Line::from(""));
 

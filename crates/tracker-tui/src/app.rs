@@ -21,7 +21,9 @@ use crate::ui::modal::Modal;
 use crate::ui::sample_browser::SampleBrowser;
 use crate::ui::theme::{Theme, ThemeKind};
 use crate::ui::waveform_editor::WaveformEditorState;
-use tracker_core::audio::{load_sample, AudioEngine, Mixer, Sample, TransportCommand};
+use tracker_core::audio::{
+    load_sample, AudioEngine, ChipRenderData, Mixer, Sample, TransportCommand,
+};
 use tracker_core::dsl::engine::ScriptEngine;
 use tracker_core::export;
 use tracker_core::pattern::note::{NoteEvent, Pitch};
@@ -243,6 +245,7 @@ impl App {
 
         // Generate a demo sine wave sample at 440Hz, 0.25s duration
         let demo_sample = Self::generate_sine_sample(440.0, 0.25, 44100);
+        let demo_chip_render = ChipRenderData::from_sample(&demo_sample);
 
         // Create a demo pattern: C4, E4, G4, C5 across 16 rows
         let mut pattern = Pattern::new(16, 4);
@@ -288,6 +291,7 @@ impl App {
         let mut demo_inst = Instrument::new("sine440");
         demo_inst.sample_index = Some(0);
         demo_inst.sample_path = None;
+        demo_inst.chip_render = Some(demo_chip_render);
         song.instruments.push(demo_inst);
 
         // Initialize file browser and sample browser at current working directory
@@ -1214,6 +1218,7 @@ impl App {
             load_sample(&path, output_sample_rate).map_err(|e| format!("Failed to load: {}", e))?;
 
         let name = sample.name().unwrap_or("unknown").to_string();
+        let chip_render = ChipRenderData::from_sample(&sample);
 
         let idx = if let Ok(mut mixer) = self.mixer.lock() {
             mixer.add_sample(Arc::new(sample))
@@ -1225,6 +1230,7 @@ impl App {
         let mut instrument = Instrument::new(&name);
         instrument.sample_index = Some(idx);
         instrument.sample_path = Some(path.display().to_string());
+        instrument.chip_render = Some(chip_render);
         self.song.instruments.push(instrument);
         self.sync_mixer_instruments();
 
@@ -1252,6 +1258,7 @@ impl App {
             load_sample(&path, output_sample_rate).map_err(|e| format!("Failed to load: {e}"))?;
 
         let name = sample.name().unwrap_or("unknown").to_string();
+        let chip_render = ChipRenderData::from_sample(&sample);
 
         let idx = if let Ok(mut mixer) = self.mixer.lock() {
             mixer.add_sample(Arc::new(sample))
@@ -1263,6 +1270,7 @@ impl App {
         let mut instrument = Instrument::new(&name);
         instrument.sample_index = Some(idx);
         instrument.sample_path = Some(path.display().to_string());
+        instrument.chip_render = Some(chip_render);
         self.song.instruments.push(instrument);
         self.sync_mixer_instruments();
 
@@ -1285,6 +1293,7 @@ impl App {
             load_sample(path, output_sample_rate).map_err(|e| format!("Failed to load: {e}"))?;
 
         let name = sample.name().unwrap_or("unknown").to_string();
+        let chip_render = ChipRenderData::from_sample(&sample);
 
         let idx = if let Ok(mut mixer) = self.mixer.lock() {
             mixer.add_sample(Arc::new(sample))
@@ -1296,6 +1305,7 @@ impl App {
         let mut instrument = Instrument::new(&name);
         instrument.sample_index = Some(idx);
         instrument.sample_path = Some(path.display().to_string());
+        instrument.chip_render = Some(chip_render);
         self.song.instruments.push(instrument);
         self.sync_mixer_instruments();
         self.instrument_names.push(name);
@@ -1320,6 +1330,7 @@ impl App {
 
         let sample =
             load_sample(path, output_sample_rate).map_err(|e| format!("Failed to load: {e}"))?;
+        let chip_render = ChipRenderData::from_sample(&sample);
 
         let sample_idx = if let Ok(mut mixer) = self.mixer.lock() {
             mixer.add_sample(Arc::new(sample))
@@ -1335,9 +1346,56 @@ impl App {
 
         inst.sample_index = Some(sample_idx);
         inst.sample_path = Some(path.display().to_string());
+        inst.chip_render = Some(chip_render);
         self.sync_mixer_instruments();
         self.mark_dirty();
         Ok(())
+    }
+
+    /// Replace an assigned sample and refresh the instrument's derived chip data.
+    pub fn replace_instrument_sample(
+        &mut self,
+        inst_idx: usize,
+        sample_idx: usize,
+        sample: Sample,
+    ) -> Result<(), String> {
+        let chip_render = ChipRenderData::from_sample(&sample);
+
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.replace_sample(sample_idx, Arc::new(sample));
+        } else {
+            return Err("Failed to lock mixer".to_string());
+        }
+
+        let inst = self
+            .song
+            .instruments
+            .get_mut(inst_idx)
+            .ok_or_else(|| format!("Instrument slot {inst_idx:02X} does not exist"))?;
+        inst.chip_render = Some(chip_render);
+
+        self.sync_mixer_instruments();
+        self.mark_dirty();
+        Ok(())
+    }
+
+    /// Apply the waveform editor pencil value to the selected instrument sample.
+    pub fn draw_waveform_sample(&mut self) -> Result<(), String> {
+        let inst_idx = self
+            .instrument_selection()
+            .ok_or_else(|| "No instrument selected".to_string())?;
+        let sample_idx = self.song.instruments[inst_idx]
+            .sample_index
+            .ok_or_else(|| "Selected instrument has no sample".to_string())?;
+        let sample = self
+            .loaded_samples()
+            .get(sample_idx)
+            .map(|sample| sample.as_ref().clone())
+            .ok_or_else(|| "Selected sample is not loaded".to_string())?;
+
+        let mut updated = sample;
+        self.waveform_editor.draw_at_cursor(&mut updated);
+        self.replace_instrument_sample(inst_idx, sample_idx, updated)
     }
 
     /// Preview a note pitch through a specific instrument's sample.
@@ -2171,7 +2229,7 @@ impl App {
     /// file browser. This replaces the current song data.
     pub fn load_project(&mut self, path: &std::path::Path) {
         match project::load_project(path) {
-            Ok(song) => {
+            Ok(mut song) => {
                 let pattern = if !song.patterns.is_empty() {
                     song.patterns[0].clone()
                 } else {
@@ -2190,21 +2248,27 @@ impl App {
                     mixer.clear_samples();
                     self.instrument_names.clear();
 
-                    for inst in &song.instruments {
+                    for (idx, inst) in song.instruments.iter_mut().enumerate() {
                         let sample_name = if let Some(sample_path) = &inst.sample_path {
                             let sp_path = PathBuf::from(sample_path);
                             match load_sample(&sp_path, output_sample_rate) {
                                 Ok(sample) => {
+                                    inst.sample_index = Some(idx);
+                                    inst.chip_render = Some(ChipRenderData::from_sample(&sample));
                                     mixer.add_sample(Arc::new(sample));
                                     inst.name.clone()
                                 }
                                 Err(_) => {
+                                    inst.sample_index = Some(idx);
+                                    inst.chip_render = None;
                                     mixer.add_sample(Arc::new(Sample::default()));
                                     missing_samples.push(sample_path.clone());
                                     format!("{} (MISSING)", inst.name)
                                 }
                             }
                         } else {
+                            inst.sample_index = Some(idx);
+                            inst.chip_render = None;
                             mixer.add_sample(Arc::new(Sample::default()));
                             inst.name.clone()
                         };
@@ -3248,6 +3312,25 @@ mod tests {
             cell.is_none() || cell.unwrap().note.is_none(),
             "apply_draw_note should be a no-op when draw_note is None"
         );
+    }
+
+    #[test]
+    fn test_draw_waveform_sample_persists_and_refreshes_chip_render() {
+        let mut app = App::new();
+        app.set_instrument_selection(Some(0));
+        app.waveform_editor.set_cursor(0);
+        app.waveform_editor.pencil_value = 0.75;
+
+        app.draw_waveform_sample().unwrap();
+
+        let sample = app.loaded_samples().first().unwrap().clone();
+        assert!((sample.data()[0] - 0.75).abs() < 0.001);
+        let chip_render = app.song.instruments[0].chip_render.as_ref().unwrap();
+        assert_eq!(
+            chip_render.wavetable_2a03.len(),
+            tracker_core::audio::CHIP_WAVETABLE_LEN
+        );
+        assert_eq!(chip_render.dpcm.len(), tracker_core::audio::CHIP_DPCM_BYTES);
     }
 
     // --- Tutor view tests ---

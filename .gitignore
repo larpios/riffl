@@ -30,3 +30,7 @@ node_modules
 
 research
 .agent/
+
+.gemini
+.opencode
+.codex

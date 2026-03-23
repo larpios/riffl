@@ -4,6 +4,7 @@
 
 pub mod bus;
 pub mod channel_strip;
+pub mod chip;
 pub mod device;
 pub mod dsp;
 pub mod effect_processor;
@@ -18,6 +19,7 @@ pub mod stream;
 
 pub use bus::{BusSystem, SendBus, DEFAULT_NUM_BUSES};
 pub use channel_strip::ChannelStrip;
+pub use chip::{ChipRenderData, CHIP_DPCM_BYTES, CHIP_WAVETABLE_LEN};
 pub use device::{AudioDevice, DeviceInfo};
 pub use dsp::{DspProcessor, ProcessSpec, RampedParam};
 pub use effect_processor::{TrackerEffectProcessor, TransportCommand, VoiceRenderState};

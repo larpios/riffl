@@ -5,6 +5,7 @@
 /// metadata, and instrument definitions.
 use serde::{Deserialize, Serialize};
 
+use crate::audio::chip::ChipRenderData;
 use crate::pattern::effect::EffectMode;
 use crate::pattern::{Note, Pattern, Pitch, Track};
 
@@ -267,6 +268,9 @@ pub struct Instrument {
     pub sample_index: Option<usize>,
     /// File path to the audio sample, relative to the project or absolute.
     pub sample_path: Option<String>,
+    /// Cached chip-oriented conversions derived from the assigned sample.
+    #[serde(default)]
+    pub chip_render: Option<ChipRenderData>,
     /// Base note for sample pitch mapping (default C-4).
     pub base_note: Note,
     /// Volume multiplier for this instrument (0.0 to 1.0).
@@ -314,6 +318,7 @@ impl Instrument {
             name: name.into(),
             sample_index: None,
             sample_path: None,
+            chip_render: None,
             base_note: Note::simple(Pitch::C, 4),
             volume: 1.0,
             panning: None,
@@ -546,6 +551,7 @@ mod tests {
         let inst = Instrument::new("Kick");
         assert_eq!(inst.name, "Kick");
         assert_eq!(inst.sample_index, None);
+        assert!(inst.chip_render.is_none());
         assert_eq!(inst.base_note.pitch, Pitch::C);
         assert_eq!(inst.base_note.octave, 4);
         assert_eq!(inst.volume, 1.0);
