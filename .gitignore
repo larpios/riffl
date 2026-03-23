@@ -5,7 +5,10 @@
 .auto-claude*
 .claude_settings.json
 Auto\ Run\ Docs/
-*.trs
+
+# Project files
+*.rtm
+
 .serena
 .direnv
 

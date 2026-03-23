@@ -22,5 +22,8 @@ opl-emu = { version = "0.4", default-features = false, features = ["chip"] }
 name = "mixer_bench"
 harness = false
 
+[package.metadata.cargo-audit]
+ignore = ["RUSTSEC-2024-0370"]
+
 [dev-dependencies]
 criterion = "0.5"

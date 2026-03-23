@@ -89,10 +89,16 @@ fn read_nsf_string(slice: &[u8]) -> String {
 pub fn import_nsf(data: &[u8]) -> Result<FormatData, String> {
     let meta = parse_nsf_header(data);
 
-    let gme = game_music_emu::GameMusicEmu::new(game_music_emu::EmuType::Nsf, 48000);
+    const MAX_DURATION_SECONDS: u32 = 300;
+    const SAMPLE_RATE: u32 = 48000;
+
+    let gme = game_music_emu::GameMusicEmu::new(game_music_emu::EmuType::Nsf, SAMPLE_RATE);
 
     gme.load_data(data)
         .map_err(|e| format!("Failed to load NSF data: {:?}", e))?;
+
+    gme.start_track(0)
+        .map_err(|e| format!("Failed to start NSF track: {:?}", e))?;
 
     let track_count = meta.track_count.max(1);
     let mut instrument = Instrument::new(format!("NSF Track ({})", meta.song_name));
@@ -110,12 +116,42 @@ pub fn import_nsf(data: &[u8]) -> Result<FormatData, String> {
     song.instruments.push(instrument);
     song.patterns.push(crate::pattern::Pattern::new(64, 1));
 
-    let sample = Sample::new(
-        vec![0.0f32; 48000],
-        48000,
-        2,
-        Some(format!("NSF: {}", meta.song_name)),
-    );
+    // Render audio
+    let max_frames = SAMPLE_RATE as usize * MAX_DURATION_SECONDS as usize;
+    let chunk_frames = 4096;
+    let mut audio_data = Vec::with_capacity(max_frames * 2);
+    let mut total_frames = 0;
+
+    while total_frames < max_frames && !gme.track_ended() {
+        let frames_to_render = chunk_frames.min(max_frames - total_frames);
+        let mut buffer = vec![0i16; frames_to_render * 2]; // stereo
+        gme.play(frames_to_render, &mut buffer)
+            .map_err(|e| format!("Failed to render NSF audio: {:?}", e))?;
+
+        // Convert i16 to f32
+        for sample in buffer {
+            audio_data.push(sample as f32 / 32768.0);
+        }
+
+        total_frames += frames_to_render;
+    }
+
+    // If no audio rendered (track ended immediately), fallback to dummy silence
+    let sample = if audio_data.is_empty() {
+        Sample::new(
+            vec![0.0f32; SAMPLE_RATE as usize],
+            SAMPLE_RATE,
+            2,
+            Some(format!("NSF: {}", meta.song_name)),
+        )
+    } else {
+        Sample::new(
+            audio_data,
+            SAMPLE_RATE,
+            2,
+            Some(format!("NSF: {}", meta.song_name)),
+        )
+    };
 
     song.effect_mode = EffectMode::Compatible;
 

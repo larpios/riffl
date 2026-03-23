@@ -63,6 +63,7 @@ hats:
     publishes: ["diagnosis.ready"]
     instructions: |
       - Identify failure type: Compile, Runtime, Logic, or Missing Context.
+      - If you can't figure out, reference projects in research/
       - Write the diagnosis and the specific failed approach to .ralph/scratchpad.
 
   healer:

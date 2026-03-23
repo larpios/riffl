@@ -107,7 +107,7 @@ fn restore_terminal() -> Result<()> {
     Ok(())
 }
 
-fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
+fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> Result<()> {
     while app.should_run() {
         terminal.draw(|frame| ui::render(frame, app))?;
 
