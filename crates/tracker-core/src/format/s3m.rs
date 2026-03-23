@@ -88,12 +88,12 @@ fn parse_s3m_header(data: &[u8]) -> Result<S3mHeader, String> {
 
     let mut off = 0;
     let name = read_string(data, &mut off, 28);
-    
+
     // 0x1C (28) -> 0x1A
     if data[0x1C] != 0x1A {
         // Warning: Some files might not have this, but standard says they should.
     }
-    off += 1; 
+    off += 1;
 
     let _type = read_u8(data, &mut off); // 0x1D
     let _unused = read_u16_le(data, &mut off); // 0x1E
@@ -101,9 +101,9 @@ fn parse_s3m_header(data: &[u8]) -> Result<S3mHeader, String> {
     let ord_num = read_u16_le(data, &mut off); // 0x20
     let ins_num = read_u16_le(data, &mut off); // 0x22
     let pat_num = read_u16_le(data, &mut off); // 0x24
-    let flags = read_u16_le(data, &mut off);   // 0x26
-    let _cwt_v = read_u16_le(data, &mut off);  // 0x28
-    let _ffi = read_u16_le(data, &mut off);    // 0x2A
+    let flags = read_u16_le(data, &mut off); // 0x26
+    let _cwt_v = read_u16_le(data, &mut off); // 0x28
+    let _ffi = read_u16_le(data, &mut off); // 0x2A
 
     let magic = &data[0x2C..0x30];
     if magic != b"SCRM" {
@@ -117,7 +117,7 @@ fn parse_s3m_header(data: &[u8]) -> Result<S3mHeader, String> {
     let master_vol = read_u8(data, &mut off); // 0x33
     let _ultra_click = read_u8(data, &mut off); // 0x34
     let _default_pan_flag = read_u8(data, &mut off); // 0x35
-    
+
     // Reserved
     off += 8; // 0x36..0x3E
 
@@ -126,8 +126,8 @@ fn parse_s3m_header(data: &[u8]) -> Result<S3mHeader, String> {
 
     // Channel settings (32 bytes) at 0x40
     let mut channel_settings = [0u8; 32];
-    for i in 0..32 {
-        channel_settings[i] = read_u8(data, &mut off);
+    for ch in &mut channel_settings {
+        *ch = read_u8(data, &mut off);
     }
 
     // Orders at 0x60
@@ -141,14 +141,18 @@ fn parse_s3m_header(data: &[u8]) -> Result<S3mHeader, String> {
     // Parapointers for Instruments
     let mut inst_pointers = Vec::with_capacity(ins_num as usize);
     for _ in 0..ins_num {
-        if off + 2 > data.len() { return Err("File truncated in instrument pointers".into()); }
+        if off + 2 > data.len() {
+            return Err("File truncated in instrument pointers".into());
+        }
         inst_pointers.push(read_u16_le(data, &mut off));
     }
 
     // Parapointers for Patterns
     let mut pat_pointers = Vec::with_capacity(pat_num as usize);
     for _ in 0..pat_num {
-        if off + 2 > data.len() { return Err("File truncated in pattern pointers".into()); }
+        if off + 2 > data.len() {
+            return Err("File truncated in pattern pointers".into());
+        }
         pat_pointers.push(read_u16_le(data, &mut off));
     }
 
@@ -222,12 +226,12 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
     // 0x1E: Pack (u8) - 0=Unpacked, 1=DP30ADPCM (unsupported)
     // 0x1F: Flags (u8) - Loop, Stereo, 16bit
     // 0x20: C2Spd (u32)
-    
+
     // Reset off to PCM-specific fields
     off = offset + 0x0D;
     let mem_seg = read_u16_le(data, &mut off);
     let sample_ptr = (mem_seg as usize) * 16;
-    
+
     let length = read_u32_le(data, &mut off); // 0x10
     let loop_begin = read_u32_le(data, &mut off); // 0x14
     let loop_end = read_u32_le(data, &mut off); // 0x18
@@ -261,23 +265,28 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
     // Flags bit 1 (2) = Stereo (unsupported in old S3M usually, but checked)
     // Flags bit 2 (4) = 16-bit
     let is_16bit = flags & 4 != 0;
-    
+
     // S3M 16-bit data is Little Endian
-    let raw_slice = &data[sample_ptr .. sample_ptr + length as usize];
+    let raw_slice = &data[sample_ptr..sample_ptr + length as usize];
     let float_data = if is_16bit {
         // 16-bit unsigned (rare in standard S3M but supported by format)
         let num_samples = raw_slice.len() / 2;
         let mut fd = Vec::with_capacity(num_samples);
         for i in 0..num_samples {
-            if i*2+1 >= raw_slice.len() { break; }
-            let s = u16::from_le_bytes([raw_slice[i*2], raw_slice[i*2+1]]);
+            if i * 2 + 1 >= raw_slice.len() {
+                break;
+            }
+            let s = u16::from_le_bytes([raw_slice[i * 2], raw_slice[i * 2 + 1]]);
             // Unsigned 16-bit to float: (s - 32768) / 32768.0
             fd.push((s as i32 - 32768) as f32 / 32768.0);
         }
         fd
     } else {
         // 8-bit unsigned
-        raw_slice.iter().map(|&b| (b as i16 - 128) as f32 / 128.0).collect()
+        raw_slice
+            .iter()
+            .map(|&b| (b as i16 - 128) as f32 / 128.0)
+            .collect()
     };
 
     Ok(S3mInstrument {
@@ -297,10 +306,10 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
 #[derive(Clone, Copy)]
 struct S3mCell {
     note: u8, // 0=Empty, 254=Cut, 255=Off (S3M uses 255 for empty, but we map)
-              // S3M: note 0..=119. 254 = key off?
+    // S3M: note 0..=119. 254 = key off?
     instrument: u8, // 0=Empty
-    volume: u8, // 0..64, 255=Empty
-    command: u8, // 0=Empty
+    volume: u8,     // 0..64, 255=Empty
+    command: u8,    // 0=Empty
     info: u8,
 }
 
@@ -311,11 +320,20 @@ struct S3mPattern {
 fn parse_s3m_pattern(data: &[u8], para_ptr: u16) -> Result<S3mPattern, String> {
     if para_ptr == 0 {
         // Empty pattern
-        return Ok(S3mPattern { 
+        return Ok(S3mPattern {
             rows: vec![
-                vec![S3mCell { note: 255, instrument: 0, volume: 255, command: 0, info: 0 }; 32];
+                vec![
+                    S3mCell {
+                        note: 255,
+                        instrument: 0,
+                        volume: 255,
+                        command: 0,
+                        info: 0
+                    };
+                    32
+                ];
                 64
-            ] 
+            ],
         });
     }
 
@@ -324,25 +342,31 @@ fn parse_s3m_pattern(data: &[u8], para_ptr: u16) -> Result<S3mPattern, String> {
         return Err("Pattern header out of bounds".into());
     }
 
-    let length = u16::from_le_bytes([data[offset], data[offset+1]]) as usize;
+    let length = u16::from_le_bytes([data[offset], data[offset + 1]]) as usize;
     if offset + 2 + length > data.len() {
         return Err("Pattern data out of bounds".into());
     }
 
-    let pat_data = &data[offset + 2 .. offset + 2 + length];
+    let pat_data = &data[offset + 2..offset + 2 + length];
     let mut off = 0;
-    
+
     let mut rows = Vec::with_capacity(64);
     let mut current_row = Vec::with_capacity(32);
     // Initialize current row with empty cells for 32 channels
     for _ in 0..32 {
-        current_row.push(S3mCell { note: 255, instrument: 0, volume: 255, command: 0, info: 0 });
+        current_row.push(S3mCell {
+            note: 255,
+            instrument: 0,
+            volume: 255,
+            command: 0,
+            info: 0,
+        });
     }
 
     // S3M patterns are packed. Loop until 64 rows are filled.
     // 32 channels per row.
     let mut row_idx = 0;
-    
+
     while off < pat_data.len() && row_idx < 64 {
         let b = pat_data[off];
         off += 1;
@@ -352,7 +376,13 @@ fn parse_s3m_pattern(data: &[u8], para_ptr: u16) -> Result<S3mPattern, String> {
             rows.push(current_row);
             current_row = Vec::with_capacity(32);
             for _ in 0..32 {
-                current_row.push(S3mCell { note: 255, instrument: 0, volume: 255, command: 0, info: 0 });
+                current_row.push(S3mCell {
+                    note: 255,
+                    instrument: 0,
+                    volume: 255,
+                    command: 0,
+                    info: 0,
+                });
             }
             row_idx += 1;
             continue;
@@ -367,27 +397,39 @@ fn parse_s3m_pattern(data: &[u8], para_ptr: u16) -> Result<S3mPattern, String> {
 
         if b & 32 != 0 {
             // Note + Instrument
-            if off + 2 > pat_data.len() { break; }
+            if off + 2 > pat_data.len() {
+                break;
+            }
             note = pat_data[off];
-            instrument = pat_data[off+1];
+            instrument = pat_data[off + 1];
             off += 2;
         }
         if b & 64 != 0 {
             // Volume
-            if off + 1 > pat_data.len() { break; }
+            if off + 1 > pat_data.len() {
+                break;
+            }
             volume = pat_data[off];
             off += 1;
         }
         if b & 128 != 0 {
             // Command + Info
-            if off + 2 > pat_data.len() { break; }
+            if off + 2 > pat_data.len() {
+                break;
+            }
             command = pat_data[off];
-            info = pat_data[off+1];
+            info = pat_data[off + 1];
             off += 2;
         }
 
         if channel < 32 {
-            current_row[channel] = S3mCell { note, instrument, volume, command, info };
+            current_row[channel] = S3mCell {
+                note,
+                instrument,
+                volume,
+                command,
+                info,
+            };
         }
     }
 
@@ -395,7 +437,13 @@ fn parse_s3m_pattern(data: &[u8], para_ptr: u16) -> Result<S3mPattern, String> {
     while rows.len() < 64 {
         let mut row = Vec::with_capacity(32);
         for _ in 0..32 {
-            row.push(S3mCell { note: 255, instrument: 0, volume: 255, command: 0, info: 0 });
+            row.push(S3mCell {
+                note: 255,
+                instrument: 0,
+                volume: 255,
+                command: 0,
+                info: 0,
+            });
         }
         rows.push(row);
     }
@@ -406,12 +454,14 @@ fn parse_s3m_pattern(data: &[u8], para_ptr: u16) -> Result<S3mPattern, String> {
 // ─── Effect Conversion ───────────────────────────────────────────────────────
 
 fn convert_s3m_effect(cmd: u8, info: u8) -> Option<Effect> {
-    if cmd == 0 { return None; }
-    
+    if cmd == 0 {
+        return None;
+    }
+
     // S3M commands are 1-based (A=1, B=2...)
     // Internal Effect uses specific bytes.
     let cmd_char = (cmd + 64) as char; // 1 -> 'A'
-    
+
     // Note: S3M param is straight byte.
     let _x = (info >> 4) & 0x0F;
     let y = info & 0x0F;
@@ -436,7 +486,7 @@ fn convert_s3m_effect(cmd: u8, info: u8) -> Option<Effect> {
             // Special commands (Sxy where x is subcmd)
             // S3M uses High nibble for subcmd
             match (info >> 4) & 0x0F {
-                0x0 => None, // Set Filter (ignored)
+                0x0 => None,                              // Set Filter (ignored)
                 0x1 => Some(Effect::new(0x0E, 0x30 | y)), // Glissando
                 0x2 => Some(Effect::new(0x0E, 0x50 | y)), // Finetune
                 0x3 => Some(Effect::new(0x0E, 0x40 | y)), // Vibrato Waveform
@@ -446,13 +496,13 @@ fn convert_s3m_effect(cmd: u8, info: u8) -> Option<Effect> {
                 0xC => Some(Effect::new(0x0E, 0xC0 | y)), // Note Cut
                 0xD => Some(Effect::new(0x0E, 0xD0 | y)), // Note Delay
                 0xE => Some(Effect::new(0x0E, 0xE0 | y)), // Pattern Delay
-                _ => None
+                _ => None,
             }
-        },
-        'T' => Some(Effect::new(0x0F, if info < 32 { info } else { info })), // Tempo/BPM
+        }
+        'T' => Some(Effect::new(0x0F, info)), // Tempo/BPM
         'U' => Some(Effect::new(0x04, info)), // Fine Vibrato (map to Vibrato for now)
         'V' => Some(Effect::new(0x10, info)), // Global Volume
-        _ => None
+        _ => None,
     }
 }
 
@@ -468,28 +518,26 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
 
     for (i, &ptr) in header.inst_pointers.iter().enumerate() {
         let s3m_inst = parse_s3m_instrument(data, ptr)?;
-        
+
         if let Some(float_data) = s3m_inst.sample_data {
             let mut sample = Sample::new(
                 float_data,
                 s3m_inst.c2spd,
                 1, // Mono
-                Some(s3m_inst.name.clone())
+                Some(s3m_inst.name.clone()),
             );
             sample.volume = s3m_inst.volume as f32 / 64.0;
-            
+
             // Loop
-            if s3m_inst.flags & 1 != 0 {
-                if s3m_inst.loop_end > s3m_inst.loop_begin {
-                    sample = sample.with_loop(
-                        LoopMode::Forward, 
-                        s3m_inst.loop_begin as usize, 
-                        s3m_inst.loop_end as usize
-                    );
-                }
+            if s3m_inst.flags & 1 != 0 && s3m_inst.loop_end > s3m_inst.loop_begin {
+                sample = sample.with_loop(
+                    LoopMode::Forward,
+                    s3m_inst.loop_begin as usize,
+                    s3m_inst.loop_end as usize,
+                );
             }
 
-            // S3M samples don't have relative pitch bytes like XM. 
+            // S3M samples don't have relative pitch bytes like XM.
             // C2SPD defines the frequency at Middle C (C-4).
             // Our engine uses base_note to calculate frequency.
             // Frequency = C4_Freq * 2^((Note - BaseNote)/12)
@@ -503,7 +551,7 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
             let mut inst = Instrument::new(s3m_inst.name);
             inst.sample_index = Some(samples.len());
             inst.volume = 1.0; // S3M applies volume at sample level mostly, but we can put it here too?
-                               // Actually S3M default volume is per-sample. 
+                               // Actually S3M default volume is per-sample.
                                // We applied it to the sample.volume already.
 
             inst_map[i] = Some(instruments.len());
@@ -529,18 +577,22 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
         let mut pattern = Pattern::new(64, 32); // S3M patterns are always 64 rows? Yes usually.
 
         for (r, row) in s3m_pat.rows.iter().enumerate() {
-            if r >= 64 { break; }
+            if r >= 64 {
+                break;
+            }
             for (c, cell) in row.iter().enumerate() {
-                if c >= 32 { break; }
-                
+                if c >= 32 {
+                    break;
+                }
+
                 let mut p_cell = Cell::empty();
-                
+
                 // Note
                 if cell.note < 254 {
-                    // S3M notes: 0x00=C-0 ... 0xFE=Cut? 
+                    // S3M notes: 0x00=C-0 ... 0xFE=Cut?
                     // High nibble octave, low nibble note?
                     // S3M: High nibble = octave (0-7+), Low nibble = note (0-11).
-                    // Actually: value = octave * 16 + note. 
+                    // Actually: value = octave * 16 + note.
                     // 255 = Empty. 254 = Key Off (^).
                     // C-4 is roughly middle.
                     let octave = cell.note >> 4;
@@ -548,10 +600,9 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
                     if note_idx < 12 {
                         if let Some(pitch) = Pitch::from_semitone(note_idx) {
                             p_cell.note = Some(NoteEvent::On(Note::new(
-                                pitch,
-                                octave,
+                                pitch, octave,
                                 64, // S3M doesn't have note velocity, default to mid/max? 64 is max vol in S3M.
-                                0   // Instrument set below
+                                0,  // Instrument set below
                             )));
                         }
                     }
@@ -591,14 +642,16 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
     // Build Arrangement
     let mut arrangement = Vec::new();
     for &ord in &header.orders {
-        if ord == 255 { break; } // End of song
+        if ord == 255 {
+            break;
+        } // End of song
         if ord < patterns.len() as u8 {
             arrangement.push(ord as usize);
         } else {
             // Empty pattern / +++
             // We should probably push a dummy pattern index or handle +++ (skip).
             // 254 = +++ (Marker/Skip).
-            // Standard S3M behavior: 254 is skipped in playback order, but 
+            // Standard S3M behavior: 254 is skipped in playback order, but
             // some trackers might treat it differently. We'll skip it in the list.
         }
     }
@@ -609,18 +662,22 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
     // Build Tracks (Channel settings)
     let mut tracks = Vec::new();
     let _num_channels = 0;
-    
+
     for i in 0..32 {
         let setting = header.channel_settings[i];
-        let _enabled = setting < 16; 
-        
+        let _enabled = setting < 16;
+
         let mut track = Track::with_number(i + 1);
         if setting == 255 {
             track.muted = true; // Effectively unused
         } else {
             // Default pan: S3M uses 0-7 for Left, 8-15 for Right
             if i < 16 {
-                if setting < 8 { track.pan = -0.5; } else { track.pan = 0.5; }
+                if setting < 8 {
+                    track.pan = -0.5;
+                } else {
+                    track.pan = 0.5;
+                }
             } else {
                 track.pan = 0.0;
             }
@@ -681,8 +738,12 @@ mod tests {
         // Parapointers (InsNum=0, PatNum=0) -> 0 bytes added
 
         let result = import_s3m(&data);
-        assert!(result.is_ok(), "Failed to parse minimal S3M: {:?}", result.err());
-        
+        assert!(
+            result.is_ok(),
+            "Failed to parse minimal S3M: {:?}",
+            result.err()
+        );
+
         let format_data = result.unwrap();
         assert_eq!(format_data.song.tracks.len(), 32);
         assert_eq!(format_data.song.arrangement.len(), 1);

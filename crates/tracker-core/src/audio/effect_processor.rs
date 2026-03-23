@@ -1490,7 +1490,7 @@ mod tests {
         }
         proc.advance_frame(0);
         proc.advance_frame(0);
-        
+
         let vol_after = proc.volume_override(0).unwrap();
         assert!(vol_after > 1.0);
     }
@@ -1557,7 +1557,7 @@ mod tests {
         // delta_per_frame = delta_per_row / 6.0
         // Expected = 1.0 + (5.0/384.0) = 1.0 + 0.01302
         let expected_delta = (1.0 / 64.0 * 5.0) / 6.0;
-        
+
         assert!((vol_after_frame - (vol_after_row + expected_delta as f32)).abs() < 0.000001);
     }
 
@@ -1612,7 +1612,7 @@ mod tests {
             state.frames_per_row = 6;
             state.ticks_per_row = 6;
         }
-        proc.advance_frame(0); 
+        proc.advance_frame(0);
         proc.advance_frame(0);
         let vol_after = proc.volume_override(0).unwrap();
 
