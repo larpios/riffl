@@ -1406,6 +1406,11 @@ impl Mixer {
         &self.effect_processor
     }
 
+    /// Set the effect interpretation mode.
+    pub fn set_effect_mode(&mut self, mode: crate::pattern::effect::EffectMode) {
+        self.effect_processor.set_effect_mode(mode);
+    }
+
     /// Get a mutable reference to the bus system for configuration.
     pub fn bus_system_mut(&mut self) -> &mut BusSystem {
         &mut self.bus_system

@@ -142,6 +142,12 @@ pub struct App {
     /// Scroll offset for the help overlay (in lines)
     pub help_scroll: u16,
 
+    /// Whether effect command help overlay is shown
+    pub show_effect_help: bool,
+
+    /// Scroll offset for the effect help overlay (in lines)
+    pub effect_help_scroll: u16,
+
     /// Timestamp of the last update call (for delta time calculation)
     last_update: Instant,
 
@@ -330,6 +336,8 @@ impl App {
             live_mode: false,
             show_help: false,
             help_scroll: 0,
+            show_effect_help: false,
+            effect_help_scroll: 0,
             last_update: Instant::now(),
             pending_key: None,
             pending_replace: false,
@@ -2284,6 +2292,7 @@ impl App {
                     mixer.update_tempo(self.song.bpm);
                     mixer.set_tpl(self.song.tpl);
                     mixer.set_global_volume(self.song.global_volume);
+                    mixer.set_effect_mode(self.song.effect_mode);
                 }
                 self.sync_mixer_instruments();
                 self.project_path = Some(path.to_path_buf());

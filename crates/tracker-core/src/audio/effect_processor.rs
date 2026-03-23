@@ -5,7 +5,7 @@
 //! processor maintains per-channel running state and provides frame-level
 //! modulation for continuous effects.
 
-use crate::pattern::effect::{Effect, EffectType};
+use crate::pattern::effect::{Effect, EffectMode, EffectType};
 
 /// Commands that effects can send to the transport system.
 ///
@@ -476,6 +476,8 @@ pub struct TrackerEffectProcessor {
     channels: Vec<ChannelEffectState>,
     /// Output sample rate (for timing calculations).
     sample_rate: u32,
+    /// Project-level effect interpretation mode.
+    pub mode: EffectMode,
     pub global_volume: f32,
     pub global_volume_slide_up: u8,
     pub global_volume_slide_down: u8,
@@ -487,6 +489,7 @@ impl TrackerEffectProcessor {
         Self {
             channels: vec![ChannelEffectState::default(); num_channels],
             sample_rate,
+            mode: EffectMode::default(),
             global_volume: 1.0,
             global_volume_slide_up: 0,
             global_volume_slide_down: 0,
@@ -501,6 +504,11 @@ impl TrackerEffectProcessor {
         } else {
             self.channels.truncate(num_channels);
         }
+    }
+
+    /// Set the effect interpretation mode.
+    pub fn set_effect_mode(&mut self, mode: EffectMode) {
+        self.mode = mode;
     }
 
     /// Process effects for a row, returning any transport commands.
