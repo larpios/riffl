@@ -278,6 +278,66 @@ const KEY_MAPPINGS: &[KeyMapping] = &[
         action: Action::ExecuteScript,
         mode: EditorMode::Normal,
     },
+    KeyMapping {
+        key: "Tab",
+        action: Action::EnvCycle,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Shift+Tab",
+        action: Action::EnvPrev,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Up",
+        action: Action::EnvMoveUp,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Down",
+        action: Action::EnvMoveDown,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Left",
+        action: Action::EnvMoveLeft,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Right",
+        action: Action::EnvMoveRight,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Insert",
+        action: Action::EnvAddPoint,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Delete",
+        action: Action::EnvDeletePoint,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Home",
+        action: Action::EnvSelectFirst,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "End",
+        action: Action::EnvSelectLast,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "+",
+        action: Action::EnvChangeValue,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "-",
+        action: Action::EnvChangeValue,
+        mode: EditorMode::Normal,
+    },
 ];
 
 /// Chord prefix mappings for which-key display
@@ -471,6 +531,20 @@ pub enum Action {
     ClonePattern,
     SelectPattern,
 
+    // Envelope editor
+    EnvCycle,
+    EnvPrev,
+    EnvMoveUp,
+    EnvMoveDown,
+    EnvMoveLeft,
+    EnvMoveRight,
+    EnvAddPoint,
+    EnvDeletePoint,
+    EnvSelectFirst,
+    EnvSelectLast,
+    EnvChangeValue,
+    EnvToggleEnabled,
+
     /// No action (unmapped key)
     None,
 }
@@ -564,6 +638,18 @@ impl ActionMetadata for Action {
             Action::DeletePattern => "Delete Pattern",
             Action::ClonePattern => "Clone Pattern",
             Action::SelectPattern => "Select Pattern",
+            Action::EnvCycle => "Env Cycle",
+            Action::EnvPrev => "Env Prev",
+            Action::EnvMoveUp => "Env Move Up",
+            Action::EnvMoveDown => "Env Move Down",
+            Action::EnvMoveLeft => "Env Move Left",
+            Action::EnvMoveRight => "Env Move Right",
+            Action::EnvAddPoint => "Env Add Point",
+            Action::EnvDeletePoint => "Env Delete Point",
+            Action::EnvSelectFirst => "Env Select First",
+            Action::EnvSelectLast => "Env Select Last",
+            Action::EnvChangeValue => "Env Change Value",
+            Action::EnvToggleEnabled => "Env Toggle Enabled",
             Action::None => "None",
         }
     }
@@ -656,6 +742,18 @@ impl ActionMetadata for Action {
             Action::DeletePattern => "Delete current pattern",
             Action::ClonePattern => "Clone current pattern",
             Action::SelectPattern => "Select current pattern",
+            Action::EnvCycle => "Cycle envelope type",
+            Action::EnvPrev => "Previous envelope type",
+            Action::EnvMoveUp => "Move envelope point up",
+            Action::EnvMoveDown => "Move envelope point down",
+            Action::EnvMoveLeft => "Move envelope point left",
+            Action::EnvMoveRight => "Move envelope point right",
+            Action::EnvAddPoint => "Add envelope point",
+            Action::EnvDeletePoint => "Delete envelope point",
+            Action::EnvSelectFirst => "Select first envelope point",
+            Action::EnvSelectLast => "Select last envelope point",
+            Action::EnvChangeValue => "Change envelope point value",
+            Action::EnvToggleEnabled => "Toggle envelope enabled",
             Action::None => "No operation",
         }
     }
@@ -719,6 +817,19 @@ impl ActionMetadata for Action {
             | Action::DeletePattern
             | Action::ClonePattern
             | Action::SelectPattern => ActionCategory::Pattern,
+
+            Action::EnvCycle
+            | Action::EnvPrev
+            | Action::EnvMoveUp
+            | Action::EnvMoveDown
+            | Action::EnvMoveLeft
+            | Action::EnvMoveRight
+            | Action::EnvAddPoint
+            | Action::EnvDeletePoint
+            | Action::EnvSelectFirst
+            | Action::EnvSelectLast
+            | Action::EnvChangeValue
+            | Action::EnvToggleEnabled => ActionCategory::Instrument,
 
             Action::TogglePlay
             | Action::Stop

@@ -798,6 +798,147 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             }
         }
 
+        // Envelope editor actions
+        Action::EnvCycle => {
+            if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
+                app.env_editor.focus();
+                app.env_editor.cycle_envelope_type();
+                if let Some(idx) = app.instrument_selection() {
+                    let envelope = app.env_editor.get_envelope(&app.song.instruments[idx]);
+                    app.env_editor.select_first_point(envelope);
+                }
+            }
+        }
+        Action::EnvPrev => {
+            if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
+                app.env_editor.focus();
+                app.env_editor.prev_envelope_type();
+                if let Some(idx) = app.instrument_selection() {
+                    let envelope = app.env_editor.get_envelope(&app.song.instruments[idx]);
+                    app.env_editor.select_first_point(envelope);
+                }
+            }
+        }
+        Action::EnvMoveUp => {
+            if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
+                app.env_editor.focus();
+                if let Some(idx) = app.instrument_selection() {
+                    let env_type = app.env_editor.envelope_type;
+                    let envelope = app
+                        .env_editor
+                        .get_envelope_mut(&mut app.song.instruments[idx]);
+                    app.env_editor.move_point_up(envelope, env_type);
+                }
+            }
+        }
+        Action::EnvMoveDown => {
+            if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
+                app.env_editor.focus();
+                if let Some(idx) = app.instrument_selection() {
+                    let env_type = app.env_editor.envelope_type;
+                    let envelope = app
+                        .env_editor
+                        .get_envelope_mut(&mut app.song.instruments[idx]);
+                    app.env_editor.move_point_down(envelope, env_type);
+                }
+            }
+        }
+        Action::EnvMoveLeft => {
+            if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
+                app.env_editor.focus();
+                if let Some(idx) = app.instrument_selection() {
+                    let envelope = app
+                        .env_editor
+                        .get_envelope_mut(&mut app.song.instruments[idx]);
+                    app.env_editor.move_point_left(envelope);
+                }
+            }
+        }
+        Action::EnvMoveRight => {
+            if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
+                app.env_editor.focus();
+                if let Some(idx) = app.instrument_selection() {
+                    let envelope = app
+                        .env_editor
+                        .get_envelope_mut(&mut app.song.instruments[idx]);
+                    app.env_editor.move_point_right(envelope);
+                }
+            }
+        }
+        Action::EnvAddPoint => {
+            if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
+                app.env_editor.focus();
+                if let Some(idx) = app.instrument_selection() {
+                    let envelope = app
+                        .env_editor
+                        .get_envelope_mut(&mut app.song.instruments[idx]);
+                    let frame = app
+                        .env_editor
+                        .selected_point
+                        .and_then(|i| envelope.points.get(i).map(|p| p.frame))
+                        .unwrap_or(0);
+                    app.env_editor
+                        .add_point_at(envelope, frame.saturating_add(32), 0.5);
+                }
+            }
+        }
+        Action::EnvDeletePoint => {
+            if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
+                app.env_editor.focus();
+                if let Some(idx) = app.instrument_selection() {
+                    let envelope = app
+                        .env_editor
+                        .get_envelope_mut(&mut app.song.instruments[idx]);
+                    app.env_editor.delete_selected_point(envelope);
+                }
+            }
+        }
+        Action::EnvSelectFirst => {
+            if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
+                app.env_editor.focus();
+                if let Some(idx) = app.instrument_selection() {
+                    let envelope = app.env_editor.get_envelope(&app.song.instruments[idx]);
+                    app.env_editor.select_first_point(envelope);
+                }
+            }
+        }
+        Action::EnvSelectLast => {
+            if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
+                app.env_editor.focus();
+                if let Some(idx) = app.instrument_selection() {
+                    let envelope = app.env_editor.get_envelope(&app.song.instruments[idx]);
+                    app.env_editor.select_last_point(envelope);
+                }
+            }
+        }
+        Action::EnvChangeValue => {
+            if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
+                app.env_editor.focus();
+                if let Some(idx) = app.instrument_selection() {
+                    let envelope = app
+                        .env_editor
+                        .get_envelope_mut(&mut app.song.instruments[idx]);
+                    let delta = if key.code == crossterm::event::KeyCode::Char('+')
+                        || key.code == crossterm::event::KeyCode::Char('=')
+                    {
+                        0.05
+                    } else {
+                        -0.05
+                    };
+                    app.env_editor.change_value(envelope, delta);
+                }
+            }
+        }
+        Action::EnvToggleEnabled => {
+            if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
+                app.env_editor.focus();
+                if let Some(idx) = app.instrument_selection() {
+                    app.env_editor
+                        .toggle_envelope_enabled(&mut app.song.instruments[idx]);
+                }
+            }
+        }
+
         Action::None => {}
     }
 }

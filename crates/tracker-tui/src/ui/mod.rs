@@ -20,6 +20,7 @@ use tracker_core::transport::{PlaybackMode, TransportState};
 // Submodules
 pub mod arrangement;
 pub mod code_editor;
+pub mod envelope_editor;
 pub mod export_dialog;
 pub mod fft_analyzer;
 pub mod file_browser;
@@ -81,14 +82,15 @@ pub fn render(frame: &mut Frame, app: &App) {
                 );
             }
             AppView::InstrumentList => {
-                // If an instrument is selected, split: list on top, editor below.
+                // If an instrument is selected, split: list, editor, envelope editor.
                 if let Some(idx) = app.instrument_selection() {
                     if idx < app.song.instruments.len() {
                         let chunks = ratatui::layout::Layout::default()
                             .direction(ratatui::layout::Direction::Vertical)
                             .constraints([
-                                ratatui::layout::Constraint::Percentage(55),
-                                ratatui::layout::Constraint::Percentage(45),
+                                ratatui::layout::Constraint::Percentage(40),
+                                ratatui::layout::Constraint::Percentage(35),
+                                ratatui::layout::Constraint::Percentage(25),
                             ])
                             .split(content_area);
                         instrument_list::render_instrument_list(
@@ -112,6 +114,13 @@ pub fn render(frame: &mut Frame, app: &App) {
                             &app.inst_editor,
                             &app.theme,
                             sample.as_deref(),
+                        );
+                        envelope_editor::render_envelope_editor(
+                            frame,
+                            chunks[2],
+                            &app.song.instruments[idx],
+                            &app.env_editor,
+                            &app.theme,
                         );
                     } else {
                         instrument_list::render_instrument_list(

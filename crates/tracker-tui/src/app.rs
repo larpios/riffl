@@ -13,6 +13,7 @@ use crate::config::Config;
 use crate::editor::{Editor, EditorMode};
 use crate::ui::arrangement::ArrangementView;
 use crate::ui::code_editor::{self, CodeEditor};
+use crate::ui::envelope_editor::EnvelopeEditorState;
 use crate::ui::export_dialog::ExportDialog;
 use crate::ui::file_browser::FileBrowser;
 use crate::ui::instrument_editor::InstrumentEditorState;
@@ -189,6 +190,9 @@ pub struct App {
     /// Instrument editor panel state (shown below the instrument list)
     pub inst_editor: InstrumentEditorState,
 
+    /// Envelope editor state for visual envelope editing
+    pub env_editor: EnvelopeEditorState,
+
     /// Whether the sample browser has an active user-initiated preview.
     pub browser_preview_active: bool,
 
@@ -326,6 +330,7 @@ impl App {
             draw_mode: false,
             draw_note: None,
             inst_editor: InstrumentEditorState::default(),
+            env_editor: EnvelopeEditorState::default(),
             browser_preview_active: false,
             browser_preview_sample: None,
             browser_preview_rate: 1.0,
