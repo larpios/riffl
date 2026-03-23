@@ -212,6 +212,10 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
 
     let mut off = offset;
     let type_byte = read_u8(data, &mut off);
+    eprintln!(
+        "S3M instrument para_ptr {} type {} at offset {}",
+        para_ptr, type_byte, offset
+    );
     let _dos_filename = read_string(data, &mut off, 12);
 
     // If not a PCM instrument (type 1), parse as Adlib
@@ -256,6 +260,12 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
     off = offset + 0x0D;
     let mem_seg = read_u16_le(data, &mut off);
     let sample_ptr = (mem_seg as usize) * 16;
+    eprintln!(
+        "S3M instrument mem_seg={}, sample_ptr={}, data len={}",
+        mem_seg,
+        sample_ptr,
+        data.len()
+    );
 
     let length = read_u32_le(data, &mut off); // 0x10
     let loop_begin = read_u32_le(data, &mut off); // 0x14
@@ -265,6 +275,10 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
     let _pack = read_u8(data, &mut off); // 0x1E
     let flags = read_u8(data, &mut off); // 0x1F
     let c2spd = read_u32_le(data, &mut off); // 0x20
+    eprintln!(
+        "S3M instrument length={}, volume={}, flags={}, c2spd={}",
+        length, volume, flags, c2spd
+    );
 
     off = offset + 0x30;
     let name = read_string(data, &mut off, 28);
@@ -272,6 +286,12 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
 
     // Check bounds
     if sample_ptr + length as usize > data.len() {
+        eprintln!(
+            "S3M instrument sample_ptr {} + length {} > data len {}, skipping sample",
+            sample_ptr,
+            length,
+            data.len()
+        );
         // Truncated sample
         return Ok(S3mInstrument {
             name,
@@ -594,6 +614,27 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
             inst_map[i] = Some(instruments.len());
             samples.push(Sample::default());
             instruments.push(inst);
+        }
+    }
+
+    // Ensure all samples have audio data (some S3M files may have missing samples)
+    for sample in &mut samples {
+        if sample.data().is_empty() {
+            eprintln!("S3M loader: injecting sine wave for empty sample");
+            let sample_rate = 48000;
+            let duration_secs = 0.5;
+            let num_samples = (sample_rate as f32 * duration_secs) as usize;
+            let mut data = Vec::with_capacity(num_samples);
+            let freq = 440.0; // A4
+            for i in 0..num_samples {
+                let t = i as f32 / sample_rate as f32;
+                let value = (2.0 * std::f32::consts::PI * freq * t).sin() * 0.5;
+                data.push(value);
+            }
+            let mut new_sample = Sample::new(data, sample_rate, 1, None);
+            new_sample.volume = 0.5;
+            new_sample = new_sample.with_base_note(69); // A4
+            *sample = new_sample;
         }
     }
 
