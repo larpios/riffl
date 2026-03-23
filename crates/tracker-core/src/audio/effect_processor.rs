@@ -562,23 +562,18 @@ impl TrackerEffectProcessor {
                 EffectType::PitchSlideUp => {
                     // Set pitch slide up speed
                     state.pitch_slide_up = effect.param;
-                    // Apply immediate slide for tick 0 responsiveness
-                    let semitones = effect.param as f64 / 16.0;
-                    state.pitch_ratio *= 2.0_f64.powf(semitones / 12.0);
                 }
 
                 EffectType::PitchSlideDown => {
                     // Set pitch slide down speed
                     state.pitch_slide_down = effect.param;
-                    // Apply immediate slide for tick 0 responsiveness
-                    let semitones = effect.param as f64 / 16.0;
-                    state.pitch_ratio *= 2.0_f64.powf(-semitones / 12.0);
                 }
 
                 EffectType::PortamentoToNote => {
                     // Set portamento speed; target is set when a note is triggered
                     if effect.param > 0 {
-                        state.portamento_speed = effect.param as f64 / 16.0;
+                        // Standard XM slide unit is 1/64th semitone per tick
+                        state.portamento_speed = effect.param as f64 / 64.0;
                     }
                     if let Some(freq) = note_frequency {
                         state.portamento_target = Some(freq);
@@ -607,12 +602,6 @@ impl TrackerEffectProcessor {
                         state.volume_slide_down = effect.param_y();
                     }
 
-                    // Apply immediate slide for tick 0 responsiveness
-                    let current_vol = state.volume_override.unwrap_or(1.0);
-                    let delta =
-                        (state.volume_slide_up as f32 - state.volume_slide_down as f32) / 64.0;
-                    state.volume_override = Some((current_vol + delta).clamp(0.0, 2.0));
-
                     // Portamento target is handled by new notes triggered on this row
                     if let Some(freq) = note_frequency {
                         state.portamento_target = Some(freq);
@@ -630,12 +619,6 @@ impl TrackerEffectProcessor {
                         state.volume_slide_up = effect.param_x();
                         state.volume_slide_down = effect.param_y();
                     }
-
-                    // Apply immediate slide for tick 0 responsiveness
-                    let current_vol = state.volume_override.unwrap_or(1.0);
-                    let delta =
-                        (state.volume_slide_up as f32 - state.volume_slide_down as f32) / 64.0;
-                    state.volume_override = Some((current_vol + delta).clamp(0.0, 2.0));
                 }
 
                 EffectType::Tremolo => {
@@ -658,13 +641,6 @@ impl TrackerEffectProcessor {
                         state.volume_slide_up = effect.param_x();
                         state.volume_slide_down = effect.param_y();
                     }
-
-                    // Apply immediate slide for tick 0 responsiveness
-                    let current_vol = state.volume_override.unwrap_or(1.0);
-                    let delta =
-                        (state.volume_slide_up as f32 - state.volume_slide_down as f32) / 64.0;
-                    state.volume_override = Some((current_vol + delta).clamp(0.0, 2.0));
-
                     // Volume slides in classic trackers are only applied on ticks > 0.
                     // We handle the continuous sliding smoothly in advance_frame.
                 }
@@ -689,13 +665,14 @@ impl TrackerEffectProcessor {
 
                     match sub_command {
                         0x1 => {
-                            // E1x: Fine Portamento Up
-                            let semitones = sub_param as f64 / 256.0;
+                            // E1x: Fine Portamento Up (once per row)
+                            // Standard Fine slide is 4x Extra Fine (4/64 semitones per unit)
+                            let semitones = sub_param as f64 / 16.0;
                             state.pitch_ratio *= 2.0_f64.powf(semitones / 12.0);
                         }
                         0x2 => {
-                            // E2x: Fine Portamento Down
-                            let semitones = sub_param as f64 / 256.0;
+                            // E2x: Fine Portamento Down (once per row)
+                            let semitones = sub_param as f64 / 16.0;
                             state.pitch_ratio *= 2.0_f64.powf(-semitones / 12.0);
                         }
                         0x3 => {
@@ -833,6 +810,17 @@ impl TrackerEffectProcessor {
                         param: effect.param,
                     });
                 }
+                EffectType::ExtraFinePortaUp => {
+                    // X1x: Extra Fine Portamento Up (once per row)
+                    // Unit is 1/64th semitone (same as linear frequency period unit)
+                    let semitones = effect.param as f64 / 64.0;
+                    state.pitch_ratio *= 2.0_f64.powf(semitones / 12.0);
+                }
+                EffectType::ExtraFinePortaDown => {
+                    // X2x: Extra Fine Portamento Down
+                    let semitones = effect.param as f64 / 64.0;
+                    state.pitch_ratio *= 2.0_f64.powf(-semitones / 12.0);
+                }
             }
         }
 
@@ -847,11 +835,12 @@ impl TrackerEffectProcessor {
         if let Some(state) = self.channels.get_mut(channel) {
             state.row_frame_counter += 1;
 
-            // Skip continuous effects on the very first frame of the row (tick 0).
-            // This matches tracker behavior where slides (Axy, 1xx, 2xx) only
-            // happen on ticks > 0. Since row_frame_counter starts at 0 and we just
-            // incremented it, we skip if it's 1 (the first frame after tick 0 start).
-            if state.row_frame_counter <= 1 {
+            // Skip continuous effects during Tick 0.
+            // Continuous slides (Axy, 1xx, 2xx) only apply on ticks > 0.
+            let frames_per_tick = state.frames_per_row / state.ticks_per_row.max(1) as u32;
+            // row_frame_counter is 1-based here (just incremented).
+            // If we are within the first tick's duration, return early.
+            if state.row_frame_counter <= frames_per_tick.max(1) {
                 return;
             }
 
@@ -864,8 +853,9 @@ impl TrackerEffectProcessor {
             let state = self.channels.get_mut(channel).unwrap();
             if state.pitch_slide_up > 0 || state.pitch_slide_down > 0 {
                 // Pitch slides happen every tick except tick 0.
+                // Standard unit: 1/64 semitone per tick
                 let semitones_per_tick =
-                    (state.pitch_slide_up as f64 - state.pitch_slide_down as f64) / 16.0;
+                    (state.pitch_slide_up as f64 - state.pitch_slide_down as f64) / 64.0;
                 let active_ticks = (state.ticks_per_row as f64 - 1.0).max(1.0);
                 let semitones_per_row = semitones_per_tick * active_ticks;
                 let semitones_per_frame = semitones_per_row / state.frames_per_row as f64;
@@ -1384,6 +1374,17 @@ mod tests {
         let effects = vec![Effect::from_type(EffectType::PitchSlideUp, 0x10)];
         proc.process_row(0, &effects, None);
 
+        // Should not slide immediately
+        assert!((proc.pitch_ratio(0) - 1.0).abs() < 0.0001);
+
+        // Advance to trigger
+        if let Some(state) = proc.channel_state_mut(0) {
+            state.frames_per_row = 6;
+            state.ticks_per_row = 6;
+        }
+        proc.advance_frame(0);
+        proc.advance_frame(0);
+
         assert!(proc.pitch_ratio(0) > 1.0);
     }
 
@@ -1393,6 +1394,17 @@ mod tests {
         let effects = vec![Effect::from_type(EffectType::PitchSlideDown, 0x10)];
         proc.process_row(0, &effects, None);
 
+        // Should not slide immediately
+        assert!((proc.pitch_ratio(0) - 1.0).abs() < 0.0001);
+
+        // Advance to trigger
+        if let Some(state) = proc.channel_state_mut(0) {
+            state.frames_per_row = 6;
+            state.ticks_per_row = 6;
+        }
+        proc.advance_frame(0);
+        proc.advance_frame(0);
+
         assert!(proc.pitch_ratio(0) < 1.0);
     }
 
@@ -1401,10 +1413,23 @@ mod tests {
         let mut proc = TrackerEffectProcessor::new(4, 48000);
         let effects = vec![Effect::from_type(EffectType::PitchSlideUp, 0x10)];
 
+        if let Some(state) = proc.channel_state_mut(0) {
+            state.frames_per_row = 6;
+            state.ticks_per_row = 6;
+        }
+
+        // Row 1
         proc.process_row(0, &effects, None);
+        proc.advance_frame(0);
+        proc.advance_frame(0);
         let ratio1 = proc.pitch_ratio(0);
 
+        // Row 2
         proc.process_row(0, &effects, None);
+        // Note: process_row resets transient flags but pitch_ratio persists
+        // We need to advance frames again to slide further
+        proc.advance_frame(0);
+        proc.advance_frame(0);
         let ratio2 = proc.pitch_ratio(0);
 
         assert!(
@@ -1454,9 +1479,20 @@ mod tests {
         assert_eq!(state.volume_slide_up, 1);
         assert_eq!(state.volume_slide_down, 0);
 
-        // Verify immediate volume slide application
+        // Should NOT change immediately
         let vol = proc.volume_override(0).unwrap();
-        assert!((vol - (1.0 + 1.0 / 64.0)).abs() < 0.001);
+        assert!((vol - 1.0).abs() < 0.001);
+
+        // Advance to trigger
+        if let Some(state) = proc.channel_state_mut(0) {
+            state.frames_per_row = 6;
+            state.ticks_per_row = 6;
+        }
+        proc.advance_frame(0);
+        proc.advance_frame(0);
+        
+        let vol_after = proc.volume_override(0).unwrap();
+        assert!(vol_after > 1.0);
     }
 
     #[test]
@@ -1477,19 +1513,24 @@ mod tests {
         )]; // Up 1
         proc.process_row(0, &effects, None);
 
+        // Should scale speed by 64.0 now (standard 1xx/2xx/3xx unit)
         let state = proc.channel_state(0).unwrap();
-        assert_eq!(state.portamento_speed, 1.0);
+        assert_eq!(state.portamento_speed, 16.0 / 64.0); // 0.25
         assert_eq!(state.volume_slide_up, 1);
 
-        // Verify immediate volume slide application
+        // Should NOT change volume immediately
         let vol = proc.volume_override(0).unwrap();
-        assert!((vol - (1.0 + 1.0 / 64.0)).abs() < 0.001);
+        assert!((vol - 1.0).abs() < 0.001);
     }
 
     #[test]
     fn test_advance_frame_volume_slide() {
         let mut proc = TrackerEffectProcessor::new(1, 48000);
-        proc.update_tempo(120.0); // 6000 frames per row
+        // Set small frames per row for testing tick boundaries
+        if let Some(state) = proc.channel_state_mut(0) {
+            state.frames_per_row = 6;
+            state.ticks_per_row = 6;
+        }
 
         // Initial volume
         proc.process_row(0, &[Effect::from_type(EffectType::SetVolume, 0x40)], None);
@@ -1501,16 +1542,22 @@ mod tests {
         let vol_after_row = proc.volume_override(0).unwrap();
 
         // Advance two frames
-        // Frame 1: row_frame_counter becomes 1. Continuous effects SKIPPED.
-        // Frame 2: row_frame_counter becomes 2. Continuous effects PROCESSED.
+        // Frame 1: row_frame_counter 1 (Tick 0). Skipped.
+        // Frame 2: row_frame_counter 2 (Tick 1). Processed.
         proc.advance_frame(0);
         proc.advance_frame(0);
 
         let vol_after_frame = proc.volume_override(0).unwrap();
 
-        // Each frame (after the first) should slide by (up-down)/64 * (ticks-1) / frames_per_row
-        // ticks_per_row defaults to 6, so active_ticks = 5.
-        let expected_delta = (1.0 / 64.0 * 5.0) / 6000.0;
+        // One frame processed.
+        // Delta calculation:
+        // delta_per_tick = 1/64.0
+        // active_ticks = 5.0
+        // delta_per_row = 5/64.0
+        // delta_per_frame = delta_per_row / 6.0
+        // Expected = 1.0 + (5.0/384.0) = 1.0 + 0.01302
+        let expected_delta = (1.0 / 64.0 * 5.0) / 6.0;
+        
         assert!((vol_after_frame - (vol_after_row + expected_delta as f32)).abs() < 0.000001);
     }
 
@@ -1557,7 +1604,16 @@ mod tests {
 
         // Volume slide up
         proc.process_row(0, &[Effect::from_type(EffectType::VolumeSlide, 0x40)], None);
-        proc.advance_frame(0); // Volume slide takes effect smoothly during the row
+        // No immediate change
+        assert!((proc.volume_override(0).unwrap() - vol_before).abs() < 0.001);
+
+        // Advance to trigger
+        if let Some(state) = proc.channel_state_mut(0) {
+            state.frames_per_row = 6;
+            state.ticks_per_row = 6;
+        }
+        proc.advance_frame(0); 
+        proc.advance_frame(0);
         let vol_after = proc.volume_override(0).unwrap();
 
         assert!(
@@ -1575,7 +1631,16 @@ mod tests {
         let vol_before = proc.volume_override(0).unwrap();
 
         proc.process_row(0, &[Effect::from_type(EffectType::VolumeSlide, 0x04)], None);
-        proc.advance_frame(0); // Volume slide takes effect smoothly during the row
+        // No immediate change
+        assert!((proc.volume_override(0).unwrap() - vol_before).abs() < 0.001);
+
+        // Advance to trigger
+        if let Some(state) = proc.channel_state_mut(0) {
+            state.frames_per_row = 6;
+            state.ticks_per_row = 6;
+        }
+        proc.advance_frame(0);
+        proc.advance_frame(0);
         let vol_after = proc.volume_override(0).unwrap();
 
         assert!(
@@ -1772,8 +1837,18 @@ mod tests {
         assert!(proc.volume_override(0).is_some());
         assert!((proc.pitch_ratio(0) - 1.0).abs() < 0.001);
 
-        // Channel 1: no volume change, pitch changed
+        // Channel 1: no volume change, pitch starts unchanged (tick 0)
         assert_eq!(proc.volume_override(1), None);
+        assert!((proc.pitch_ratio(1) - 1.0).abs() < 0.001);
+
+        // Advance frames to trigger slide
+        if let Some(state) = proc.channel_state_mut(1) {
+            state.frames_per_row = 6;
+            state.ticks_per_row = 6;
+        }
+        proc.advance_frame(1);
+        proc.advance_frame(1);
+
         assert!(proc.pitch_ratio(1) > 1.0);
     }
 
