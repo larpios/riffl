@@ -961,7 +961,7 @@ fn convert_it_effect(cmd: u8, param: u8) -> Option<Effect> {
                 Some(Effect::new(0x0E, 0x20 | lo))
             } else if hi == 0x0E {
                 // EEy: Extra fine pitch slide down
-                Some(Effect::new(0x0E, 0x20 | lo)) // Map to same for now
+                Some(Effect::new(0x22, lo))
             } else {
                 Some(Effect::new(0x02, param))
             }
@@ -974,7 +974,7 @@ fn convert_it_effect(cmd: u8, param: u8) -> Option<Effect> {
                 Some(Effect::new(0x0E, 0x10 | lo))
             } else if hi == 0x0E {
                 // FEy: Extra fine pitch slide up
-                Some(Effect::new(0x0E, 0x10 | lo))
+                Some(Effect::new(0x21, lo))
             } else {
                 Some(Effect::new(0x01, param))
             }
