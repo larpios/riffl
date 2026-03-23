@@ -259,12 +259,19 @@ impl App {
             .map(|e| e.sample_rate())
             .unwrap_or(44100);
 
+        // Load user configuration
+        let config = if cfg!(test) {
+            Config::default()
+        } else {
+            Config::load()
+        };
+
         // Generate a demo sine wave sample at 440Hz, 0.25s duration
         let demo_sample = Self::generate_sine_sample(440.0, 0.25, 44100);
         let demo_chip_render = ChipRenderData::from_sample(&demo_sample);
 
         // Create a demo pattern: C4, E4, G4, C5 across 16 rows
-        let mut pattern = Pattern::new(16, 4);
+        let mut pattern = Pattern::new(config.default_pattern_rows, config.default_channels);
         pattern.set_note(0, 0, Note::simple(Pitch::C, 4));
         pattern.set_note(4, 0, Note::simple(Pitch::E, 4));
         pattern.set_note(8, 0, Note::simple(Pitch::G, 4));
@@ -279,10 +286,9 @@ impl App {
         )));
 
         // Create a song with the demo pattern in its pool
-        let mut song = Song::new("Untitled", 125.0);
+        let mut song = Song::new("Untitled", config.default_bpm);
 
         // Create transport synced to song BPM and pattern size
-        let config = Config::load();
         let mut transport = Transport::new();
         transport.set_playback_mode(config.default_playback_mode);
         transport.set_loop_enabled(config.default_loop_enabled);
@@ -313,7 +319,7 @@ impl App {
         // Initialize file browser and sample browser at current working directory
         let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let file_browser = FileBrowser::new(&cwd);
-        let sample_browser = SampleBrowser::new(vec![cwd.clone()]);
+        let sample_browser = SampleBrowser::new(config.resolve_sample_dirs(None));
 
         Self {
             should_quit: false,
@@ -329,11 +335,11 @@ impl App {
             instrument_selection: None,
             pattern_selection: None,
             project_path: None,
-            configured_sample_dirs: Vec::new(),
+            configured_sample_dirs: config.resolve_sample_dirs(None),
             current_view: AppView::PatternEditor,
-            theme_kind: ThemeKind::Nord,
-            theme: Theme::from_kind(ThemeKind::Nord),
-            config: Config::default(),
+            theme_kind: config.theme_kind(),
+            theme: Theme::from_kind(config.theme_kind()),
+            config,
             audio_engine,
             mixer,
             glicol_mixer,
