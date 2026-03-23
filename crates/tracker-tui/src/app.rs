@@ -122,6 +122,12 @@ pub struct App {
     /// Whether the split view is active (pattern left, code editor right)
     pub split_view: bool,
 
+    /// Whether the instrument view is expanded (full-screen deep editing)
+    pub instrument_expanded: bool,
+
+    /// Whether the mini control panel is shown in the main view
+    pub instrument_mini_panel: bool,
+
     /// DSL scripting engine for executing Rhai scripts
     script_engine: ScriptEngine,
 
@@ -311,6 +317,8 @@ impl App {
             transport,
             code_editor: CodeEditor::new(),
             split_view: false,
+            instrument_expanded: false,
+            instrument_mini_panel: false,
             script_engine: ScriptEngine::new(),
             live_mode: false,
             show_help: false,
@@ -1939,6 +1947,16 @@ impl App {
     /// Check if the code editor is active (either full-screen or split).
     pub fn is_code_editor_active(&self) -> bool {
         self.code_editor.active
+    }
+
+    /// Toggle instrument mini panel in the main view.
+    pub fn toggle_instrument_mini_panel(&mut self) {
+        self.instrument_mini_panel = !self.instrument_mini_panel;
+    }
+
+    /// Toggle instrument expanded view (full-screen deep editing).
+    pub fn toggle_instrument_expanded(&mut self) {
+        self.instrument_expanded = !self.instrument_expanded;
     }
 
     /// Toggle live mode on/off.

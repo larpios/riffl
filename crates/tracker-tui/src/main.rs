@@ -775,6 +775,12 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                 app.select_instrument();
             }
         }
+        Action::ToggleInstrumentMiniPanel => {
+            app.toggle_instrument_mini_panel();
+        }
+        Action::ToggleInstrumentExpanded => {
+            app.toggle_instrument_expanded();
+        }
 
         // Pattern management (only when in pattern list view)
         Action::AddPattern => {

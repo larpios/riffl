@@ -55,6 +55,62 @@ pub fn render(frame: &mut Frame, app: &App) {
 
     render_header(frame, header_area, app);
 
+    // Handle instrument expanded view (full-screen deep editing)
+    if app.instrument_expanded {
+        if let Some(idx) = app.instrument_selection() {
+            if idx < app.song.instruments.len() {
+                let chunks = ratatui::layout::Layout::default()
+                    .direction(ratatui::layout::Direction::Vertical)
+                    .constraints([
+                        ratatui::layout::Constraint::Percentage(30),
+                        ratatui::layout::Constraint::Percentage(25),
+                        ratatui::layout::Constraint::Percentage(25),
+                        ratatui::layout::Constraint::Percentage(20),
+                    ])
+                    .split(content_area);
+                instrument_list::render_instrument_list(
+                    frame,
+                    chunks[0],
+                    &app.song,
+                    &app.loaded_samples(),
+                    &app.theme,
+                    Some(idx),
+                );
+                let sample = {
+                    let samples = app.loaded_samples();
+                    app.song.instruments[idx]
+                        .sample_index
+                        .and_then(|si| samples.get(si).cloned())
+                };
+                instrument_editor::render_instrument_editor(
+                    frame,
+                    chunks[1],
+                    &app.song.instruments[idx],
+                    &app.inst_editor,
+                    &app.theme,
+                    sample.as_deref(),
+                );
+                envelope_editor::render_envelope_editor(
+                    frame,
+                    chunks[2],
+                    &app.song.instruments[idx],
+                    &app.env_editor,
+                    &app.theme,
+                );
+                waveform_editor::render_waveform_editor(
+                    frame,
+                    chunks[3],
+                    &app.song.instruments[idx],
+                    sample.as_deref(),
+                    &app.waveform_editor,
+                    &app.theme,
+                );
+            }
+        }
+        render_footer(frame, footer_area, app);
+        return;
+    }
+
     // Handle split view: pattern left, code editor right
     if app.split_view && app.current_view == AppView::PatternEditor {
         let (left, right) =
@@ -377,6 +433,50 @@ fn calculate_channel_scroll(
 
 /// Render the main content area with the tracker pattern grid
 fn render_content(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    // Handle mini control panel - show above pattern when enabled and instrument selected
+    if app.instrument_mini_panel {
+        if let Some(idx) = app.instrument_selection() {
+            if idx < app.song.instruments.len() {
+                // Calculate layout: mini panel takes top ~20% or 5 rows, pattern takes rest
+                let mini_panel_height = 5;
+                if area.height > mini_panel_height + 2 {
+                    let chunks = ratatui::layout::Layout::default()
+                        .direction(ratatui::layout::Direction::Vertical)
+                        .constraints([
+                            ratatui::layout::Constraint::Length(mini_panel_height),
+                            ratatui::layout::Constraint::Min(0),
+                        ])
+                        .split(area);
+
+                    // Render mini instrument control panel
+                    let sample = {
+                        let samples = app.loaded_samples();
+                        app.song.instruments[idx]
+                            .sample_index
+                            .and_then(|si| samples.get(si).cloned())
+                    };
+                    instrument_editor::render_instrument_editor(
+                        frame,
+                        chunks[0],
+                        &app.song.instruments[idx],
+                        &app.inst_editor,
+                        &app.theme,
+                        sample.as_deref(),
+                    );
+
+                    // Render pattern in remaining space
+                    render_pattern_with_area(frame, chunks[1], app);
+                    return;
+                }
+            }
+        }
+    }
+
+    // Default: render pattern in full area
+    render_pattern_with_area(frame, area, app);
+}
+
+fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let theme = &app.theme;
     let pattern = app.editor.pattern();
     let cursor_row = app.editor.cursor_row();

@@ -554,6 +554,8 @@ pub enum Action {
     RenameInstrument,
     EditInstrument,
     SelectInstrument,
+    ToggleInstrumentMiniPanel,
+    ToggleInstrumentExpanded,
 
     // Pattern management
     AddPattern,
@@ -674,6 +676,8 @@ impl ActionMetadata for Action {
             Action::RenameInstrument => "Rename Instrument",
             Action::EditInstrument => "Edit Instrument",
             Action::SelectInstrument => "Select Instrument",
+            Action::ToggleInstrumentMiniPanel => "Instrument Mini Panel",
+            Action::ToggleInstrumentExpanded => "Instrument Expand",
             Action::AddPattern => "Add Pattern",
             Action::DeletePattern => "Delete Pattern",
             Action::ClonePattern => "Clone Pattern",
@@ -786,6 +790,8 @@ impl ActionMetadata for Action {
             Action::RenameInstrument => "Rename current instrument",
             Action::EditInstrument => "Enter instrument editor",
             Action::SelectInstrument => "Select current instrument",
+            Action::ToggleInstrumentMiniPanel => "Toggle instrument mini panel",
+            Action::ToggleInstrumentExpanded => "Toggle instrument expanded view",
             Action::AddPattern => "Add a new pattern",
             Action::DeletePattern => "Delete current pattern",
             Action::ClonePattern => "Clone current pattern",
@@ -867,7 +873,9 @@ impl ActionMetadata for Action {
             | Action::DeleteInstrument
             | Action::RenameInstrument
             | Action::EditInstrument
-            | Action::SelectInstrument => ActionCategory::Instrument,
+            | Action::SelectInstrument
+            | Action::ToggleInstrumentMiniPanel
+            | Action::ToggleInstrumentExpanded => ActionCategory::Instrument,
 
             Action::AddPattern
             | Action::DeletePattern
