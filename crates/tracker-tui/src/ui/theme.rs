@@ -9,6 +9,9 @@ pub enum ThemeKind {
     Dark,
     CatppuccinMocha,
     Nord,
+    Gruvbox,
+    SolarizedDark,
+    SolarizedLight,
     Custom(String),
 }
 
@@ -18,6 +21,9 @@ impl ThemeKind {
             Self::Dark => "dark",
             Self::CatppuccinMocha => "mocha",
             Self::Nord => "nord",
+            Self::Gruvbox => "gruvbox",
+            Self::SolarizedDark => "solarized-dark",
+            Self::SolarizedLight => "solarized-light",
             Self::Custom(name) => name.as_str(),
         }
     }
@@ -27,6 +33,9 @@ impl ThemeKind {
             "dark" | "default" => Some(Self::Dark),
             "mocha" | "catppuccin" | "catppuccin-mocha" => Some(Self::CatppuccinMocha),
             "nord" => Some(Self::Nord),
+            "gruvbox" => Some(Self::Gruvbox),
+            "solarized-dark" | "solarized" => Some(Self::SolarizedDark),
+            "solarized-light" => Some(Self::SolarizedLight),
             _ => None,
         }
     }
@@ -85,6 +94,9 @@ impl Theme {
             ThemeKind::Dark => Self::dark(),
             ThemeKind::CatppuccinMocha => Self::catppuccin_mocha(),
             ThemeKind::Nord => Self::nord(),
+            ThemeKind::Gruvbox => Self::gruvbox(),
+            ThemeKind::SolarizedDark => Self::solarized_dark(),
+            ThemeKind::SolarizedLight => Self::solarized_light(),
             ThemeKind::Custom(_) => Self::dark(), // fallback; use load_from_toml for custom
         }
     }
@@ -226,6 +238,158 @@ impl Theme {
             inst_color: aurora_yellow,
             vol_color: aurora_orange,
             eff_color: aurora_green,
+        }
+    }
+
+    // ── Gruvbox ─────────────────────────────────────────────────────────────
+    pub fn gruvbox() -> Self {
+        let dark0 = Color::Rgb(40, 40, 40); // #282828
+        let dark1 = Color::Rgb(60, 56, 54); // #3c3836
+        let dark2 = Color::Rgb(80, 73, 69); // #504945
+        let dark3 = Color::Rgb(102, 92, 86); // #665c54
+        let light0 = Color::Rgb(213, 196, 161); // #d5c4a1
+        let light1 = Color::Rgb(235, 219, 178); // #ebdbb2
+        let red = Color::Rgb(204, 102, 102); // #cc241d
+        let green = Color::Rgb(152, 151, 26); // #98971a
+        let yellow = Color::Rgb(181, 137, 0); // #b5a505
+        let blue = Color::Rgb(104, 151, 187); // #6891b3
+        let purple = Color::Rgb(177, 98, 134); // #b16286
+        let aqua = Color::Rgb(104, 157, 106); // #689d6a
+        let orange = Color::Rgb(211, 123, 69); // #d38609
+
+        Self {
+            bg: dark0,
+            bg_surface: dark1,
+            bg_highlight: dark2,
+            bg_header: dark1,
+            bg_footer: dark1,
+
+            primary: blue,
+            secondary: purple,
+
+            border: dark3,
+            border_focused: aqua,
+
+            text: light1,
+            text_secondary: light0,
+            text_dimmed: dark3,
+
+            cursor_normal_bg: yellow,
+            cursor_insert_bg: purple,
+            cursor_visual_bg: blue,
+            cursor_fg: dark0,
+
+            status_success: green,
+            status_warning: yellow,
+            status_error: red,
+            status_info: blue,
+
+            note_color: blue,
+            inst_color: yellow,
+            vol_color: purple,
+            eff_color: orange,
+        }
+    }
+
+    // ── Solarized Dark ─────────────────────────────────────────────────────
+    pub fn solarized_dark() -> Self {
+        let base03 = Color::Rgb(0, 43, 54); // #002b36
+        let base02 = Color::Rgb(7, 54, 66); // #073642
+        let base01 = Color::Rgb(88, 110, 117); // #586e75
+        let _base00 = Color::Rgb(101, 123, 131); // #657b83
+        let base0 = Color::Rgb(131, 148, 150); // #839496
+        let base1 = Color::Rgb(147, 161, 161); // #93a1a1
+        let yellow = Color::Rgb(181, 137, 0); // #b58900
+        let orange = Color::Rgb(203, 75, 22); // #cb4b16
+        let red = Color::Rgb(220, 50, 47); // #dc322f
+        let magenta = Color::Rgb(211, 54, 130); // #d33682
+        let violet = Color::Rgb(108, 113, 196); // #6c71c4
+        let blue = Color::Rgb(38, 139, 210); // #268bd2
+        let cyan = Color::Rgb(42, 161, 152); // #2aa198
+        let green = Color::Rgb(133, 153, 0); // #859900
+
+        Self {
+            bg: base03,
+            bg_surface: base02,
+            bg_highlight: base02,
+            bg_header: base02,
+            bg_footer: base02,
+
+            primary: blue,
+            secondary: cyan,
+
+            border: base01,
+            border_focused: blue,
+
+            text: base1,
+            text_secondary: base0,
+            text_dimmed: base01,
+
+            cursor_normal_bg: yellow,
+            cursor_insert_bg: magenta,
+            cursor_visual_bg: violet,
+            cursor_fg: base03,
+
+            status_success: green,
+            status_warning: yellow,
+            status_error: red,
+            status_info: cyan,
+
+            note_color: blue,
+            inst_color: yellow,
+            vol_color: magenta,
+            eff_color: orange,
+        }
+    }
+
+    // ── Solarized Light ───────────────────────────────────────────────────
+    pub fn solarized_light() -> Self {
+        let base2 = Color::Rgb(238, 232, 213); // #eee8d5
+        let base3 = Color::Rgb(253, 246, 227); // #fdf6e3
+        let base1 = Color::Rgb(147, 161, 161); // #93a1a1
+        let base0 = Color::Rgb(131, 148, 150); // #839496
+        let base00 = Color::Rgb(101, 123, 131); // #657b83
+        let _base01 = Color::Rgb(88, 110, 117); // #586e75
+        let yellow = Color::Rgb(181, 137, 0); // #b58900
+        let orange = Color::Rgb(203, 75, 22); // #cb4b16
+        let red = Color::Rgb(220, 50, 47); // #dc322f
+        let magenta = Color::Rgb(211, 54, 130); // #d33682
+        let violet = Color::Rgb(108, 113, 196); // #6c71c4
+        let blue = Color::Rgb(38, 139, 210); // #268bd2
+        let cyan = Color::Rgb(42, 161, 152); // #2aa198
+        let green = Color::Rgb(133, 153, 0); // #859900
+
+        Self {
+            bg: base3,
+            bg_surface: base2,
+            bg_highlight: base2,
+            bg_header: base2,
+            bg_footer: base2,
+
+            primary: blue,
+            secondary: cyan,
+
+            border: base1,
+            border_focused: blue,
+
+            text: base00,
+            text_secondary: base0,
+            text_dimmed: base1,
+
+            cursor_normal_bg: yellow,
+            cursor_insert_bg: magenta,
+            cursor_visual_bg: violet,
+            cursor_fg: base3,
+
+            status_success: green,
+            status_warning: yellow,
+            status_error: red,
+            status_info: cyan,
+
+            note_color: blue,
+            inst_color: yellow,
+            vol_color: magenta,
+            eff_color: orange,
         }
     }
 
@@ -402,7 +566,14 @@ mod tests {
 
     #[test]
     fn test_from_kind_roundtrip() {
-        for kind in [ThemeKind::Dark, ThemeKind::CatppuccinMocha, ThemeKind::Nord] {
+        for kind in [
+            ThemeKind::Dark,
+            ThemeKind::CatppuccinMocha,
+            ThemeKind::Nord,
+            ThemeKind::Gruvbox,
+            ThemeKind::SolarizedDark,
+            ThemeKind::SolarizedLight,
+        ] {
             let t = Theme::from_kind(kind.clone());
             assert_eq!(t, Theme::from_kind(kind));
         }
@@ -420,6 +591,19 @@ mod tests {
             Some(ThemeKind::CatppuccinMocha)
         );
         assert_eq!(ThemeKind::from_str("nord"), Some(ThemeKind::Nord));
+        assert_eq!(ThemeKind::from_str("gruvbox"), Some(ThemeKind::Gruvbox));
+        assert_eq!(
+            ThemeKind::from_str("solarized-dark"),
+            Some(ThemeKind::SolarizedDark)
+        );
+        assert_eq!(
+            ThemeKind::from_str("solarized"),
+            Some(ThemeKind::SolarizedDark)
+        );
+        assert_eq!(
+            ThemeKind::from_str("solarized-light"),
+            Some(ThemeKind::SolarizedLight)
+        );
         assert_eq!(ThemeKind::from_str("unknown"), None);
     }
 
@@ -458,12 +642,40 @@ mod tests {
 
     #[test]
     fn test_theme_has_cell_colors() {
-        for t in [Theme::dark(), Theme::catppuccin_mocha(), Theme::nord()] {
+        for t in [
+            Theme::dark(),
+            Theme::catppuccin_mocha(),
+            Theme::nord(),
+            Theme::gruvbox(),
+            Theme::solarized_dark(),
+            Theme::solarized_light(),
+        ] {
             let _ = t.note_color;
             let _ = t.inst_color;
             let _ = t.vol_color;
             let _ = t.eff_color;
         }
+    }
+
+    #[test]
+    fn test_gruvbox_theme_has_rgb_colors() {
+        let t = Theme::gruvbox();
+        assert!(matches!(t.bg, Color::Rgb(_, _, _)));
+        assert!(matches!(t.primary, Color::Rgb(_, _, _)));
+    }
+
+    #[test]
+    fn test_solarized_dark_theme_has_rgb_colors() {
+        let t = Theme::solarized_dark();
+        assert!(matches!(t.bg, Color::Rgb(_, _, _)));
+        assert!(matches!(t.primary, Color::Rgb(_, _, _)));
+    }
+
+    #[test]
+    fn test_solarized_light_theme_has_rgb_colors() {
+        let t = Theme::solarized_light();
+        assert!(matches!(t.bg, Color::Rgb(_, _, _)));
+        assert!(matches!(t.primary, Color::Rgb(_, _, _)));
     }
 
     #[test]
