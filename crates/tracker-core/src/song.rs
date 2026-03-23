@@ -77,7 +77,7 @@ pub enum LfoWaveform {
 pub struct Lfo {
     /// Waveform shape of the LFO.
     pub waveform: LfoWaveform,
-    /// Rate in Hz (cycles per second).
+    /// Rate in Hz (cycles per second), used when sync_to_bpm is false.
     pub rate: f32,
     /// Depth/intensity of the modulation (0.0 to 1.0).
     pub depth: f32,
@@ -87,6 +87,10 @@ pub struct Lfo {
     pub enabled: bool,
     /// Phase offset for synchronization (0.0 to 1.0).
     pub phase: f32,
+    /// BPM sync: when true, rate is interpreted as beats per bar (1-16).
+    /// LFO cycles once per beat at 1x, twice per beat at 2x, etc.
+    #[serde(default)]
+    pub sync_to_bpm: bool,
 }
 
 impl Default for Lfo {
@@ -98,6 +102,7 @@ impl Default for Lfo {
             offset: 0.0,
             enabled: true,
             phase: 0.0,
+            sync_to_bpm: false,
         }
     }
 }
@@ -111,6 +116,7 @@ impl Lfo {
             offset: offset.clamp(-1.0, 1.0),
             enabled: true,
             phase: 0.0,
+            sync_to_bpm: false,
         }
     }
 

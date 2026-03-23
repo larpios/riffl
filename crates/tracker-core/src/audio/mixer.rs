@@ -102,20 +102,35 @@ impl VoiceLfoState {
         }
     }
 
-    fn update(&mut self, instrument: &Instrument, sample_rate: u32) {
+    fn update(&mut self, instrument: &Instrument, sample_rate: u32, bpm: f64) {
         if let Some(lfo) = &instrument.volume_lfo {
             if lfo.enabled && lfo.rate > 0.0 {
-                self.volume = (self.volume + lfo.rate / sample_rate as f32) % 1.0;
+                let rate_hz = if lfo.sync_to_bpm {
+                    bpm / 60.0 * lfo.rate as f64
+                } else {
+                    lfo.rate as f64
+                };
+                self.volume = (self.volume + rate_hz as f32 / sample_rate as f32) % 1.0;
             }
         }
         if let Some(lfo) = &instrument.panning_lfo {
             if lfo.enabled && lfo.rate > 0.0 {
-                self.panning = (self.panning + lfo.rate / sample_rate as f32) % 1.0;
+                let rate_hz = if lfo.sync_to_bpm {
+                    bpm / 60.0 * lfo.rate as f64
+                } else {
+                    lfo.rate as f64
+                };
+                self.panning = (self.panning + rate_hz as f32 / sample_rate as f32) % 1.0;
             }
         }
         if let Some(lfo) = &instrument.pitch_lfo {
             if lfo.enabled && lfo.rate > 0.0 {
-                self.pitch = (self.pitch + lfo.rate / sample_rate as f32) % 1.0;
+                let rate_hz = if lfo.sync_to_bpm {
+                    bpm / 60.0 * lfo.rate as f64
+                } else {
+                    lfo.rate as f64
+                };
+                self.pitch = (self.pitch + rate_hz as f32 / sample_rate as f32) % 1.0;
             }
         }
     }
@@ -378,6 +393,8 @@ pub struct Mixer {
     fft_buf: Vec<f32>,
     /// Write position into the FFT ring buffer.
     fft_write_pos: AtomicU32,
+    /// Current BPM for BPM-synced LFO calculations.
+    bpm: f64,
 }
 
 impl Mixer {
@@ -438,6 +455,7 @@ impl Mixer {
             oscilloscope_write_pos,
             fft_buf: vec![0.0f32; FFT_BUF_SIZE],
             fft_write_pos: AtomicU32::new(0),
+            bpm: 120.0,
         }
     }
 
@@ -932,7 +950,7 @@ impl Mixer {
 
                     if let Some(inst) = self.instruments.get(voice.instrument_index) {
                         // Update LFO phases
-                        voice.lfo.update(inst, output_sample_rate);
+                        voice.lfo.update(inst, output_sample_rate, self.bpm);
 
                         // Fadeout processing
                         if !voice.key_on
@@ -1398,6 +1416,7 @@ impl Mixer {
 
     /// Update the effect processor's tempo (frames per row).
     pub fn update_tempo(&mut self, bpm: f64) {
+        self.bpm = bpm;
         self.effect_processor.update_tempo(bpm);
     }
 
@@ -3234,6 +3253,7 @@ mod tests {
             offset: 0.0,
             enabled: true,
             phase: 0.0,
+            sync_to_bpm: false,
         });
         inst.pitch_lfo = Some(Lfo {
             waveform: LfoWaveform::Sine,
@@ -3242,6 +3262,7 @@ mod tests {
             offset: 0.0,
             enabled: true,
             phase: 0.0,
+            sync_to_bpm: false,
         });
         inst.panning_lfo = Some(Lfo {
             waveform: LfoWaveform::Sine,
@@ -3250,6 +3271,7 @@ mod tests {
             offset: 0.0,
             enabled: true,
             phase: 0.0,
+            sync_to_bpm: false,
         });
 
         let mut mixer = Mixer::new(vec![Arc::new(sample)], vec![inst], 4, 48000);
