@@ -557,8 +557,24 @@ fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout::Rect, app:
 
     // Render VU meters and oscilloscopes if we have space
     if show_meters && visible_channels > 0 {
-        let levels = app.channel_levels(visible_channels);
-        let waveforms = app.oscilloscope_data(visible_channels);
+        // Fetch levels and waveforms for all channels up to ch_end, then slice visible range
+        let all_levels = app.channel_levels(ch_end);
+        let all_waveforms = app.oscilloscope_data(ch_end);
+        let levels: Vec<(f32, f32)> = all_levels
+            .into_iter()
+            .skip(ch_scroll)
+            .take(visible_channels)
+            .collect();
+        let waveforms: Vec<Vec<f32>> = all_waveforms
+            .into_iter()
+            .skip(ch_scroll)
+            .take(visible_channels)
+            .collect();
+
+        // Content width per channel (excluding separator "│ ")
+        let content_width = (CHANNEL_COL_WIDTH - 2) as usize;
+        let left_width = content_width / 2;
+        let right_width = content_width - left_width;
 
         // VU meters row
         let mut vu_spans = Vec::new();
@@ -566,10 +582,9 @@ fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout::Rect, app:
             "VU    ",
             Style::default().fg(theme.text_secondary),
         ));
-        for ch in 0..visible_channels {
-            let (l, r) = levels.get(ch).copied().unwrap_or((0.0, 0.0));
-            let l_bar = vu_meters::level_to_bar(l, 4);
-            let r_bar = vu_meters::level_to_bar(r, 4);
+        for &(l, r) in levels.iter() {
+            let l_bar = vu_meters::level_to_bar(l, left_width as u16);
+            let r_bar = vu_meters::level_to_bar(r, right_width as u16);
             let l_color = vu_meters::level_to_color(l, theme);
             let r_color = vu_meters::level_to_color(r, theme);
             vu_spans.push(Span::styled("│ ", Style::default().fg(theme.text_dimmed)));
@@ -584,10 +599,8 @@ fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout::Rect, app:
             "\u{223F}    ",
             Style::default().fg(theme.text_secondary),
         ));
-        for ch in 0..visible_channels {
-            let waveform = waveforms.get(ch).map(|v| v.as_slice()).unwrap_or(&[]);
-            let width = 16usize;
-            let line = oscilloscope::render_waveform_line(waveform, width, theme);
+        for waveform in waveforms.iter() {
+            let line = oscilloscope::render_waveform_line(waveform, content_width, theme);
             osc_spans.push(Span::styled("│ ", Style::default().fg(theme.text_dimmed)));
             for span in line.spans {
                 osc_spans.push(span);
