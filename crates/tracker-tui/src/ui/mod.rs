@@ -3,7 +3,7 @@
 /// This module contains all UI-related code including layout management,
 /// theming, and modal dialogs.
 use ratatui::{
-    layout::Alignment,
+    layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
@@ -29,6 +29,7 @@ pub mod help;
 pub mod instrument_editor;
 pub mod instrument_list;
 pub mod layout;
+pub mod lfo_editor;
 pub mod modal;
 pub mod oscilloscope;
 pub mod pattern_list;
@@ -421,6 +422,14 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .style(theme.header_style());
 
     frame.render_widget(header_text, area);
+
+    if area.height >= 2 {
+        let fft_area = Rect::new(area.x, area.y + 1, area.width, 1);
+        let fft_samples = app.fft_data();
+        if !fft_samples.is_empty() {
+            fft_analyzer::render_fft_analyzer(frame, fft_area, &fft_samples, theme);
+        }
+    }
 }
 
 /// Width of a single channel column (including separator): "│ C#4 01 40 C20 " = 2 + 14 + 1 = 17
@@ -513,7 +522,7 @@ fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout::Rect, app:
         .title_alignment(Alignment::Left);
 
     let inner = content_block.inner(area);
-    let visible_rows = inner.height as usize;
+    let mut visible_rows = inner.height as usize;
 
     // Use persistent horizontal channel scroll offset (reset with Ctrl+Left)
     let num_channels = pattern.num_channels();
@@ -521,6 +530,11 @@ fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout::Rect, app:
     let channel_space = inner.width.saturating_sub(ROW_NUM_WIDTH);
     let visible_channels = ((channel_space / CHANNEL_COL_WIDTH) as usize).min(num_channels);
     let ch_end = (ch_scroll + visible_channels).min(num_channels);
+
+    // Reserve 2 rows at top for VU meters and oscilloscopes if there's enough space
+    let show_meters = visible_rows >= 4;
+    let meter_rows = if show_meters { 2 } else { 0 };
+    visible_rows = visible_rows.saturating_sub(meter_rows);
 
     // Pre-compute track audibility for muted/solo display
     let any_soloed = pattern.any_track_soloed();
@@ -540,6 +554,47 @@ fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout::Rect, app:
     );
 
     let mut lines: Vec<Line> = Vec::new();
+
+    // Render VU meters and oscilloscopes if we have space
+    if show_meters && visible_channels > 0 {
+        let levels = app.channel_levels(visible_channels);
+        let waveforms = app.oscilloscope_data(visible_channels);
+
+        // VU meters row
+        let mut vu_spans = Vec::new();
+        vu_spans.push(Span::styled(
+            "VU    ",
+            Style::default().fg(theme.text_secondary),
+        ));
+        for ch in 0..visible_channels {
+            let (l, r) = levels.get(ch).copied().unwrap_or((0.0, 0.0));
+            let l_bar = vu_meters::level_to_bar(l, 4);
+            let r_bar = vu_meters::level_to_bar(r, 4);
+            let l_color = vu_meters::level_to_color(l, theme);
+            let r_color = vu_meters::level_to_color(r, theme);
+            vu_spans.push(Span::styled("│ ", Style::default().fg(theme.text_dimmed)));
+            vu_spans.push(Span::styled(l_bar, Style::default().fg(l_color)));
+            vu_spans.push(Span::styled(r_bar, Style::default().fg(r_color)));
+        }
+        lines.push(Line::from(vu_spans));
+
+        // Oscilloscope row
+        let mut osc_spans = Vec::new();
+        osc_spans.push(Span::styled(
+            "\u{223F}    ",
+            Style::default().fg(theme.text_secondary),
+        ));
+        for ch in 0..visible_channels {
+            let waveform = waveforms.get(ch).map(|v| v.as_slice()).unwrap_or(&[]);
+            let width = 16usize;
+            let line = oscilloscope::render_waveform_line(waveform, width, theme);
+            osc_spans.push(Span::styled("│ ", Style::default().fg(theme.text_dimmed)));
+            for span in line.spans {
+                osc_spans.push(span);
+            }
+        }
+        lines.push(Line::from(osc_spans));
+    }
 
     // Channel header row with track names, mute/solo indicators
     let mut header_spans = Vec::new();
@@ -1023,6 +1078,7 @@ fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
 /// Render the footer with mode indicator and keybindings
 fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let theme = &app.theme;
+    let status_bar_cfg = &app.config.status_bar;
 
     // Pattern length prompt mode: show inline length input
     if app.len_prompt_mode {
@@ -1295,44 +1351,81 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 .fg(theme.info_color())
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" | "),
-        Span::styled(
-            format!("CH:{} ROW:{:02X}", cursor_channel, cursor_row),
-            Style::default().fg(theme.primary),
-        ),
-        Span::raw(" "),
-        Span::styled(
-            format!("Inst:{}", app.instrument_count()),
-            Style::default().fg(theme.text_secondary),
-        ),
     ]);
 
-    // System resource indicators (CPU, Memory)
-    if let Some((cpu, mem)) = app.system_stats() {
+    // Pattern/Row indicator (cursor position)
+    if status_bar_cfg.show_pattern_row {
+        footer_spans.extend([
+            Span::raw(" | "),
+            Span::styled(
+                format!("CH:{} ROW:{:02X}", cursor_channel, cursor_row),
+                Style::default().fg(theme.primary),
+            ),
+        ]);
+    }
+
+    // Selection indicator (visual selection range)
+    if status_bar_cfg.show_selection {
+        if let Some(((r0, c0), (r1, c1))) = app.editor.visual_selection() {
+            let sel_text = if r0 == r1 && c0 == c1 {
+                format!("SEL:{}:{:02X}", c0, r0)
+            } else if r0 == r1 {
+                format!("SEL:{}:{:02X}-{}:{:02X}", c0, r0, c1, r1)
+            } else {
+                format!("SEL:{}:{:02X}-{}:{:02X}", c0, r0, c1, r1)
+            };
+            footer_spans.extend([
+                Span::raw(" "),
+                Span::styled(sel_text, Style::default().fg(theme.secondary)),
+            ]);
+        }
+    }
+
+    // Instrument count
+    if status_bar_cfg.show_instrument_count {
         footer_spans.extend([
             Span::raw(" "),
             Span::styled(
-                format!("CPU:{:.0}%", cpu),
-                Style::default().fg(if cpu > 80.0 {
-                    theme.status_error
-                } else if cpu > 50.0 {
-                    theme.status_warning
-                } else {
-                    theme.text_dimmed
-                }),
-            ),
-            Span::raw(" "),
-            Span::styled(
-                format!("MEM:{:.0}%", mem),
-                Style::default().fg(if mem > 80.0 {
-                    theme.status_error
-                } else if mem > 50.0 {
-                    theme.status_warning
-                } else {
-                    theme.text_dimmed
-                }),
+                format!("Inst:{}", app.instrument_count()),
+                Style::default().fg(theme.text_secondary),
             ),
         ]);
+    }
+
+    // System resource indicators (CPU, Memory)
+    if status_bar_cfg.show_cpu || status_bar_cfg.show_memory {
+        if let Some((cpu, mem)) = app.system_stats() {
+            if status_bar_cfg.show_cpu {
+                footer_spans.extend([
+                    Span::raw(" "),
+                    Span::styled(
+                        format!("CPU:{:.0}%", cpu),
+                        Style::default().fg(if cpu > 80.0 {
+                            theme.status_error
+                        } else if cpu > 50.0 {
+                            theme.status_warning
+                        } else {
+                            theme.text_dimmed
+                        }),
+                    ),
+                ]);
+            }
+            if status_bar_cfg.show_memory {
+                footer_spans.extend([
+                    Span::raw(" "),
+                    Span::styled(
+                        format!("MEM:{:.0}%", mem),
+                        Style::default().fg(if mem > 80.0 {
+                            theme.status_error
+                        } else if mem > 50.0 {
+                            theme.status_warning
+                        } else {
+                            theme.text_dimmed
+                        }),
+                    ),
+                ]);
+            }
+        }
     }
 
     let footer = Paragraph::new(Line::from(footer_spans)).style(theme.footer_style());
@@ -1398,8 +1491,16 @@ fn render_command_completions(frame: &mut Frame, footer_area: ratatui::layout::R
     frame.render_widget(para, area);
 }
 
-/// Render a which-key popup showing completions for the current pending key.
+/// Render a which-key popup showing completions for the current pending key
+/// or when which_key_mode is manually triggered.
 fn render_which_key(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    // Handle manually triggered which-key menu
+    if app.which_key_mode && app.pending_key.is_none() {
+        render_which_key_menu(frame, area, app);
+        return;
+    }
+
+    // Handle pending key (chord) completion
     let pending = match app.pending_key {
         Some(c) => c,
         None => return,
@@ -1444,6 +1545,47 @@ fn render_which_key(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .style(Style::default().bg(Color::Black));
 
     let para = Paragraph::new(lines).block(block);
+    frame.render_widget(para, popup_area);
+}
+
+/// Render the full which-key menu when manually triggered.
+fn render_which_key_menu(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let theme = &app.theme;
+
+    // Get all which-key entries
+    let all_entries = KeybindingRegistry::get_all_which_key_entries();
+
+    let width = 40u16;
+    let height = 25u16;
+    let x = (area.width - width) / 2;
+    let y = (area.height - height) / 2;
+    let popup_area = ratatui::layout::Rect::new(x, y, width, height);
+
+    frame.render_widget(Clear, popup_area);
+
+    let mut lines = Vec::new();
+    for (key, desc) in all_entries.iter() {
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!(" {:3} ", key),
+                Style::default()
+                    .fg(theme.success_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(desc),
+        ]));
+    }
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.primary))
+        .title(" KEYBINDINGS  (Esc close) ")
+        .title_alignment(Alignment::Center)
+        .style(Style::default().bg(Color::Black));
+
+    let para = Paragraph::new(lines)
+        .block(block)
+        .style(Style::default().fg(theme.primary));
     frame.render_widget(para, popup_area);
 }
 

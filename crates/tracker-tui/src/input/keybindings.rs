@@ -142,6 +142,11 @@ const KEY_MAPPINGS: &[KeyMapping] = &[
         mode: EditorMode::Normal,
     },
     KeyMapping {
+        key: "\\",
+        action: Action::ShowWhichKey,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
         key: "K",
         action: Action::ToggleEffectHelp,
         mode: EditorMode::Normal,
@@ -427,6 +432,18 @@ impl KeybindingRegistry {
             })
             .collect()
     }
+
+    /// Get all which-key entries (for the full menu display)
+    pub fn get_all_which_key_entries() -> Vec<(String, String)> {
+        CHORD_MAPPINGS
+            .iter()
+            .map(|m| {
+                let key = format!("{}{}", m.prefix, m.completion);
+                let desc = m.action.description().to_string();
+                (key, desc)
+            })
+            .collect()
+    }
 }
 
 /// Actions that can be triggered by keybindings
@@ -558,6 +575,7 @@ pub enum Action {
     OpenModal,
     ToggleHelp,
     ToggleEffectHelp,
+    ShowWhichKey,
     OpenFileBrowser,
 
     // Instrument management
@@ -723,6 +741,7 @@ impl ActionMetadata for Action {
             Action::WfFocus => "Wf Focus",
             Action::WfUnfocus => "Wf Unfocus",
             Action::None => "None",
+            Action::ShowWhichKey => "Show Which-Key",
         }
     }
 
@@ -842,6 +861,7 @@ impl ActionMetadata for Action {
             Action::WfFocus => "Focus waveform editor",
             Action::WfUnfocus => "Unfocus waveform editor",
             Action::None => "No operation",
+            Action::ShowWhichKey => "Show which-key menu",
         }
     }
 
@@ -967,7 +987,8 @@ impl ActionMetadata for Action {
             | Action::OpenModal
             | Action::ToggleHelp
             | Action::ToggleEffectHelp
-            | Action::OpenFileBrowser => ActionCategory::Application,
+            | Action::OpenFileBrowser
+            | Action::ShowWhichKey => ActionCategory::Application,
 
             Action::None => ActionCategory::None,
         }

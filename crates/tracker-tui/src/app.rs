@@ -149,6 +149,9 @@ pub struct App {
     /// Scroll offset for the effect help overlay (in lines)
     pub effect_help_scroll: u16,
 
+    /// Whether the which-key menu is shown (displays available keybindings)
+    pub which_key_mode: bool,
+
     /// Timestamp of the last update call (for delta time calculation)
     last_update: Instant,
 
@@ -345,6 +348,7 @@ impl App {
             help_scroll: 0,
             show_effect_help: false,
             effect_help_scroll: 0,
+            which_key_mode: false,
             last_update: Instant::now(),
             pending_key: None,
             pending_replace: false,

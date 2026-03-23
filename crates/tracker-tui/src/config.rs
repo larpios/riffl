@@ -39,6 +39,10 @@ pub struct Config {
     /// Populated when the user presses `b` on a directory in the sample browser.
     #[serde(default)]
     pub bookmarked_dirs: Vec<String>,
+
+    /// Status bar configuration - controls what information is displayed in the footer.
+    #[serde(default)]
+    pub status_bar: StatusBarConfig,
 }
 
 impl Default for Config {
@@ -52,6 +56,7 @@ impl Default for Config {
             default_loop_enabled: true,
             sample_dirs: Vec::new(),
             bookmarked_dirs: Vec::new(),
+            status_bar: StatusBarConfig::default(),
         }
     }
 }
@@ -164,6 +169,37 @@ impl Config {
     }
 }
 
+/// Configuration for the status bar (footer) display.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StatusBarConfig {
+    /// Show play state (Playing/Stopped/Paused)
+    pub show_play_state: bool,
+    /// Show current pattern number and row position (CH:ROW)
+    pub show_pattern_row: bool,
+    /// Show instrument count
+    pub show_instrument_count: bool,
+    /// Show CPU usage percentage
+    pub show_cpu: bool,
+    /// Show memory usage percentage
+    pub show_memory: bool,
+    /// Show selection info (selection start/end)
+    pub show_selection: bool,
+}
+
+impl Default for StatusBarConfig {
+    fn default() -> Self {
+        Self {
+            show_play_state: true,
+            show_pattern_row: true,
+            show_instrument_count: true,
+            show_cpu: true,
+            show_memory: true,
+            show_selection: true,
+        }
+    }
+}
+
 /// Return the user's home directory.
 fn dirs_next() -> std::path::PathBuf {
     std::env::var("HOME")
@@ -227,6 +263,7 @@ mod tests {
             default_loop_enabled: false,
             sample_dirs: vec!["/tmp/samples".to_string()],
             bookmarked_dirs: vec![],
+            status_bar: StatusBarConfig::default(),
         };
         let s = toml::to_string_pretty(&cfg).unwrap();
         let restored: Config = toml::from_str(&s).unwrap();
@@ -239,5 +276,36 @@ mod tests {
             tracker_core::transport::PlaybackMode::Song
         );
         assert_eq!(restored.default_loop_enabled, false);
+    }
+
+    #[test]
+    fn test_status_bar_config_default() {
+        let sb = StatusBarConfig::default();
+        assert!(sb.show_play_state);
+        assert!(sb.show_pattern_row);
+        assert!(sb.show_instrument_count);
+        assert!(sb.show_cpu);
+        assert!(sb.show_memory);
+        assert!(sb.show_selection);
+    }
+
+    #[test]
+    fn test_status_bar_config_toml_roundtrip() {
+        let sb = StatusBarConfig {
+            show_play_state: false,
+            show_pattern_row: true,
+            show_instrument_count: false,
+            show_cpu: true,
+            show_memory: false,
+            show_selection: true,
+        };
+        let s = toml::to_string_pretty(&sb).unwrap();
+        let restored: StatusBarConfig = toml::from_str(&s).unwrap();
+        assert_eq!(restored.show_play_state, false);
+        assert_eq!(restored.show_pattern_row, true);
+        assert_eq!(restored.show_instrument_count, false);
+        assert_eq!(restored.show_cpu, true);
+        assert_eq!(restored.show_memory, false);
+        assert_eq!(restored.show_selection, true);
     }
 }

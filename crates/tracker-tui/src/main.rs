@@ -792,6 +792,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             app.show_effect_help = !app.show_effect_help;
             app.effect_help_scroll = 0;
         }
+        Action::ShowWhichKey => {
+            app.which_key_mode = !app.which_key_mode;
+        }
         Action::OpenModal => app.open_test_modal(),
         Action::OpenFileBrowser => app.open_file_browser(),
         Action::Cancel => {

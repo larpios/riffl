@@ -11,22 +11,20 @@ event_loop:
   max_runtime_seconds: 7200
 
 core:
-  scratchpad: ".ralph/scratchpad.md"
-  specs_dir: "openspec/"
+  specs_dir: ".ralph/scratchpad/"
   # Guardrails enforce the "Failure Strategy" rules from your PROMPT.md
   guardrails:
-    - "Never repeat a failed strategy documented in .ralph/scratchpad.md."
+    - "Never repeat a failed strategy documented in .ralph/scratchpad"
     - "If a task fails 3 times, it MUST be marked as BLOCKED in 'br'."
     - "Prioritize fixing broken core functionality over adding new features."
     - "Do NOT ever push."
     - "Once finished, use jujutsu to commit, so don't think about beig in a detached state."
 
-
 hats:
   scouter:
     name: "Scouter"
     description: "Responsible for task discovery and prioritization using Beads Rust."
-    triggers: ["loop.start", "task.done", "task.blocked"]
+    triggers: ["loop.start", "task.done"]
     publishes: ["task.selected"]
     instructions: |
       1. Run `br list` to fetch the current state of all tasks.
@@ -65,7 +63,7 @@ hats:
     publishes: ["diagnosis.ready"]
     instructions: |
       - Identify failure type: Compile, Runtime, Logic, or Missing Context.
-      - Write the diagnosis and the specific failed approach to .ralph/scratchpad.md.
+      - Write the diagnosis and the specific failed approach to .ralph/scratchpad.
 
   healer:
     name: "Healer"
@@ -83,7 +81,8 @@ hats:
     triggers: ["test.passed"]
     publishes: ["task.done"]
     instructions: |
-      - Commit the changes with a concise message.
+      - Commit the changes with a concise message following the conventional commit message format. (e.g., "feat: add new feature")
+      - Never push.
       - Update the task status in 'br'.
       - Ensure 'Definition of Done' is met (docs updated, no regressions).
 

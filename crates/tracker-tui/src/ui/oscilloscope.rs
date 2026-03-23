@@ -48,7 +48,7 @@ pub fn render_oscilloscopes(frame: &mut Frame, area: Rect, waveforms: &[Vec<f32>
 }
 
 /// Downsample a waveform buffer to `width` characters and produce a styled Line.
-fn render_waveform_line(samples: &[f32], width: usize, theme: &Theme) -> Line<'static> {
+pub fn render_waveform_line(samples: &[f32], width: usize, theme: &Theme) -> Line<'static> {
     if samples.is_empty() || width == 0 {
         return Line::default();
     }
