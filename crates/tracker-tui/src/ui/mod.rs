@@ -35,6 +35,7 @@ pub mod sample_browser;
 pub mod theme;
 pub mod tutor;
 pub mod vu_meters;
+pub mod waveform_editor;
 
 use help::render_help;
 use tutor::render_tutor;
@@ -82,15 +83,16 @@ pub fn render(frame: &mut Frame, app: &App) {
                 );
             }
             AppView::InstrumentList => {
-                // If an instrument is selected, split: list, editor, envelope editor.
+                // If an instrument is selected, split: list, editor, envelope editor, waveform editor.
                 if let Some(idx) = app.instrument_selection() {
                     if idx < app.song.instruments.len() {
                         let chunks = ratatui::layout::Layout::default()
                             .direction(ratatui::layout::Direction::Vertical)
                             .constraints([
-                                ratatui::layout::Constraint::Percentage(40),
-                                ratatui::layout::Constraint::Percentage(35),
+                                ratatui::layout::Constraint::Percentage(30),
                                 ratatui::layout::Constraint::Percentage(25),
+                                ratatui::layout::Constraint::Percentage(25),
+                                ratatui::layout::Constraint::Percentage(20),
                             ])
                             .split(content_area);
                         instrument_list::render_instrument_list(
@@ -120,6 +122,14 @@ pub fn render(frame: &mut Frame, app: &App) {
                             chunks[2],
                             &app.song.instruments[idx],
                             &app.env_editor,
+                            &app.theme,
+                        );
+                        waveform_editor::render_waveform_editor(
+                            frame,
+                            chunks[3],
+                            &app.song.instruments[idx],
+                            sample.as_deref(),
+                            &app.waveform_editor,
                             &app.theme,
                         );
                     } else {

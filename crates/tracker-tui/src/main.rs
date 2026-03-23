@@ -939,6 +939,60 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
             }
         }
 
+        Action::WfTogglePencil => {
+            if let Some(_idx) = app.instrument_selection() {
+                app.waveform_editor.focus();
+                app.waveform_editor.toggle_pencil_mode();
+            }
+        }
+        Action::WfMoveCursorLeft => {
+            if let Some(idx) = app.instrument_selection() {
+                if let Some(sample) = app
+                    .loaded_samples()
+                    .get(app.song.instruments[idx].sample_index.unwrap_or(0))
+                {
+                    app.waveform_editor.focus();
+                    app.waveform_editor.move_cursor_left(sample.frame_count());
+                }
+            }
+        }
+        Action::WfMoveCursorRight => {
+            if let Some(idx) = app.instrument_selection() {
+                if let Some(sample) = app
+                    .loaded_samples()
+                    .get(app.song.instruments[idx].sample_index.unwrap_or(0))
+                {
+                    app.waveform_editor.focus();
+                    app.waveform_editor.move_cursor_right(sample.frame_count());
+                }
+            }
+        }
+        Action::WfValueUp => {
+            app.waveform_editor.focus();
+            app.waveform_editor.pencil_value_up();
+        }
+        Action::WfValueDown => {
+            app.waveform_editor.focus();
+            app.waveform_editor.pencil_value_down();
+        }
+        Action::WfDrawSample => {
+            if let Some(idx) = app.instrument_selection() {
+                let sample_idx = app.song.instruments[idx].sample_index;
+                if let Some(si) = sample_idx {
+                    if let Some(sample) = app.loaded_samples().get(si) {
+                        app.waveform_editor
+                            .draw_at_cursor(&mut sample.as_ref().clone());
+                    }
+                }
+            }
+        }
+        Action::WfFocus => {
+            app.waveform_editor.focus();
+        }
+        Action::WfUnfocus => {
+            app.waveform_editor.unfocus();
+        }
+
         Action::None => {}
     }
 }

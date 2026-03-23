@@ -338,6 +338,36 @@ const KEY_MAPPINGS: &[KeyMapping] = &[
         action: Action::EnvChangeValue,
         mode: EditorMode::Normal,
     },
+    KeyMapping {
+        key: "p",
+        action: Action::WfTogglePencil,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Left",
+        action: Action::WfMoveCursorLeft,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Right",
+        action: Action::WfMoveCursorRight,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Up",
+        action: Action::WfValueUp,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Down",
+        action: Action::WfValueDown,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Enter",
+        action: Action::WfDrawSample,
+        mode: EditorMode::Normal,
+    },
 ];
 
 /// Chord prefix mappings for which-key display
@@ -545,6 +575,16 @@ pub enum Action {
     EnvChangeValue,
     EnvToggleEnabled,
 
+    // Waveform editor
+    WfTogglePencil,
+    WfMoveCursorLeft,
+    WfMoveCursorRight,
+    WfDrawSample,
+    WfValueUp,
+    WfValueDown,
+    WfFocus,
+    WfUnfocus,
+
     /// No action (unmapped key)
     None,
 }
@@ -650,6 +690,14 @@ impl ActionMetadata for Action {
             Action::EnvSelectLast => "Env Select Last",
             Action::EnvChangeValue => "Env Change Value",
             Action::EnvToggleEnabled => "Env Toggle Enabled",
+            Action::WfTogglePencil => "Wf Toggle Pencil",
+            Action::WfMoveCursorLeft => "Wf Move Cursor Left",
+            Action::WfMoveCursorRight => "Wf Move Cursor Right",
+            Action::WfDrawSample => "Wf Draw Sample",
+            Action::WfValueUp => "Wf Value Up",
+            Action::WfValueDown => "Wf Value Down",
+            Action::WfFocus => "Wf Focus",
+            Action::WfUnfocus => "Wf Unfocus",
             Action::None => "None",
         }
     }
@@ -754,6 +802,14 @@ impl ActionMetadata for Action {
             Action::EnvSelectLast => "Select last envelope point",
             Action::EnvChangeValue => "Change envelope point value",
             Action::EnvToggleEnabled => "Toggle envelope enabled",
+            Action::WfTogglePencil => "Toggle pencil mode for waveform editing",
+            Action::WfMoveCursorLeft => "Move waveform cursor left",
+            Action::WfMoveCursorRight => "Move waveform cursor right",
+            Action::WfDrawSample => "Draw sample value at cursor",
+            Action::WfValueUp => "Increase pencil value",
+            Action::WfValueDown => "Decrease pencil value",
+            Action::WfFocus => "Focus waveform editor",
+            Action::WfUnfocus => "Unfocus waveform editor",
             Action::None => "No operation",
         }
     }
@@ -829,7 +885,15 @@ impl ActionMetadata for Action {
             | Action::EnvSelectFirst
             | Action::EnvSelectLast
             | Action::EnvChangeValue
-            | Action::EnvToggleEnabled => ActionCategory::Instrument,
+            | Action::EnvToggleEnabled
+            | Action::WfTogglePencil
+            | Action::WfMoveCursorLeft
+            | Action::WfMoveCursorRight
+            | Action::WfDrawSample
+            | Action::WfValueUp
+            | Action::WfValueDown
+            | Action::WfFocus
+            | Action::WfUnfocus => ActionCategory::Instrument,
 
             Action::TogglePlay
             | Action::Stop

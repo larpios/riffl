@@ -178,6 +178,23 @@ impl Sample {
         &self.data
     }
 
+    /// Get a mutable reference to the raw audio data buffer.
+    pub fn data_mut(&mut self) -> &mut Vec<f32> {
+        &mut self.data
+    }
+
+    /// Set a sample value at the given frame (left channel for stereo).
+    pub fn set_sample(&mut self, frame: usize, value: f32) {
+        if frame >= self.frame_count() {
+            return;
+        }
+        let channels = self.channels as usize;
+        let idx = frame * channels;
+        if idx < self.data.len() {
+            self.data[idx] = value.clamp(-1.0, 1.0);
+        }
+    }
+
     /// Get the header/overhead bytes stored alongside the sample.
     /// Returns 0 for in-memory samples (no header overhead).
     pub fn header_size(&self) -> u32 {

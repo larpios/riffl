@@ -20,6 +20,7 @@ use crate::ui::instrument_editor::InstrumentEditorState;
 use crate::ui::modal::Modal;
 use crate::ui::sample_browser::SampleBrowser;
 use crate::ui::theme::{Theme, ThemeKind};
+use crate::ui::waveform_editor::WaveformEditorState;
 use tracker_core::audio::{load_sample, AudioEngine, Mixer, Sample, TransportCommand};
 use tracker_core::dsl::engine::ScriptEngine;
 use tracker_core::export;
@@ -193,6 +194,9 @@ pub struct App {
     /// Envelope editor state for visual envelope editing
     pub env_editor: EnvelopeEditorState,
 
+    /// Waveform editor state for manual sample editing
+    pub waveform_editor: WaveformEditorState,
+
     /// Whether the sample browser has an active user-initiated preview.
     pub browser_preview_active: bool,
 
@@ -331,6 +335,7 @@ impl App {
             draw_note: None,
             inst_editor: InstrumentEditorState::default(),
             env_editor: EnvelopeEditorState::default(),
+            waveform_editor: WaveformEditorState::default(),
             browser_preview_active: false,
             browser_preview_sample: None,
             browser_preview_rate: 1.0,
