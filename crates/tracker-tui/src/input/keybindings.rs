@@ -1134,6 +1134,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         KeyCode::Char('r') => Action::RenameInstrument,
         KeyCode::Char('a') => Action::EditInstrument,
         KeyCode::Char('s') => Action::SelectInstrument,
+        KeyCode::Char('w') => Action::ToggleInstrumentMiniPanel,
 
         // Pattern management (when in PatternList view)
         KeyCode::Char('c') => Action::ClonePattern,
