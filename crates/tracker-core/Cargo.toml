@@ -28,6 +28,10 @@ dasp_sample = "0.11.0"
 name = "mixer_bench"
 harness = false
 
+[[bench]]
+name = "module_parsing_bench"
+harness = false
+
 [package.metadata.cargo-audit]
 ignore = ["RUSTSEC-2024-0370"]
 
