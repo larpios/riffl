@@ -552,12 +552,22 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
             sample.volume = s3m_inst.volume as f32 / 64.0;
 
             // Loop
-            if s3m_inst.flags & 1 != 0 && s3m_inst.loop_end > s3m_inst.loop_begin {
-                sample = sample.with_loop(
-                    LoopMode::Forward,
-                    s3m_inst.loop_begin as usize,
-                    s3m_inst.loop_end as usize,
-                );
+            // S3M stores loop points as BYTE offsets. For 16-bit samples (flags & 4 != 0),
+            // we need to convert to frame indices by dividing by 2.
+            let is_16bit = s3m_inst.flags & 4 != 0;
+            let loop_begin = if is_16bit {
+                s3m_inst.loop_begin / 2
+            } else {
+                s3m_inst.loop_begin
+            };
+            let loop_end = if is_16bit {
+                s3m_inst.loop_end / 2
+            } else {
+                s3m_inst.loop_end
+            };
+            if s3m_inst.flags & 1 != 0 && loop_end > loop_begin {
+                sample =
+                    sample.with_loop(LoopMode::Forward, loop_begin as usize, loop_end as usize);
             }
 
             // S3M samples don't have relative pitch bytes like XM.
