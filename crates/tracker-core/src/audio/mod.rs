@@ -16,6 +16,7 @@ pub mod error;
 pub mod glicol_mixer;
 pub mod loader;
 pub mod mixer;
+pub mod pitch;
 pub mod sample;
 pub mod stream;
 
@@ -30,5 +31,6 @@ pub use engine::AudioEngine;
 pub use error::{AudioError, AudioResult};
 pub use loader::load_sample;
 pub use mixer::Mixer;
+pub use pitch::SlideMode;
 pub use sample::{LoopMode, Sample, C4_MIDI};
 pub use stream::{AudioCallback, AudioStream, StreamConfig};

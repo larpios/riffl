@@ -5,6 +5,7 @@
 
 #[cfg(feature = "adlib")]
 use crate::audio::adlib::AdlibSynthesizer;
+use crate::audio::pitch::SlideMode;
 use crate::audio::sample::{LoopMode, Sample};
 use crate::pattern::effect::{Effect, EffectMode};
 use crate::pattern::note::{Note, Pitch};
@@ -239,7 +240,10 @@ pub fn parse_s3m_instrument(
             volume: 64,
             c2spd: 8363,
             flags: 0,
-            adlib_data: Some(AdlibData { registers, is_opl3: type_byte == 3 }),
+            adlib_data: Some(AdlibData {
+                registers,
+                is_opl3: type_byte == 3,
+            }),
         });
     }
 
@@ -503,9 +507,40 @@ fn convert_s3m_effect(cmd: u8, info: u8) -> Option<Effect> {
         'B' => Some(Effect::new(0x0B, info)), // Order Jump
         'C' => Some(Effect::new(0x0D, info)), // Pattern Break
         'D' => Some(Effect::new(0x0A, info)), // Volume Slide
-        'E' => Some(Effect::new(0x02, info)), // Portamento Down
-        'F' => Some(Effect::new(0x01, info)), // Portamento Up
-        'G' => Some(Effect::new(0x03, info)), // Tone Portamento
+        'E' => {
+            if info >= 0xF0 {
+                // Fine Slide Down (F0..FF)
+                Some(Effect::new(0x24, info & 0x0F))
+            } else if info >= 0xE0 {
+                // Extra Fine Slide Down (E0..EF)
+                // Use existing ExtraFinePortaDown for now
+                Some(Effect::new(0x22, info & 0x0F))
+            } else {
+                Some(Effect::new(0x02, info)) // Normal Slide Down
+            }
+        }
+        'F' => {
+            if info >= 0xF0 {
+                // Fine Slide Up (F0..FF)
+                Some(Effect::new(0x23, info & 0x0F))
+            } else if info >= 0xE0 {
+                // Extra Fine Slide Up (E0..EF)
+                Some(Effect::new(0x21, info & 0x0F))
+            } else {
+                Some(Effect::new(0x01, info)) // Normal Slide Up
+            }
+        }
+        'G' => {
+            if info >= 0xF0 {
+                // Extra Fine Portamento (F0..FF)
+                Some(Effect::new(0x25, info & 0x0F))
+            } else if info >= 0xE0 {
+                // Fine Portamento (E0..EF)
+                Some(Effect::new(0x26, info & 0x0F))
+            } else {
+                Some(Effect::new(0x03, info)) // Normal Tone Portamento
+            }
+        }
         'H' => Some(Effect::new(0x04, info)), // Vibrato
         'I' => Some(Effect::new(0x15, info)), // Tremor
         'J' => Some(Effect::new(0x00, info)), // Arpeggio
@@ -593,7 +628,11 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
             // 8363 * 2^((60 - Base)/12) = C2SPD
             // log2(C2SPD/8363) = (60 - Base)/12
             // Base = 60 - 12 * log2(C2SPD/8363)
-            let c2spd = if s3m_inst.c2spd > 0 { s3m_inst.c2spd } else { 8363 };
+            let c2spd = if s3m_inst.c2spd > 0 {
+                s3m_inst.c2spd
+            } else {
+                8363
+            };
             let base_note = 60.0 - 12.0 * (c2spd as f64 / 8363.0).log2();
             sample = sample.with_base_note(base_note.round() as u8);
 
@@ -635,7 +674,11 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
                         Ok(data) => {
                             let mut sample = Sample::new(data, SAMPLE_RATE, 1, Some(name));
                             sample.volume = s3m_inst.volume as f32 / 64.0;
-                            let c2spd = if s3m_inst.c2spd > 0 { s3m_inst.c2spd } else { 8363 };
+                            let c2spd = if s3m_inst.c2spd > 0 {
+                                s3m_inst.c2spd
+                            } else {
+                                8363
+                            };
                             let base_note = 60.0 - 12.0 * (c2spd as f64 / 8363.0).log2();
                             sample = sample.with_base_note(base_note.round() as u8);
                             sample
@@ -816,6 +859,8 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
     song.tracks = tracks;
 
     song.effect_mode = EffectMode::Compatible;
+    song.slide_mode = SlideMode::AmigaPeriod;
+    song.format_is_s3m = true;
 
     Ok(FormatData { song, samples })
 }

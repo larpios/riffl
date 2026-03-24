@@ -916,6 +916,11 @@ pub fn import_xm(data: &[u8]) -> Result<FormatData, String> {
     }
 
     song.effect_mode = EffectMode::Compatible;
+    song.slide_mode = if header.linear_frequencies {
+        crate::audio::pitch::SlideMode::Linear
+    } else {
+        crate::audio::pitch::SlideMode::AmigaPeriod
+    };
 
     Ok(FormatData {
         song,

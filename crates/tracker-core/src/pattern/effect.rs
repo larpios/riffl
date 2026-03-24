@@ -120,6 +120,14 @@ pub enum EffectType {
     ExtraFinePortaUp,
     /// `X2x` — Extra fine portamento down. (0x22)
     ExtraFinePortaDown,
+    /// S3M `Exx` where `x >= 0xE0` — Fine slide up. (0x23)
+    SlideUpFine,
+    /// S3M `Fxx` where `x >= 0xF0` — Fine slide down. (0x24)
+    SlideDownFine,
+    /// S3M `Gxx` where `x >= 0xF0` — Extra fine portamento. (0x25)
+    PortamentoExtraFine,
+    /// S3M `Gxx` where `x >= 0xE0` — Fine portamento. (0x26)
+    PortamentoFine,
 }
 
 impl EffectType {
@@ -156,6 +164,10 @@ impl EffectType {
             0x19 => Some(EffectType::MidiMacro),
             0x21 => Some(EffectType::ExtraFinePortaUp),
             0x22 => Some(EffectType::ExtraFinePortaDown),
+            0x23 => Some(EffectType::SlideUpFine),
+            0x24 => Some(EffectType::SlideDownFine),
+            0x25 => Some(EffectType::PortamentoExtraFine),
+            0x26 => Some(EffectType::PortamentoFine),
             _ => None,
         }
     }
@@ -196,6 +208,10 @@ impl EffectType {
             EffectType::MidiMacro => 0x19,
             EffectType::ExtraFinePortaUp => 0x21,
             EffectType::ExtraFinePortaDown => 0x22,
+            EffectType::SlideUpFine => 0x23,
+            EffectType::SlideDownFine => 0x24,
+            EffectType::PortamentoExtraFine => 0x25,
+            EffectType::PortamentoFine => 0x26,
         }
     }
 
@@ -454,6 +470,42 @@ impl EffectType {
                 name: "XFine Down",
                 summary: "XFine Down: extra-fine pitch slide down",
                 description: "Slides the pitch down by an extremely small amount (1/4 of a fine slide unit).",
+                param_label: "x: speed",
+                param_format: ParamFormat::Hex,
+                supports_continuation: false,
+                is_native: true,
+            },
+            EffectType::SlideUpFine => EffectMetadata {
+                name: "Fine Up",
+                summary: "Fine Up: S3M fine slide up",
+                description: "Slides the pitch up by a small amount (once per row).",
+                param_label: "x: speed",
+                param_format: ParamFormat::Hex,
+                supports_continuation: false,
+                is_native: true,
+            },
+            EffectType::SlideDownFine => EffectMetadata {
+                name: "Fine Down",
+                summary: "Fine Down: S3M fine slide down",
+                description: "Slides the pitch down by a small amount (once per row).",
+                param_label: "x: speed",
+                param_format: ParamFormat::Hex,
+                supports_continuation: false,
+                is_native: true,
+            },
+            EffectType::PortamentoExtraFine => EffectMetadata {
+                name: "XFine Porta",
+                summary: "XFine Porta: S3M extra-fine portamento",
+                description: "Slides to target note with extra-fine precision.",
+                param_label: "x: speed",
+                param_format: ParamFormat::Hex,
+                supports_continuation: false,
+                is_native: true,
+            },
+            EffectType::PortamentoFine => EffectMetadata {
+                name: "Fine Porta",
+                summary: "Fine Porta: S3M fine portamento",
+                description: "Slides to target note with fine precision.",
                 param_label: "x: speed",
                 param_format: ParamFormat::Hex,
                 supports_continuation: false,

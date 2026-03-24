@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::audio::chip::ChipRenderData;
+use crate::audio::pitch::SlideMode;
 use crate::pattern::effect::EffectMode;
 use crate::pattern::{Note, Pattern, Pitch, Track};
 
@@ -402,6 +403,12 @@ pub struct Song {
     pub tpl: u32,
     /// Effect interpretation mode.
     pub effect_mode: EffectMode,
+    /// Pitch slide math mode (linear semitone steps vs Amiga period arithmetic).
+    ///
+    /// Set to `SlideMode::AmigaPeriod` for .MOD and .S3M files.
+    pub slide_mode: SlideMode,
+    /// Set to true if the song is an S3M (uses 14.3MHz clock).
+    pub format_is_s3m: bool,
     /// Pattern pool (up to 256 patterns).
     pub patterns: Vec<Pattern>,
     /// Arrangement: ordered list of pattern indices forming the song sequence.
@@ -431,6 +438,8 @@ impl Song {
             lpb: 4,
             tpl: 6,
             effect_mode: EffectMode::RifflNative,
+            slide_mode: SlideMode::default(),
+            format_is_s3m: false,
             patterns: vec![default_pattern],
             arrangement: vec![0],
             tracks,

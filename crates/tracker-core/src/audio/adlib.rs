@@ -23,7 +23,7 @@ impl AdlibSynthesizer {
         let mut chip = Chip::new(sample_rate);
         chip.setup();
         // Enable OPL3 features if possible
-        chip.write_reg(0x105, 0x01); 
+        chip.write_reg(0x105, 0x01);
         Self {
             chip,
             sample_rate,
@@ -50,7 +50,7 @@ impl AdlibSynthesizer {
         }
 
         let off = OP_OFFSETS[channel];
-        
+
         // Modulator
         self.chip.write_reg(0x20 + off, params[0]);
         self.chip.write_reg(0x40 + off, params[2]);
@@ -89,14 +89,14 @@ impl AdlibSynthesizer {
     pub fn note_on(&mut self, channel: usize, note: u8, velocity: u8) {
         if channel < OPL_CHANNELS {
             let freq = calculate_note_frequency(note);
-            
+
             // Write frequency low bits
             self.chip
                 .write_reg(0xa0 + channel as u32, (freq & 0xff) as u8);
             // Write frequency high bits + block + key on bit
             self.chip
                 .write_reg(0xb0 + channel as u32, ((freq >> 8) | 0x20) as u8);
-            
+
             // Adjust volume if needed? S3M parameters already have scaling.
         }
     }
@@ -112,18 +112,17 @@ fn calculate_note_frequency(note: u8) -> u16 {
     // note 0..119 (C-0..B-9)
     let octave = (note / 12) as i32;
     let note_in_octave = (note % 12) as i32;
-    
+
     // OPL F-Number calculation:
     // F-Number = freq * 2^(20-block) / 49716
     // Standard frequencies for octave 4:
     let f_numbers = [
-        0x157, 0x16B, 0x181, 0x198, 0x1B0, 0x1CA,
-        0x1E5, 0x202, 0x220, 0x241, 0x263, 0x287
+        0x157, 0x16B, 0x181, 0x198, 0x1B0, 0x1CA, 0x1E5, 0x202, 0x220, 0x241, 0x263, 0x287,
     ];
-    
+
     let f_num = f_numbers[note_in_octave as usize % 12];
     let block = (octave as u16).clamp(0, 7);
-    
+
     (block << 10) | (f_num & 0x3FF)
 }
 

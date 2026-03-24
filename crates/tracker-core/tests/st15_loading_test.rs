@@ -10,7 +10,7 @@ fn test_detect_st15() {
     data[470] = 1;
     // Pattern order table at 472
     data[472] = 0;
-    
+
     let loader = ModLoader;
     assert!(loader.detect(&data));
 }
@@ -20,7 +20,7 @@ fn test_load_st15_minimal() {
     let mut data = vec![0u8; 600 + 1024]; // 600 header + 1 pattern (1024 bytes)
     data[470] = 1; // length
     data[472] = 0; // pattern 0
-    
+
     let loader = ModLoader;
     let result = loader.load(&data);
     assert!(result.is_ok(), "ST15 load failed: {:?}", result.err());

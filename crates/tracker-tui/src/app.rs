@@ -297,6 +297,10 @@ impl App {
         // Sync mixer effect processor tempo with the song BPM
         if let Ok(mut m) = mixer.lock() {
             m.update_tempo(song.bpm);
+            m.set_tpl(song.tpl);
+            m.set_effect_mode(song.effect_mode);
+            m.set_format_is_s3m(song.format_is_s3m);
+            m.set_slide_mode(song.slide_mode);
         }
 
         let editor = Editor::new(pattern.clone());
@@ -1706,6 +1710,9 @@ impl App {
             mixer.update_tempo(self.song.bpm);
             mixer.set_tpl(self.song.tpl);
             mixer.set_global_volume(self.song.global_volume);
+            mixer.set_effect_mode(self.song.effect_mode);
+            mixer.set_format_is_s3m(self.song.format_is_s3m);
+            mixer.set_slide_mode(self.song.slide_mode);
         }
         self.sync_mixer_instruments();
         self.sync_mixer_tracks();
@@ -2471,6 +2478,8 @@ impl App {
                     mixer.set_tpl(self.song.tpl);
                     mixer.set_global_volume(self.song.global_volume);
                     mixer.set_effect_mode(self.song.effect_mode);
+                    mixer.set_format_is_s3m(self.song.format_is_s3m);
+                    mixer.set_slide_mode(self.song.slide_mode);
                 }
                 self.sync_mixer_instruments();
                 self.project_path = Some(path.to_path_buf());

@@ -5,6 +5,7 @@
 //! sample data into tracker-core's native types.
 
 use super::{FormatData, FormatError, FormatResult, ModuleLoader};
+use crate::audio::pitch::SlideMode;
 use crate::audio::sample::{LoopMode, Sample, C4_MIDI};
 use crate::pattern::effect::{Effect, EffectMode};
 use crate::pattern::note::{Note, NoteEvent, Pitch};
@@ -491,6 +492,7 @@ pub fn import_mod(data: &[u8]) -> Result<super::FormatData, String> {
     song.tpl = speed as u32;
 
     song.effect_mode = EffectMode::Compatible;
+    song.slide_mode = SlideMode::AmigaPeriod;
 
     Ok(super::FormatData { song, samples })
 }
@@ -657,6 +659,13 @@ fn decode_effect(cmd: u8, param: u8) -> Option<Effect> {
     if cmd == 0xE && (param >> 4) == 0x8 {
         let mapped = (param & 0x0F) * 17;
         return Some(Effect::new(0x8, mapped));
+    }
+    // Map MOD E1x / E2x fine portamento to our 0x21 / 0x22 range
+    if cmd == 0xE && (param >> 4) == 0x1 {
+        return Some(Effect::new(0x21, param & 0x0F));
+    }
+    if cmd == 0xE && (param >> 4) == 0x2 {
+        return Some(Effect::new(0x22, param & 0x0F));
     }
     // MOD Fxx effect: param < 32 sets tick speed, param >= 32 sets BPM.
     // Both use command 0xF — SetSpeed handler checks the param range.

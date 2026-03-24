@@ -341,6 +341,8 @@ struct PendingNote {
     velocity_gain: f32,
     hz_to_rate: f64,
     triggered_note_freq: f64,
+    /// Effective Amiga period clock for this note trigger.
+    period_clock: f64,
     offset: Option<usize>,
     trigger_frame: u32,
 }
@@ -356,6 +358,8 @@ struct PendingNote {
 /// pan, mute/solo) synced from track metadata. Equal-power panning is used
 /// with -3dB center.
 pub struct Mixer {
+    /// Set to true if current file is S3M (uses 14.3MHz clock).
+    format_is_s3m: bool,
     /// Loaded audio samples available for playback.
     samples: Vec<Arc<Sample>>,
     /// Instrument definitions (mapping name to sample index).
@@ -438,6 +442,7 @@ impl Mixer {
             (0..num_channels).map(|_| AtomicU32::new(0)).collect();
 
         Self {
+            format_is_s3m: false,
             samples,
             instruments,
             voices: vec![None; num_channels],
@@ -619,78 +624,102 @@ impl Mixer {
                         )
                     });
 
+                    let note_frequency = note.frequency();
                     let instrument_idx = cell.instrument.unwrap_or(note.instrument) as usize;
 
-                    if has_tone_porta && self.voices[ch].is_some() {
-                        // A tone portamento effect exists and a voice is already playing.
-                        // Do not trigger a new sample. The TrackerEffectProcessor handles target pitch updates.
-                    } else {
-                        // Resolve sample index: use keyzone matching if instrument has keyzones,
-                        // otherwise fall back to instrument_idx as the sample index.
-                        let resolved_sample_idx =
-                            if let Some(inst) = self.instruments.get(instrument_idx) {
-                                if inst.keyzones.is_empty() {
-                                    Some(instrument_idx)
-                                } else {
-                                    inst.resolve_sample_index(note.midi_note(), note.velocity)
-                                }
+                    // Resolve sample index: use keyzone matching if instrument has keyzones,
+                    // otherwise fall back to instrument's sample_index.
+                    let resolved_sample_idx =
+                        if let Some(inst) = self.instruments.get(instrument_idx) {
+                            inst.resolve_sample_index(note.midi_note(), note.velocity)
+                        } else {
+                            Some(instrument_idx)
+                        };
+
+                    if let Some(resolved_sample_idx) = resolved_sample_idx {
+                        if resolved_sample_idx < self.samples.len() {
+                            let sample = &self.samples[resolved_sample_idx];
+                            // Calculate playback rate to pitch the sample to the desired note.
+                            // The sample's base_note (default C-4) plays at original speed.
+                            // Higher notes play faster, lower notes play slower.
+                            let base_freq = sample.base_frequency();
+                            let target_freq = note_frequency;
+                            let sample_rate_ratio =
+                                sample.sample_rate() as f64 / self.output_sample_rate as f64;
+
+                            let mut hz_to_rate = (1.0 / base_freq) * sample_rate_ratio;
+
+                            // Apply sample-level finetune (in cents)
+                            if sample.finetune != 0 {
+                                hz_to_rate *= 2.0_f64.powf(sample.finetune as f64 / 1200.0);
+                            }
+
+                            // Apply finetune from instrument or effect override
+                            let finetune = if let Some(ft_override) =
+                                self.effect_processor.finetune_override(ch)
+                            {
+                                ft_override
                             } else {
-                                Some(instrument_idx)
+                                self.instruments
+                                    .get(instrument_idx)
+                                    .map(|inst| inst.finetune)
+                                    .unwrap_or(0)
                             };
 
-                        if let Some(resolved_sample_idx) = resolved_sample_idx {
-                            if resolved_sample_idx < self.samples.len() {
-                                let sample = &self.samples[resolved_sample_idx];
-                                // Calculate playback rate to pitch the sample to the desired note.
-                                // The sample's base_note (default C-4) plays at original speed.
-                                // Higher notes play faster, lower notes play slower.
-                                let base_freq = sample.base_frequency();
-                                let target_freq = note.frequency();
-                                let sample_rate_ratio =
-                                    sample.sample_rate() as f64 / self.output_sample_rate as f64;
+                            if finetune != 0 {
+                                // ProTracker finetune formula: 1 unit = 1/8th of a semitone
+                                hz_to_rate *= 2.0_f64.powf(finetune as f64 / (12.0 * 8.0));
+                            }
 
-                                let mut hz_to_rate = (1.0 / base_freq) * sample_rate_ratio;
+                            let playback_rate = target_freq * hz_to_rate;
 
-                                // Apply sample-level finetune (in cents)
-                                if sample.finetune != 0 {
-                                    hz_to_rate *= 2.0_f64.powf(sample.finetune as f64 / 1200.0);
+                            let inst_vol = self
+                                .instruments
+                                .get(instrument_idx)
+                                .map(|inst| inst.volume)
+                                .unwrap_or(1.0);
+                            let velocity = note.velocity as f32;
+                            let velocity_gain = (velocity / 127.0) * inst_vol * sample.volume;
+
+                            // Apply instrument panning override to the effect processor
+                            if let Some(inst_pan) =
+                                self.instruments.get(instrument_idx).and_then(|i| i.panning)
+                            {
+                                if let Some(state) = self.effect_processor.channel_state_mut(ch) {
+                                    state.panning_override = Some((inst_pan + 1.0) / 2.0);
                                 }
+                            }
 
-                                // Apply finetune from instrument or effect override
-                                let finetune = if let Some(ft_override) =
-                                    self.effect_processor.finetune_override(ch)
-                                {
-                                    ft_override
+                            if has_tone_porta && self.voices[ch].is_some() {
+                                // A tone portamento effect exists and a voice is already playing.
+                                // Do not trigger a new sample. The TrackerEffectProcessor handles target pitch updates.
+                                // However, we update the voice's instrument settings (volume, panning, etc) without retriggering.
+                                if let Some(voice) = &mut self.voices[ch] {
+                                    voice.instrument_index = instrument_idx;
+                                    voice.velocity_gain = velocity_gain;
+                                    // Update LFO state if instrument changed
+                                    voice.lfo =
+                                        VoiceLfoState::new(self.instruments.get(instrument_idx));
+                                }
+                            } else {
+                                let is_amiga = self.effect_processor.channel_state(ch)
+                                    .map(|s| s.slide_mode == crate::audio::pitch::SlideMode::AmigaPeriod)
+                                    .unwrap_or(false);
+
+                                let clock = if self.format_is_s3m {
+                                    crate::audio::pitch::AMIGA_S3M_CLOCK
                                 } else {
-                                    self.instruments
-                                        .get(instrument_idx)
-                                        .map(|inst| inst.finetune)
-                                        .unwrap_or(0)
+                                    crate::audio::pitch::AMIGA_PAL_CLOCK
                                 };
 
-                                if finetune != 0 {
-                                    // ProTracker finetune formula: 1 unit = 1/8th of a semitone
-                                    hz_to_rate *= 2.0_f64.powf(finetune as f64 / (12.0 * 8.0));
-                                }
+                                let period_clock = if is_amiga {
+                                    clock * base_freq / sample.sample_rate() as f64
+                                } else {
+                                    clock
+                                };
 
-                                let playback_rate = target_freq * hz_to_rate;
-
-                                let inst_vol = self
-                                    .instruments
-                                    .get(instrument_idx)
-                                    .map(|inst| inst.volume)
-                                    .unwrap_or(1.0);
-                                let velocity = note.velocity as f32;
-                                let velocity_gain = (velocity / 127.0) * inst_vol * sample.volume;
-
-                                // Apply instrument panning override to the effect processor
-                                if let Some(inst_pan) =
-                                    self.instruments.get(instrument_idx).and_then(|i| i.panning)
-                                {
-                                    if let Some(state) = self.effect_processor.channel_state_mut(ch)
-                                    {
-                                        state.panning_override = Some((inst_pan + 1.0) / 2.0);
-                                    }
+                                if is_amiga {
+                                    self.effect_processor.set_period_clock(ch, period_clock);
                                 }
 
                                 // Check for Note Delay (EDx)
@@ -717,6 +746,7 @@ impl Mixer {
                                         velocity_gain,
                                         hz_to_rate,
                                         triggered_note_freq: target_freq,
+                                        period_clock,
                                         offset,
                                         trigger_frame,
                                     });
@@ -737,7 +767,7 @@ impl Mixer {
                                     self.voices[ch] = Some(voice);
                                 }
                             }
-                        } // if let Some(resolved_sample_idx)
+                        }
                     }
                 }
                 Some(NoteEvent::Off) => {
@@ -776,7 +806,94 @@ impl Mixer {
                     }
                 }
                 None => {
-                    // No event — existing voice continues
+                    // No note event — check if an instrument was provided with a tone portamento.
+                    // This handles cases like `305 .. .. 04` where instrument 4 is set without a new note.
+                    if let Some(instrument_idx) = cell.instrument {
+                        let instrument_idx = instrument_idx as usize;
+                        let has_tone_porta = cell.effects.iter().any(|e| {
+                            matches!(
+                                e.effect_type(),
+                                Some(EffectType::PortamentoToNote)
+                                    | Some(EffectType::TonePortamentoVolumeSlide)
+                            )
+                        });
+
+                        if has_tone_porta && self.voices[ch].is_some() {
+                            let last_freq = self.effect_processor.last_note_frequency(ch);
+
+                            // Resolve sample for the current instrument at the last frequency.
+                            let midi_note =
+                                (12.0f64 * (last_freq / 440.0f64).log2() + 69.0f64).round() as u8;
+                            let resolved_sample_idx = if let Some(inst) =
+                                self.instruments.get(instrument_idx)
+                            {
+                                if inst.keyzones.is_empty() {
+                                    Some(instrument_idx)
+                                } else {
+                                    inst.resolve_sample_index(midi_note, 100) // Default velocity
+                                }
+                            } else {
+                                Some(instrument_idx)
+                            };
+
+                            if let Some(resolved_sample_idx) = resolved_sample_idx {
+                                if resolved_sample_idx < self.samples.len() {
+                                    let sample = &self.samples[resolved_sample_idx];
+                                    let base_freq = sample.base_frequency();
+                                    let sample_rate_ratio = sample.sample_rate() as f64
+                                        / self.output_sample_rate as f64;
+
+                                    let mut hz_to_rate = (1.0 / base_freq) * sample_rate_ratio;
+                                    if sample.finetune != 0 {
+                                        hz_to_rate *= 2.0_f64.powf(sample.finetune as f64 / 1200.0);
+                                    }
+
+                                    let finetune = if let Some(ft_override) =
+                                        self.effect_processor.finetune_override(ch)
+                                    {
+                                        ft_override
+                                    } else {
+                                        self.instruments
+                                            .get(instrument_idx)
+                                            .map(|inst| inst.finetune)
+                                            .unwrap_or(0)
+                                    };
+
+                                    if finetune != 0 {
+                                        hz_to_rate *= 2.0_f64.powf(finetune as f64 / (12.0 * 8.0));
+                                    }
+
+                                    let inst_vol = self
+                                        .instruments
+                                        .get(instrument_idx)
+                                        .map(|inst| inst.volume)
+                                        .unwrap_or(1.0);
+                                    let velocity_gain = (100.0 / 127.0) * inst_vol * sample.volume;
+
+                                    // Apply instrument panning override to the effect processor
+                                    if let Some(inst_pan) =
+                                        self.instruments.get(instrument_idx).and_then(|i| i.panning)
+                                    {
+                                        if let Some(state) =
+                                            self.effect_processor.channel_state_mut(ch)
+                                        {
+                                            state.panning_override = Some((inst_pan + 1.0) / 2.0);
+                                        }
+                                    }
+
+                                    if let Some(voice) = &mut self.voices[ch] {
+                                        voice.instrument_index = instrument_idx;
+                                        voice.sample_index = resolved_sample_idx;
+                                        voice.velocity_gain = velocity_gain as f32;
+                                        voice.hz_to_rate = hz_to_rate;
+                                        voice.lfo = VoiceLfoState::new(
+                                            self.instruments.get(instrument_idx),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -829,6 +946,7 @@ impl Mixer {
                         .position(|pn| pn.channel == ch && pn.trigger_frame == current_row_frame)
                     {
                         let pn = self.pending_notes.remove(pos);
+                        effect_processor.set_period_clock(ch, pn.period_clock);
                         let mut voice = Voice::new(
                             self.instruments.get(pn.instrument_index),
                             pn.instrument_index,
@@ -1439,6 +1557,27 @@ impl Mixer {
     /// Set the effect interpretation mode.
     pub fn set_effect_mode(&mut self, mode: crate::pattern::effect::EffectMode) {
         self.effect_processor.set_effect_mode(mode);
+    }
+
+    pub fn set_format_is_s3m(&mut self, is_s3m: bool) {
+        self.format_is_s3m = is_s3m;
+    }
+
+    /// Set the pitch slide mode for all channels.
+    ///
+    /// Use `SlideMode::AmigaPeriod` for MOD and S3M files.
+    pub fn set_slide_mode(&mut self, mode: crate::audio::pitch::SlideMode) {
+        self.effect_processor.set_slide_mode(mode);
+        if mode == crate::audio::pitch::SlideMode::AmigaPeriod {
+            let clock = if self.format_is_s3m {
+                crate::audio::pitch::AMIGA_S3M_CLOCK
+            } else {
+                crate::audio::pitch::AMIGA_PAL_CLOCK
+            };
+            for ch in 0..self.voices.len() {
+                self.effect_processor.set_period_clock(ch, clock);
+            }
+        }
     }
 
     /// Get a mutable reference to the bus system for configuration.
@@ -2877,6 +3016,112 @@ mod tests {
             mixer.voices[0].is_some(),
             "Voice should continue during portamento"
         );
+    }
+
+    #[test]
+    fn test_mixer_tone_portamento_updates_instrument() {
+        let data = vec![1.0f32; 1000];
+        let sample = Arc::new(Sample::new(data, 44100, 1, None));
+
+        let mut inst1 = Instrument::new("Inst1").with_volume(0.5);
+        inst1.sample_index = Some(0);
+        let mut inst2 = Instrument::new("Inst2").with_volume(1.0);
+        inst2.sample_index = Some(0);
+
+        let mut mixer = Mixer::new(vec![sample], vec![inst1, inst2], 1, 44100);
+        let mut pattern = Pattern::new(16, 1);
+
+        // Row 0: Start note with instrument 0 (vol 0.5)
+        let mut cell0 = Cell::default();
+        cell0.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
+        cell0.instrument = Some(0);
+        pattern.set_cell(0, 0, cell0);
+
+        mixer.tick(0, &pattern);
+        let vol_before = mixer.voices[0].as_ref().unwrap().velocity_gain;
+        assert!((vol_before - 0.5).abs() < 0.001);
+
+        // Row 1: Tone portamento to E-4 with instrument 1 (vol 1.0)
+        let mut cell1 = Cell::default();
+        cell1.note = Some(NoteEvent::On(Note::new(Pitch::E, 4, 127, 1)));
+        cell1.instrument = Some(1);
+        cell1
+            .effects
+            .push(Effect::from_type(EffectType::PortamentoToNote, 0x10));
+        pattern.set_cell(1, 0, cell1);
+
+        mixer.tick(1, &pattern);
+
+        let voice = mixer.voices[0].as_ref().unwrap();
+        let vol_after = voice.velocity_gain;
+
+        // Volume should be updated to 1.0 (from inst2)
+        assert!(
+            (vol_after - 1.0).abs() < 0.001,
+            "Volume should be updated to 1.0, got {}",
+            vol_after
+        );
+        // Position should NOT be reset (no re-trigger)
+        assert!(
+            voice.position > 0.0,
+            "Voice should not be re-triggered (position should be > 0)"
+        );
+    }
+
+    #[test]
+    fn test_mixer_tone_portamento_instrument_only() {
+        let data = vec![1.0f32; 1000];
+        let sample = Arc::new(Sample::new(data, 44100, 1, None));
+
+        let mut inst1 = Instrument::new("Inst1").with_volume(0.5);
+        inst1.sample_index = Some(0);
+        let mut inst2 = Instrument::new("Inst2").with_volume(1.0);
+        inst2.sample_index = Some(0);
+
+        let mut mixer = Mixer::new(vec![sample], vec![inst1, inst2], 1, 44100);
+        let mut pattern = Pattern::new(16, 1);
+        println!(
+            "DEBUG: pattern rows = {}, channels = {}",
+            pattern.row_count(),
+            pattern.num_channels()
+        );
+
+        // Row 0: Start note with instrument 0 (vol 0.5)
+        let mut cell0 = Cell::default();
+        cell0.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
+        cell0.instrument = Some(0);
+        pattern.set_cell(0, 0, cell0);
+
+        mixer.tick(0, &pattern);
+        let vol_before = mixer.voices[0].as_ref().unwrap().velocity_gain;
+        assert!((vol_before - 0.5).abs() < 0.001);
+
+        // Row 1: Tone portamento with instrument 1 (vol 1.0) with NEW NOTE
+        let mut cell1 = Cell::default();
+        cell1.note = Some(NoteEvent::On(Note::new(Pitch::E, 4, 127, 0)));
+        cell1.instrument = Some(1);
+        cell1
+            .effects
+            .push(Effect::from_type(EffectType::PortamentoToNote, 0x10));
+        pattern.set_cell(1, 0, cell1);
+
+        mixer.tick(1, &pattern);
+
+        let voice = mixer.voices[0].as_ref().unwrap();
+        let vol_after = voice.velocity_gain;
+
+        // Volume should be updated to 1.0 (from inst2)
+        println!(
+            "DEBUG: vol_after = {}, inst_idx = {}",
+            vol_after, voice.instrument_index
+        );
+        assert!(
+            (vol_after - 1.0).abs() < 0.001,
+            "Volume should be updated to 1.0, got {}",
+            vol_after
+        );
+        assert_eq!(voice.instrument_index, 1);
+        assert!(voice.position > 0.0, "Voice should not be re-triggered");
     }
 
     #[test]

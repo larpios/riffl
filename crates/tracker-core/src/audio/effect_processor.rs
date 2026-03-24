@@ -5,6 +5,7 @@
 //! processor maintains per-channel running state and provides frame-level
 //! modulation for continuous effects.
 
+use crate::audio::pitch::{PitchCalculator, SlideMode};
 use crate::pattern::effect::{Effect, EffectMode, EffectType};
 
 /// Commands that effects can send to the transport system.
@@ -153,6 +154,13 @@ pub struct ChannelEffectState {
     pub pitch_slide_up: u8,
     /// Pitch slide down speed (per row approx).
     pub pitch_slide_down: u8,
+    /// Pitch calculation mode: linear semitone-based (default) or Amiga period-based.
+    ///
+    /// Set to `SlideMode::AmigaPeriod` when playing back MOD or S3M files.
+    pub slide_mode: SlideMode,
+    /// Effective Amiga period clock for this channel (AmigaPeriod mode only).
+    /// Set by the mixer when a note triggers: AMIGA_PAL_CLOCK * base_freq / sample_rate
+    pub period_clock: f64,
 
     // --- Advanced XM/IT Effects ---
     /// Base channel volume set by Mxx (0.0 - 1.0).
@@ -226,6 +234,8 @@ impl Default for ChannelEffectState {
             ticks_per_row: 6,
             pitch_slide_up: 0,
             pitch_slide_down: 0,
+            slide_mode: SlideMode::default(),
+            period_clock: crate::audio::pitch::AMIGA_PAL_CLOCK,
             channel_volume: 1.0,
             channel_volume_slide_up: 0,
             channel_volume_slide_down: 0,
@@ -248,9 +258,16 @@ impl ChannelEffectState {
     pub fn reset(&mut self) {
         let fpr = self.frames_per_row;
         let tpr = self.ticks_per_row;
+        let mode = self.slide_mode;
+        let clock = self.period_clock;
+        let channel_vol = self.channel_volume;
+
         *self = Self {
             frames_per_row: fpr,
             ticks_per_row: tpr,
+            slide_mode: mode,
+            period_clock: clock,
+            channel_volume: channel_vol,
             ..Self::default()
         };
     }
@@ -437,31 +454,106 @@ impl ChannelEffectState {
         Some((base_vol * tremolo * self.channel_volume).clamp(0.0, 2.0))
     }
 
-    /// Advance portamento frequency smoothly.
-    pub fn advance_portamento(&mut self) {
-        if let (Some(target), triggered_freq) = (self.portamento_target, self.triggered_note_freq) {
-            if self.portamento_speed <= 0.0 || triggered_freq <= 0.0 {
-                return;
+    /// Advance portamento frequency by one tick.
+    ///
+    /// Delegates all pitch math to [`PitchCalculator`] using the channel's
+    /// [`SlideMode`].  For `Linear` mode `portamento_speed` is in semitone
+    /// units (effect param / 64).  For `AmigaPeriod` mode it should be the
+    /// raw period delta (effect param as f64) set by the format loader.
+    pub fn advance_portamento_tick(&mut self) {
+        let (Some(target_freq), triggered_freq) =
+            (self.portamento_target, self.triggered_note_freq)
+        else {
+            return;
+        };
+
+        if self.portamento_speed <= 0.0 || triggered_freq <= 0.0 {
+            return;
+        }
+
+        let current_freq = self.pitch_ratio * triggered_freq;
+
+        // Snap to target when already close enough (avoids floating-point drift).
+        if (current_freq - target_freq).abs() < 0.001 {
+            self.portamento_freq = Some(target_freq);
+            self.pitch_ratio = target_freq / triggered_freq;
+            return;
+        }
+
+        let new_freq = PitchCalculator::apply_portamento(
+            current_freq,
+            target_freq,
+            self.portamento_speed,
+            self.slide_mode,
+            self.period_clock,
+        );
+
+        self.portamento_freq = Some(new_freq);
+        self.pitch_ratio = new_freq / triggered_freq;
+    }
+    /// Advance pitch slide by one tick.
+    ///
+    /// Delegates all pitch math to [`PitchCalculator`] using the channel's
+    /// [`SlideMode`].  For `AmigaPeriod` mode the slide units are raw period
+    /// deltas rather than 1/64th-semitone steps.
+    pub fn advance_pitch_slide_tick(&mut self) {
+        if self.pitch_slide_up > 0 || self.pitch_slide_down > 0 {
+            let current_freq = self.pitch_ratio * self.triggered_note_freq;
+            let new_freq = PitchCalculator::apply_slide(
+                current_freq,
+                self.pitch_slide_up,
+                self.pitch_slide_down,
+                self.slide_mode,
+                self.period_clock,
+            );
+            if self.triggered_note_freq > 0.0 {
+                self.pitch_ratio = new_freq / self.triggered_note_freq;
             }
+        }
+    }
 
-            let target_ratio = target / triggered_freq;
-            let current_ratio = self.pitch_ratio;
+    /// Advance volume slide by one tick.
+    pub fn advance_volume_slide_tick(&mut self) {
+        if self.volume_slide_up > 0 || self.volume_slide_down > 0 {
+            let current_vol = self.volume_override.unwrap_or(1.0);
+            let delta_per_tick =
+                (self.volume_slide_up as f32 - self.volume_slide_down as f32) / 64.0;
+            self.volume_override = Some((current_vol + delta_per_tick).clamp(0.0, 2.0));
+        }
 
-            if (current_ratio - target_ratio).abs() < 0.000001 {
-                self.pitch_ratio = target_ratio;
-                return;
-            }
+        if self.channel_volume_slide_up > 0 || self.channel_volume_slide_down > 0 {
+            let delta_per_tick = (self.channel_volume_slide_up as f32
+                - self.channel_volume_slide_down as f32)
+                / 64.0;
+            self.channel_volume = (self.channel_volume + delta_per_tick).clamp(0.0, 1.0);
+        }
+    }
 
-            let active_ticks = (self.ticks_per_row as f64 - 1.0).max(1.0);
-            let semitones_per_row = self.portamento_speed * active_ticks;
-            let semitones_per_frame = semitones_per_row / self.frames_per_row as f64;
-            let ratio_step = 2.0_f64.powf(semitones_per_frame / 12.0);
+    /// Advance panning slide by one tick.
+    pub fn advance_panning_slide_tick(&mut self) {
+        if self.panning_slide_right > 0 || self.panning_slide_left > 0 {
+            let current_pan = self.panning_override.unwrap_or(0.5);
+            let delta_per_tick =
+                (self.panning_slide_right as f32 - self.panning_slide_left as f32) / 64.0;
+            self.panning_override = Some((current_pan + delta_per_tick).clamp(0.0, 1.0));
+        }
+    }
 
-            if current_ratio < target_ratio {
-                self.pitch_ratio = (current_ratio * ratio_step).min(target_ratio);
-            } else {
-                self.pitch_ratio = (current_ratio / ratio_step).max(target_ratio);
-            }
+    /// Advance panbrello LFO phase.
+    pub fn advance_panbrello(&mut self, _sample_rate: u32) {
+        if !self.panbrello_active || self.panbrello_speed == 0 {
+            return;
+        }
+
+        // Same cycle logic as vibrato
+        let cycles_per_row = (self.panbrello_speed as f64 / 64.0) * self.ticks_per_row as f64;
+        let phase_inc_per_frame =
+            (cycles_per_row * 2.0 * std::f64::consts::PI) / self.frames_per_row as f64;
+
+        self.panbrello_phase += phase_inc_per_frame;
+
+        if self.panbrello_phase > 2.0 * std::f64::consts::PI {
+            self.panbrello_phase -= 2.0 * std::f64::consts::PI;
         }
     }
 }
@@ -509,6 +601,16 @@ impl TrackerEffectProcessor {
     /// Set the effect interpretation mode.
     pub fn set_effect_mode(&mut self, mode: EffectMode) {
         self.mode = mode;
+    }
+
+    /// Set the pitch slide mode for all channels.
+    ///
+    /// Call with `SlideMode::AmigaPeriod` when playing back MOD or S3M files,
+    /// so that 1xx/2xx/3xx effects use Amiga hardware period arithmetic.
+    pub fn set_slide_mode(&mut self, mode: SlideMode) {
+        for ch in &mut self.channels {
+            ch.slide_mode = mode;
+        }
     }
 
     /// Process effects for a row, returning any transport commands.
@@ -580,8 +682,12 @@ impl TrackerEffectProcessor {
                 EffectType::PortamentoToNote => {
                     // Set portamento speed; target is set when a note is triggered
                     if effect.param > 0 {
-                        // Standard XM slide unit is 1/64th semitone per tick
-                        state.portamento_speed = effect.param as f64 / 64.0;
+                        state.portamento_speed = match state.slide_mode {
+                            // Linear: 1/64th semitone per tick per unit
+                            SlideMode::Linear => effect.param as f64 / 64.0,
+                            // AmigaPeriod: raw period delta per tick (no scaling)
+                            SlideMode::AmigaPeriod => effect.param as f64,
+                        };
                     }
                     if let Some(freq) = note_frequency {
                         state.portamento_target = Some(freq);
@@ -820,14 +926,108 @@ impl TrackerEffectProcessor {
                 }
                 EffectType::ExtraFinePortaUp => {
                     // X1x: Extra Fine Portamento Up (once per row)
-                    // Unit is 1/64th semitone (same as linear frequency period unit)
-                    let semitones = effect.param as f64 / 64.0;
-                    state.pitch_ratio *= 2.0_f64.powf(semitones / 12.0);
+                    match state.slide_mode {
+                        SlideMode::Linear => {
+                            let semitones = effect.param as f64 / 64.0;
+                            state.pitch_ratio *= 2.0_f64.powf(semitones / 12.0);
+                        }
+                        SlideMode::AmigaPeriod => {
+                            let freq = state.pitch_ratio * state.triggered_note_freq;
+                            let new_freq = PitchCalculator::apply_slide(
+                                freq,
+                                effect.param,
+                                0,
+                                state.slide_mode,
+                                state.period_clock,
+                            );
+                            if state.triggered_note_freq > 0.0 {
+                                state.pitch_ratio = new_freq / state.triggered_note_freq;
+                            }
+                        }
+                    }
                 }
                 EffectType::ExtraFinePortaDown => {
-                    // X2x: Extra Fine Portamento Down
-                    let semitones = effect.param as f64 / 64.0;
-                    state.pitch_ratio *= 2.0_f64.powf(-semitones / 12.0);
+                    // X2x: Extra Fine Portamento Down (once per row)
+                    match state.slide_mode {
+                        SlideMode::Linear => {
+                            let semitones = effect.param as f64 / 64.0;
+                            state.pitch_ratio *= 2.0_f64.powf(-semitones / 12.0);
+                        }
+                        SlideMode::AmigaPeriod => {
+                            let freq = state.pitch_ratio * state.triggered_note_freq;
+                            let new_freq = PitchCalculator::apply_slide(
+                                freq,
+                                0,
+                                effect.param,
+                                state.slide_mode,
+                                state.period_clock,
+                            );
+                            if state.triggered_note_freq > 0.0 {
+                                state.pitch_ratio = new_freq / state.triggered_note_freq;
+                            }
+                        }
+                    }
+                }
+                EffectType::SlideUpFine => {
+                    // S3M Fine Slide Up: info & 0x0F units, applied once per row
+                    match state.slide_mode {
+                        SlideMode::Linear => {
+                            let semitones = (effect.param & 0x0F) as f64 / 16.0;
+                            state.pitch_ratio *= 2.0_f64.powf(semitones / 12.0);
+                        }
+                        SlideMode::AmigaPeriod => {
+                            let freq = state.pitch_ratio * state.triggered_note_freq;
+                            // S3M Fine Slide is 4x speed of Extra Fine Slide (raw period units)
+                            let new_freq = PitchCalculator::apply_slide(
+                                freq,
+                                (effect.param & 0x0F) * 4,
+                                0,
+                                state.slide_mode,
+                                state.period_clock,
+                            );
+                            if state.triggered_note_freq > 0.0 {
+                                state.pitch_ratio = new_freq / state.triggered_note_freq;
+                            }
+                        }
+                    }
+                }
+                EffectType::SlideDownFine => {
+                    // S3M Fine Slide Down: info & 0x0F units, applied once per row
+                    match state.slide_mode {
+                        SlideMode::Linear => {
+                            let semitones = (effect.param & 0x0F) as f64 / 16.0;
+                            state.pitch_ratio *= 2.0_f64.powf(-semitones / 12.0);
+                        }
+                        SlideMode::AmigaPeriod => {
+                            let freq = state.pitch_ratio * state.triggered_note_freq;
+                            let new_freq = PitchCalculator::apply_slide(
+                                freq,
+                                0,
+                                (effect.param & 0x0F) * 4,
+                                state.slide_mode,
+                                state.period_clock,
+                            );
+                            if state.triggered_note_freq > 0.0 {
+                                state.pitch_ratio = new_freq / state.triggered_note_freq;
+                            }
+                        }
+                    }
+                }
+                EffectType::PortamentoExtraFine => {
+                    // S3M Extra Fine Portamento (GxF): sets speed and slides once per row
+                    state.portamento_speed = match state.slide_mode {
+                        SlideMode::Linear => (effect.param & 0x0F) as f64 / 64.0,
+                        SlideMode::AmigaPeriod => (effect.param & 0x0F) as f64,
+                    };
+                    state.advance_portamento_tick();
+                }
+                EffectType::PortamentoFine => {
+                    // S3M Fine Portamento (GxE): sets speed and slides once per row
+                    state.portamento_speed = match state.slide_mode {
+                        SlideMode::Linear => (effect.param & 0x0F) as f64 / 16.0,
+                        SlideMode::AmigaPeriod => ((effect.param & 0x0F) * 4) as f64,
+                    };
+                    state.advance_portamento_tick();
                 }
             }
         }
@@ -843,69 +1043,36 @@ impl TrackerEffectProcessor {
         if let Some(state) = self.channels.get_mut(channel) {
             state.row_frame_counter += 1;
 
-            // Skip continuous effects during Tick 0.
-            // Continuous slides (Axy, 1xx, 2xx) only apply on ticks > 0.
-            let frames_per_tick = state.frames_per_row / state.ticks_per_row.max(1) as u32;
-            // row_frame_counter is 1-based here (just incremented).
-            // If we are within the first tick's duration, return early.
-            if state.row_frame_counter <= frames_per_tick.max(1) {
-                return;
-            }
+            let ticks_per_row = state.ticks_per_row.max(1) as u32;
+            let frames_per_tick = state.frames_per_row / ticks_per_row;
 
+            // Tick boundary detection.
+            // A tick boundary occurs when we've processed a full tick's worth of frames.
+            // We use row_frame_counter % frames_per_tick == 0.
+            // We skip tick 0 (the start of the row) for continuous slides.
+            let is_tick_boundary = if frames_per_tick > 0 {
+                state.row_frame_counter % frames_per_tick == 0
+            } else {
+                true
+            };
+
+            let current_tick = if frames_per_tick > 0 {
+                state.row_frame_counter / frames_per_tick
+            } else {
+                state.row_frame_counter
+            };
+
+            // Non-tick effects (smooth per-frame modulations)
             state.advance_vibrato(self.sample_rate);
             state.advance_tremolo(self.sample_rate);
-            state.advance_portamento();
-            let _ = state;
-            self.advance_panbrello(channel);
+            state.advance_panbrello(self.sample_rate);
 
-            let state = self.channels.get_mut(channel).unwrap();
-            if state.pitch_slide_up > 0 || state.pitch_slide_down > 0 {
-                // Pitch slides happen every tick except tick 0.
-                // Standard unit: 1/64 semitone per tick
-                let semitones_per_tick =
-                    (state.pitch_slide_up as f64 - state.pitch_slide_down as f64) / 64.0;
-                let active_ticks = (state.ticks_per_row as f64 - 1.0).max(1.0);
-                let semitones_per_row = semitones_per_tick * active_ticks;
-                let semitones_per_frame = semitones_per_row / state.frames_per_row as f64;
-                state.pitch_ratio *= 2.0_f64.powf(semitones_per_frame / 12.0);
-            }
-
-            // Advance volume slides smoothly across the row
-            if state.volume_slide_up > 0 || state.volume_slide_down > 0 {
-                let current_vol = state.volume_override.unwrap_or(1.0);
-
-                // Volume slides (Axy) happen every tick except tick 0.
-                // To maintain smooth frame-level graduation, we calculate the total row delta
-                // based on the per-tick amount and the number of ticks.
-                let delta_per_tick =
-                    (state.volume_slide_up as f32 - state.volume_slide_down as f32) / 64.0;
-                let active_ticks = (state.ticks_per_row as f32 - 1.0).max(1.0);
-                let delta_per_row = delta_per_tick * active_ticks;
-
-                let delta_per_frame = delta_per_row / state.frames_per_row as f32;
-                state.volume_override = Some((current_vol + delta_per_frame).clamp(0.0, 2.0));
-            }
-
-            // Channel Volume slides (Hxy)
-            if state.channel_volume_slide_up > 0 || state.channel_volume_slide_down > 0 {
-                let delta_per_tick = (state.channel_volume_slide_up as f32
-                    - state.channel_volume_slide_down as f32)
-                    / 64.0;
-                let active_ticks = (state.ticks_per_row as f32 - 1.0).max(1.0);
-                let delta_per_row = delta_per_tick * active_ticks;
-                let delta_per_frame = delta_per_row / state.frames_per_row as f32;
-                state.channel_volume = (state.channel_volume + delta_per_frame).clamp(0.0, 1.0);
-            }
-
-            // Panning slides (Xxy)
-            if state.panning_slide_right > 0 || state.panning_slide_left > 0 {
-                let current_pan = state.panning_override.unwrap_or(0.5);
-                let delta_per_tick =
-                    (state.panning_slide_right as f32 - state.panning_slide_left as f32) / 64.0;
-                let active_ticks = (state.ticks_per_row as f32 - 1.0).max(1.0);
-                let delta_per_row = delta_per_tick * active_ticks;
-                let delta_per_frame = delta_per_row / state.frames_per_row as f32;
-                state.panning_override = Some((current_pan + delta_per_frame).clamp(0.0, 1.0));
+            // Tick-based effects (slides updated only at tick boundaries > 0)
+            if is_tick_boundary && current_tick > 0 && current_tick < ticks_per_row {
+                state.advance_portamento_tick();
+                state.advance_pitch_slide_tick();
+                state.advance_volume_slide_tick();
+                state.advance_panning_slide_tick();
             }
         }
     }
@@ -913,20 +1080,22 @@ impl TrackerEffectProcessor {
     /// Advance global frame-level modulations.
     pub fn advance_global_frame(&mut self) {
         if self.global_volume_slide_up > 0 || self.global_volume_slide_down > 0 {
-            // Use the frames_per_row from the first channel as a target speed reference
-            let fpr = self
-                .channels
-                .first()
-                .map(|s| s.frames_per_row)
-                .unwrap_or(6000) as f32;
-            let tpr = self.channels.first().map(|s| s.ticks_per_row).unwrap_or(6) as f32;
+            // Global volume slides are also updated once per tick.
+            // Here we use the first channel's frames_per_row/ticks_per_row as the timing reference.
+            if let Some(state) = self.channels.first() {
+                let ticks_per_row = state.ticks_per_row.max(1) as u32;
+                let frames_per_tick = state.frames_per_row / ticks_per_row;
 
-            let delta_per_tick =
-                (self.global_volume_slide_up as f32 - self.global_volume_slide_down as f32) / 128.0;
-            let active_ticks = (tpr - 1.0).max(1.0);
-            let delta_per_row = delta_per_tick * active_ticks;
-            let delta_per_frame = delta_per_row / fpr;
-            self.global_volume = (self.global_volume + delta_per_frame).clamp(0.0, 1.0);
+                if frames_per_tick > 0 && state.row_frame_counter % frames_per_tick == 0 {
+                    let current_tick = state.row_frame_counter / frames_per_tick;
+                    if current_tick > 0 && current_tick < ticks_per_row {
+                        let delta_per_tick = (self.global_volume_slide_up as f32
+                            - self.global_volume_slide_down as f32)
+                            / 128.0;
+                        self.global_volume = (self.global_volume + delta_per_tick).clamp(0.0, 1.0);
+                    }
+                }
+            }
         }
     }
 
@@ -936,6 +1105,14 @@ impl TrackerEffectProcessor {
             .get(channel)
             .map(|s| s.combined_pitch_ratio())
             .unwrap_or(1.0)
+    }
+
+    /// Get the frequency of the last triggered note on this channel.
+    pub fn last_note_frequency(&self, channel: usize) -> f64 {
+        self.channels
+            .get(channel)
+            .map(|s| s.triggered_note_freq)
+            .unwrap_or(440.0)
     }
 
     /// Get the portamento frequency for a channel, if portamento is active.
@@ -970,22 +1147,10 @@ impl TrackerEffectProcessor {
     }
 
     /// Advance panbrello LFO phase.
+    #[deprecated(note = "Use ChannelEffectState::advance_panbrello instead")]
     pub fn advance_panbrello(&mut self, channel: usize) {
         if let Some(state) = self.channels.get_mut(channel) {
-            if !state.panbrello_active || state.panbrello_speed == 0 {
-                return;
-            }
-
-            // Same cycle logic as vibrato
-            let cycles_per_row = (state.panbrello_speed as f64 / 64.0) * state.ticks_per_row as f64;
-            let phase_inc_per_frame =
-                (cycles_per_row * 2.0 * std::f64::consts::PI) / state.frames_per_row as f64;
-
-            state.panbrello_phase += phase_inc_per_frame;
-
-            if state.panbrello_phase > 2.0 * std::f64::consts::PI {
-                state.panbrello_phase -= 2.0 * std::f64::consts::PI;
-            }
+            state.advance_panbrello(self.sample_rate);
         }
     }
 
@@ -1018,6 +1183,12 @@ impl TrackerEffectProcessor {
     /// Get mutable channel effect state.
     pub fn channel_state_mut(&mut self, channel: usize) -> Option<&mut ChannelEffectState> {
         self.channels.get_mut(channel)
+    }
+
+    pub fn set_period_clock(&mut self, channel: usize, clock: f64) {
+        if let Some(ch) = self.channels.get_mut(channel) {
+            ch.period_clock = clock;
+        }
     }
 
     /// Reset all effect state (e.g., when playback stops).
@@ -1387,13 +1558,24 @@ mod tests {
 
         // Advance to trigger
         if let Some(state) = proc.channel_state_mut(0) {
-            state.frames_per_row = 6;
+            state.frames_per_row = 60; // 10 frames per tick
             state.ticks_per_row = 6;
         }
-        proc.advance_frame(0);
-        proc.advance_frame(0);
+        // Advance 9 frames (within Tick 0)
+        for _ in 0..9 {
+            proc.advance_frame(0);
+        }
+        assert!(
+            (proc.pitch_ratio(0) - 1.0).abs() < 0.0001,
+            "Should not slide before tick boundary"
+        );
 
-        assert!(proc.pitch_ratio(0) > 1.0);
+        // Advance 1 more (completes Tick 0, slides for Tick 1)
+        proc.advance_frame(0);
+        assert!(
+            proc.pitch_ratio(0) > 1.0,
+            "Should slide at boundary of tick 0 and 1"
+        );
     }
 
     #[test]
@@ -1405,14 +1587,13 @@ mod tests {
         // Should not slide immediately
         assert!((proc.pitch_ratio(0) - 1.0).abs() < 0.0001);
 
-        // Advance to trigger
+        // Advance to trigger (set small frames_per_row so ticks are short)
         if let Some(state) = proc.channel_state_mut(0) {
-            state.frames_per_row = 6;
+            state.frames_per_row = 6; // 1 frame per tick
             state.ticks_per_row = 6;
         }
-        proc.advance_frame(0);
-        proc.advance_frame(0);
 
+        proc.advance_frame(0);
         assert!(proc.pitch_ratio(0) < 1.0);
     }
 
@@ -1428,16 +1609,17 @@ mod tests {
 
         // Row 1
         proc.process_row(0, &effects, None);
-        proc.advance_frame(0);
-        proc.advance_frame(0);
+        // Advance through all ticks
+        for _ in 0..60 {
+            proc.advance_frame(0);
+        }
         let ratio1 = proc.pitch_ratio(0);
 
         // Row 2
         proc.process_row(0, &effects, None);
-        // Note: process_row resets transient flags but pitch_ratio persists
-        // We need to advance frames again to slide further
-        proc.advance_frame(0);
-        proc.advance_frame(0);
+        for _ in 0..60 {
+            proc.advance_frame(0);
+        }
         let ratio2 = proc.pitch_ratio(0);
 
         assert!(
@@ -1493,12 +1675,17 @@ mod tests {
 
         // Advance to trigger
         if let Some(state) = proc.channel_state_mut(0) {
-            state.frames_per_row = 6;
+            state.frames_per_row = 60;
             state.ticks_per_row = 6;
         }
-        proc.advance_frame(0);
-        proc.advance_frame(0);
+        // Advance 9 frames (within Tick 0)
+        for _ in 0..9 {
+            proc.advance_frame(0);
+        }
+        assert!((proc.volume_override(0).unwrap() - 1.0).abs() < 0.001);
 
+        // Advance 1 more (completes Tick 0, slides for Tick 1)
+        proc.advance_frame(0);
         let vol_after = proc.volume_override(0).unwrap();
         assert!(vol_after > 1.0);
     }
@@ -1534,9 +1721,9 @@ mod tests {
     #[test]
     fn test_advance_frame_volume_slide() {
         let mut proc = TrackerEffectProcessor::new(1, 48000);
-        // Set small frames per row for testing tick boundaries
+        // Set setup with 10 frames per tick
         if let Some(state) = proc.channel_state_mut(0) {
-            state.frames_per_row = 6;
+            state.frames_per_row = 60;
             state.ticks_per_row = 6;
         }
 
@@ -1549,24 +1736,26 @@ mod tests {
 
         let vol_after_row = proc.volume_override(0).unwrap();
 
-        // Advance two frames
-        // Frame 1: row_frame_counter 1 (Tick 0). Skipped.
-        // Frame 2: row_frame_counter 2 (Tick 1). Processed.
+        // Advance frames
+        // Frame 1-9: Tick 0. No slide.
+        for _ in 0..9 {
+            proc.advance_frame(0);
+        }
+        assert_eq!(proc.volume_override(0).unwrap(), vol_after_row);
+
+        // Frame 10: Tick 1 boundary. Slide happens.
         proc.advance_frame(0);
-        proc.advance_frame(0);
 
-        let vol_after_frame = proc.volume_override(0).unwrap();
+        let vol_after_tick_0 = proc.volume_override(0).unwrap();
+        // Since frame 10 was processed, it should have slid once.
+        let expected_delta = 1.0 / 64.0;
+        assert!((vol_after_tick_0 - (vol_after_row + expected_delta as f32)).abs() < 0.000001);
 
-        // One frame processed.
-        // Delta calculation:
-        // delta_per_tick = 1/64.0
-        // active_ticks = 5.0
-        // delta_per_row = 5/64.0
-        // delta_per_frame = delta_per_row / 6.0
-        // Expected = 1.0 + (5.0/384.0) = 1.0 + 0.01302
-        let expected_delta = (1.0 / 64.0 * 5.0) / 6.0;
-
-        assert!((vol_after_frame - (vol_after_row + expected_delta as f32)).abs() < 0.000001);
+        // Frame 11-19: no slide.
+        for _ in 0..9 {
+            proc.advance_frame(0);
+        }
+        assert_eq!(proc.volume_override(0).unwrap(), vol_after_tick_0);
     }
 
     #[test]
