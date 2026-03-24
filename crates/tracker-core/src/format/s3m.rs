@@ -204,7 +204,11 @@ pub struct S3mInstrument {
     pub adlib_data: Option<AdlibData>,
 }
 
-pub fn parse_s3m_instrument(data: &[u8], para_ptr: u16, signed_samples: bool) -> Result<S3mInstrument, String> {
+pub fn parse_s3m_instrument(
+    data: &[u8],
+    para_ptr: u16,
+    signed_samples: bool,
+) -> Result<S3mInstrument, String> {
     let offset = (para_ptr as usize) * 16;
     if offset + 0x50 > data.len() {
         return Err("Instrument header out of bounds".into());
@@ -220,13 +224,11 @@ pub fn parse_s3m_instrument(data: &[u8], para_ptr: u16, signed_samples: bool) ->
         let name = read_string(data, &mut off, 28);
         let _id = read_string(data, &mut off, 4);
 
-        let is_opl3 = type_byte == 3;
-        let reg_size = if is_opl3 { 512 } else { 256 };
-        let mut registers = vec![0u8; reg_size.min(data.len().saturating_sub(offset + 0x50))];
-
-        let reg_start = offset + 0x50;
-        let reg_end = (reg_start + registers.len()).min(data.len());
-        registers[..reg_end.saturating_sub(reg_start)].copy_from_slice(&data[reg_start..reg_end]);
+        let mut registers = vec![0u8; 12];
+        let reg_start = offset + 0x30;
+        if reg_start + 12 <= data.len() {
+            registers.copy_from_slice(&data[reg_start..reg_start + 12]);
+        }
 
         return Ok(S3mInstrument {
             name,
@@ -237,7 +239,7 @@ pub fn parse_s3m_instrument(data: &[u8], para_ptr: u16, signed_samples: bool) ->
             volume: 64,
             c2spd: 8363,
             flags: 0,
-            adlib_data: Some(AdlibData { registers, is_opl3 }),
+            adlib_data: Some(AdlibData { registers, is_opl3: type_byte == 3 }),
         });
     }
 
@@ -530,8 +532,10 @@ fn convert_s3m_effect(cmd: u8, info: u8) -> Option<Effect> {
             }
         }
         'T' => Some(Effect::new(0x0F, info)), // Tempo/BPM
-        'U' => Some(Effect::new(0x04, info)), // Fine Vibrato (map to Vibrato for now)
+        'U' => Some(Effect::new(0x04, info)), // Fine Vibrato
         'V' => Some(Effect::new(0x10, info)), // Global Volume
+        'W' => Some(Effect::new(0x11, info)), // Global Volume Slide
+        'X' => Some(Effect::new(0x08, info.saturating_mul(17))), // Pan position
         _ => None,
     }
 }
@@ -589,7 +593,8 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
             // 8363 * 2^((60 - Base)/12) = C2SPD
             // log2(C2SPD/8363) = (60 - Base)/12
             // Base = 60 - 12 * log2(C2SPD/8363)
-            let base_note = 60.0 - 12.0 * (s3m_inst.c2spd as f64 / 8363.0).log2();
+            let c2spd = if s3m_inst.c2spd > 0 { s3m_inst.c2spd } else { 8363 };
+            let base_note = 60.0 - 12.0 * (c2spd as f64 / 8363.0).log2();
             sample = sample.with_base_note(base_note.round() as u8);
 
             let mut inst = Instrument::new(s3m_inst.name.clone());
@@ -630,7 +635,8 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
                         Ok(data) => {
                             let mut sample = Sample::new(data, SAMPLE_RATE, 1, Some(name));
                             sample.volume = s3m_inst.volume as f32 / 64.0;
-                            let base_note = 60.0 - 12.0 * (s3m_inst.c2spd as f64 / 8363.0).log2();
+                            let c2spd = if s3m_inst.c2spd > 0 { s3m_inst.c2spd } else { 8363 };
+                            let base_note = 60.0 - 12.0 * (c2spd as f64 / 8363.0).log2();
                             sample = sample.with_base_note(base_note.round() as u8);
                             sample
                         }

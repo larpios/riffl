@@ -28,13 +28,16 @@ use input::keybindings::{map_key_to_action, Action};
 const TICK_RATE: Duration = Duration::from_millis(16);
 
 fn main() -> Result<()> {
+    // Initialize logging as early as possible
+    let _ = tracker_core::log::init();
+
     // Check for --dump-config before doing any terminal setup
     if std::env::args().any(|arg| arg == "--dump-config") {
         let config = crate::config::Config::load();
         if let Ok(toml_str) = toml::to_string_pretty(&config) {
             println!("{}", toml_str);
         } else {
-            eprintln!("Failed to serialize config to TOML");
+            println!("Failed to serialize config to TOML");
         }
         return Ok(());
     }
@@ -51,6 +54,7 @@ fn main() -> Result<()> {
     let mut terminal = match init_terminal() {
         Ok(t) => t,
         Err(e) => {
+            // No terminal yet, can use println/eprintln safely here
             eprintln!("riffl: Failed to initialize terminal: {}", e);
             eprintln!("This application requires an interactive terminal (TTY) to run.");
             return Err(e);
@@ -78,11 +82,6 @@ fn main() -> Result<()> {
     app.theme = crate::ui::theme::Theme::from_kind(theme_kind.clone());
     app.theme_kind = theme_kind;
     app.config = config;
-
-    // Initialize logging
-    if let Err(e) = tracker_core::log::init() {
-        eprintln!("Warning: Failed to initialize logging: {}", e);
-    }
 
     // Re-apply roots so persisted bookmarks from config appear at startup.
     // set_sample_dirs (above) ran before app.config was assigned, so bookmarks

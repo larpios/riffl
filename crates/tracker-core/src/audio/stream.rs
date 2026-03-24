@@ -2,6 +2,7 @@
 
 use crate::audio::device::AudioDevice;
 use crate::audio::error::{AudioError, AudioResult};
+use crate::{log_error, log_warn};
 use cpal::traits::{DeviceTrait, StreamTrait};
 use std::sync::{Arc, Mutex};
 
@@ -177,7 +178,7 @@ impl AudioStream {
                 },
                 |err| {
                     // Error callback - just log for now
-                    eprintln!("Audio stream error: {}", err);
+                    log_error!("audio", "Audio stream error: {}", err);
                 },
                 None, // No timeout
             )
@@ -235,7 +236,7 @@ impl Drop for AudioStream {
             // Pause the stream first to prevent abrupt cutoff
             // This reduces the likelihood of clicks/pops on shutdown
             if let Err(e) = stream.pause() {
-                eprintln!("Warning: Failed to pause stream during shutdown: {}", e);
+                log_warn!("audio", "Failed to pause stream during shutdown: {}", e);
             }
 
             // Give the audio system a small amount of time to flush buffers

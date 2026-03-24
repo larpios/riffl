@@ -551,7 +551,11 @@ impl App {
         // Decay VU meter levels on every tick for visual smoothing.
         // During playback it smooths peaks; when stopped it ensures they return to zero.
         if let Ok(mut mixer) = self.mixer.lock() {
-            let decay = if self.transport.is_playing() { 0.85 } else { 0.70 };
+            let decay = if self.transport.is_playing() {
+                0.85
+            } else {
+                0.70
+            };
             mixer.decay_channel_levels(decay);
         }
 

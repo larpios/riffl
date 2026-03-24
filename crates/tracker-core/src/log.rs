@@ -1,14 +1,10 @@
-use std::fs::{self, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Mutex;
+use chrono::Local;
 
-pub struct Logger {
-    file: Mutex<Option<std::fs::File>>,
-    level: Mutex<LogLevel>,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum LogLevel {
     Error,
     #[default]
@@ -29,31 +25,41 @@ impl LogLevel {
     }
 }
 
+pub struct Logger {
+    file: Mutex<Option<std::fs::File>>,
+    level: Mutex<LogLevel>,
+}
+
 static LOGGER: Logger = Logger {
     file: Mutex::new(None),
     level: Mutex::new(LogLevel::Warn),
 };
 
+pub fn init() -> std::io::Result<()> {
+    Logger::init()
+}
+
 impl Logger {
     pub fn init() -> std::io::Result<()> {
-        let log_dir = get_log_dir()?;
-        fs::create_dir_all(&log_dir)?;
-
-        let log_file = get_log_file_path(&log_dir);
+        let log_file_path = PathBuf::from("log.txt");
         let file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(&log_file)?;
+            .open(&log_file_path)?;
 
-        let mut guard = LOGGER.file.lock().unwrap();
-        *guard = Some(file);
+        if let Ok(mut guard) = LOGGER.file.lock() {
+            *guard = Some(file);
+        }
 
-        drop(guard);
-
-        let mut level_guard = LOGGER.level.lock().unwrap();
-        *level_guard = LogLevel::from_env();
+        if let Ok(mut level_guard) = LOGGER.level.lock() {
+            *level_guard = LogLevel::from_env();
+        }
 
         Ok(())
+    }
+
+    pub fn instance() -> &'static Logger {
+        &LOGGER
     }
 
     pub fn log(&self, level: LogLevel, module: &str, message: &str) {
@@ -61,7 +67,7 @@ impl Logger {
             return;
         }
 
-        let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+        let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
         let level_str = match level {
             LogLevel::Error => "ERROR",
             LogLevel::Warn => "WARN ",
@@ -77,59 +83,41 @@ impl Logger {
                 let _ = file.flush();
             }
         }
-
-        eprintln!("{}", line.trim());
     }
 
-    fn should_log(&self, level: LogLevel) -> bool {
-        let guard = self.level.lock().unwrap();
-        level as u8 >= *guard as u8
+    pub fn should_log(&self, level: LogLevel) -> bool {
+        if let Ok(logger_level) = self.level.lock() {
+            level >= *logger_level
+        } else {
+            false
+        }
     }
-}
-
-fn get_log_dir() -> std::io::Result<PathBuf> {
-    let config_dir = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("riffl")
-        .join("logs");
-    Ok(config_dir)
-}
-
-fn get_log_file_path(log_dir: &Path) -> PathBuf {
-    let date = chrono::Local::now().format("%Y%m%d");
-    log_dir.join(format!("riffl-{}.log", date))
-}
-
-pub fn error(module: &str, message: &str) {
-    LOGGER.log(LogLevel::Error, module, message);
-}
-
-pub fn warn(module: &str, message: &str) {
-    LOGGER.log(LogLevel::Warn, module, message);
-}
-
-pub fn info(module: &str, message: &str) {
-    LOGGER.log(LogLevel::Info, module, message);
-}
-
-pub fn debug(module: &str, message: &str) {
-    LOGGER.log(LogLevel::Debug, module, message);
 }
 
 #[macro_export]
-macro_rules! log {
-    ($level:expr, $module:expr, $($arg:tt)*) => {{
-        let msg = format!($($arg)*);
-        match $level {
-            "error" => $crate::log::error($module, &msg),
-            "warn" => $crate::log::warn($module, &msg),
-            "info" => $crate::log::info($module, &msg),
-            "debug" => $crate::log::debug($module, &msg),
-            _ => $crate::log::warn($module, &msg),
-        }
-    }};
+macro_rules! log_error {
+    ($module:expr, $($arg:tt)*) => {
+        $crate::log::Logger::instance().log($crate::log::LogLevel::Error, $module, &format!($($arg)*));
+    };
 }
 
-pub fn init() -> std::io::Result<()> {
-    Logger::init()
+#[macro_export]
+macro_rules! log_warn {
+    ($module:expr, $($arg:tt)*) => {
+        $crate::log::Logger::instance().log($crate::log::LogLevel::Warn, $module, &format!($($arg)*));
+    };
+}
+
+#[macro_export]
+macro_rules! log_info {
+    ($module:expr, $($arg:tt)*) => {
+        $crate::log::Logger::instance().log($crate::log::LogLevel::Info, $module, &format!($($arg)*));
+    };
+}
+
+#[macro_export]
+macro_rules! log_debug {
+    ($module:expr, $($arg:tt)*) => {
+        $crate::log::Logger::instance().log($crate::log::LogLevel::Debug, $module, &format!($($arg)*));
+    };
 }

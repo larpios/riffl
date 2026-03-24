@@ -653,11 +653,15 @@ fn load_it_sample_data(file_data: &[u8], sh: &ItSampleHeader) -> Option<Vec<f32>
                 let mut consumed = 0;
                 let mut temp_raw_len = 0;
                 while temp_raw_len < num_frames && consumed + 2 <= current_sample_data.len() {
-                    let block_len = u16::from_le_bytes([current_sample_data[consumed], current_sample_data[consumed+1]]) as usize;
+                    let block_len = u16::from_le_bytes([
+                        current_sample_data[consumed],
+                        current_sample_data[consumed + 1],
+                    ]) as usize;
                     consumed += 2 + block_len;
                     temp_raw_len += 0x4000; // Each block is up to 0x4000 samples
                 }
-                current_sample_data = &current_sample_data[consumed.min(current_sample_data.len())..];
+                current_sample_data =
+                    &current_sample_data[consumed.min(current_sample_data.len())..];
 
                 let xor_val = if !is_signed { -32768i16 } else { 0 };
                 raw.into_iter()
@@ -668,11 +672,15 @@ fn load_it_sample_data(file_data: &[u8], sh: &ItSampleHeader) -> Option<Vec<f32>
                 let mut consumed = 0;
                 let mut temp_raw_len = 0;
                 while temp_raw_len < num_frames && consumed + 2 <= current_sample_data.len() {
-                    let block_len = u16::from_le_bytes([current_sample_data[consumed], current_sample_data[consumed+1]]) as usize;
+                    let block_len = u16::from_le_bytes([
+                        current_sample_data[consumed],
+                        current_sample_data[consumed + 1],
+                    ]) as usize;
                     consumed += 2 + block_len;
                     temp_raw_len += 0x8000; // Each block is up to 0x8000 samples for 8-bit
                 }
-                current_sample_data = &current_sample_data[consumed.min(current_sample_data.len())..];
+                current_sample_data =
+                    &current_sample_data[consumed.min(current_sample_data.len())..];
 
                 let xor_val = if !is_signed { -128i8 } else { 0 };
                 raw.into_iter()
@@ -699,7 +707,8 @@ fn load_it_sample_data(file_data: &[u8], sh: &ItSampleHeader) -> Option<Vec<f32>
                         raw.push(0.0);
                     }
                 }
-                current_sample_data = &current_sample_data[(num_frames * 2).min(current_sample_data.len())..];
+                current_sample_data =
+                    &current_sample_data[(num_frames * 2).min(current_sample_data.len())..];
                 raw
             } else {
                 let mut raw = Vec::with_capacity(num_frames);
@@ -717,7 +726,8 @@ fn load_it_sample_data(file_data: &[u8], sh: &ItSampleHeader) -> Option<Vec<f32>
                         raw.push(0.0);
                     }
                 }
-                current_sample_data = &current_sample_data[num_frames.min(current_sample_data.len())..];
+                current_sample_data =
+                    &current_sample_data[num_frames.min(current_sample_data.len())..];
                 raw
             };
             res

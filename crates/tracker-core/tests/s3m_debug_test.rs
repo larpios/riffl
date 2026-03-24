@@ -31,7 +31,9 @@ fn debug_2nd_pm_s3m() {
 
     // Parse each instrument
     for (i, &ptr) in header.inst_pointers.iter().enumerate() {
-        if ptr == 0 { continue; }
+        if ptr == 0 {
+            continue;
+        }
         println!("\n--- Instrument {} (para_ptr={:04x}) ---", i, ptr);
         match parse_s3m_instrument(&data, ptr, signed_samples) {
             Ok(inst) => {
