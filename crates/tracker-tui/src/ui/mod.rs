@@ -596,7 +596,7 @@ fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout::Rect, app:
         // Oscilloscope row
         let mut osc_spans = Vec::new();
         osc_spans.push(Span::styled(
-            "\u{223F}    ",
+            "\u{223F}     ",
             Style::default().fg(theme.text_secondary),
         ));
         for waveform in waveforms.iter() {

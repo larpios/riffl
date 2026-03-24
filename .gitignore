@@ -17,6 +17,8 @@ Auto\ Run\ Docs/
 *.db
 
 .claude*
+.codex
+.gemini
 .rtk
 node_modules
 .ralph

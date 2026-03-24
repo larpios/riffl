@@ -614,7 +614,7 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
             // If we skip, we break references.
             let name = s3m_inst.name.clone();
             let mut inst = Instrument::new(name.clone());
-            let sample = if let Some(_adlib) = s3m_inst.adlib_data {
+            let sample = if let Some(adlib) = s3m_inst.adlib_data {
                 #[cfg(feature = "adlib")]
                 {
                     const SAMPLE_RATE: u32 = 48000;
@@ -624,7 +624,7 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
                     let adlib_result =
                         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                             let mut synth = AdlibSynthesizer::new(SAMPLE_RATE);
-                            synth.init(&_adlib.registers);
+                            synth.init(&adlib.registers);
                             synth.note_on(0, 60, 64);
                             let data = synth.render_samples(num_samples).to_vec();
                             synth.note_off(0);

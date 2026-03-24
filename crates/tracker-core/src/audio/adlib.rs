@@ -3,20 +3,22 @@
 //! Implements FM synthesis using the opl-emu crate for Adlib instruments
 //! in Scream Tracker 3 modules.
 
-use opl_emu::chip::{OplChipEmu, OplEmu, OplSample};
+#![allow(unused)]
 
-const OPL_SAMPLE_RATE: u32 = 49716;
+use opl::chip::Chip;
+
 const OPL_CHANNELS: usize = 9;
 
 pub struct AdlibSynthesizer {
-    chip: OplEmu,
+    chip: Chip,
     sample_rate: u32,
     buffer: Vec<f32>,
 }
 
 impl AdlibSynthesizer {
     pub fn new(sample_rate: u32) -> Self {
-        let chip = OplEmu::new();
+        let mut chip = Chip::new(sample_rate);
+        chip.setup();
         Self {
             chip,
             sample_rate,
@@ -27,20 +29,23 @@ impl AdlibSynthesizer {
     pub fn init(&mut self, registers: &[u8]) {
         if registers.len() >= 256 {
             for (i, &reg) in registers.iter().enumerate().take(256) {
-                self.chip.write_reg(i as u8, reg);
+                self.chip.write_reg(i as u32, reg);
             }
         }
     }
 
     pub fn render_samples(&mut self, num_samples: usize) -> &[f32] {
         self.buffer.clear();
-        self.buffer.reserve(num_samples);
+        self.buffer.resize(num_samples, 0.0);
 
-        for _ in 0..num_samples {
-            let left = self.chip.sample();
-            let right = self.chip.sample();
-            let stereo_sample = (left + right) as f32 / (i16::MAX as f32 * 2.0);
-            self.buffer.push(stereo_sample);
+        // Generate samples into temporary i32 buffer
+        let mut temp_buffer = vec![0i32; num_samples];
+        self.chip.generate_block_2(num_samples, &mut temp_buffer);
+
+        // Convert i32 samples to f32 in range [-1.0, 1.0]
+        // OPL output is 16-bit signed
+        for (i, &sample) in temp_buffer.iter().enumerate() {
+            self.buffer[i] = sample as f32 / 32768.0;
         }
 
         &self.buffer
@@ -50,16 +55,18 @@ impl AdlibSynthesizer {
         if channel < OPL_CHANNELS {
             let freq = calculate_note_frequency(note);
             let reg_offset = channel * 3;
-            self.chip.write_reg(0xa0 + channel, freq & 0xff);
-            self.chip.write_reg(0xb0 + channel, (freq >> 8) | 0x20);
             self.chip
-                .write_reg(0x83 + reg_offset, velocity.saturating_mul(2));
+                .write_reg(0xa0 + channel as u32, (freq & 0xff) as u8);
+            self.chip
+                .write_reg(0xb0 + channel as u32, ((freq >> 8) | 0x20) as u8);
+            self.chip
+                .write_reg(0x83 + reg_offset as u32, velocity.saturating_mul(2));
         }
     }
 
     pub fn note_off(&mut self, channel: usize) {
         if channel < OPL_CHANNELS {
-            self.chip.write_reg(0xb0 + channel, 0);
+            self.chip.write_reg(0xb0 + channel as u32, 0);
         }
     }
 }
