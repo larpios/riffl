@@ -24,20 +24,39 @@ impl ModuleLoader for ModLoader {
     }
 
     fn detect(&self, data: &[u8]) -> bool {
-        if data.len() < 1084 {
-            return false;
-        }
-        let tag = &data[1080..1084];
-        match tag {
-            b"M.K." | b"M!K!" | b"4CHN" | b"FLT4" | b"FLT8" | b"6CHN" | b"8CHN" | b"CD81"
-            | b"OCTA" => true,
-            _ => {
-                tag[2] == b'C'
-                    && tag[3] == b'H'
-                    && tag[0].is_ascii_digit()
-                    && tag[1].is_ascii_digit()
+        // Standard 31-instrument MODs have a tag at 1080
+        if data.len() >= 1084 {
+            let tag = &data[1080..1084];
+            let is_31_inst = match tag {
+                b"M.K." | b"M!K!" | b"4CHN" | b"FLT4" | b"FLT8" | b"6CHN" | b"8CHN" | b"CD81"
+                | b"OCTA" => true,
+                _ => {
+                    tag[2] == b'C'
+                        && tag[3] == b'H'
+                        && tag[0].is_ascii_digit()
+                        && tag[1].is_ascii_digit()
+                }
+            };
+            if is_31_inst {
+                return true;
             }
         }
+
+        // Legacy 15-instrument SoundTracker MODs
+        // Minimum size: 20 (title) + 15*30 (inst) + 1 (len) + 1 (restart) + 128 (order) = 600 bytes
+        if data.len() >= 600 {
+            let song_length = data[470];
+            // Valid song length is 1-128. 0 is sometimes used but 1 is standard minimum.
+            // Also check that the pattern order table contains reasonable pattern indices (0-63 for ST)
+            if song_length > 0 && song_length <= 128 {
+                let order_table = &data[472..472 + song_length as usize];
+                if order_table.iter().all(|&p| p < 64) {
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 
     fn load(&self, data: &[u8]) -> FormatResult<FormatData> {
@@ -305,13 +324,36 @@ pub fn export_mod(song: &Song, samples: &[Sample]) -> Result<Vec<u8>, String> {
 ///
 /// Returns an error string if the data is too small or structurally invalid.
 pub fn import_mod(data: &[u8]) -> Result<super::FormatData, String> {
-    // Minimum: 20 title + 31*30 headers + 1 length + 1 restart + 128 order + 4 tag
-    if data.len() < 1084 {
+    // Standard MOD: 20 title + 31*30 headers + 1 length + 1 restart + 128 order + 4 tag = 1084
+    // SoundTracker: 20 title + 15*30 headers + 1 length + 1 restart + 128 order = 600
+    if data.len() < 600 {
         return Err(format!(
-            "File too small: {} bytes (minimum 1084)",
+            "File too small: {} bytes (minimum 600)",
             data.len()
         ));
     }
+
+    // Detect if this is a 31-instrument or 15-instrument MOD
+    let (is_31_inst, num_instruments) = if data.len() >= 1084 {
+        let tag = &data[1080..1084];
+        let is_31 = match tag {
+            b"M.K." | b"M!K!" | b"4CHN" | b"FLT4" | b"FLT8" | b"6CHN" | b"8CHN" | b"CD81"
+            | b"OCTA" => true,
+            _ => {
+                tag[2] == b'C'
+                    && tag[3] == b'H'
+                    && tag[0].is_ascii_digit()
+                    && tag[1].is_ascii_digit()
+            }
+        };
+        if is_31 {
+            (true, 31)
+        } else {
+            (false, 15)
+        }
+    } else {
+        (false, 15)
+    };
 
     let mut pos = 0usize;
 
@@ -319,9 +361,9 @@ pub fn import_mod(data: &[u8]) -> Result<super::FormatData, String> {
     let title = read_string(data, pos, 20);
     pos += 20;
 
-    // ── 31 sample headers (30 bytes each) ──────────────────────────────────
-    let mut headers: Vec<SampleHeader> = Vec::with_capacity(31);
-    for _ in 0..31 {
+    // ── Sample headers (30 bytes each) ─────────────────────────────────────
+    let mut headers: Vec<SampleHeader> = Vec::with_capacity(num_instruments);
+    for _ in 0..num_instruments {
         headers.push(read_sample_header(data, pos)?);
         pos += 30;
     }
@@ -335,10 +377,15 @@ pub fn import_mod(data: &[u8]) -> Result<super::FormatData, String> {
     let pattern_order = data[pos..pos + 128].to_vec();
     pos += 128;
 
-    // ── Format tag → channel count ─────────────────────────────────────────
-    let tag: [u8; 4] = data[pos..pos + 4].try_into().unwrap();
-    let num_channels = detect_channels(&tag);
-    pos += 4;
+    // ── Format tag (if 31-inst) and channel count ──────────────────────────
+    let num_channels = if is_31_inst {
+        let tag: [u8; 4] = data[pos..pos + 4].try_into().unwrap();
+        let n = detect_channels(&tag);
+        pos += 4;
+        n
+    } else {
+        4 // 15-inst MODs are always 4 channels
+    };
 
     // ── Pattern decode ─────────────────────────────────────────────────────
     let num_patterns = pattern_order[..song_length]
@@ -364,7 +411,7 @@ pub fn import_mod(data: &[u8]) -> Result<super::FormatData, String> {
     }
 
     // ── Sample data decode ─────────────────────────────────────────────────
-    let mut samples: Vec<Sample> = Vec::with_capacity(31);
+    let mut samples: Vec<Sample> = Vec::with_capacity(num_instruments);
     for hdr in &headers {
         let byte_len = hdr.length_words * 2;
         if byte_len == 0 {
@@ -372,6 +419,10 @@ pub fn import_mod(data: &[u8]) -> Result<super::FormatData, String> {
             continue;
         }
         let available = data.len().saturating_sub(pos);
+        if available == 0 {
+            samples.push(Sample::default());
+            continue;
+        }
         let slice = &data[pos..pos + byte_len.min(available)];
         samples.push(decode_sample_data(slice, hdr));
         pos += byte_len.min(available);
@@ -413,7 +464,6 @@ pub fn import_mod(data: &[u8]) -> Result<super::FormatData, String> {
 
     // Initialize tracks with Amiga panning
     // Amiga hardware: Ch 0(L), 1(R), 2(R), 3(L)
-    // Stereo separation is roughly 80/127 (around 63%), matching Furnace's default
     let mut tracks = Vec::with_capacity(num_channels);
     for i in 0..num_channels {
         let mut t = Track::with_number(i + 1);
