@@ -617,24 +617,43 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
             let sample = if let Some(_adlib) = s3m_inst.adlib_data {
                 #[cfg(feature = "adlib")]
                 {
-                    // Generate audio using AdlibSynthesizer
                     const SAMPLE_RATE: u32 = 48000;
                     const DURATION_SECS: f32 = 0.5;
                     let num_samples = (SAMPLE_RATE as f32 * DURATION_SECS) as usize;
 
-                    let mut synth = AdlibSynthesizer::new(SAMPLE_RATE);
-                    synth.init(&_adlib.registers);
-                    // Trigger note C4 (middle C) with moderate velocity
-                    synth.note_on(0, 60, 64);
-                    let data = synth.render_samples(num_samples).to_vec();
-                    synth.note_off(0);
+                    let adlib_result =
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            let mut synth = AdlibSynthesizer::new(SAMPLE_RATE);
+                            synth.init(&_adlib.registers);
+                            synth.note_on(0, 60, 64);
+                            let data = synth.render_samples(num_samples).to_vec();
+                            synth.note_off(0);
+                            data
+                        }));
 
-                    let mut sample = Sample::new(data, SAMPLE_RATE, 1, Some(name));
-                    sample.volume = s3m_inst.volume as f32 / 64.0;
-                    // Compute base note similar to PCM (C2SPD defaults to 8363)
-                    let base_note = 60.0 - 12.0 * (s3m_inst.c2spd as f64 / 8363.0).log2();
-                    sample = sample.with_base_note(base_note.round() as u8);
-                    sample
+                    match adlib_result {
+                        Ok(data) => {
+                            let mut sample = Sample::new(data, SAMPLE_RATE, 1, Some(name));
+                            sample.volume = s3m_inst.volume as f32 / 64.0;
+                            let base_note = 60.0 - 12.0 * (s3m_inst.c2spd as f64 / 8363.0).log2();
+                            sample = sample.with_base_note(base_note.round() as u8);
+                            sample
+                        }
+                        Err(_) => {
+                            eprintln!("S3M loader: adlib instrument '{}' failed to render (unsupported OPL feature), using fallback", name);
+                            let freq = 440.0;
+                            let mut data = Vec::with_capacity(num_samples);
+                            for i in 0..num_samples {
+                                let t = i as f32 / SAMPLE_RATE as f32;
+                                let value = (2.0 * std::f32::consts::PI * freq * t).sin() * 0.5;
+                                data.push(value);
+                            }
+                            let mut sample = Sample::new(data, SAMPLE_RATE, 1, Some(name));
+                            sample.volume = s3m_inst.volume as f32 / 64.0;
+                            sample = sample.with_base_note(69);
+                            sample
+                        }
+                    }
                 }
                 #[cfg(not(feature = "adlib"))]
                 {
