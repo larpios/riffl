@@ -63,27 +63,24 @@ fn read_u32_le(data: &[u8], offset: &mut usize) -> u32 {
 
 // ─── S3M Header ──────────────────────────────────────────────────────────────
 
-struct S3mHeader {
-    name: String,
-    #[allow(dead_code)]
-    ord_num: u16,
-    ins_num: u16,
-    #[allow(dead_code)]
-    pat_num: u16,
-    #[allow(dead_code)]
-    flags: u16,
-    global_vol: u8,
-    initial_speed: u8,
-    initial_tempo: u8,
-    #[allow(dead_code)]
-    master_vol: u8,
-    channel_settings: [u8; 32],
-    orders: Vec<u8>,
-    inst_pointers: Vec<u16>,
-    pat_pointers: Vec<u16>,
+pub struct S3mHeader {
+    pub name: String,
+    pub ord_num: u16,
+    pub ins_num: u16,
+    pub pat_num: u16,
+    pub flags: u16,
+    pub global_vol: u8,
+    pub initial_speed: u8,
+    pub initial_tempo: u8,
+    pub master_vol: u8,
+    pub ffi: u16, // File format information
+    pub channel_settings: [u8; 32],
+    pub orders: Vec<u8>,
+    pub inst_pointers: Vec<u16>,
+    pub pat_pointers: Vec<u16>,
 }
 
-fn parse_s3m_header(data: &[u8]) -> Result<S3mHeader, String> {
+pub fn parse_s3m_header(data: &[u8]) -> Result<S3mHeader, String> {
     if data.len() < 0x60 {
         return Err("File too short for S3M header".into());
     }
@@ -105,7 +102,7 @@ fn parse_s3m_header(data: &[u8]) -> Result<S3mHeader, String> {
     let pat_num = read_u16_le(data, &mut off); // 0x24
     let flags = read_u16_le(data, &mut off); // 0x26
     let _cwt_v = read_u16_le(data, &mut off); // 0x28
-    let _ffi = read_u16_le(data, &mut off); // 0x2A
+    let ffi = read_u16_le(data, &mut off); // 0x2A
 
     let magic = &data[0x2C..0x30];
     if magic != b"SCRM" {
@@ -168,6 +165,7 @@ fn parse_s3m_header(data: &[u8]) -> Result<S3mHeader, String> {
         initial_speed,
         initial_tempo,
         master_vol,
+        ffi,
         channel_settings,
         orders,
         inst_pointers,
@@ -192,21 +190,21 @@ impl Default for AdlibData {
     }
 }
 
-struct S3mInstrument {
-    name: String,
-    sample_data: Option<Vec<f32>>,
+pub struct S3mInstrument {
+    pub name: String,
+    pub sample_data: Option<Vec<f32>>,
     #[allow(dead_code)]
-    sample_len: u32,
-    loop_begin: u32,
-    loop_end: u32,
-    volume: u8,
-    c2spd: u32,
-    flags: u8,
+    pub sample_len: u32,
+    pub loop_begin: u32,
+    pub loop_end: u32,
+    pub volume: u8,
+    pub c2spd: u32,
+    pub flags: u8,
     #[allow(dead_code)]
-    adlib_data: Option<AdlibData>,
+    pub adlib_data: Option<AdlibData>,
 }
 
-fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, String> {
+pub fn parse_s3m_instrument(data: &[u8], para_ptr: u16, signed_samples: bool) -> Result<S3mInstrument, String> {
     let offset = (para_ptr as usize) * 16;
     if offset + 0x50 > data.len() {
         return Err("Instrument header out of bounds".into());
@@ -246,14 +244,14 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
     // Sample data pointer (24-bit value)
     // Stored as: ptrDataH (upper 8 bits at 0x0D), ptrDataL (lower 16 bits at 0x0E-0x0F)
     // Combined as 24-bit: (ptrDataH << 16) | ptrDataL
-    // This IS the file offset - no multiplication needed
+    // This is a parapointer (units of 16 bytes)
     off = offset + 0x0D;
     let ptr_data_h = data[off] as u32;
     let ptr_data_l = u16::from_le_bytes([data[off + 1], data[off + 2]]);
-    let sample_ptr = ((ptr_data_h as u32) << 16) | (ptr_data_l as u32);
+    let sample_ptr = ((ptr_data_h << 16) | (ptr_data_l as u32)) * 16;
 
     off += 3; // Skip the 3-byte sample pointer
-    let length = read_u32_le(data, &mut off); // 0x10
+    let length = read_u32_le(data, &mut off); // 0x10. Number of samples.
     let loop_begin = read_u32_le(data, &mut off); // 0x14
     let loop_end = read_u32_le(data, &mut off); // 0x18
     let volume = read_u8(data, &mut off); // 0x1C
@@ -266,12 +264,18 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
     let name = read_string(data, &mut off, 28);
     let _id = read_string(data, &mut off, 4); // "SCRS"
 
+    // Flags bit 1 (2) = Stereo (unsupported in old S3M usually, but checked)
+    // Flags bit 2 (4) = 16-bit
+    let is_16bit = flags & 4 != 0;
+    let bytes_per_sample = if is_16bit { 2 } else { 1 };
+    let total_bytes = length as usize * bytes_per_sample;
+
     // Check bounds
-    if sample_ptr as usize + length as usize > data.len() {
+    if sample_ptr as usize + total_bytes > data.len() {
         // Truncated sample
         return Ok(S3mInstrument {
             name,
-            sample_data: None, // Or partial?
+            sample_data: None,
             sample_len: 0,
             loop_begin: 0,
             loop_end: 0,
@@ -283,32 +287,35 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
     }
 
     // Parse Sample Data
-    // S3M samples are 8-bit unsigned by default.
-    // Flags bit 1 (2) = Stereo (unsupported in old S3M usually, but checked)
-    // Flags bit 2 (4) = 16-bit
-    let is_16bit = flags & 4 != 0;
-
-    // S3M 16-bit data is Little Endian
-    let raw_slice = &data[sample_ptr as usize..(sample_ptr + length) as usize];
+    let raw_slice = &data[sample_ptr as usize..(sample_ptr as usize + total_bytes)];
     let float_data = if is_16bit {
-        // 16-bit unsigned (rare in standard S3M but supported by format)
         let num_samples = raw_slice.len() / 2;
         let mut fd = Vec::with_capacity(num_samples);
         for i in 0..num_samples {
             if i * 2 + 1 >= raw_slice.len() {
                 break;
             }
-            let s = u16::from_le_bytes([raw_slice[i * 2], raw_slice[i * 2 + 1]]);
-            // Unsigned 16-bit to float: (s - 32768) / 32768.0
-            fd.push((s as i32 - 32768) as f32 / 32768.0);
+            if signed_samples {
+                let s = i16::from_le_bytes([raw_slice[i * 2], raw_slice[i * 2 + 1]]);
+                fd.push(s as f32 / 32768.0);
+            } else {
+                let s = u16::from_le_bytes([raw_slice[i * 2], raw_slice[i * 2 + 1]]);
+                fd.push((s as i32 - 32768) as f32 / 32768.0);
+            }
         }
         fd
     } else {
-        // 8-bit unsigned
-        raw_slice
-            .iter()
-            .map(|&b| (b as i16 - 128) as f32 / 128.0)
-            .collect()
+        if signed_samples {
+            raw_slice
+                .iter()
+                .map(|&b| (b as i8) as f32 / 128.0)
+                .collect()
+        } else {
+            raw_slice
+                .iter()
+                .map(|&b| (b as i16 - 128) as f32 / 128.0)
+                .collect()
+        }
     };
 
     Ok(S3mInstrument {
@@ -533,6 +540,7 @@ fn convert_s3m_effect(cmd: u8, info: u8) -> Option<Effect> {
 
 pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
     let header = parse_s3m_header(data)?;
+    let signed_samples = header.ffi == 1;
 
     // Parse Instruments
     let mut instruments = Vec::new();
@@ -540,7 +548,10 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
     let mut inst_map = vec![None; header.ins_num as usize]; // Maps S3M inst index to internal index
 
     for (i, &ptr) in header.inst_pointers.iter().enumerate() {
-        let s3m_inst = parse_s3m_instrument(data, ptr)?;
+        if ptr == 0 {
+            continue;
+        }
+        let s3m_inst = parse_s3m_instrument(data, ptr, signed_samples)?;
 
         if let Some(float_data) = s3m_inst.sample_data {
             let mut sample = Sample::new(

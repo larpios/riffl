@@ -644,27 +644,36 @@ fn load_it_sample_data(file_data: &[u8], sh: &ItSampleHeader) -> Option<Vec<f32>
     let mut channels_pcm = Vec::with_capacity(num_channels);
 
     // IT stores stereo samples as L-block then R-block
-    for ch in 0..num_channels {
-        let block_offset = if is_16bit {
-            ch * num_frames * 2
-        } else {
-            ch * num_frames
-        };
-
-        if block_offset >= sample_data.len() {
-            break;
-        }
-        let block_data = &sample_data[block_offset..];
-
+    let mut current_sample_data = sample_data;
+    for _ch in 0..num_channels {
         let pcm_float: Vec<f32> = if sh.is_compressed() {
             if is_16bit {
-                let raw = it_unpack_16bit(block_data, num_frames, true);
+                let raw = it_unpack_16bit(current_sample_data, num_frames, is_delta);
+                // Advance current_sample_data based on how many bytes were consumed by blocks
+                let mut consumed = 0;
+                let mut temp_raw_len = 0;
+                while temp_raw_len < num_frames && consumed + 2 <= current_sample_data.len() {
+                    let block_len = u16::from_le_bytes([current_sample_data[consumed], current_sample_data[consumed+1]]) as usize;
+                    consumed += 2 + block_len;
+                    temp_raw_len += 0x4000; // Each block is up to 0x4000 samples
+                }
+                current_sample_data = &current_sample_data[consumed.min(current_sample_data.len())..];
+
                 let xor_val = if !is_signed { -32768i16 } else { 0 };
                 raw.into_iter()
                     .map(|s| (s ^ xor_val) as f32 / 32768.0)
                     .collect()
             } else {
-                let raw = it_unpack_8bit(block_data, num_frames, true);
+                let raw = it_unpack_8bit(current_sample_data, num_frames, is_delta);
+                let mut consumed = 0;
+                let mut temp_raw_len = 0;
+                while temp_raw_len < num_frames && consumed + 2 <= current_sample_data.len() {
+                    let block_len = u16::from_le_bytes([current_sample_data[consumed], current_sample_data[consumed+1]]) as usize;
+                    consumed += 2 + block_len;
+                    temp_raw_len += 0x8000; // Each block is up to 0x8000 samples for 8-bit
+                }
+                current_sample_data = &current_sample_data[consumed.min(current_sample_data.len())..];
+
                 let xor_val = if !is_signed { -128i8 } else { 0 };
                 raw.into_iter()
                     .map(|s| (s ^ xor_val) as f32 / 128.0)
@@ -672,7 +681,8 @@ fn load_it_sample_data(file_data: &[u8], sh: &ItSampleHeader) -> Option<Vec<f32>
             }
         } else {
             // Uncompressed
-            if is_16bit {
+            let block_data = current_sample_data;
+            let res = if is_16bit {
                 let mut raw = Vec::with_capacity(num_frames);
                 let mut sum = 0i16;
                 let xor_val = if !is_signed { -32768i16 } else { 0 };
@@ -689,6 +699,7 @@ fn load_it_sample_data(file_data: &[u8], sh: &ItSampleHeader) -> Option<Vec<f32>
                         raw.push(0.0);
                     }
                 }
+                current_sample_data = &current_sample_data[(num_frames * 2).min(current_sample_data.len())..];
                 raw
             } else {
                 let mut raw = Vec::with_capacity(num_frames);
@@ -706,8 +717,10 @@ fn load_it_sample_data(file_data: &[u8], sh: &ItSampleHeader) -> Option<Vec<f32>
                         raw.push(0.0);
                     }
                 }
+                current_sample_data = &current_sample_data[num_frames.min(current_sample_data.len())..];
                 raw
-            }
+            };
+            res
         };
         channels_pcm.push(pcm_float);
     }

@@ -1,17 +1,34 @@
 #[test]
 fn test_load_real_s3m_files() {
-    let paths = vec![
-        "/Users/ray/.config/riffl/samples/2nd_pm.s3m",
-        "/Users/ray/.config/riffl/samples/DISTANCE.S3M",
-        "/Users/ray/.config/riffl/samples/pod.s3m",
-        "/Users/ray/.config/riffl/samples/celestial_fantasia.s3m",
-        "/Users/ray/.config/riffl/samples/aryx.s3m",
-        "/Users/ray/.config/riffl/samples/skyrider.s3m",
-    ];
+    // Use test_modules directory relative to this test file
+    let test_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("test_modules");
+
+    let paths: Vec<_> = std::fs::read_dir(&test_dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|e| {
+                    e.path()
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .map(|ext| ext.eq_ignore_ascii_case("s3m"))
+                        .unwrap_or(false)
+                })
+                .map(|e| e.path())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if paths.is_empty() {
+        eprintln!("No S3M files found in {:?}, skipping test", test_dir);
+        return;
+    }
 
     for path in paths {
-        eprintln!("\n=== Testing: {} ===", path);
-        let data = std::fs::read(path).expect("Failed to read file");
+        eprintln!("\n=== Testing: {:?} ===", path);
+        let data = std::fs::read(&path).expect("Failed to read file");
         eprintln!("File size: {} bytes", data.len());
 
         match tracker_core::format::s3m::import_s3m(&data) {
@@ -39,7 +56,7 @@ fn test_load_real_s3m_files() {
             }
             Err(e) => {
                 eprintln!("ERROR: {:?}", e);
-                panic!("Failed to load {}", path);
+                panic!("Failed to load {:?}", path);
             }
         }
     }

@@ -56,13 +56,13 @@ pub fn render_instrument_list(
 
             let sample_name = sample.and_then(|s| s.name()).unwrap_or("---");
             let sample_name_display = if sample_name.len() > 12 {
-                &sample_name[..12]
+                sample_name.get(..12).unwrap_or(sample_name)
             } else {
                 sample_name
             };
 
             let name_display = if inst.name.len() > 20 {
-                &inst.name[..20]
+                inst.name.get(..20).unwrap_or(&inst.name)
             } else {
                 &inst.name
             };

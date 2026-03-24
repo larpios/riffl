@@ -1,6 +1,6 @@
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 pub struct Logger {
@@ -95,7 +95,7 @@ fn get_log_dir() -> std::io::Result<PathBuf> {
     Ok(config_dir)
 }
 
-fn get_log_file_path(log_dir: &PathBuf) -> PathBuf {
+fn get_log_file_path(log_dir: &Path) -> PathBuf {
     let date = chrono::Local::now().format("%Y%m%d");
     log_dir.join(format!("riffl-{}.log", date))
 }
