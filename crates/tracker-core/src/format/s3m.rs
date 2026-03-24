@@ -214,10 +214,6 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
 
     let mut off = offset;
     let type_byte = read_u8(data, &mut off);
-    eprintln!(
-        "S3M instrument para_ptr {} type {} at offset {}",
-        para_ptr, type_byte, offset
-    );
     let _dos_filename = read_string(data, &mut off, 12);
 
     // If not a PCM instrument (type 1), parse as Adlib
@@ -255,13 +251,6 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
     let ptr_data_h = data[off] as u32;
     let ptr_data_l = u16::from_le_bytes([data[off + 1], data[off + 2]]);
     let sample_ptr = ((ptr_data_h as u32) << 16) | (ptr_data_l as u32);
-    eprintln!(
-        "S3M instrument ptr_data_h={}, ptr_data_l={}, sample_ptr={}, data len={}",
-        ptr_data_h,
-        ptr_data_l,
-        sample_ptr,
-        data.len()
-    );
 
     off += 3; // Skip the 3-byte sample pointer
     let length = read_u32_le(data, &mut off); // 0x10
@@ -272,10 +261,6 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
     let _pack = read_u8(data, &mut off); // 0x1E
     let flags = read_u8(data, &mut off); // 0x1F
     let c2spd = read_u32_le(data, &mut off); // 0x20
-    eprintln!(
-        "S3M instrument length={}, volume={}, flags={}, c2spd={}",
-        length, volume, flags, c2spd
-    );
 
     off = offset + 0x30;
     let name = read_string(data, &mut off, 28);
@@ -283,12 +268,6 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
 
     // Check bounds
     if sample_ptr as usize + length as usize > data.len() {
-        eprintln!(
-            "S3M instrument sample_ptr {} + length {} > data len {}, skipping sample",
-            sample_ptr,
-            length,
-            data.len()
-        );
         // Truncated sample
         return Ok(S3mInstrument {
             name,
@@ -635,7 +614,6 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
                             sample
                         }
                         Err(_) => {
-                            eprintln!("S3M loader: adlib instrument '{}' failed to render (unsupported OPL feature), using fallback", name);
                             let freq = 440.0;
                             let mut data = Vec::with_capacity(num_samples);
                             for i in 0..num_samples {
@@ -670,7 +648,6 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
     // Ensure all samples have audio data (some S3M files may have missing samples)
     for sample in &mut samples {
         if sample.data().is_empty() {
-            eprintln!("S3M loader: injecting sine wave for empty sample");
             let sample_rate = 48000;
             let duration_secs = 0.5;
             let num_samples = (sample_rate as f32 * duration_secs) as usize;

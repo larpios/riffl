@@ -64,6 +64,11 @@ fn main() -> Result<()> {
     let default_samples = crate::config::Config::default_samples_dir();
     let _ = std::fs::create_dir_all(&default_samples);
 
+    // Resolve module directories and ensure the default one exists
+    let _module_dirs = config.resolve_module_dirs();
+    let default_modules = crate::config::Config::default_modules_dir();
+    let _ = std::fs::create_dir_all(&default_modules);
+
     // Create and initialize app
     let mut app = App::new();
     app.set_sample_dirs(sample_dirs);

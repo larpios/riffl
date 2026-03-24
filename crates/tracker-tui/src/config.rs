@@ -35,6 +35,11 @@ pub struct Config {
     #[serde(default)]
     pub sample_dirs: Vec<String>,
 
+    /// Additional module directories shown in the module browser.
+    /// `~/.config/riffl/modules/` is always included automatically.
+    #[serde(default)]
+    pub module_dirs: Vec<String>,
+
     /// User-bookmarked directories shown at the top of the sample browser roots list.
     /// Populated when the user presses `b` on a directory in the sample browser.
     #[serde(default)]
@@ -55,6 +60,7 @@ impl Default for Config {
             default_playback_mode: tracker_core::transport::PlaybackMode::Pattern,
             default_loop_enabled: true,
             sample_dirs: Vec::new(),
+            module_dirs: Vec::new(),
             bookmarked_dirs: Vec::new(),
             status_bar: StatusBarConfig::default(),
         }
@@ -144,6 +150,32 @@ impl Config {
 
         // 4. --sample-dir CLI flag
         if let Some(p) = cli_override {
+            let path = std::path::PathBuf::from(p);
+            if !dirs.contains(&path) {
+                dirs.push(path);
+            }
+        }
+
+        dirs
+    }
+
+    /// Return the default modules directory (`~/.config/riffl/modules/`).
+    pub fn default_modules_dir() -> std::path::PathBuf {
+        Self::config_dir().join("modules")
+    }
+
+    /// Resolve all module directories for the browser.
+    ///
+    /// Order: default modules dir, then config `module_dirs`.
+    /// Duplicates are removed. Directories that don't exist are kept.
+    pub fn resolve_module_dirs(&self) -> Vec<std::path::PathBuf> {
+        let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+
+        // 1. Always include the default modules dir
+        dirs.push(Self::default_modules_dir());
+
+        // 2. Dirs from config file
+        for p in &self.module_dirs {
             let path = std::path::PathBuf::from(p);
             if !dirs.contains(&path) {
                 dirs.push(path);
@@ -262,6 +294,7 @@ mod tests {
             default_playback_mode: tracker_core::transport::PlaybackMode::Song,
             default_loop_enabled: false,
             sample_dirs: vec!["/tmp/samples".to_string()],
+            module_dirs: vec!["/tmp/modules".to_string()],
             bookmarked_dirs: vec![],
             status_bar: StatusBarConfig::default(),
         };
