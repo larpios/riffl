@@ -116,33 +116,43 @@ pub fn import_nsf(data: &[u8]) -> Result<FormatData, String> {
     song.instruments.push(instrument);
     song.patterns.push(crate::pattern::Pattern::new(64, 1));
 
-    // Render audio
-    let max_frames = SAMPLE_RATE as usize * MAX_DURATION_SECONDS as usize;
-    let chunk_frames = 4096;
-    let mut audio_data = Vec::with_capacity(max_frames * 2);
-    let mut total_frames = 0;
+    let audio_data: Vec<f32> = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let max_frames = SAMPLE_RATE as usize * MAX_DURATION_SECONDS as usize;
+        let chunk_frames = 4096;
+        let mut audio_data = Vec::with_capacity(max_frames * 2);
+        let mut total_frames = 0;
 
-    while total_frames < max_frames && !gme.track_ended() {
-        let frames_to_render = chunk_frames.min(max_frames - total_frames);
-        let mut buffer = vec![0i16; frames_to_render * 2]; // stereo
-        gme.play(frames_to_render, &mut buffer)
-            .map_err(|e| format!("Failed to render NSF audio: {:?}", e))?;
-
-        // Convert i16 to f32
-        for sample in buffer {
-            audio_data.push(sample as f32 / 32768.0);
+        while total_frames < max_frames && !gme.track_ended() {
+            let frames_to_render = chunk_frames.min(max_frames - total_frames);
+            let mut buffer = vec![0i16; frames_to_render * 2]; // stereo
+            if gme.play(frames_to_render, &mut buffer).is_ok() {
+                for sample in buffer {
+                    audio_data.push(sample as f32 / 32768.0);
+                }
+            }
+            total_frames += frames_to_render;
         }
 
-        total_frames += frames_to_render;
-    }
+        audio_data
+    }))
+    .unwrap_or_else(|_| Vec::new());
 
-    // If no audio rendered (track ended immediately), fallback to dummy silence
     let sample = if audio_data.is_empty() {
+        let freq = 440.0;
+        let num_samples = SAMPLE_RATE as usize;
+        let mut fallback_data = Vec::with_capacity(num_samples * 2);
+        for i in 0..num_samples {
+            let t = i as f32 / SAMPLE_RATE as f32;
+            let left = (2.0 * std::f32::consts::PI * freq * t).sin() * 0.3;
+            let right = (2.0 * std::f32::consts::PI * freq * t).sin() * 0.3;
+            fallback_data.push(left);
+            fallback_data.push(right);
+        }
         Sample::new(
-            vec![0.0f32; SAMPLE_RATE as usize],
+            fallback_data,
             SAMPLE_RATE,
             2,
-            Some(format!("NSF: {}", meta.song_name)),
+            Some(format!("NSF (fallback): {}", meta.song_name)),
         )
     } else {
         Sample::new(

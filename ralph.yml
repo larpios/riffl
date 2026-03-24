@@ -18,26 +18,52 @@ core:
     - "If a task fails 3 times, it MUST be marked as BLOCKED in 'br'."
     - "Prioritize fixing broken core functionality over adding new features."
     - "Do NOT ever push."
-    - "Once finished, use jujutsu to commit, so don't think about beig in a detached state."
+    - "Once finished, use jujutsu to commit, so don't think about being in a detached state."
 
 hats:
   scouter:
     name: "Scouter"
     description: "Responsible for task discovery and prioritization using Beads Rust."
     triggers: ["loop.start", "task.done"]
+    publishes: ["task.selected", "scan.requested"]
+    instructions: |
+      1. Run `br ready` to fetch the current state of all tasks.
+      2. Identify the highest priority task based on the 'Prioritization' section of PROMPT.md.
+      3. If tasks exist and none are blocked, publish `task.selected`.
+      4. If no tasks remain or all are blocked, publish `scan.requested` (triggers auto-scanning).
+
+  researcher:
+    name: "Researcher"
+    description: "Researches and documents what's missing or could be improved in the program."
+    triggers: ['research.requested', 'scan.requested']
     publishes: ["task.selected"]
     instructions: |
-      1. Run `br list` to fetch the current state of all tasks.
-      2. Identify the highest priority task based on the 'Prioritization' section of PROMPT.md.
-      3. If no tasks remain or all are blocked, publish LOOP_COMPLETE.
-      4. Otherwise, publish `task.selected`.
+      If triggered by scan.requested:
+        1. Run: cargo check, cargo clippy
+        2. Search: rg "TODO|FIXME|XXX" --glob "*.rs"
+        3. Check for missing tests (files without _test.rs)
+        4. Check for missing docs (public APIs without doc comments)
+        5. Before creating any issue, run `br search <keywords>` to check for duplicates.
+        6. Create max 3 issues per scan with `[auto]` prefix using `br create`.
+      
+      If triggered by research.requested:
+        1. Read the current state of the program from the Scouter.
+        2. Identify a task that addresses the missing or could-be-improved feature.
+        3. If you can't think of a task, do the internet search for what other competitors have that we don't, or the issues they have we can solve.
+        4. Create tasks with `br create`
+
+      After creating issues: Select highest priority and publish `task.selected`
 
   planner:
     name: "Planner"
     description: "Analyzes the selected task and creates a minimal execution plan."
     triggers: ["task.selected"]
     publishes: ["plan.updated"]
-    instructions: "Break the task down into the smallest correct solution possible. Do not over-engineer."
+    instructions: |
+      - Analyze the task thoroughly
+      - Figure out the long-term solution
+      - Write a realistic plan
+      - Break the task down into the smallest correct solution possible.
 
   builder:
     name: "Builder"
@@ -49,12 +75,50 @@ hats:
       - Implement the change using the most conservative approach first.
       - Do not write code if the strategy is 'Isolate'; create a reproduction case instead.
 
+  reviewer:
+    name: "Reviewer"
+    description: "Reviews the code changes and updates the Plan."
+    triggers: ["build.done", "review.requested"]
+    publishes: ["test.requested", "refactor.requested"]
+    instructions: |
+      - Review the code changes
+      - If there's something to refactor, write to .ralph/scratchpad and publish `refactor.requested`
+      - If everything looks good, publish `test.requested`
+    
+
+  refactorer:
+    name: "Refactorer"
+    description: "Refactors the code so that it's testable, maintainable, scalable, and performant."
+    triggers: ["refactor.requested"]
+    publishes: ["review.requested", "heal.requested"]
+    instructions: |
+      - Read .ralph/scratchpad to know what the reviewer has discovered
+      - Refactor the code using the most conservative approach.
+      - If refactor succeeds, publish `review.requested`
+      - If refactor fails, publish `heal.requested`
+
   tester:
     name: "Tester"
     description: "Executes the verification suite (build/tests/reasoning)."
-    triggers: ["build.done"]
+    triggers: ["test.requested"]
     publishes: ["test.passed", "test.failed"]
-    instructions: "Run 'br test'. If it fails, capture the full stdout/stderr for the Diagnostician."
+    instructions: |
+      1. Identify what type of changes were made:
+         - Rust backend/library changes → run `cargo test`
+         - CLI/TUI changes (binary with terminal UI) → test via tmux session
+         - Both → run both test approaches
+      2. Run cargo test for standard Rust tests:
+         - `cargo test --lib` for library tests
+         - `cargo test --doc` for doc tests
+         - `cargo test` for all tests
+      3. For CLI/TUI interactive testing:
+         - Create a tmux session: `tmux new -d -s ralph_test`
+         - Run the binary in the session: `tmux send-keys -t ralph_test './target/release/mybin --arg' C-m`
+         - Capture output: `tmux capture-pane -t ralph_test -p`
+         - Check expected output is present
+         - Kill session: `tmux kill-session -t ralph_test`
+      4. If any test fails, capture the full stdout/stderr for the Diagnostician.
+      5. If all tests pass, publish `test.passed`.
 
   diagnostician:
     name: "Diagnostician"
@@ -69,17 +133,27 @@ hats:
   healer:
     name: "Healer"
     description: "Controls the self-healing loop and strategy rotation."
-    triggers: ["diagnosis.ready"]
+    triggers: ["diagnosis.ready", "heal.requested"]
     publishes: ["retry.requested", "task.blocked"]
     instructions: |
       - Check the retry count for the current task.
       - Assign the next strategy: 1st (Fix Direct), 2nd (Simplify), 3rd (Isolate).
       - If 3 attempts have failed, publish `task.blocked` and provide a clear explanation.
 
+  documenter:
+    name: "Documenter"
+    description: "Updates documents and the help, tutor pages"
+    triggers: ["test.passed"]
+    publishes: ["docs.updated"]
+    instructions: |
+      - Update the tutor page.
+      - Update the help page.
+      - Update the documentation.
+
   operator:
     name: "Operator"
     description: "Finalizes the task and cleans up the environment."
-    triggers: ["test.passed"]
+    triggers: ["docs.updated"]
     publishes: ["task.done"]
     instructions: |
       - Commit the changes with a concise message following the conventional commit message format. (e.g., "feat: add new feature")

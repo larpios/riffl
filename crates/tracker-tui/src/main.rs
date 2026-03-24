@@ -78,6 +78,12 @@ fn main() -> Result<()> {
     app.theme = crate::ui::theme::Theme::from_kind(theme_kind.clone());
     app.theme_kind = theme_kind;
     app.config = config;
+
+    // Initialize logging
+    if let Err(e) = tracker_core::log::init() {
+        eprintln!("Warning: Failed to initialize logging: {}", e);
+    }
+
     // Re-apply roots so persisted bookmarks from config appear at startup.
     // set_sample_dirs (above) ran before app.config was assigned, so bookmarks
     // were not applied on that first call.

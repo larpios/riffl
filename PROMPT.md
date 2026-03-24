@@ -4,9 +4,24 @@
 
 For each iteration:
 
-1. Select ONE task from `br list`. **(If no tasks remain, signal LOOP_COMPLETE)**.
+### Phase 0 — Scan (when br ready is empty)
+
+If `br ready` returns no tasks or all are blocked:
+
+1. **Compile scan:** Run `cargo check` and capture output
+2. **Lint scan:** Run `cargo clippy` and capture output
+3. **Debt scan:** Search for `TODO`, `FIXME`, `XXX` patterns
+4. **Gap scan:** Check for missing tests, docs, error handling
+5. **Dedup:** Run `br search <keywords>` to avoid duplicates
+6. **Create:** Create max 3 issues with `[auto]` prefix
+7. **Select:** Pick highest priority and proceed to implement
+8. **Complete:** If nothing actionable found, signal `LOOP_COMPLETE`
+
+### Phase 1 — Select
+
+1. Select ONE task from `br list`.
 2. Implement the smallest correct solution.
-3. Run verification via `br test`.
+3. Run verification via appropriate test suite.
 
 ### If success:
 
@@ -17,6 +32,18 @@ For each iteration:
 ### If failure:
 
 - Enter SELF-HEALING loop.
+
+---
+
+## 📋 ISSUE CREATION RULES
+
+When auto-scanning creates issues:
+
+- **Prefix:** Always use `[auto]` to distinguish from human issues
+- **Max rate:** Create max 3 issues per scan cycle (prevents overwhelming)
+- **Dedup:** Always run `br search <keywords>` before creating to avoid duplicates
+- **Content:** Include scan command output in issue body
+- **Priority:** Mark as `ready` so Scouter can pick it up
 
 ---
 
