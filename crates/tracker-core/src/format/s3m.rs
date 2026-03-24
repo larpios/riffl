@@ -247,28 +247,23 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
         });
     }
 
-    // Sample data pointer (24-bit: offset + mem_seg * 16?)
-    // Actually:
-    // 0x0D: MemSeg (u16) -> pointer to sample data * 16
-    // 0x10: Length (u32)
-    // 0x14: LoopBegin (u32)
-    // 0x18: LoopEnd (u32)
-    // 0x1C: Volume (u8)
-    // 0x1E: Pack (u8) - 0=Unpacked, 1=DP30ADPCM (unsupported)
-    // 0x1F: Flags (u8) - Loop, Stereo, 16bit
-    // 0x20: C2Spd (u32)
-
-    // Reset off to PCM-specific fields
+    // Sample data pointer (24-bit value)
+    // Stored as: ptrDataH (upper 8 bits at 0x0D), ptrDataL (lower 16 bits at 0x0E-0x0F)
+    // Combined as 24-bit: (ptrDataH << 16) | ptrDataL
+    // This IS the file offset - no multiplication needed
     off = offset + 0x0D;
-    let mem_seg = read_u16_le(data, &mut off);
-    let sample_ptr = (mem_seg as usize) * 16;
+    let ptr_data_h = data[off] as u32;
+    let ptr_data_l = u16::from_le_bytes([data[off + 1], data[off + 2]]);
+    let sample_ptr = ((ptr_data_h as u32) << 16) | (ptr_data_l as u32);
     eprintln!(
-        "S3M instrument mem_seg={}, sample_ptr={}, data len={}",
-        mem_seg,
+        "S3M instrument ptr_data_h={}, ptr_data_l={}, sample_ptr={}, data len={}",
+        ptr_data_h,
+        ptr_data_l,
         sample_ptr,
         data.len()
     );
 
+    off += 3; // Skip the 3-byte sample pointer
     let length = read_u32_le(data, &mut off); // 0x10
     let loop_begin = read_u32_le(data, &mut off); // 0x14
     let loop_end = read_u32_le(data, &mut off); // 0x18
@@ -287,7 +282,7 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
     let _id = read_string(data, &mut off, 4); // "SCRS"
 
     // Check bounds
-    if sample_ptr + length as usize > data.len() {
+    if sample_ptr as usize + length as usize > data.len() {
         eprintln!(
             "S3M instrument sample_ptr {} + length {} > data len {}, skipping sample",
             sample_ptr,
@@ -315,7 +310,7 @@ fn parse_s3m_instrument(data: &[u8], para_ptr: u16) -> Result<S3mInstrument, Str
     let is_16bit = flags & 4 != 0;
 
     // S3M 16-bit data is Little Endian
-    let raw_slice = &data[sample_ptr..sample_ptr + length as usize];
+    let raw_slice = &data[sample_ptr as usize..(sample_ptr + length) as usize];
     let float_data = if is_16bit {
         // 16-bit unsigned (rare in standard S3M but supported by format)
         let num_samples = raw_slice.len() / 2;

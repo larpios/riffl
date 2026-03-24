@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tracker-core = { path = "../tracker-core" }
+tracker-core = { path = "../tracker-core", features = ["adlib"] }
 ratatui = "0.30"
 crossterm = "0.28"
 anyhow = "1.0"
