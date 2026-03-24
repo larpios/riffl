@@ -316,9 +316,9 @@ impl App {
         demo_inst.chip_render = Some(demo_chip_render);
         song.instruments.push(demo_inst);
 
-        // Initialize file browser and sample browser at current working directory
-        let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-        let file_browser = FileBrowser::new(&cwd);
+        // Initialize file browser at default modules dir, sample browser at sample dirs
+        let default_modules = crate::config::Config::default_modules_dir();
+        let file_browser = FileBrowser::new(&default_modules);
         let sample_browser = SampleBrowser::new(config.resolve_sample_dirs(None));
 
         Self {
@@ -548,11 +548,11 @@ impl App {
             }
         }
 
-        // Decay VU meter levels on every tick during playback for visual smoothing.
-        if self.transport.is_playing() {
-            if let Ok(mut mixer) = self.mixer.lock() {
-                mixer.decay_channel_levels(0.85);
-            }
+        // Decay VU meter levels on every tick for visual smoothing.
+        // During playback it smooths peaks; when stopped it ensures they return to zero.
+        if let Ok(mut mixer) = self.mixer.lock() {
+            let decay = if self.transport.is_playing() { 0.85 } else { 0.70 };
+            mixer.decay_channel_levels(decay);
         }
 
         Ok(())
@@ -1220,10 +1220,9 @@ impl App {
     ///
     /// Call this after changing `project_path`, `configured_sample_dirs`, or bookmarks.
     pub(crate) fn refresh_browser_roots(&mut self) {
-        // Overlay file browser uses the first configured dir as its starting point
-        if let Some(first) = self.configured_sample_dirs.first() {
-            self.file_browser = FileBrowser::new(first);
-        }
+        // File browser uses the default modules directory
+        let default_modules = crate::config::Config::default_modules_dir();
+        self.file_browser = FileBrowser::new(&default_modules);
         self.sample_browser
             .set_roots(self.configured_sample_dirs.clone());
 

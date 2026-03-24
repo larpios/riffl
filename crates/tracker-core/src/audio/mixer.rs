@@ -1095,9 +1095,11 @@ impl Mixer {
                             }
                         }
                         LoopMode::Forward => {
-                            if src_frame > eff_loop_end {
+                            if voice.position > eff_loop_end as f64 {
                                 let loop_len = (eff_loop_end - eff_loop_start + 1) as f64;
-                                voice.position -= loop_len;
+                                let offset =
+                                    (voice.position - eff_loop_start as f64).rem_euclid(loop_len);
+                                voice.position = eff_loop_start as f64 + offset;
                             }
                         }
                         LoopMode::PingPong => {
@@ -1403,6 +1405,14 @@ impl Mixer {
         self.effect_processor.reset_all();
         self.bus_system.reset();
         self.reset_channel_levels();
+        self.reset_oscilloscope_buffers();
+        self.reset_fft_buffer();
+    }
+
+    /// Reset the FFT capture buffer to silence.
+    pub fn reset_fft_buffer(&mut self) {
+        self.fft_buf.fill(0.0);
+        self.fft_write_pos.store(0, Ordering::Relaxed);
     }
 
     /// Set the ticks per line (TPL) for the mixer and its effect processor.
@@ -1467,6 +1477,17 @@ impl Mixer {
         for (l, r) in &self.channel_levels {
             l.store(0u32, Ordering::Relaxed);
             r.store(0u32, Ordering::Relaxed);
+        }
+    }
+
+    /// Reset all oscilloscope buffers to zero.
+    pub fn reset_oscilloscope_buffers(&mut self) {
+        for buf in &mut self.oscilloscope_bufs {
+            buf.fill(0.0);
+        }
+        for pos in &self.oscilloscope_write_pos {
+            // Use atomic store to reset position
+            pos.store(0, Ordering::Relaxed);
         }
     }
 
