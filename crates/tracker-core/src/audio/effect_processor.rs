@@ -164,6 +164,16 @@ pub struct ChannelEffectState {
     /// Set by the mixer when a note triggers: AMIGA_PAL_CLOCK * base_freq / sample_rate
     pub period_clock: f64,
 
+    // --- Effect Memory (for param 00 continuation) ---
+    pub prev_pitch_slide_up: f64,
+    pub prev_pitch_slide_down: f64,
+    pub prev_portamento_speed: f64,
+    pub prev_volume_slide_up: u8,
+    pub prev_volume_slide_down: u8,
+    pub prev_vibrato_speed: u8,
+    pub prev_vibrato_depth: u8,
+    pub is_fine_vibrato: bool,
+
     // --- Advanced XM/IT Effects ---
     /// Base channel volume set by Mxx (0.0 - 1.0).
     pub channel_volume: f32,
@@ -239,6 +249,14 @@ impl Default for ChannelEffectState {
             slide_mode: SlideMode::default(),
             use_high_res_periods: false,
             period_clock: crate::audio::pitch::AMIGA_PAL_CLOCK,
+            prev_pitch_slide_up: 0.0,
+            prev_pitch_slide_down: 0.0,
+            prev_portamento_speed: 0.0,
+            prev_volume_slide_up: 0,
+            prev_volume_slide_down: 0,
+            prev_vibrato_speed: 0,
+            prev_vibrato_depth: 0,
+            is_fine_vibrato: false,
             channel_volume: 1.0,
             channel_volume_slide_up: 0,
             channel_volume_slide_down: 0,
@@ -286,8 +304,6 @@ impl ChannelEffectState {
         self.tremolo_active = false;
         self.volume_slide_up = 0;
         self.volume_slide_down = 0;
-        self.pitch_slide_up = 0.0;
-        self.pitch_slide_down = 0.0;
         self.sample_offset = None;
         self.channel_volume_slide_up = 0;
         self.channel_volume_slide_down = 0;
@@ -335,7 +351,16 @@ impl ChannelEffectState {
         }
 
         // Vibrato depth: each unit = ~1/16 semitone
-        let depth_semitones = self.vibrato_depth as f64 / 16.0;
+        let mut depth_semitones = self.vibrato_depth as f64 / 16.0;
+        // In high-res Amiga modes (S3M), vibrato depth is 4x finer.
+        // In XM (Linear mode), vibrato depth matches ProTracker/MOD (1x).
+        if self.use_high_res_periods && self.slide_mode == SlideMode::AmigaPeriod {
+            depth_semitones /= 4.0;
+        }
+        // S3M Fine Vibrato (Uxy) is 4x finer than normal S3M vibrato (Hxy).
+        if self.is_fine_vibrato {
+            depth_semitones /= 4.0;
+        }
 
         let modulation = match self.vibrato_waveform {
             0 => self.vibrato_phase.sin(),                          // sine
@@ -575,6 +600,8 @@ pub struct TrackerEffectProcessor {
     sample_rate: u32,
     /// Project-level effect interpretation mode.
     pub mode: EffectMode,
+    /// Scale factor for global volume effects (64.0 for S3M/XM, 128.0 for IT).
+    pub global_volume_range: f32,
     pub global_volume: f32,
     pub global_volume_slide_up: u8,
     pub global_volume_slide_down: u8,
@@ -587,6 +614,7 @@ impl TrackerEffectProcessor {
             channels: vec![ChannelEffectState::default(); num_channels],
             sample_rate,
             mode: EffectMode::default(),
+            global_volume_range: 128.0, // Default to IT/standard range
             global_volume: 1.0,
             global_volume_slide_up: 0,
             global_volume_slide_down: 0,
@@ -685,24 +713,71 @@ impl TrackerEffectProcessor {
 
                 EffectType::PitchSlideUp => {
                     // Set pitch slide up speed
-                    state.pitch_slide_up = effect.param.into();
+                    if effect.param > 0 {
+                        let speed = match state.slide_mode {
+                            SlideMode::Linear => effect.param as f64 / 64.0,
+                            SlideMode::AmigaPeriod => {
+                                let mut s = effect.param as f64;
+                                if state.use_high_res_periods {
+                                    s *= 4.0;
+                                }
+                                s
+                            }
+                        };
+                        state.pitch_slide_up = speed;
+                        state.prev_pitch_slide_up = speed;
+                    } else if self.mode == EffectMode::Compatible {
+                        state.pitch_slide_up = state.prev_pitch_slide_up;
+                    } else {
+                        state.pitch_slide_up = 0.0;
+                    }
                 }
 
                 EffectType::PitchSlideDown => {
                     // Set pitch slide down speed
-                    state.pitch_slide_down = effect.param.into();
+                    if effect.param > 0 {
+                        let speed = match state.slide_mode {
+                            SlideMode::Linear => effect.param as f64 / 64.0,
+                            SlideMode::AmigaPeriod => {
+                                let mut s = effect.param as f64;
+                                if state.use_high_res_periods {
+                                    s *= 4.0;
+                                }
+                                s
+                            }
+                        };
+                        state.pitch_slide_down = speed;
+                        state.prev_pitch_slide_down = speed;
+                    } else if self.mode == EffectMode::Compatible {
+                        state.pitch_slide_down = state.prev_pitch_slide_down;
+                    } else {
+                        state.pitch_slide_down = 0.0;
+                    }
                 }
 
                 EffectType::PortamentoToNote => {
                     // Set portamento speed; target is set when a note is triggered
                     if effect.param > 0 {
-                        state.portamento_speed = match state.slide_mode {
+                        let speed = match state.slide_mode {
                             // Linear: 1/64th semitone per tick per unit
                             SlideMode::Linear => effect.param as f64 / 64.0,
-                            // AmigaPeriod: raw period delta per tick (no scaling)
-                            SlideMode::AmigaPeriod => effect.param as f64,
+                            // AmigaPeriod: raw period delta per tick
+                            SlideMode::AmigaPeriod => {
+                                let mut s = effect.param as f64;
+                                if state.use_high_res_periods {
+                                    s *= 4.0;
+                                }
+                                s
+                            }
                         };
+                        state.portamento_speed = speed;
+                        state.prev_portamento_speed = speed;
+                    } else if self.mode == EffectMode::Compatible {
+                        state.portamento_speed = state.prev_portamento_speed;
+                    } else {
+                        state.portamento_speed = 0.0;
                     }
+
                     if let Some(freq) = note_frequency {
                         state.portamento_target = Some(freq);
                         // Initialize current freq if not already sliding
@@ -715,11 +790,47 @@ impl TrackerEffectProcessor {
 
                 EffectType::Vibrato => {
                     state.vibrato_active = true;
+                    state.is_fine_vibrato = false;
                     if effect.param_x() > 0 {
                         state.vibrato_speed = effect.param_x();
+                        state.prev_vibrato_speed = effect.param_x();
+                    } else if self.mode == EffectMode::Compatible {
+                        state.vibrato_speed = state.prev_vibrato_speed;
                     }
                     if effect.param_y() > 0 {
                         state.vibrato_depth = effect.param_y();
+                        state.prev_vibrato_depth = effect.param_y();
+                    } else if self.mode == EffectMode::Compatible {
+                        state.vibrato_depth = state.prev_vibrato_depth;
+                    }
+
+                    // In Amiga mode, 400 stops the vibrato
+                    if self.mode == EffectMode::Amiga && effect.param == 0 {
+                        state.vibrato_active = false;
+                    }
+                }
+
+                EffectType::FineVibrato => {
+                    state.vibrato_active = true;
+                    state.is_fine_vibrato = true;
+                    if effect.param_x() > 0 {
+                        state.vibrato_speed = effect.param_x();
+                        state.prev_vibrato_speed = effect.param_x();
+                    } else if self.mode == EffectMode::Compatible {
+                        state.vibrato_speed = state.prev_vibrato_speed;
+                    }
+                    if effect.param_y() > 0 {
+                        state.vibrato_depth = effect.param_y();
+                        state.prev_vibrato_depth = effect.param_y();
+                    } else if self.mode == EffectMode::Compatible {
+                        state.vibrato_depth = state.prev_vibrato_depth;
+                    }
+
+                    // S3M U00 also stops vibrato (or continues, depending on tracker, but usually 00 = stop in S3M if not compatible)
+                    // Actually S3M is usually "Compatible" so it continues.
+                    // But if someone uses Amiga mode with S3M (unlikely), we stop.
+                    if self.mode == EffectMode::Amiga && effect.param == 0 {
+                        state.vibrato_active = false;
                     }
                 }
 
@@ -729,7 +840,15 @@ impl TrackerEffectProcessor {
                     if effect.param > 0 {
                         state.volume_slide_up = effect.param_x();
                         state.volume_slide_down = effect.param_y();
+                        state.prev_volume_slide_up = effect.param_x();
+                        state.prev_volume_slide_down = effect.param_y();
+                    } else if self.mode == EffectMode::Compatible {
+                        state.volume_slide_up = state.prev_volume_slide_up;
+                        state.volume_slide_down = state.prev_volume_slide_down;
                     }
+
+                    // Always use current portamento speed (memory handled in PortamentoToNote)
+                    state.portamento_speed = state.prev_portamento_speed;
 
                     // Portamento target is handled by new notes triggered on this row
                     if let Some(freq) = note_frequency {
@@ -748,7 +867,14 @@ impl TrackerEffectProcessor {
                     if effect.param > 0 {
                         state.volume_slide_up = effect.param_x();
                         state.volume_slide_down = effect.param_y();
+                        state.prev_volume_slide_up = effect.param_x();
+                        state.prev_volume_slide_down = effect.param_y();
+                    } else if self.mode == EffectMode::Compatible {
+                        state.volume_slide_up = state.prev_volume_slide_up;
+                        state.volume_slide_down = state.prev_volume_slide_down;
                     }
+                    state.vibrato_speed = state.prev_vibrato_speed;
+                    state.vibrato_depth = state.prev_vibrato_depth;
                 }
 
                 EffectType::Tremolo => {
@@ -758,6 +884,9 @@ impl TrackerEffectProcessor {
                     }
                     if effect.param_y() > 0 {
                         state.tremolo_depth = effect.param_y();
+                    }
+                    if self.mode == EffectMode::Amiga && effect.param == 0 {
+                        state.tremolo_active = false;
                     }
                 }
 
@@ -770,9 +899,12 @@ impl TrackerEffectProcessor {
                     if effect.param > 0 {
                         state.volume_slide_up = effect.param_x();
                         state.volume_slide_down = effect.param_y();
+                        state.prev_volume_slide_up = effect.param_x();
+                        state.prev_volume_slide_down = effect.param_y();
+                    } else if self.mode == EffectMode::Compatible {
+                        state.volume_slide_up = state.prev_volume_slide_up;
+                        state.volume_slide_down = state.prev_volume_slide_down;
                     }
-                    // Volume slides in classic trackers are only applied on ticks > 0.
-                    // We handle the continuous sliding smoothly in advance_frame.
                 }
 
                 EffectType::PositionJump => {
@@ -924,8 +1056,8 @@ impl TrackerEffectProcessor {
                 }
 
                 EffectType::SetGlobalVolume => {
-                    // IT uses 0-128 for global volume.
-                    self.global_volume = (effect.param as f32 / 128.0).clamp(0.0, 1.0);
+                    self.global_volume =
+                        (effect.param as f32 / self.global_volume_range).clamp(0.0, 1.0);
                 }
                 EffectType::GlobalVolumeSlide => {
                     self.global_volume_slide_up = effect.param_x();
@@ -1235,7 +1367,7 @@ impl TrackerEffectProcessor {
                     if current_tick > 0 && current_tick < ticks_per_row {
                         let delta_per_tick = (self.global_volume_slide_up as f32
                             - self.global_volume_slide_down as f32)
-                            / 128.0;
+                            / self.global_volume_range;
                         self.global_volume = (self.global_volume + delta_per_tick).clamp(0.0, 1.0);
                     }
                 }

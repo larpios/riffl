@@ -409,6 +409,8 @@ pub struct Song {
     pub slide_mode: SlideMode,
     /// Set to true if the song is an S3M (uses 14.3MHz clock).
     pub format_is_s3m: bool,
+    /// Set to true if the song is an IT (uses 128-unit global volume).
+    pub format_is_it: bool,
     /// Pattern pool (up to 256 patterns).
     pub patterns: Vec<Pattern>,
     /// Arrangement: ordered list of pattern indices forming the song sequence.
@@ -440,6 +442,7 @@ impl Song {
             effect_mode: EffectMode::RifflNative,
             slide_mode: SlideMode::default(),
             format_is_s3m: false,
+            format_is_it: false,
             patterns: vec![default_pattern],
             arrangement: vec![0],
             tracks,

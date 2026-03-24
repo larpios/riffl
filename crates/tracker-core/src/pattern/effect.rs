@@ -13,9 +13,11 @@ pub enum EffectMode {
     /// Riffl native effects: strict interpretation, standard Riffl behavior.
     #[default]
     RifflNative,
-    /// Compatibility mode: preserves source tracker semantics (e.g., XM, IT, ProTracker).
+    /// Compatibility mode: preserves source tracker semantics (e.g., XM, IT, S3M).
     /// Used when importing foreign modules to maintain playback fidelity.
     Compatible,
+    /// Legacy Amiga/ProTracker style: no effect memory for some commands, etc.
+    Amiga,
 }
 
 /// Format for effect parameters to guide human-readable display.
@@ -128,6 +130,8 @@ pub enum EffectType {
     PortamentoExtraFine,
     /// S3M `Gxx` where `x >= 0xE0` — Fine portamento. (0x26)
     PortamentoFine,
+    /// S3M `Uxy` — Fine vibrato. (0x27)
+    FineVibrato,
 }
 
 impl EffectType {
@@ -168,6 +172,7 @@ impl EffectType {
             0x24 => Some(EffectType::SlideDownFine),
             0x25 => Some(EffectType::PortamentoExtraFine),
             0x26 => Some(EffectType::PortamentoFine),
+            0x27 => Some(EffectType::FineVibrato),
             _ => None,
         }
     }
@@ -212,6 +217,7 @@ impl EffectType {
             EffectType::SlideDownFine => 0x24,
             EffectType::PortamentoExtraFine => 0x25,
             EffectType::PortamentoFine => 0x26,
+            EffectType::FineVibrato => 0x27,
         }
     }
 
@@ -505,10 +511,19 @@ impl EffectType {
             EffectType::PortamentoFine => EffectMetadata {
                 name: "Fine Porta",
                 summary: "Fine Porta: S3M fine portamento",
-                description: "Slides to target note with fine precision.",
+                description: "Slides to target note with fine precision (4 units of high-res period).",
                 param_label: "x: speed",
                 param_format: ParamFormat::Hex,
                 supports_continuation: false,
+                is_native: true,
+            },
+            EffectType::FineVibrato => EffectMetadata {
+                name: "Fine Vib",
+                summary: "Fine Vib: S3M fine vibrato",
+                description: "Similar to normal vibrato but with 4 times smaller depth.",
+                param_label: "xy: speed/depth",
+                param_format: ParamFormat::Nibbles,
+                supports_continuation: true,
                 is_native: true,
             },
         }
@@ -623,7 +638,7 @@ impl Effect {
             EffectMode::RifflNative => {
                 format!("{}: {}", meta.name, param_desc)
             }
-            EffectMode::Compatible => {
+            EffectMode::Compatible | EffectMode::Amiga => {
                 // In compatibility mode, we might want to surface legacy-specific info
                 let legacy_note = match effect_type {
                     EffectType::Arpeggio => " (Hardware cycle)",

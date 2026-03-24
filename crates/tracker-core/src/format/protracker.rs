@@ -495,7 +495,7 @@ pub fn import_mod(data: &[u8]) -> Result<super::FormatData, String> {
     song.instruments = instruments;
     song.tpl = speed as u32;
 
-    song.effect_mode = EffectMode::Compatible;
+    song.effect_mode = EffectMode::Amiga;
     song.slide_mode = SlideMode::AmigaPeriod;
 
     Ok(super::FormatData { song, samples })

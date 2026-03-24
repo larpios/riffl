@@ -507,7 +507,20 @@ fn convert_s3m_effect(cmd: u8, info: u8) -> Option<Effect> {
         'A' => Some(Effect::new(0x0F, info)), // Set Speed (if < 32 usually)
         'B' => Some(Effect::new(0x0B, info)), // Order Jump
         'C' => Some(Effect::new(0x0D, info)), // Pattern Break
-        'D' => Some(Effect::new(0x0A, info)), // Volume Slide
+        'D' => {
+            if x == 0xF && y != 0 && y != 0xF {
+                // Fine Volume Slide Down (DFx)
+                Some(Effect::new(0x0E, 0xB0 | y))
+            } else if y == 0xF && x != 0 && x != 0xF {
+                // Fine Volume Slide Up (DxF)
+                Some(Effect::new(0x0E, 0xA0 | x))
+            } else if x == 0xF && y == 0xF {
+                // DFF is Fine Volume Slide Down 15
+                Some(Effect::new(0x0E, 0xBF))
+            } else {
+                Some(Effect::new(0x0A, info)) // Normal Volume Slide
+            }
+        }
         'E' => {
             if x == 0xF {
                 // Extra Fine Slide Down (EFx)
@@ -530,7 +543,17 @@ fn convert_s3m_effect(cmd: u8, info: u8) -> Option<Effect> {
                 Some(Effect::new(0x01, info)) // Normal Slide Up
             }
         }
-        'G' => Some(Effect::new(0x03, info)), // Normal Tone Portamento
+        'G' => {
+            if x == 0xF {
+                // Extra Fine Portamento (GFx)
+                Some(Effect::new(0x25, y))
+            } else if x == 0xE {
+                // Fine Portamento (GEx)
+                Some(Effect::new(0x26, y))
+            } else {
+                Some(Effect::new(0x03, info)) // Normal Tone Portamento
+            }
+        }
         'H' => Some(Effect::new(0x04, info)), // Vibrato
         'I' => Some(Effect::new(0x15, info)), // Tremor
         'J' => Some(Effect::new(0x00, info)), // Arpeggio
@@ -556,7 +579,7 @@ fn convert_s3m_effect(cmd: u8, info: u8) -> Option<Effect> {
             }
         }
         'T' => Some(Effect::new(0x0F, info)), // Tempo/BPM
-        'U' => Some(Effect::new(0x04, info)), // Fine Vibrato
+        'U' => Some(Effect::new(0x27, info)), // Fine Vibrato
         'V' => Some(Effect::new(0x10, info)), // Global Volume
         'W' => Some(Effect::new(0x11, info)), // Global Volume Slide
         'X' => Some(Effect::new(0x08, info.saturating_mul(17))), // Pan position

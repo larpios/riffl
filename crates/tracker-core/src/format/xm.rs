@@ -921,7 +921,8 @@ pub fn import_xm(data: &[u8]) -> Result<FormatData, String> {
         song.format_is_s3m = false;
     } else {
         song.slide_mode = crate::audio::pitch::SlideMode::AmigaPeriod;
-        song.format_is_s3m = true;
+        // XM Amiga mode uses standard PAL clock (3.5MHz) and MOD units.
+        song.format_is_s3m = false;
     };
 
     Ok(FormatData {

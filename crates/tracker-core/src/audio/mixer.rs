@@ -675,6 +675,30 @@ impl Mixer {
 
                             let playback_rate = target_freq * hz_to_rate;
 
+                            let is_amiga = self
+                                .effect_processor
+                                .channel_state(ch)
+                                .map(|s| {
+                                    s.slide_mode == crate::audio::pitch::SlideMode::AmigaPeriod
+                                })
+                                .unwrap_or(false);
+
+                            let clock = if self.format_is_s3m {
+                                crate::audio::pitch::AMIGA_S3M_CLOCK
+                            } else {
+                                crate::audio::pitch::AMIGA_PAL_CLOCK
+                            };
+
+                            let period_clock = if is_amiga {
+                                clock * base_freq / sample.sample_rate() as f64
+                            } else {
+                                clock
+                            };
+
+                            if is_amiga {
+                                self.effect_processor.set_period_clock(ch, period_clock);
+                            }
+
                             let inst_vol = self
                                 .instruments
                                 .get(instrument_idx)
@@ -699,35 +723,12 @@ impl Mixer {
                                 if let Some(voice) = &mut self.voices[ch] {
                                     voice.instrument_index = instrument_idx;
                                     voice.velocity_gain = velocity_gain;
+                                    voice.hz_to_rate = hz_to_rate;
                                     // Update LFO state if instrument changed
                                     voice.lfo =
                                         VoiceLfoState::new(self.instruments.get(instrument_idx));
                                 }
                             } else {
-                                let is_amiga = self
-                                    .effect_processor
-                                    .channel_state(ch)
-                                    .map(|s| {
-                                        s.slide_mode == crate::audio::pitch::SlideMode::AmigaPeriod
-                                    })
-                                    .unwrap_or(false);
-
-                                let clock = if self.format_is_s3m {
-                                    crate::audio::pitch::AMIGA_S3M_CLOCK
-                                } else {
-                                    crate::audio::pitch::AMIGA_PAL_CLOCK
-                                };
-
-                                let period_clock = if is_amiga {
-                                    clock * base_freq / sample.sample_rate() as f64
-                                } else {
-                                    clock
-                                };
-
-                                if is_amiga {
-                                    self.effect_processor.set_period_clock(ch, period_clock);
-                                }
-
                                 // Check for Note Delay (EDx)
                                 if let Some(delay_tick) = self
                                     .effect_processor
@@ -898,6 +899,26 @@ impl Mixer {
                                             self.instruments.get(instrument_idx),
                                         );
                                     }
+
+                                    // Update period clock for the channel if in Amiga mode
+                                    let is_amiga = self
+                                        .effect_processor
+                                        .channel_state(ch)
+                                        .map(|s| {
+                                            s.slide_mode
+                                                == crate::audio::pitch::SlideMode::AmigaPeriod
+                                        })
+                                        .unwrap_or(false);
+                                    if is_amiga {
+                                        let clock = if self.format_is_s3m {
+                                            crate::audio::pitch::AMIGA_S3M_CLOCK
+                                        } else {
+                                            crate::audio::pitch::AMIGA_PAL_CLOCK
+                                        };
+                                        let period_clock =
+                                            clock * base_freq / sample.sample_rate() as f64;
+                                        self.effect_processor.set_period_clock(ch, period_clock);
+                                    }
                                 }
                             }
                         }
@@ -988,6 +1009,13 @@ impl Mixer {
 
                     let render_state = effect_processor.voice_render_state(ch);
                     let ch_state = effect_processor.channel_state(ch).unwrap();
+
+                    // Apply any envelope position overrides (Lxx) from the effect processor at row start
+                    if ch_state.row_frame_counter == 0 {
+                        if let Some(pos) = ch_state.envelope_position_override {
+                            voice.volume_envelope_tick = pos;
+                        }
+                    }
 
                     // Sub-row timing logic
                     let frames_per_tick = ch_state.frames_per_row / ch_state.ticks_per_row as u32;
@@ -1570,6 +1598,11 @@ impl Mixer {
     pub fn set_format_is_s3m(&mut self, is_s3m: bool) {
         self.format_is_s3m = is_s3m;
         self.effect_processor.set_use_high_res_periods(is_s3m);
+    }
+
+    /// Set the range for global volume effects (64.0 for S3M/XM, 128.0 for IT).
+    pub fn set_global_volume_range(&mut self, range: f32) {
+        self.effect_processor.global_volume_range = range;
     }
 
     /// Set the pitch slide mode for all channels.

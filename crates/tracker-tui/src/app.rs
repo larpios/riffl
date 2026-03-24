@@ -1712,6 +1712,7 @@ impl App {
             mixer.set_global_volume(self.song.global_volume);
             mixer.set_effect_mode(self.song.effect_mode);
             mixer.set_format_is_s3m(self.song.format_is_s3m);
+            mixer.set_global_volume_range(if self.song.format_is_it { 128.0 } else { 64.0 });
             mixer.set_slide_mode(self.song.slide_mode);
         }
         self.sync_mixer_instruments();

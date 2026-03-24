@@ -23,7 +23,7 @@ pub fn effect_help_line_count(mode: EffectMode) -> u16 {
     for i in 0..=0x22 {
         if let Some(t) = EffectType::from_command(i) {
             let meta = t.metadata();
-            if meta.is_native || mode == EffectMode::Compatible {
+            if meta.is_native || mode == EffectMode::Compatible || mode == EffectMode::Amiga {
                 count += 4; // command/name line + summary + description + blank line
             }
         }
@@ -83,6 +83,7 @@ pub fn render_effect_help(
     let mode_str = match mode {
         EffectMode::RifflNative => "RIFFL NATIVE",
         EffectMode::Compatible => "COMPATIBLE",
+        EffectMode::Amiga => "AMIGA (LEGACY)",
     };
     let title = format!(
         " EFFECT COMMAND EXPLORER ({})  (j/k scroll · K/Esc close) ",
