@@ -498,8 +498,9 @@ fn convert_s3m_effect(cmd: u8, info: u8) -> Option<Effect> {
     // Internal Effect uses specific bytes.
     let cmd_char = (cmd + 64) as char; // 1 -> 'A'
 
-    // Note: S3M param is straight byte.
-    let _x = (info >> 4) & 0x0F;
+    // S3M commands often use the high nibble for sub-commands (e.g. EFx, FEx)
+    // and the low nibble for the value.
+    let x = (info >> 4) & 0x0F;
     let y = info & 0x0F;
 
     match cmd_char {
@@ -508,39 +509,28 @@ fn convert_s3m_effect(cmd: u8, info: u8) -> Option<Effect> {
         'C' => Some(Effect::new(0x0D, info)), // Pattern Break
         'D' => Some(Effect::new(0x0A, info)), // Volume Slide
         'E' => {
-            if info >= 0xF0 {
-                // Fine Slide Down (F0..FF)
-                Some(Effect::new(0x24, info & 0x0F))
-            } else if info >= 0xE0 {
-                // Extra Fine Slide Down (E0..EF)
-                // Use existing ExtraFinePortaDown for now
-                Some(Effect::new(0x22, info & 0x0F))
+            if x == 0xF {
+                // Extra Fine Slide Down (EFx)
+                Some(Effect::new(0x22, y))
+            } else if x == 0xE {
+                // Fine Slide Down (EEx)
+                Some(Effect::new(0x24, y))
             } else {
                 Some(Effect::new(0x02, info)) // Normal Slide Down
             }
         }
         'F' => {
-            if info >= 0xF0 {
-                // Fine Slide Up (F0..FF)
-                Some(Effect::new(0x23, info & 0x0F))
-            } else if info >= 0xE0 {
-                // Extra Fine Slide Up (E0..EF)
-                Some(Effect::new(0x21, info & 0x0F))
+            if x == 0xF {
+                // Fine Slide Up (FFx)
+                Some(Effect::new(0x23, y))
+            } else if x == 0xE {
+                // Extra Fine Slide Up (FEx)
+                Some(Effect::new(0x21, y))
             } else {
                 Some(Effect::new(0x01, info)) // Normal Slide Up
             }
         }
-        'G' => {
-            if info >= 0xF0 {
-                // Extra Fine Portamento (F0..FF)
-                Some(Effect::new(0x25, info & 0x0F))
-            } else if info >= 0xE0 {
-                // Fine Portamento (E0..EF)
-                Some(Effect::new(0x26, info & 0x0F))
-            } else {
-                Some(Effect::new(0x03, info)) // Normal Tone Portamento
-            }
-        }
+        'G' => Some(Effect::new(0x03, info)), // Normal Tone Portamento
         'H' => Some(Effect::new(0x04, info)), // Vibrato
         'I' => Some(Effect::new(0x15, info)), // Tremor
         'J' => Some(Effect::new(0x00, info)), // Arpeggio
@@ -551,18 +541,17 @@ fn convert_s3m_effect(cmd: u8, info: u8) -> Option<Effect> {
         'R' => Some(Effect::new(0x07, info)), // Tremolo
         'S' => {
             // Special commands (Sxy where x is subcmd)
-            // S3M uses High nibble for subcmd
-            match (info >> 4) & 0x0F {
-                0x0 => None,                              // Set Filter (ignored)
-                0x1 => Some(Effect::new(0x0E, 0x30 | y)), // Glissando
-                0x2 => Some(Effect::new(0x0E, 0x50 | y)), // Finetune
-                0x3 => Some(Effect::new(0x0E, 0x40 | y)), // Vibrato Waveform
-                0x4 => Some(Effect::new(0x0E, 0x70 | y)), // Tremolo Waveform
-                0x8 => Some(Effect::new(0x08, y * 17)),   // Pan position (0-15 -> 0-255)
-                0xB => Some(Effect::new(0x0E, 0x60 | y)), // Pattern Loop
-                0xC => Some(Effect::new(0x0E, 0xC0 | y)), // Note Cut
-                0xD => Some(Effect::new(0x0E, 0xD0 | y)), // Note Delay
-                0xE => Some(Effect::new(0x0E, 0xE0 | y)), // Pattern Delay
+            match x {
+                0x0 => None,                                          // Set Filter (ignored)
+                0x1 => Some(Effect::new(0x0E, 0x30 | y)),             // Glissando
+                0x2 => Some(Effect::new(0x0E, 0x50 | y)),             // Finetune
+                0x3 => Some(Effect::new(0x0E, 0x40 | y)),             // Vibrato Waveform
+                0x4 => Some(Effect::new(0x0E, 0x70 | y)),             // Tremolo Waveform
+                0x8 => Some(Effect::new(0x08, y.saturating_mul(17))), // Pan position (0-15 -> 0-255)
+                0xB => Some(Effect::new(0x0E, 0x60 | y)),             // Pattern Loop
+                0xC => Some(Effect::new(0x0E, 0xC0 | y)),             // Note Cut
+                0xD => Some(Effect::new(0x0E, 0xD0 | y)),             // Note Delay
+                0xE => Some(Effect::new(0x0E, 0xE0 | y)),             // Pattern Delay
                 _ => None,
             }
         }

@@ -1500,10 +1500,12 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
     }
 
     song.effect_mode = EffectMode::Compatible;
-    song.slide_mode = if header.linear_slides {
-        crate::audio::pitch::SlideMode::Linear
+    if header.linear_slides {
+        song.slide_mode = crate::audio::pitch::SlideMode::Linear;
+        song.format_is_s3m = false;
     } else {
-        crate::audio::pitch::SlideMode::AmigaPeriod
+        song.slide_mode = crate::audio::pitch::SlideMode::AmigaPeriod;
+        song.format_is_s3m = true;
     };
 
     Ok(FormatData {

@@ -120,9 +120,9 @@ pub enum EffectType {
     ExtraFinePortaUp,
     /// `X2x` — Extra fine portamento down. (0x22)
     ExtraFinePortaDown,
-    /// S3M `Exx` where `x >= 0xE0` — Fine slide up. (0x23)
+    /// S3M `Fxx` where `x >= 0xF0` — Fine slide up. (0x23)
     SlideUpFine,
-    /// S3M `Fxx` where `x >= 0xF0` — Fine slide down. (0x24)
+    /// S3M `Exx` where `x >= 0xE0` — Fine slide down. (0x24)
     SlideDownFine,
     /// S3M `Gxx` where `x >= 0xF0` — Extra fine portamento. (0x25)
     PortamentoExtraFine,

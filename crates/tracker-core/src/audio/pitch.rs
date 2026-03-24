@@ -46,8 +46,8 @@ impl PitchCalculator {
     ///   (higher period = lower frequency, so `param_up` decreases the period).
     pub fn apply_slide(
         current_freq: f64,
-        param_up: u8,
-        param_down: u8,
+        param_up: f64,
+        param_down: f64,
         mode: SlideMode,
         period_clock: f64,
     ) -> f64 {
@@ -57,14 +57,14 @@ impl PitchCalculator {
 
         match mode {
             SlideMode::Linear => {
-                let semitones_per_tick = (param_up as f64 - param_down as f64) / 64.0;
+                let semitones_per_tick = (param_up - param_down) / 64.0;
                 current_freq * 2.0_f64.powf(semitones_per_tick / 12.0)
             }
             SlideMode::AmigaPeriod => {
                 // Period and frequency are inversely related: period = clock / freq.
                 // Sliding "up" in pitch means decreasing the period value.
                 let period = period_clock / current_freq;
-                let delta = param_down as f64 - param_up as f64;
+                let delta = param_down - param_up;
                 let new_period = (period + delta).max(1.0);
                 period_clock / new_period
             }
@@ -131,7 +131,7 @@ mod tests {
         // 64 units = 1 semitone per tick
         let freq = 440.0_f64;
         let new_freq =
-            PitchCalculator::apply_slide(freq, 64, 0, SlideMode::Linear, AMIGA_PAL_CLOCK);
+            PitchCalculator::apply_slide(freq, 64.0, 0.0, SlideMode::Linear, AMIGA_PAL_CLOCK);
         let expected = freq * 2.0_f64.powf(1.0 / 12.0);
         assert!(
             (new_freq - expected).abs() < 0.001,
@@ -143,7 +143,7 @@ mod tests {
     fn linear_slide_down_one_semitone() {
         let freq = 440.0_f64;
         let new_freq =
-            PitchCalculator::apply_slide(freq, 0, 64, SlideMode::Linear, AMIGA_PAL_CLOCK);
+            PitchCalculator::apply_slide(freq, 0.0, 64.0, SlideMode::Linear, AMIGA_PAL_CLOCK);
         let expected = freq * 2.0_f64.powf(-1.0 / 12.0);
         assert!((new_freq - expected).abs() / expected < 0.0001);
     }
@@ -152,7 +152,7 @@ mod tests {
     fn amiga_slide_up_decreases_period() {
         let freq = 440.0_f64;
         let new_freq =
-            PitchCalculator::apply_slide(freq, 4, 0, SlideMode::AmigaPeriod, AMIGA_PAL_CLOCK);
+            PitchCalculator::apply_slide(freq, 4.0, 0.0, SlideMode::AmigaPeriod, AMIGA_PAL_CLOCK);
         // Sliding up should raise frequency (period decreases)
         assert!(new_freq > freq, "expected higher freq, got {new_freq}");
     }
@@ -161,7 +161,7 @@ mod tests {
     fn amiga_slide_down_increases_period() {
         let freq = 440.0_f64;
         let new_freq =
-            PitchCalculator::apply_slide(freq, 0, 4, SlideMode::AmigaPeriod, AMIGA_PAL_CLOCK);
+            PitchCalculator::apply_slide(freq, 0.0, 4.0, SlideMode::AmigaPeriod, AMIGA_PAL_CLOCK);
         assert!(new_freq < freq, "expected lower freq, got {new_freq}");
     }
 

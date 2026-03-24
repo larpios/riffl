@@ -339,12 +339,16 @@ pub fn import_mod(data: &[u8]) -> Result<super::FormatData, String> {
         let tag = &data[1080..1084];
         let is_31 = match tag {
             b"M.K." | b"M!K!" | b"4CHN" | b"FLT4" | b"FLT8" | b"6CHN" | b"8CHN" | b"CD81"
-            | b"OCTA" => true,
+            | b"OCTA" | b"2CHN" => true,
             _ => {
-                tag[2] == b'C'
+                (tag[2] == b'C'
                     && tag[3] == b'H'
                     && tag[0].is_ascii_digit()
-                    && tag[1].is_ascii_digit()
+                    && tag[1].is_ascii_digit())
+                    || (tag[3] == b'C'
+                        && tag[0].is_ascii_digit()
+                        && tag[1].is_ascii_digit()
+                        && tag[2].is_ascii_digit())
             }
         };
         if is_31 {

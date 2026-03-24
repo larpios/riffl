@@ -621,6 +621,8 @@ impl Mixer {
                             e.effect_type(),
                             Some(EffectType::PortamentoToNote)
                                 | Some(EffectType::TonePortamentoVolumeSlide)
+                                | Some(EffectType::PortamentoFine)
+                                | Some(EffectType::PortamentoExtraFine)
                         )
                     });
 
@@ -702,8 +704,12 @@ impl Mixer {
                                         VoiceLfoState::new(self.instruments.get(instrument_idx));
                                 }
                             } else {
-                                let is_amiga = self.effect_processor.channel_state(ch)
-                                    .map(|s| s.slide_mode == crate::audio::pitch::SlideMode::AmigaPeriod)
+                                let is_amiga = self
+                                    .effect_processor
+                                    .channel_state(ch)
+                                    .map(|s| {
+                                        s.slide_mode == crate::audio::pitch::SlideMode::AmigaPeriod
+                                    })
                                     .unwrap_or(false);
 
                                 let clock = if self.format_is_s3m {
@@ -815,6 +821,8 @@ impl Mixer {
                                 e.effect_type(),
                                 Some(EffectType::PortamentoToNote)
                                     | Some(EffectType::TonePortamentoVolumeSlide)
+                                    | Some(EffectType::PortamentoFine)
+                                    | Some(EffectType::PortamentoExtraFine)
                             )
                         });
 
@@ -1561,6 +1569,7 @@ impl Mixer {
 
     pub fn set_format_is_s3m(&mut self, is_s3m: bool) {
         self.format_is_s3m = is_s3m;
+        self.effect_processor.set_use_high_res_periods(is_s3m);
     }
 
     /// Set the pitch slide mode for all channels.
@@ -1924,7 +1933,9 @@ mod tests {
     #[test]
     fn test_mixer_sample_and_instrument_volume() {
         let sample = Arc::new(make_test_sample(44100, 0.25).with_volume(0.5));
-        let instruments = vec![Instrument::new("Test").with_volume(0.8)];
+        let mut inst = Instrument::new("Test").with_volume(0.8);
+        inst.sample_index = Some(0);
+        let instruments = vec![inst];
         let mut mixer = Mixer::new(vec![sample], instruments, 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
@@ -3038,6 +3049,10 @@ mod tests {
         pattern.set_cell(0, 0, cell0);
 
         mixer.tick(0, &pattern);
+        // Render a bit to advance position from 0
+        let mut output = vec![0.0f32; 100];
+        mixer.render(&mut output);
+
         let vol_before = mixer.voices[0].as_ref().unwrap().velocity_gain;
         assert!((vol_before - 0.5).abs() < 0.001);
 
@@ -3093,6 +3108,10 @@ mod tests {
         pattern.set_cell(0, 0, cell0);
 
         mixer.tick(0, &pattern);
+        // Render a bit to advance position from 0
+        let mut output = vec![0.0f32; 100];
+        mixer.render(&mut output);
+
         let vol_before = mixer.voices[0].as_ref().unwrap().velocity_gain;
         assert!((vol_before - 0.5).abs() < 0.001);
 
@@ -3438,6 +3457,7 @@ mod tests {
         let data: Vec<f32> = vec![0.5; 48000];
         let sample = Sample::new(data, 48000, 1, Some("test".to_string()));
         let mut inst = Instrument::new("Test");
+        inst.sample_index = Some(0);
         inst.volume_lfo = Some(Lfo::sine(10.0, 0.5));
         let instruments = vec![inst];
 
@@ -3472,8 +3492,10 @@ mod tests {
         let data: Vec<f32> = (0..96000).map(|i| i as f32 / 96000.0).collect();
         let sample = Sample::new(data, 48000, 1, Some("ramp".to_string()));
 
-        let inst_no_lfo = Instrument::new("NoLFO");
+        let mut inst_no_lfo = Instrument::new("NoLFO");
+        inst_no_lfo.sample_index = Some(0);
         let mut inst_with_lfo = Instrument::new("WithLFO");
+        inst_with_lfo.sample_index = Some(0);
         inst_with_lfo.pitch_lfo = Some(Lfo::sine(10.0, 0.5));
 
         let mut mixer_no_lfo =
@@ -3513,6 +3535,7 @@ mod tests {
         let sample = Sample::new(data, 48000, 1, Some("test".to_string()));
 
         let mut inst = Instrument::new("Test");
+        inst.sample_index = Some(0);
         inst.volume_lfo = Some(Lfo {
             waveform: LfoWaveform::Sine,
             rate: 0.0,
@@ -3621,10 +3644,12 @@ mod tests {
     #[test]
     fn test_mixer_no_keyzones_backward_compat() {
         let sample = Arc::new(make_test_sample(44100, 0.25));
-        let inst = Instrument::new("Simple");
+        let mut inst = Instrument::new("Simple");
+        inst.sample_index = Some(0);
+        let instruments = vec![inst];
         // No keyzones -- should use instrument_idx as sample_index directly
-
-        let mut mixer = Mixer::new(vec![sample], vec![inst], 4, 44100);
+        // actually now it uses inst.sample_index fallback.
+        let mut mixer = Mixer::new(vec![sample], instruments, 4, 44100);
 
         let mut pattern = Pattern::new(16, 4);
         pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));

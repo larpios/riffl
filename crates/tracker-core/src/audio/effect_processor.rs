@@ -151,13 +151,15 @@ pub struct ChannelEffectState {
     /// Number of ticks per row (default 6).
     pub ticks_per_row: u8,
     /// Pitch slide up speed (per row approx).
-    pub pitch_slide_up: u8,
+    pub pitch_slide_up: f64,
     /// Pitch slide down speed (per row approx).
-    pub pitch_slide_down: u8,
+    pub pitch_slide_down: f64,
     /// Pitch calculation mode: linear semitone-based (default) or Amiga period-based.
     ///
     /// Set to `SlideMode::AmigaPeriod` when playing back MOD or S3M files.
     pub slide_mode: SlideMode,
+    /// If true, use 14.3MHz clock logic (S3M/XM Amiga mode) which has 4x period resolution.
+    pub use_high_res_periods: bool,
     /// Effective Amiga period clock for this channel (AmigaPeriod mode only).
     /// Set by the mixer when a note triggers: AMIGA_PAL_CLOCK * base_freq / sample_rate
     pub period_clock: f64,
@@ -232,9 +234,10 @@ impl Default for ChannelEffectState {
             row_frame_counter: 0,
             frames_per_row: 6000, // ~125ms at 48kHz (120 BPM default)
             ticks_per_row: 6,
-            pitch_slide_up: 0,
-            pitch_slide_down: 0,
+            pitch_slide_up: 0.0,
+            pitch_slide_down: 0.0,
             slide_mode: SlideMode::default(),
+            use_high_res_periods: false,
             period_clock: crate::audio::pitch::AMIGA_PAL_CLOCK,
             channel_volume: 1.0,
             channel_volume_slide_up: 0,
@@ -260,6 +263,7 @@ impl ChannelEffectState {
         let tpr = self.ticks_per_row;
         let mode = self.slide_mode;
         let clock = self.period_clock;
+        let high_res = self.use_high_res_periods;
         let channel_vol = self.channel_volume;
 
         *self = Self {
@@ -267,6 +271,7 @@ impl ChannelEffectState {
             ticks_per_row: tpr,
             slide_mode: mode,
             period_clock: clock,
+            use_high_res_periods: high_res,
             channel_volume: channel_vol,
             ..Self::default()
         };
@@ -281,8 +286,8 @@ impl ChannelEffectState {
         self.tremolo_active = false;
         self.volume_slide_up = 0;
         self.volume_slide_down = 0;
-        self.pitch_slide_up = 0;
-        self.pitch_slide_down = 0;
+        self.pitch_slide_up = 0.0;
+        self.pitch_slide_down = 0.0;
         self.sample_offset = None;
         self.channel_volume_slide_up = 0;
         self.channel_volume_slide_down = 0;
@@ -497,7 +502,7 @@ impl ChannelEffectState {
     /// [`SlideMode`].  For `AmigaPeriod` mode the slide units are raw period
     /// deltas rather than 1/64th-semitone steps.
     pub fn advance_pitch_slide_tick(&mut self) {
-        if self.pitch_slide_up > 0 || self.pitch_slide_down > 0 {
+        if self.pitch_slide_up > 0.0 || self.pitch_slide_down > 0.0 {
             let current_freq = self.pitch_ratio * self.triggered_note_freq;
             let new_freq = PitchCalculator::apply_slide(
                 current_freq,
@@ -613,6 +618,13 @@ impl TrackerEffectProcessor {
         }
     }
 
+    /// Set high-resolution period math (14.3MHz clock) for all channels.
+    pub fn set_use_high_res_periods(&mut self, use_high_res: bool) {
+        for ch in &mut self.channels {
+            ch.use_high_res_periods = use_high_res;
+        }
+    }
+
     /// Process effects for a row, returning any transport commands.
     ///
     /// Called once at the start of each new row. Reads effect commands from
@@ -639,6 +651,8 @@ impl TrackerEffectProcessor {
                     e.effect_type(),
                     Some(EffectType::PortamentoToNote)
                         | Some(EffectType::TonePortamentoVolumeSlide)
+                        | Some(EffectType::PortamentoFine)
+                        | Some(EffectType::PortamentoExtraFine)
                 )
             });
 
@@ -671,12 +685,12 @@ impl TrackerEffectProcessor {
 
                 EffectType::PitchSlideUp => {
                     // Set pitch slide up speed
-                    state.pitch_slide_up = effect.param;
+                    state.pitch_slide_up = effect.param.into();
                 }
 
                 EffectType::PitchSlideDown => {
                     // Set pitch slide down speed
-                    state.pitch_slide_down = effect.param;
+                    state.pitch_slide_down = effect.param.into();
                 }
 
                 EffectType::PortamentoToNote => {
@@ -692,8 +706,9 @@ impl TrackerEffectProcessor {
                     if let Some(freq) = note_frequency {
                         state.portamento_target = Some(freq);
                         // Initialize current freq if not already sliding
-                        if state.portamento_freq.is_none() {
-                            state.portamento_freq = Some(freq);
+                        if state.portamento_freq.is_none() && state.triggered_note_freq > 0.0 {
+                            let current_freq = state.pitch_ratio * state.triggered_note_freq;
+                            state.portamento_freq = Some(current_freq);
                         }
                     }
                 }
@@ -719,8 +734,9 @@ impl TrackerEffectProcessor {
                     // Portamento target is handled by new notes triggered on this row
                     if let Some(freq) = note_frequency {
                         state.portamento_target = Some(freq);
-                        if state.portamento_freq.is_none() {
-                            state.portamento_freq = Some(freq);
+                        if state.portamento_freq.is_none() && state.triggered_note_freq > 0.0 {
+                            let current_freq = state.pitch_ratio * state.triggered_note_freq;
+                            state.portamento_freq = Some(current_freq);
                         }
                     }
                 }
@@ -780,14 +796,59 @@ impl TrackerEffectProcessor {
                     match sub_command {
                         0x1 => {
                             // E1x: Fine Portamento Up (once per row)
-                            // Standard Fine slide is 4x Extra Fine (4/64 semitones per unit)
-                            let semitones = sub_param as f64 / 16.0;
-                            state.pitch_ratio *= 2.0_f64.powf(semitones / 12.0);
+                            match state.slide_mode {
+                                SlideMode::Linear => {
+                                    let semitones = sub_param as f64 / 16.0;
+                                    state.pitch_ratio *= 2.0_f64.powf(semitones / 12.0);
+                                }
+                                SlideMode::AmigaPeriod => {
+                                    let freq = state.pitch_ratio * state.triggered_note_freq;
+                                    let delta = if state.use_high_res_periods {
+                                        // XM Amiga mode: E1x is 1 MOD unit = 4 high-res units
+                                        sub_param as f64 * 4.0
+                                    } else {
+                                        // MOD mode: 1 unit
+                                        sub_param as f64
+                                    };
+                                    let new_freq = PitchCalculator::apply_slide(
+                                        freq,
+                                        delta,
+                                        0.0,
+                                        state.slide_mode,
+                                        state.period_clock,
+                                    );
+                                    if state.triggered_note_freq > 0.0 {
+                                        state.pitch_ratio = new_freq / state.triggered_note_freq;
+                                    }
+                                }
+                            }
                         }
                         0x2 => {
                             // E2x: Fine Portamento Down (once per row)
-                            let semitones = sub_param as f64 / 16.0;
-                            state.pitch_ratio *= 2.0_f64.powf(-semitones / 12.0);
+                            match state.slide_mode {
+                                SlideMode::Linear => {
+                                    let semitones = sub_param as f64 / 16.0;
+                                    state.pitch_ratio *= 2.0_f64.powf(-semitones / 12.0);
+                                }
+                                SlideMode::AmigaPeriod => {
+                                    let freq = state.pitch_ratio * state.triggered_note_freq;
+                                    let delta = if state.use_high_res_periods {
+                                        sub_param as f64 * 4.0
+                                    } else {
+                                        sub_param as f64
+                                    };
+                                    let new_freq = PitchCalculator::apply_slide(
+                                        freq,
+                                        0.0,
+                                        delta,
+                                        state.slide_mode,
+                                        state.period_clock,
+                                    );
+                                    if state.triggered_note_freq > 0.0 {
+                                        state.pitch_ratio = new_freq / state.triggered_note_freq;
+                                    }
+                                }
+                            }
                         }
                         0x3 => {
                             // E3x: Glissando Control
@@ -925,109 +986,192 @@ impl TrackerEffectProcessor {
                     });
                 }
                 EffectType::ExtraFinePortaUp => {
-                    // X1x: Extra Fine Portamento Up (once per row)
-                    match state.slide_mode {
-                        SlideMode::Linear => {
-                            let semitones = effect.param as f64 / 64.0;
-                            state.pitch_ratio *= 2.0_f64.powf(semitones / 12.0);
-                        }
-                        SlideMode::AmigaPeriod => {
-                            let freq = state.pitch_ratio * state.triggered_note_freq;
-                            let new_freq = PitchCalculator::apply_slide(
-                                freq,
-                                effect.param,
-                                0,
-                                state.slide_mode,
-                                state.period_clock,
-                            );
-                            if state.triggered_note_freq > 0.0 {
+                    // MOD E1x: x units of PAL period once per row
+                    // S3M FEx: x units of "extra-fine" period once per row
+                    if state.triggered_note_freq > 0.0 {
+                        match state.slide_mode {
+                            SlideMode::Linear => {
+                                let semitones = effect.param as f64 / 64.0;
+                                state.pitch_ratio *= 2.0_f64.powf(semitones / 12.0);
+                            }
+                            SlideMode::AmigaPeriod => {
+                                let freq = state.pitch_ratio * state.triggered_note_freq;
+                                let delta = if state.use_high_res_periods {
+                                    // S3M Extra-fine is 1 unit of 14.3MHz
+                                    effect.param as f64
+                                } else {
+                                    // MOD Fine is 1 unit of 3.5MHz
+                                    effect.param as f64
+                                };
+                                let new_freq = PitchCalculator::apply_slide(
+                                    freq,
+                                    delta,
+                                    0.0,
+                                    state.slide_mode,
+                                    state.period_clock,
+                                );
                                 state.pitch_ratio = new_freq / state.triggered_note_freq;
                             }
                         }
                     }
                 }
                 EffectType::ExtraFinePortaDown => {
-                    // X2x: Extra Fine Portamento Down (once per row)
-                    match state.slide_mode {
-                        SlideMode::Linear => {
-                            let semitones = effect.param as f64 / 64.0;
-                            state.pitch_ratio *= 2.0_f64.powf(-semitones / 12.0);
-                        }
-                        SlideMode::AmigaPeriod => {
-                            let freq = state.pitch_ratio * state.triggered_note_freq;
-                            let new_freq = PitchCalculator::apply_slide(
-                                freq,
-                                0,
-                                effect.param,
-                                state.slide_mode,
-                                state.period_clock,
-                            );
-                            if state.triggered_note_freq > 0.0 {
+                    // MOD E2x / S3M EFx
+                    if state.triggered_note_freq > 0.0 {
+                        match state.slide_mode {
+                            SlideMode::Linear => {
+                                let semitones = effect.param as f64 / 64.0;
+                                state.pitch_ratio *= 2.0_f64.powf(-semitones / 12.0);
+                            }
+                            SlideMode::AmigaPeriod => {
+                                let freq = state.pitch_ratio * state.triggered_note_freq;
+                                let delta = if state.use_high_res_periods {
+                                    // S3M Extra-fine is 1 unit of 14.3MHz
+                                    effect.param as f64
+                                } else {
+                                    // MOD Fine is 1 unit of 3.5MHz
+                                    effect.param as f64
+                                };
+                                let new_freq = PitchCalculator::apply_slide(
+                                    freq,
+                                    0.0,
+                                    delta,
+                                    state.slide_mode,
+                                    state.period_clock,
+                                );
                                 state.pitch_ratio = new_freq / state.triggered_note_freq;
                             }
                         }
                     }
                 }
                 EffectType::SlideUpFine => {
-                    // S3M Fine Slide Up: info & 0x0F units, applied once per row
-                    match state.slide_mode {
-                        SlideMode::Linear => {
-                            let semitones = (effect.param & 0x0F) as f64 / 16.0;
-                            state.pitch_ratio *= 2.0_f64.powf(semitones / 12.0);
-                        }
-                        SlideMode::AmigaPeriod => {
-                            let freq = state.pitch_ratio * state.triggered_note_freq;
-                            // S3M Fine Slide is 4x speed of Extra Fine Slide (raw period units)
-                            let new_freq = PitchCalculator::apply_slide(
-                                freq,
-                                (effect.param & 0x0F) * 4,
-                                0,
-                                state.slide_mode,
-                                state.period_clock,
-                            );
-                            if state.triggered_note_freq > 0.0 {
+                    // S3M FFx Fine Slide Up (once per row)
+                    if state.triggered_note_freq > 0.0 {
+                        match state.slide_mode {
+                            SlideMode::Linear => {
+                                let semitones = effect.param as f64 / 16.0;
+                                state.pitch_ratio *= 2.0_f64.powf(semitones / 12.0);
+                            }
+                            SlideMode::AmigaPeriod => {
+                                let freq = state.pitch_ratio * state.triggered_note_freq;
+                                let delta = if state.use_high_res_periods {
+                                    // S3M Fine Slide is 4 units of 14.3MHz (1 MOD unit)
+                                    effect.param as f64 * 4.0
+                                } else {
+                                    effect.param as f64
+                                };
+                                let new_freq = PitchCalculator::apply_slide(
+                                    freq,
+                                    delta,
+                                    0.0,
+                                    state.slide_mode,
+                                    state.period_clock,
+                                );
                                 state.pitch_ratio = new_freq / state.triggered_note_freq;
                             }
                         }
                     }
                 }
                 EffectType::SlideDownFine => {
-                    // S3M Fine Slide Down: info & 0x0F units, applied once per row
-                    match state.slide_mode {
-                        SlideMode::Linear => {
-                            let semitones = (effect.param & 0x0F) as f64 / 16.0;
-                            state.pitch_ratio *= 2.0_f64.powf(-semitones / 12.0);
-                        }
-                        SlideMode::AmigaPeriod => {
-                            let freq = state.pitch_ratio * state.triggered_note_freq;
-                            let new_freq = PitchCalculator::apply_slide(
-                                freq,
-                                0,
-                                (effect.param & 0x0F) * 4,
-                                state.slide_mode,
-                                state.period_clock,
-                            );
-                            if state.triggered_note_freq > 0.0 {
+                    // S3M EEx Fine Slide Down (once per row)
+                    if state.triggered_note_freq > 0.0 {
+                        match state.slide_mode {
+                            SlideMode::Linear => {
+                                let semitones = effect.param as f64 / 16.0;
+                                state.pitch_ratio *= 2.0_f64.powf(-semitones / 12.0);
+                            }
+                            SlideMode::AmigaPeriod => {
+                                let freq = state.pitch_ratio * state.triggered_note_freq;
+                                let delta = if state.use_high_res_periods {
+                                    // S3M Fine Slide is 4 units of 14.3MHz (1 MOD unit)
+                                    effect.param as f64 * 4.0
+                                } else {
+                                    effect.param as f64
+                                };
+                                let new_freq = PitchCalculator::apply_slide(
+                                    freq,
+                                    0.0,
+                                    delta,
+                                    state.slide_mode,
+                                    state.period_clock,
+                                );
                                 state.pitch_ratio = new_freq / state.triggered_note_freq;
                             }
                         }
                     }
                 }
                 EffectType::PortamentoExtraFine => {
-                    // S3M Extra Fine Portamento (GxF): sets speed and slides once per row
-                    state.portamento_speed = match state.slide_mode {
-                        SlideMode::Linear => (effect.param & 0x0F) as f64 / 64.0,
-                        SlideMode::AmigaPeriod => (effect.param & 0x0F) as f64,
-                    };
-                    state.advance_portamento_tick();
+                    // S3M GxF Extra Fine Portamento (once per row)
+                    if state.triggered_note_freq > 0.0 {
+                        let current_freq = state.pitch_ratio * state.triggered_note_freq;
+                        let target_freq = state.portamento_target.unwrap_or(current_freq);
+                        match state.slide_mode {
+                            SlideMode::Linear => {
+                                let speed = effect.param as f64 / 64.0;
+                                let new_freq = PitchCalculator::apply_portamento(
+                                    current_freq,
+                                    target_freq,
+                                    speed,
+                                    state.slide_mode,
+                                    state.period_clock,
+                                );
+                                state.pitch_ratio = new_freq / state.triggered_note_freq;
+                            }
+                            SlideMode::AmigaPeriod => {
+                                let delta = if state.use_high_res_periods {
+                                    // S3M Extra-fine is 1 unit of 14.3MHz
+                                    effect.param as f64
+                                } else {
+                                    // MOD Fine is 1 unit of 3.5MHz
+                                    effect.param as f64
+                                };
+                                let new_freq = PitchCalculator::apply_portamento(
+                                    current_freq,
+                                    target_freq,
+                                    delta,
+                                    state.slide_mode,
+                                    state.period_clock,
+                                );
+                                state.pitch_ratio = new_freq / state.triggered_note_freq;
+                            }
+                        }
+                    }
                 }
                 EffectType::PortamentoFine => {
-                    // S3M Fine Portamento (GxE): sets speed and slides once per row
-                    state.portamento_speed = match state.slide_mode {
-                        SlideMode::Linear => (effect.param & 0x0F) as f64 / 16.0,
-                        SlideMode::AmigaPeriod => ((effect.param & 0x0F) * 4) as f64,
-                    };
-                    state.advance_portamento_tick();
+                    // S3M GxE Fine Portamento (once per row)
+                    if state.triggered_note_freq > 0.0 {
+                        let current_freq = state.pitch_ratio * state.triggered_note_freq;
+                        let target_freq = state.portamento_target.unwrap_or(current_freq);
+                        match state.slide_mode {
+                            SlideMode::Linear => {
+                                let speed = effect.param as f64 / 16.0;
+                                let new_freq = PitchCalculator::apply_portamento(
+                                    current_freq,
+                                    target_freq,
+                                    speed,
+                                    state.slide_mode,
+                                    state.period_clock,
+                                );
+                                state.pitch_ratio = new_freq / state.triggered_note_freq;
+                            }
+                            SlideMode::AmigaPeriod => {
+                                let delta = if state.use_high_res_periods {
+                                    // S3M Fine Portamento is 4 units of 14.3MHz (1 MOD unit)
+                                    effect.param as f64 * 4.0
+                                } else {
+                                    effect.param as f64
+                                };
+                                let new_freq = PitchCalculator::apply_portamento(
+                                    current_freq,
+                                    target_freq,
+                                    delta,
+                                    state.slide_mode,
+                                    state.period_clock,
+                                );
+                                state.pitch_ratio = new_freq / state.triggered_note_freq;
+                            }
+                        }
+                    }
                 }
             }
         }
