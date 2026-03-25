@@ -1,0 +1,24 @@
+name: Build Nix Project
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Build project
+        run: nix build
+        # Or use 'nix-build' for legacy projects:
+        # run: nix-build
