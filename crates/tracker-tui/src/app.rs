@@ -2324,6 +2324,61 @@ impl App {
         self.channel_scroll = 0;
     }
 
+    /// Adjust `channel_scroll` so that the editor cursor's channel is always
+    /// visible within the available terminal width.
+    ///
+    /// `term_width` should be the full terminal width in columns. Borders and
+    /// the row-number gutter are accounted for internally.
+    pub fn ensure_cursor_visible_horizontally(&mut self, term_width: u16) {
+        use crate::ui::{CHANNEL_COL_WIDTH, ROW_NUM_WIDTH};
+
+        // Account for the pattern block's 2-column border + row number column
+        let inner_width = term_width.saturating_sub(2); // 1 border each side
+        let channel_space = inner_width.saturating_sub(ROW_NUM_WIDTH);
+        let visible_channels = ((channel_space / CHANNEL_COL_WIDTH) as usize)
+            .max(1)
+            .min(self.editor.pattern().num_channels());
+
+        if visible_channels == 0 {
+            return;
+        }
+
+        let cursor = self.editor.cursor_channel();
+        let num_channels = self.editor.pattern().num_channels();
+
+        // Clamp scroll so it never goes past the last page
+        let max_scroll = num_channels.saturating_sub(visible_channels);
+
+        if cursor < self.channel_scroll {
+            // Cursor went left of view — snap scroll left
+            self.channel_scroll = cursor;
+        } else if cursor >= self.channel_scroll + visible_channels {
+            // Cursor went right of view — snap scroll right
+            self.channel_scroll = cursor + 1 - visible_channels;
+        }
+
+        self.channel_scroll = self.channel_scroll.min(max_scroll);
+    }
+
+    /// Scroll the view one channel to the right without moving the cursor,
+    /// used in follow mode where `h`/`l` pan the view, not the cursor.
+    pub fn scroll_view_right(&mut self, term_width: u16) {
+        use crate::ui::{CHANNEL_COL_WIDTH, ROW_NUM_WIDTH};
+
+        let inner_width = term_width.saturating_sub(2);
+        let channel_space = inner_width.saturating_sub(ROW_NUM_WIDTH);
+        let visible_channels = ((channel_space / CHANNEL_COL_WIDTH) as usize).max(1);
+        let num_channels = self.editor.pattern().num_channels();
+        let max_scroll = num_channels.saturating_sub(visible_channels);
+        self.channel_scroll = (self.channel_scroll + 1).min(max_scroll);
+    }
+
+    /// Scroll the view one channel to the left without moving the cursor,
+    /// used in follow mode where `h`/`l` pan the view, not the cursor.
+    pub fn scroll_view_left(&mut self) {
+        self.channel_scroll = self.channel_scroll.saturating_sub(1);
+    }
+
     /// Toggle live mode on/off.
     ///
     /// When live mode is active, scripts in the code editor are automatically

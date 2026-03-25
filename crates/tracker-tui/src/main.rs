@@ -641,15 +641,28 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         }
     }
 
+    // Grab terminal width once for horizontal tracking
+    let term_width = crossterm::terminal::size().map(|(w, _)| w).unwrap_or(80);
+
     match action {
         // Navigation — delegate to editor (or instrument/pattern list)
-        Action::MoveLeft => app.editor.move_left(),
+        Action::MoveLeft => {
+            if app.follow_mode && app.transport.is_playing() && app.current_view == AppView::PatternEditor {
+                // Follow mode: h pans the view left, doesn't move cursor channel
+                app.scroll_view_left();
+            } else {
+                app.editor.move_left();
+                app.ensure_cursor_visible_horizontally(term_width);
+            }
+        }
         Action::MoveDown => {
             if app.current_view == AppView::InstrumentList {
                 app.inst_editor.unfocus();
                 app.instrument_selection_down();
             } else if app.current_view == AppView::PatternList {
                 app.pattern_selection_down();
+            } else if app.follow_mode && app.transport.is_playing() && app.current_view == AppView::PatternEditor {
+                // Follow mode: j/k are blocked — the playhead owns vertical position
             } else if matches!(app.editor.mode(), EditorMode::Insert | EditorMode::Replace) {
                 app.editor.extend_down();
                 app.apply_draw_note();
@@ -663,11 +676,21 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                 app.instrument_selection_up();
             } else if app.current_view == AppView::PatternList {
                 app.pattern_selection_up();
+            } else if app.follow_mode && app.transport.is_playing() && app.current_view == AppView::PatternEditor {
+                // Follow mode: j/k are blocked — the playhead owns vertical position
             } else {
                 app.editor.move_up();
             }
         }
-        Action::MoveRight => app.editor.move_right(),
+        Action::MoveRight => {
+            if app.follow_mode && app.transport.is_playing() && app.current_view == AppView::PatternEditor {
+                // Follow mode: l pans the view right, doesn't move cursor channel
+                app.scroll_view_right(term_width);
+            } else {
+                app.editor.move_right();
+                app.ensure_cursor_visible_horizontally(term_width);
+            }
+        }
         Action::PageUp => app.editor.page_up(),
         Action::PageDown => app.editor.page_down(),
 
