@@ -633,8 +633,12 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
             } else {
                 8363
             };
-            let base_note = 60.0 - 12.0 * (c2spd as f64 / 8363.0).log2();
-            sample = sample.with_base_note(base_note.round() as u8);
+            // sample.sample_rate is already set to c2spd.
+            // S3M C-4 defines the pitch where the sample plays exactly at c2spd.
+            // Our pattern parser maps S3M C-4 to Note::new(..., octave=4) which is MIDI note 48.
+            // Therefore, setting base_note to 48 ensures that C-4 plays at exactly c2spd
+            // without any floating point double-pitching rounding errors!
+            sample = sample.with_base_note(48);
 
             let mut inst = Instrument::new(s3m_inst.name.clone());
             inst.sample_index = Some(samples.len());
@@ -679,8 +683,9 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
                             } else {
                                 8363
                             };
-                            let base_note = 60.0 - 12.0 * (c2spd as f64 / 8363.0).log2();
-                            sample = sample.with_base_note(base_note.round() as u8);
+                            // sample.sample_rate is c2spd. Note 48 is C-4.
+                            // Set base_note to 48 to play C-4 at original rate.
+                            sample = sample.with_base_note(48);
                             sample
                         }
                         Err(_) => {

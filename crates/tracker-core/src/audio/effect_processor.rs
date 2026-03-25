@@ -318,17 +318,9 @@ impl ChannelEffectState {
         self.tremolo_active = false;
         self.volume_slide_up = 0;
         self.volume_slide_down = 0;
-        // Preserve pitch slide speeds across rows so empty rows continue sliding
-        if self.pitch_slide_up == 0.0 && self.prev_pitch_slide_up > 0.0 {
-            self.pitch_slide_up = self.prev_pitch_slide_up;
-        }
-        if self.pitch_slide_down == 0.0 && self.prev_pitch_slide_down > 0.0 {
-            self.pitch_slide_down = self.prev_pitch_slide_down;
-        }
-        // Preserve portamento speed across rows so empty rows continue sliding
-        if self.portamento_speed <= 0.0 && self.portamento_target.is_some() {
-            self.portamento_speed = self.prev_portamento_speed;
-        }
+        self.pitch_slide_up = 0.0;
+        self.pitch_slide_down = 0.0;
+        self.portamento_speed = 0.0;
         self.sample_offset = None;
         self.channel_volume_slide_up = 0;
         self.channel_volume_slide_down = 0;
