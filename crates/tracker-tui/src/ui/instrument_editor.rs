@@ -437,432 +437,216 @@ pub fn render_instrument_editor(
     theme: &Theme,
     sample: Option<&Sample>,
 ) {
-    let title = format!(" Edit: {} ", instrument.name);
     let border_style = if state.focused {
         theme.focused_border_style()
     } else {
         theme.border_style()
     };
+
+    // Title: instrument name + hint when unfocused
+    let title_spans = if state.focused {
+        vec![
+            Span::raw(" "),
+            Span::styled(&instrument.name, Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
+            Span::raw(" "),
+        ]
+    } else {
+        vec![
+            Span::raw(" "),
+            Span::styled(&instrument.name, Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
+            Span::styled("  Enter: edit ", Style::default().fg(theme.text_dimmed)),
+        ]
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(border_style)
-        .title(title)
+        .title(Line::from(title_spans))
         .title_alignment(Alignment::Left);
 
     let inner = block.inner(area);
-    let mut lines: Vec<Line> = Vec::new();
+    frame.render_widget(block, area);
 
-    // Helper: style a field label+value row
+    let width = inner.width as usize;
+    let height = inner.height as usize;
+    if width < 20 || height < 2 {
+        return;
+    }
+
+    // Split each row into left/right halves for a 2-column layout.
+    let half = width / 2;
+
+    let active = |field: InstrumentField| state.focused && state.field == field;
     let field_style = |field: InstrumentField| {
-        if state.focused && state.field == field {
-            Style::default()
-                .fg(theme.cursor_fg)
-                .bg(theme.cursor_normal_bg)
-                .add_modifier(Modifier::BOLD)
+        if active(field) {
+            Style::default().fg(theme.cursor_fg).bg(theme.cursor_normal_bg).add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(theme.text)
         }
     };
     let label_style = |field: InstrumentField| {
-        if state.focused && state.field == field {
-            Style::default()
-                .fg(theme.cursor_fg)
-                .bg(theme.cursor_normal_bg)
-                .add_modifier(Modifier::BOLD)
+        if active(field) {
+            Style::default().fg(theme.cursor_fg).bg(theme.cursor_normal_bg)
         } else {
             Style::default().fg(theme.text_secondary)
         }
     };
+    let dim = Style::default().fg(theme.text_dimmed);
 
-    // Blank line at top for breathing room
-    lines.push(Line::from(""));
+    // Build a single 2-column row.  Each half is `half` chars wide.
+    // `left_spans` and `right_spans` are the contents for each half.
+    let make_row = |left: Vec<Span<'static>>, right: Vec<Span<'static>>| -> Line<'static> {
+        // Pad left side to `half` chars (approximate — spans don't track width cleanly,
+        // so we just concatenate and let the terminal clip).
+        let mut spans = left;
+        // Separator
+        spans.push(Span::styled("  ", dim));
+        spans.extend(right);
+        Line::from(spans)
+    };
 
-    // ── Name ─────────────────────────────────────────────────────────
-    let name_value = if state.focused && state.field == InstrumentField::Name && state.text_editing
-    {
+    let sample_rate = sample.map(|s| s.sample_rate()).unwrap_or(44100);
+
+    // ── Row 1: Name (left) | Sample file (right) ─────────────────────
+    let name_value = if active(InstrumentField::Name) && state.text_editing {
         format!("{}▌", state.input_buffer)
     } else {
         instrument.name.clone()
     };
-    lines.push(Line::from(vec![
-        Span::raw("  "),
-        Span::styled(
-            format!("{:<10}", InstrumentField::Name.label()),
-            label_style(InstrumentField::Name),
-        ),
-        Span::raw("  "),
-        Span::styled(
-            format!("{:<24}", name_value),
-            field_style(InstrumentField::Name),
-        ),
-        Span::raw("   "),
-        Span::styled("e/Enter: edit name", Style::default().fg(theme.text_dimmed)),
-    ]));
+    let name_w = half.saturating_sub(14);
+    let sample_str = instrument.sample_path.as_deref()
+        .map(|p| std::path::Path::new(p).file_name().and_then(|n| n.to_str()).unwrap_or(p).to_string())
+        .unwrap_or_else(|| "— none —".to_string());
+    let sample_w = half.saturating_sub(14);
+    let row1 = make_row(
+        vec![
+            Span::styled(format!("{:<9}", "Name"), label_style(InstrumentField::Name)),
+            Span::raw(" "),
+            Span::styled(format!("{:<w$}", name_value, w = name_w.max(1)), field_style(InstrumentField::Name)),
+        ],
+        vec![
+            Span::styled("Sample   ", dim),
+            Span::styled(format!("{:<w$}", sample_str, w = sample_w.max(1)), dim),
+        ],
+    );
 
-    lines.push(Line::from(""));
-
-    // ── Base Note ────────────────────────────────────────────────────
+    // ── Row 2: Base Note (left) | Volume bar (right) ─────────────────
     let base_note_str = instrument.base_note.display_str();
-    lines.push(Line::from(vec![
-        Span::raw("  "),
-        Span::styled(
-            format!("{:<10}", InstrumentField::BaseNote.label()),
-            label_style(InstrumentField::BaseNote),
-        ),
-        Span::raw("  "),
-        Span::styled(
-            format!("{:<6}", base_note_str),
-            field_style(InstrumentField::BaseNote),
-        ),
-        Span::raw("   "),
-        Span::styled(
-            format!("(MIDI {:3})", instrument.base_note.midi_note()),
-            Style::default().fg(theme.text_dimmed),
-        ),
-    ]));
-
-    lines.push(Line::from(""));
-
-    // ── Volume ───────────────────────────────────────────────────────
     let vol_pct = (instrument.volume * 100.0).round() as u32;
-    let vol_bar = {
-        let filled = (vol_pct / 5) as usize; // 0-20 blocks
-        format!(
-            "{}{}",
-            "█".repeat(filled.min(20)),
-            "░".repeat(20usize.saturating_sub(filled))
-        )
-    };
-    lines.push(Line::from(vec![
-        Span::raw("  "),
-        Span::styled(
-            format!("{:<10}", InstrumentField::Volume.label()),
-            label_style(InstrumentField::Volume),
-        ),
-        Span::raw("  "),
-        Span::styled(
-            format!("{:3}%", vol_pct),
-            field_style(InstrumentField::Volume),
-        ),
-        Span::raw("  "),
-        Span::styled(vol_bar, Style::default().fg(theme.primary)),
-    ]));
+    let bar_w = half.saturating_sub(22).max(4);
+    let filled = (vol_pct as usize * bar_w / 100).min(bar_w);
+    let vol_bar = format!("{}{}", "█".repeat(filled), "░".repeat(bar_w - filled));
+    let row2 = make_row(
+        vec![
+            Span::styled(format!("{:<9}", "Base Note"), label_style(InstrumentField::BaseNote)),
+            Span::raw(" "),
+            Span::styled(format!("{:<5}", base_note_str), field_style(InstrumentField::BaseNote)),
+            Span::styled(format!(" MIDI {:3}", instrument.base_note.midi_note()), dim),
+        ],
+        vec![
+            Span::styled(format!("{:<9}", "Volume"), label_style(InstrumentField::Volume)),
+            Span::raw(" "),
+            Span::styled(format!("{:3}%", vol_pct), field_style(InstrumentField::Volume)),
+            Span::raw(" "),
+            Span::styled(vol_bar, Style::default().fg(theme.primary)),
+        ],
+    );
 
-    lines.push(Line::from(""));
-
-    // ── Finetune ─────────────────────────────────────────────────────
-    // Each unit = 1/8 semitone = 12.5 cents
+    // ── Row 3: Finetune (left) | Loop mode + points (right) ──────────
     let ft = instrument.finetune;
     let cents = ft as f32 * 12.5;
-    lines.push(Line::from(vec![
-        Span::raw("  "),
-        Span::styled(
-            format!("{:<10}", InstrumentField::Finetune.label()),
-            label_style(InstrumentField::Finetune),
-        ),
-        Span::raw("  "),
-        Span::styled(format!("{:+2}", ft), field_style(InstrumentField::Finetune)),
-        Span::raw("   "),
-        Span::styled(
-            format!("({:+.1} cents)", cents),
-            Style::default().fg(theme.text_dimmed),
-        ),
-    ]));
-
-    lines.push(Line::from(""));
-
-    // ── Loop Mode ───────────────────────────────────────────────────────
-    let loop_mode_str = sample
-        .map(|s| match s.loop_mode {
-            tracker_core::audio::sample::LoopMode::NoLoop => "Off",
-            tracker_core::audio::sample::LoopMode::Forward => "Forward",
-            tracker_core::audio::sample::LoopMode::PingPong => "Ping-Pong",
-        })
-        .unwrap_or("Off");
-    lines.push(Line::from(vec![
-        Span::raw("  "),
-        Span::styled(
-            format!("{:<10}", InstrumentField::LoopMode.label()),
-            label_style(InstrumentField::LoopMode),
-        ),
-        Span::raw("  "),
-        Span::styled(
-            format!("{:<10}", loop_mode_str),
-            field_style(InstrumentField::LoopMode),
-        ),
-        Span::raw("   "),
-        Span::styled("space: cycle", Style::default().fg(theme.text_dimmed)),
-    ]));
-
-    lines.push(Line::from(""));
-
-    // ── Loop Start ─────────────────────────────────────────────────────
+    let loop_mode_str = sample.map(|s| match s.loop_mode {
+        tracker_core::audio::sample::LoopMode::NoLoop => "Off",
+        tracker_core::audio::sample::LoopMode::Forward => "Fwd",
+        tracker_core::audio::sample::LoopMode::PingPong => "P-P",
+    }).unwrap_or("Off");
     let loop_start_val = sample.map(|s| s.loop_start).unwrap_or(0);
-    let sample_rate = sample.map(|s| s.sample_rate()).unwrap_or(44100);
-    lines.push(Line::from(vec![
-        Span::raw("  "),
-        Span::styled(
-            format!("{:<10}", InstrumentField::LoopStart.label()),
-            label_style(InstrumentField::LoopStart),
-        ),
-        Span::raw("  "),
-        Span::styled(
-            format!("{:>6}", loop_start_val),
-            field_style(InstrumentField::LoopStart),
-        ),
-        Span::raw("   "),
-        Span::styled(
-            format!("({:.2}s)", loop_start_val as f32 / sample_rate as f32),
-            Style::default().fg(theme.text_dimmed),
-        ),
-    ]));
-
-    lines.push(Line::from(""));
-
-    // ── Loop End ───────────────────────────────────────────────────────
     let loop_end_val = sample.map(|s| s.loop_end).unwrap_or(0);
-    lines.push(Line::from(vec![
-        Span::raw("  "),
-        Span::styled(
-            format!("{:<10}", InstrumentField::LoopEnd.label()),
-            label_style(InstrumentField::LoopEnd),
-        ),
-        Span::raw("  "),
-        Span::styled(
-            format!("{:>6}", loop_end_val),
-            field_style(InstrumentField::LoopEnd),
-        ),
-        Span::raw("   "),
-        Span::styled(
-            format!("({:.2}s)", loop_end_val as f32 / sample_rate as f32),
-            Style::default().fg(theme.text_dimmed),
-        ),
-    ]));
+    let row3 = make_row(
+        vec![
+            Span::styled(format!("{:<9}", "Finetune"), label_style(InstrumentField::Finetune)),
+            Span::raw(" "),
+            Span::styled(format!("{:+3}", ft), field_style(InstrumentField::Finetune)),
+            Span::styled(format!(" ({:+.0}c)", cents), dim),
+        ],
+        vec![
+            Span::styled(format!("{:<9}", "Loop"), label_style(InstrumentField::LoopMode)),
+            Span::raw(" "),
+            Span::styled(format!("{:<3}", loop_mode_str), field_style(InstrumentField::LoopMode)),
+            Span::styled("  Srt:", dim),
+            Span::styled(format!("{}", loop_start_val), field_style(InstrumentField::LoopStart)),
+            Span::styled("  End:", dim),
+            Span::styled(format!("{}", loop_end_val), field_style(InstrumentField::LoopEnd)),
+        ],
+    );
 
-    lines.push(Line::from(""));
-
-    // ── Keyzones ─────────────────────────────────────────────────────
+    // ── Row 4: Keyzones ──────────────────────────────────────────────
     let keyzones = &instrument.keyzones;
     let keyzone_count = keyzones.len();
-    let keyzone_str = if keyzone_count == 0 {
-        "— none —".to_string()
-    } else {
-        format!("{} zone(s)", keyzone_count)
-    };
-    lines.push(Line::from(vec![
-        Span::raw("  "),
-        Span::styled(
-            format!("{:<10}", InstrumentField::KeyzoneList.label()),
-            label_style(InstrumentField::KeyzoneList),
-        ),
-        Span::raw("  "),
-        Span::styled(keyzone_str, field_style(InstrumentField::KeyzoneList)),
-        Span::raw("   "),
-        Span::styled("n/N: prev/next", Style::default().fg(theme.text_dimmed)),
-    ]));
-
-    // If there's a selected keyzone, show its details
-    if let Some(kz_idx) = state.selected_keyzone.filter(|&i| i < keyzone_count) {
+    let kz_summary = if keyzone_count == 0 {
+        "none".to_string()
+    } else if let Some(kz_idx) = state.selected_keyzone.filter(|&i| i < keyzone_count) {
         let kz = &keyzones[kz_idx];
         let note_min_str = (|| {
-            let octave = kz.note_min / 12;
-            let semitone = kz.note_min % 12;
-            let pitch = Pitch::from_semitone(semitone)?;
-            Some(Note::simple(pitch, octave).display_str())
-        })()
-        .unwrap_or_else(|| "---".to_string());
+            let pitch = Pitch::from_semitone(kz.note_min % 12)?;
+            Some(Note::simple(pitch, kz.note_min / 12).display_str())
+        })().unwrap_or_else(|| "---".to_string());
         let note_max_str = (|| {
-            let octave = kz.note_max / 12;
-            let semitone = kz.note_max % 12;
-            let pitch = Pitch::from_semitone(semitone)?;
-            Some(Note::simple(pitch, octave).display_str())
-        })()
-        .unwrap_or_else(|| "---".to_string());
+            let pitch = Pitch::from_semitone(kz.note_max % 12)?;
+            Some(Note::simple(pitch, kz.note_max / 12).display_str())
+        })().unwrap_or_else(|| "---".to_string());
+        format!("[{}] {}-{} vel:{}-{} smp:{}", kz_idx, note_min_str, note_max_str, kz.velocity_min, kz.velocity_max, kz.sample_index)
+    } else {
+        format!("{} zone(s)  n/N: select", keyzone_count)
+    };
+    let row4 = Line::from(vec![
+        Span::styled(format!("{:<9}", "Keyzones"), label_style(InstrumentField::KeyzoneList)),
+        Span::raw(" "),
+        Span::styled(kz_summary, field_style(InstrumentField::KeyzoneList)),
+    ]);
 
-        // Keyzone Note Min
-        lines.push(Line::from(vec![
-            Span::raw("  "),
-            Span::styled(
-                format!("{:<10}", InstrumentField::KeyzoneNoteMin.label()),
-                label_style(InstrumentField::KeyzoneNoteMin),
-            ),
-            Span::raw("  "),
-            Span::styled(
-                format!("{:<6}", note_min_str),
-                field_style(InstrumentField::KeyzoneNoteMin),
-            ),
-            Span::raw("   "),
-            Span::styled(
-                format!("MIDI {}", kz.note_min),
-                Style::default().fg(theme.text_dimmed),
-            ),
-        ]));
+    let mut lines: Vec<Line> = vec![row1, row2, row3, row4];
 
-        // Keyzone Note Max
-        lines.push(Line::from(vec![
-            Span::raw("  "),
-            Span::styled(
-                format!("{:<10}", InstrumentField::KeyzoneNoteMax.label()),
-                label_style(InstrumentField::KeyzoneNoteMax),
-            ),
-            Span::raw("  "),
-            Span::styled(
-                format!("{:<6}", note_max_str),
-                field_style(InstrumentField::KeyzoneNoteMax),
-            ),
-            Span::raw("   "),
-            Span::styled(
-                format!("MIDI {}", kz.note_max),
-                Style::default().fg(theme.text_dimmed),
-            ),
-        ]));
+    // ── Waveform (2 rows) if space allows ────────────────────────────
+    if let Some(s) = sample.filter(|s| !s.is_empty()) {
+        if height >= lines.len() + 3 {
+            let ch_str = if s.channels() == 1 { "mono" } else { "stereo" };
+            let dur_str = format!("{:.2}s · {}Hz · {}", s.duration(), s.sample_rate(), ch_str);
+            lines.push(Line::from(vec![
+                Span::styled("─── Waveform ", dim),
+                Span::styled(dur_str, dim),
+            ]));
+            let wf_width = width.saturating_sub(0);
+            let [top_row, bot_row] = build_waveform(s, wf_width, theme);
+            lines.push(top_row);
+            lines.push(bot_row);
+        }
+    }
 
-        // Keyzone Velocity Min
+    // ── Loop start/end detail rows if those fields are active ─────────
+    if active(InstrumentField::LoopStart) || active(InstrumentField::LoopEnd) {
         lines.push(Line::from(vec![
-            Span::raw("  "),
-            Span::styled(
-                format!("{:<10}", InstrumentField::KeyzoneVelMin.label()),
-                label_style(InstrumentField::KeyzoneVelMin),
-            ),
-            Span::raw("  "),
-            Span::styled(
-                format!("{:>3}", kz.velocity_min),
-                field_style(InstrumentField::KeyzoneVelMin),
-            ),
-            Span::raw("   "),
-            Span::styled("+/-: adjust", Style::default().fg(theme.text_dimmed)),
-        ]));
-
-        // Keyzone Velocity Max
-        lines.push(Line::from(vec![
-            Span::raw("  "),
-            Span::styled(
-                format!("{:<10}", InstrumentField::KeyzoneVelMax.label()),
-                label_style(InstrumentField::KeyzoneVelMax),
-            ),
-            Span::raw("  "),
-            Span::styled(
-                format!("{:>3}", kz.velocity_max),
-                field_style(InstrumentField::KeyzoneVelMax),
-            ),
-        ]));
-
-        // Keyzone Sample Index
-        lines.push(Line::from(vec![
-            Span::raw("  "),
-            Span::styled(
-                format!("{:<10}", InstrumentField::KeyzoneSample.label()),
-                label_style(InstrumentField::KeyzoneSample),
-            ),
-            Span::raw("  "),
-            Span::styled(
-                format!("{:>3}", kz.sample_index),
-                field_style(InstrumentField::KeyzoneSample),
-            ),
-        ]));
-
-        // Keyzone Base Note Override
-        let base_note_str = (|| {
-            let midi = kz.base_note_override?;
-            let octave = midi / 12;
-            let semitone = midi % 12;
-            let pitch = Pitch::from_semitone(semitone)?;
-            Some(Note::simple(pitch, octave).display_str())
-        })()
-        .unwrap_or_else(|| "—".to_string());
-        lines.push(Line::from(vec![
-            Span::raw("  "),
-            Span::styled(
-                format!("{:<10}", InstrumentField::KeyzoneBaseNote.label()),
-                label_style(InstrumentField::KeyzoneBaseNote),
-            ),
-            Span::raw("  "),
-            Span::styled(
-                format!("{:<6}", base_note_str),
-                field_style(InstrumentField::KeyzoneBaseNote),
-            ),
+            Span::styled(format!("  Srt: {:>6} ({:.2}s)   End: {:>6} ({:.2}s)",
+                loop_start_val, loop_start_val as f32 / sample_rate as f32,
+                loop_end_val, loop_end_val as f32 / sample_rate as f32,
+            ), dim),
         ]));
     }
 
-    lines.push(Line::from(""));
-
-    // ── Sample path ──────────────────────────────────────────────────
-    let sample_str = instrument
-        .sample_path
-        .as_deref()
-        .map(|p| {
-            // Show only the filename part
-            std::path::Path::new(p)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or(p)
-                .to_string()
-        })
-        .unwrap_or_else(|| "— no sample —".to_string());
-    lines.push(Line::from(vec![
-        Span::raw("  "),
-        Span::styled("Sample    ", Style::default().fg(theme.text_secondary)),
-        Span::raw("  "),
-        Span::styled(sample_str, Style::default().fg(theme.text_dimmed)),
-        Span::raw("   "),
-        Span::styled("Ctrl+F: assign", Style::default().fg(theme.text_dimmed)),
-    ]));
-
-    // ── Waveform ──────────────────────────────────────────────────────
-    // Show a 2-row waveform if we have sample data and enough space.
-    // We need at least 4 more rows: 1 blank + 1 header + 2 waveform rows.
-    let content_lines_before_waveform = lines.len();
-    let visible = inner.height as usize;
-    let waveform_rows = 4; // blank + label + top + bottom
-    let hints_rows = 2; // blank + hints line
-    let has_waveform_space = visible >= content_lines_before_waveform + waveform_rows + hints_rows;
-
-    if let Some(s) = sample.filter(|s| !s.is_empty() && has_waveform_space) {
-        lines.push(Line::from(""));
-
-        // Duration label, e.g. "0.42s · 44100Hz · mono"
-        let ch_str = if s.channels() == 1 { "mono" } else { "stereo" };
-        let dur_str = format!("{:.2}s · {}Hz · {}", s.duration(), s.sample_rate(), ch_str,);
-        lines.push(Line::from(vec![
-            Span::raw("  "),
-            Span::styled("Waveform  ", Style::default().fg(theme.text_secondary)),
-            Span::styled(dur_str, Style::default().fg(theme.text_dimmed)),
-        ]));
-
-        // Waveform area width = inner width minus 2-char left indent.
-        let wf_width = (inner.width as usize).saturating_sub(2);
-        let [top_row, bot_row] = build_waveform(s, wf_width, theme);
-
-        let mut top_spans = vec![Span::raw("  ")];
-        top_spans.extend(top_row.spans);
-        lines.push(Line::from(top_spans));
-
-        let mut bot_spans = vec![Span::raw("  ")];
-        bot_spans.extend(bot_row.spans);
-        lines.push(Line::from(bot_spans));
-    }
-
-    // Pad and show key hints at the bottom
-    let content_lines = lines.len();
-    for _ in content_lines..visible.saturating_sub(2) {
+    // ── Hint bar ─────────────────────────────────────────────────────
+    while lines.len() < height.saturating_sub(1) {
         lines.push(Line::from(""));
     }
-    if visible >= 2 {
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::raw("  "),
-            Span::styled(
-                "Tab: next  +/-: change  e/Enter: edit  space: loop mode  Esc: back",
-                Style::default().fg(theme.text_dimmed),
-            ),
-        ]));
+    if height >= 2 {
+        let hint = if state.focused {
+            "  j/k: field   +/-: value   e: name   spc: loop   Esc: exit"
+        } else {
+            "  Enter: edit instrument"
+        };
+        lines.push(Line::from(Span::styled(hint, dim)));
     }
 
-    let paragraph = Paragraph::new(lines)
-        .block(block)
-        .alignment(Alignment::Left);
-
-    frame.render_widget(paragraph, area);
+    let content = Paragraph::new(lines).alignment(Alignment::Left);
+    frame.render_widget(content, inner);
 }
 
 #[cfg(test)]

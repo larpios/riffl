@@ -610,18 +610,42 @@ pub fn render_envelope_editor(
 
     let env_type = state.envelope_type;
     let envelope = state.get_envelope(instrument);
-    let env_color = env_type.color(theme);
 
-    let title = format!(
-        " {} Envelope {} ",
-        env_type.short_label(),
-        if envelope.enabled { "[ON]" } else { "[OFF]" }
-    );
+    // Build a tab-bar title: " Envelope  [VOL]  PAN  PIT "
+    // Active tab is bracketed and coloured; inactive tabs are dimmed.
+    let mut title_spans = vec![Span::raw(" Envelope ")];
+    for tab in EnvelopeType::ALL {
+        let is_active = *tab == env_type;
+        let tab_env = match tab {
+            EnvelopeType::Volume => instrument.volume_envelope.as_ref(),
+            EnvelopeType::Panning => instrument.panning_envelope.as_ref(),
+            EnvelopeType::Pitch => instrument.pitch_envelope.as_ref(),
+        };
+        let enabled = tab_env.map_or(false, |e| e.enabled);
+        let label = if is_active {
+            format!("[{}{}] ", tab.short_label(), if enabled { "·" } else { "" })
+        } else {
+            format!(" {}{}  ", tab.short_label(), if enabled { "·" } else { "" })
+        };
+        let style = if is_active {
+            Style::default()
+                .fg(tab.color(theme))
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.text_dimmed)
+        };
+        title_spans.push(Span::styled(label, style));
+    }
+    if !state.focused {
+        title_spans.push(Span::styled(" Tab ", Style::default().fg(theme.text_dimmed)));
+    }
+
+    let title_line = Line::from(title_spans);
 
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(border_style)
-        .title(Span::styled(title, Style::default().fg(env_color)))
+        .title(title_line)
         .title_alignment(Alignment::Left);
 
     let inner = block.inner(area);
@@ -630,11 +654,17 @@ pub fn render_envelope_editor(
     let width = inner.width as usize;
     let height = inner.height as usize;
 
-    if width < 10 || height < 4 {
+    if width < 10 || height < 2 {
         return;
     }
 
-    let graph_height = height.saturating_sub(3);
+    // When focused: reserve 2 bottom rows for point info + help text.
+    // When not focused: use the full height for the graph.
+    let (graph_height, show_info) = if state.focused && height >= 4 {
+        (height - 2, true)
+    } else {
+        (height, false)
+    };
 
     let graphic = draw_envelope_graphic(
         envelope,
@@ -645,57 +675,35 @@ pub fn render_envelope_editor(
         state.selected_point,
     );
 
-    let point_info = if let Some(idx) = state.selected_point {
-        if let Some(point) = envelope.points.get(idx) {
-            let value_str = format_value(point.value, env_type);
-            format!(
-                "Point {}: frame={:3}, value={}",
-                idx, point.frame, value_str
-            )
-        } else {
-            String::new()
-        }
-    } else {
-        "No point selected".to_string()
-    };
-
-    let help_text = if state.focused {
-        "Tab: cycle   ↑↓: value   ←→: time   +/-: value   Ins: add   Del: remove"
-    } else {
-        "e: edit envelope"
-    };
-
     let mut lines: Vec<Line> = Vec::new();
     lines.extend(graphic);
 
-    lines.push(Line::from(""));
+    if show_info {
+        let point_info = if let Some(idx) = state.selected_point {
+            if let Some(point) = envelope.points.get(idx) {
+                let value_str = format_value(point.value, env_type);
+                format!("  Pt {}: frame={} val={}  k/j: value  h/l: time  a: add  x: del  e: on/off  Esc", idx, point.frame, value_str)
+            } else {
+                String::new()
+            }
+        } else {
+            "  No point selected — a: add   Tab/S-Tab: cycle type   Esc: exit".to_string()
+        };
 
-    let info_style = if state.focused {
-        Style::default()
-            .fg(theme.cursor_fg)
-            .bg(theme.cursor_normal_bg)
-    } else {
-        Style::default().fg(theme.text_dimmed)
-    };
-    lines.push(Line::from(vec![Span::styled(
-        format!("  {}", point_info),
-        info_style,
-    )]));
-
-    lines.push(Line::from(vec![Span::styled(
-        format!("  {}", help_text),
-        Style::default().fg(theme.text_dimmed),
-    )]));
+        lines.push(Line::from(vec![Span::styled(
+            point_info,
+            Style::default()
+                .fg(theme.cursor_fg)
+                .bg(theme.cursor_normal_bg),
+        )]));
+        lines.push(Line::from(vec![Span::styled(
+            "  hjkl: navigate   a: add pt   x: del pt   0/$: first/last   Tab: cycle type   e: on/off   Esc",
+            Style::default().fg(theme.text_dimmed),
+        )]));
+    }
 
     let content = Paragraph::new(lines).alignment(Alignment::Left);
-
-    let inner_with_border = ratatui::layout::Rect::new(
-        inner.x.saturating_sub(1),
-        inner.y.saturating_sub(1),
-        inner.width + 2,
-        inner.height + 2,
-    );
-    frame.render_widget(content, inner_with_border);
+    frame.render_widget(content, inner);
 }
 
 #[cfg(test)]

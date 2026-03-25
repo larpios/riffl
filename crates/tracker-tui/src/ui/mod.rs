@@ -44,6 +44,8 @@ use tutor::render_tutor;
 
 /// Render the application UI
 pub fn render(frame: &mut Frame, app: &App) {
+    use ratatui::layout::{Constraint, Direction, Layout};
+
     let full_area = frame.area();
 
     // Fill entire frame with theme background so Catppuccin/Nord bg colors are visible
@@ -52,61 +54,28 @@ pub fn render(frame: &mut Frame, app: &App) {
         full_area,
     );
 
-    // Create main layout with header (3 lines), content (flexible), and footer (1 line)
-    let (header_area, content_area, footer_area) = layout::create_main_layout(full_area, 3, 1);
+    // Layout: header(3) + tab_bar(1) + content(flex) + footer(1)
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ])
+        .split(full_area);
+
+    let (header_area, tabs_area, content_area, footer_area) =
+        (chunks[0], chunks[1], chunks[2], chunks[3]);
 
     render_header(frame, header_area, app);
+    render_view_tabs(frame, tabs_area, app);
 
     // Handle instrument expanded view (full-screen deep editing)
     if app.instrument_expanded {
         if let Some(idx) = app.instrument_selection() {
             if idx < app.song.instruments.len() {
-                let chunks = ratatui::layout::Layout::default()
-                    .direction(ratatui::layout::Direction::Vertical)
-                    .constraints([
-                        ratatui::layout::Constraint::Percentage(30),
-                        ratatui::layout::Constraint::Percentage(25),
-                        ratatui::layout::Constraint::Percentage(25),
-                        ratatui::layout::Constraint::Percentage(20),
-                    ])
-                    .split(content_area);
-                instrument_list::render_instrument_list(
-                    frame,
-                    chunks[0],
-                    &app.song,
-                    &app.loaded_samples(),
-                    &app.theme,
-                    Some(idx),
-                );
-                let sample = {
-                    let samples = app.loaded_samples();
-                    app.song.instruments[idx]
-                        .sample_index
-                        .and_then(|si| samples.get(si).cloned())
-                };
-                instrument_editor::render_instrument_editor(
-                    frame,
-                    chunks[1],
-                    &app.song.instruments[idx],
-                    &app.inst_editor,
-                    &app.theme,
-                    sample.as_deref(),
-                );
-                envelope_editor::render_envelope_editor(
-                    frame,
-                    chunks[2],
-                    &app.song.instruments[idx],
-                    &app.env_editor,
-                    &app.theme,
-                );
-                waveform_editor::render_waveform_editor(
-                    frame,
-                    chunks[3],
-                    &app.song.instruments[idx],
-                    sample.as_deref(),
-                    &app.waveform_editor,
-                    &app.theme,
-                );
+                render_instrument_view(frame, content_area, app, idx);
             }
         }
         render_footer(frame, footer_area, app);
@@ -141,74 +110,12 @@ pub fn render(frame: &mut Frame, app: &App) {
                 );
             }
             AppView::InstrumentList => {
-                // If an instrument is selected, split: list, editor, envelope editor, waveform editor.
-                if let Some(idx) = app.instrument_selection() {
-                    if idx < app.song.instruments.len() {
-                        let chunks = ratatui::layout::Layout::default()
-                            .direction(ratatui::layout::Direction::Vertical)
-                            .constraints([
-                                ratatui::layout::Constraint::Percentage(30),
-                                ratatui::layout::Constraint::Percentage(25),
-                                ratatui::layout::Constraint::Percentage(25),
-                                ratatui::layout::Constraint::Percentage(20),
-                            ])
-                            .split(content_area);
-                        instrument_list::render_instrument_list(
-                            frame,
-                            chunks[0],
-                            &app.song,
-                            &app.loaded_samples(),
-                            &app.theme,
-                            Some(idx),
-                        );
-                        let sample = {
-                            let samples = app.loaded_samples();
-                            app.song.instruments[idx]
-                                .sample_index
-                                .and_then(|si| samples.get(si).cloned())
-                        };
-                        instrument_editor::render_instrument_editor(
-                            frame,
-                            chunks[1],
-                            &app.song.instruments[idx],
-                            &app.inst_editor,
-                            &app.theme,
-                            sample.as_deref(),
-                        );
-                        envelope_editor::render_envelope_editor(
-                            frame,
-                            chunks[2],
-                            &app.song.instruments[idx],
-                            &app.env_editor,
-                            &app.theme,
-                        );
-                        waveform_editor::render_waveform_editor(
-                            frame,
-                            chunks[3],
-                            &app.song.instruments[idx],
-                            sample.as_deref(),
-                            &app.waveform_editor,
-                            &app.theme,
-                        );
-                    } else {
-                        instrument_list::render_instrument_list(
-                            frame,
-                            content_area,
-                            &app.song,
-                            &app.loaded_samples(),
-                            &app.theme,
-                            app.instrument_selection(),
-                        );
-                    }
+                // Always render the two-column instrument view regardless of selection
+                let sel = app.instrument_selection();
+                if let Some(idx) = sel.filter(|&i| i < app.song.instruments.len()) {
+                    render_instrument_view(frame, content_area, app, idx);
                 } else {
-                    instrument_list::render_instrument_list(
-                        frame,
-                        content_area,
-                        &app.song,
-                        &app.loaded_samples(),
-                        &app.theme,
-                        app.instrument_selection(),
-                    );
+                    render_instrument_view_empty(frame, content_area, app);
                 }
             }
             AppView::CodeEditor => {
@@ -286,6 +193,170 @@ pub fn render(frame: &mut Frame, app: &App) {
     if app.command_mode && !app.command_input.is_empty() {
         render_command_completions(frame, footer_area, app);
     }
+}
+
+/// Render the one-row view tab bar showing all views with the active one highlighted.
+fn render_view_tabs(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let theme = &app.theme;
+
+    let tabs: &[(&str, AppView)] = &[
+        ("1:PAT", AppView::PatternEditor),
+        ("2:ARR", AppView::Arrangement),
+        ("3:INS", AppView::InstrumentList),
+        ("4:CODE", AppView::CodeEditor),
+        ("5:LIST", AppView::PatternList),
+        ("6:SMPL", AppView::SampleBrowser),
+    ];
+
+    let mut spans: Vec<Span> = vec![Span::raw(" ")];
+    for (label, view) in tabs {
+        let is_active = app.current_view == *view
+            || (app.split_view
+                && app.current_view == AppView::PatternEditor
+                && *view == AppView::PatternEditor);
+        if is_active {
+            spans.push(Span::styled(
+                format!(" {} ", label),
+                Style::default()
+                    .fg(ratatui::style::Color::Black)
+                    .bg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        } else {
+            spans.push(Span::styled(
+                format!(" {} ", label),
+                Style::default().fg(theme.text_dimmed),
+            ));
+        }
+        spans.push(Span::styled("│", Style::default().fg(theme.text_dimmed)));
+    }
+
+    // Show focused panel indicator when in instrument view
+    if app.current_view == AppView::InstrumentList {
+        let panel_hint = if app.inst_editor.focused {
+            " [INST EDITOR]  Tab: envelope  Esc: list  j/k: field  +/-: value"
+        } else if app.env_editor.focused {
+            " [ENVELOPE]  hjkl: point  a: add  x: del  Tab: type  Esc: list"
+        } else {
+            " Tab: envelope  S-Tab: inst editor  Enter/e: edit inst  j/k: navigate"
+        };
+        spans.push(Span::styled(
+            panel_hint,
+            Style::default().fg(theme.text_secondary),
+        ));
+    }
+
+    frame.render_widget(
+        Paragraph::new(Line::from(spans)),
+        area,
+    );
+}
+
+/// Render the two-column instrument view when no instrument is selected.
+fn render_instrument_view_empty(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    use ratatui::layout::{Constraint, Direction, Layout};
+
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(38), Constraint::Percentage(62)])
+        .split(area);
+
+    instrument_list::render_instrument_list(
+        frame,
+        cols[0],
+        &app.song,
+        &app.loaded_samples(),
+        &app.theme,
+        app.instrument_selection(),
+    );
+
+    // Right side: placeholder
+    let block = ratatui::widgets::Block::default()
+        .borders(ratatui::widgets::Borders::ALL)
+        .border_style(app.theme.border_style())
+        .title(" Instrument ")
+        .title_alignment(Alignment::Left);
+    let inner = block.inner(cols[1]);
+    frame.render_widget(block, cols[1]);
+    let hint = Paragraph::new(vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "  Select an instrument with j/k, then Enter to edit.",
+            Style::default().fg(app.theme.text_dimmed),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  n: new instrument   Ctrl+F: load sample",
+            Style::default().fg(app.theme.text_secondary),
+        )),
+    ]);
+    frame.render_widget(hint, inner);
+}
+
+/// Render the two-column instrument view:
+///   left  (~38%): instrument list
+///   right (~62%): instrument editor (top) / envelope editor (middle) / waveform editor (bottom)
+fn render_instrument_view(
+    frame: &mut Frame,
+    area: ratatui::layout::Rect,
+    app: &App,
+    idx: usize,
+) {
+    use ratatui::layout::{Constraint, Direction, Layout};
+
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(38), Constraint::Percentage(62)])
+        .split(area);
+
+    instrument_list::render_instrument_list(
+        frame,
+        cols[0],
+        &app.song,
+        &app.loaded_samples(),
+        &app.theme,
+        Some(idx),
+    );
+
+    let sample = {
+        let samples = app.loaded_samples();
+        app.song.instruments[idx]
+            .sample_index
+            .and_then(|si| samples.get(si).cloned())
+    };
+
+    let right_rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(25),
+            Constraint::Percentage(50),
+            Constraint::Percentage(25),
+        ])
+        .split(cols[1]);
+
+    instrument_editor::render_instrument_editor(
+        frame,
+        right_rows[0],
+        &app.song.instruments[idx],
+        &app.inst_editor,
+        &app.theme,
+        sample.as_deref(),
+    );
+    envelope_editor::render_envelope_editor(
+        frame,
+        right_rows[1],
+        &app.song.instruments[idx],
+        &app.env_editor,
+        &app.theme,
+    );
+    waveform_editor::render_waveform_editor(
+        frame,
+        right_rows[2],
+        &app.song.instruments[idx],
+        sample.as_deref(),
+        &app.waveform_editor,
+        &app.theme,
+    );
 }
 
 /// Render the header with title, BPM, and play/stop status
@@ -1265,7 +1336,33 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
         footer_spans.push(Span::raw("| "));
     } else if !app.is_code_editor_active() {
-        // Fallback for other views
+        // View-specific hints for non-pattern views
+        let hint = match app.current_view {
+            AppView::InstrumentList => {
+                if app.inst_editor.focused {
+                    "  j/k: field   +/-: value   e: edit name   spc: loop   Tab: envelope   Esc: list"
+                } else if app.env_editor.focused {
+                    "  hjkl: point   a: add   x: del   0/$: first/last   Tab: waveform   Esc: list"
+                } else if app.waveform_editor.focused {
+                    "  h/←→: cursor   [/]: set loop   l: cycle loop   p: pencil   Esc: list"
+                } else {
+                    "  j/k: select   Enter/e: edit inst   Tab: envelope   n: new   Ctrl+F: load"
+                }
+            }
+            AppView::Arrangement => "  j/k: row   h/l: col   Enter: select   n: new pattern",
+            AppView::PatternList => "  j/k: select   Enter: open   n: new   d: delete   c: clone",
+            AppView::SampleBrowser => {
+                "  j/k: browse   l/Enter: open dir   h: up dir   Space: preview   Enter: load"
+            }
+            _ => "",
+        };
+        if !hint.is_empty() {
+            footer_spans.push(Span::styled(
+                hint,
+                Style::default().fg(theme.text_secondary),
+            ));
+            footer_spans.push(Span::raw("  "));
+        }
     }
 
     // Help hint

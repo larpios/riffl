@@ -146,6 +146,23 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App)
 fn handle_key_event(app: &mut App, key: KeyEvent) {
     use crossterm::event::{KeyCode, KeyModifiers};
 
+    // ':' always opens command mode — intercept before any panel/view handler.
+    // This ensures command mode is reachable from every view, even when a panel is focused.
+    if key.code == KeyCode::Char(':')
+        && key.modifiers == KeyModifiers::NONE
+        && !app.command_mode
+        && !app.has_modal()
+        && !app.has_file_browser()
+        && !app.has_export_dialog()
+        && !app.show_help
+        && !app.show_effect_help
+        && !app.show_tutor
+    {
+        app.command_mode = true;
+        app.command_input.clear();
+        return;
+    }
+
     // BPM prompt mode: handle inline BPM input
     if app.bpm_prompt_mode {
         match key.code {
@@ -431,6 +448,73 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         && app.inst_editor.focused
         && handle_instrument_editor_key(app, key)
     {
+        return;
+    }
+
+    // If envelope editor panel is focused, handle its input first
+    if app.current_view == AppView::InstrumentList
+        && app.env_editor.focused
+        && handle_envelope_editor_key(app, key)
+    {
+        return;
+    }
+
+    // If waveform editor panel is focused, handle its input first
+    if app.current_view == AppView::InstrumentList
+        && app.waveform_editor.focused
+        && handle_waveform_editor_key(app, key)
+    {
+        return;
+    }
+
+    // In InstrumentList, Tab/Shift-Tab cycle focus between the right panels:
+    //   none → env_editor → waveform_editor → none  (Tab)
+    //   none → waveform_editor → env_editor → inst_editor → none  (Shift-Tab)
+    let is_tab = key.code == crossterm::event::KeyCode::Tab;
+    let is_backtab = key.code == crossterm::event::KeyCode::BackTab;
+    if app.current_view == AppView::InstrumentList
+        && app.instrument_selection().map_or(false, |i| i < app.song.instruments.len())
+        && (is_tab || is_backtab)
+    {
+        if app.inst_editor.focused {
+            app.inst_editor.unfocus();
+            if is_tab {
+                app.env_editor.focus();
+                if let Some(idx) = app.instrument_selection() {
+                    let envelope = app.env_editor.get_envelope(&app.song.instruments[idx]);
+                    app.env_editor.select_first_point(envelope);
+                }
+            }
+            // Shift-Tab from inst_editor → back to list (no focus)
+        } else if app.env_editor.focused {
+            app.env_editor.unfocus();
+            if is_tab {
+                app.waveform_editor.focus();
+            } else if is_backtab {
+                app.inst_editor.focus();
+            }
+        } else if app.waveform_editor.focused {
+            app.waveform_editor.unfocus();
+            if is_backtab {
+                app.env_editor.focus();
+                if let Some(idx) = app.instrument_selection() {
+                    let envelope = app.env_editor.get_envelope(&app.song.instruments[idx]);
+                    app.env_editor.select_first_point(envelope);
+                }
+            }
+            // Tab from waveform → back to list (no focus)
+        } else {
+            // Nothing focused: Tab → envelope, Shift-Tab → waveform
+            if is_tab {
+                app.env_editor.focus();
+                if let Some(idx) = app.instrument_selection() {
+                    let envelope = app.env_editor.get_envelope(&app.song.instruments[idx]);
+                    app.env_editor.select_first_point(envelope);
+                }
+            } else {
+                app.waveform_editor.focus();
+            }
+        }
         return;
     }
 
@@ -1187,11 +1271,11 @@ fn handle_instrument_editor_key(app: &mut App, key: crossterm::event::KeyEvent) 
 
     // Normal editor navigation
     match key.code {
-        KeyCode::Tab => {
+        KeyCode::Char('j') => {
             app.inst_editor.next_field();
             return true;
         }
-        KeyCode::BackTab => {
+        KeyCode::Char('k') => {
             app.inst_editor.prev_field();
             return true;
         }
@@ -1257,6 +1341,222 @@ fn handle_instrument_editor_key(app: &mut App, key: crossterm::event::KeyEvent) 
         _ => {}
     }
     false
+}
+
+/// Handle keys when the envelope editor panel is focused.
+/// Returns true if the key was consumed.
+fn handle_envelope_editor_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
+    use crossterm::event::KeyCode;
+
+    if !app.env_editor.focused {
+        return false;
+    }
+
+    let Some(idx) = app.instrument_selection() else {
+        return false;
+    };
+
+    match key.code {
+        KeyCode::Esc => {
+            app.env_editor.unfocus();
+            true
+        }
+        KeyCode::Tab => {
+            app.env_editor.cycle_envelope_type();
+            let envelope = app.env_editor.get_envelope(&app.song.instruments[idx]);
+            app.env_editor.select_first_point(envelope);
+            true
+        }
+        KeyCode::BackTab => {
+            app.env_editor.prev_envelope_type();
+            let envelope = app.env_editor.get_envelope(&app.song.instruments[idx]);
+            app.env_editor.select_first_point(envelope);
+            true
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            let env_type = app.env_editor.envelope_type;
+            let envelope = app
+                .env_editor
+                .get_envelope_mut(&mut app.song.instruments[idx]);
+            app.env_editor.move_point_up(envelope, env_type);
+            app.mark_dirty();
+            true
+        }
+        KeyCode::Char('j') | KeyCode::Down => {
+            let env_type = app.env_editor.envelope_type;
+            let envelope = app
+                .env_editor
+                .get_envelope_mut(&mut app.song.instruments[idx]);
+            app.env_editor.move_point_down(envelope, env_type);
+            app.mark_dirty();
+            true
+        }
+        KeyCode::Char('h') | KeyCode::Left => {
+            let envelope = app
+                .env_editor
+                .get_envelope_mut(&mut app.song.instruments[idx]);
+            app.env_editor.move_point_left(envelope);
+            app.mark_dirty();
+            true
+        }
+        KeyCode::Char('l') | KeyCode::Right => {
+            let envelope = app
+                .env_editor
+                .get_envelope_mut(&mut app.song.instruments[idx]);
+            app.env_editor.move_point_right(envelope);
+            app.mark_dirty();
+            true
+        }
+        KeyCode::Char('0') => {
+            let envelope = app.env_editor.get_envelope(&app.song.instruments[idx]);
+            app.env_editor.select_first_point(envelope);
+            true
+        }
+        KeyCode::Char('$') => {
+            let envelope = app.env_editor.get_envelope(&app.song.instruments[idx]);
+            app.env_editor.select_last_point(envelope);
+            true
+        }
+        KeyCode::Char('a') => {
+            let frame = {
+                let sel = app.env_editor.selected_point;
+                let envelope = app.env_editor.get_envelope(&app.song.instruments[idx]);
+                sel.and_then(|i| envelope.points.get(i).map(|p| p.frame.saturating_add(4)))
+                    .unwrap_or(0)
+            };
+            let envelope = app
+                .env_editor
+                .get_envelope_mut(&mut app.song.instruments[idx]);
+            app.env_editor.add_point_at(envelope, frame, 0.5);
+            app.mark_dirty();
+            true
+        }
+        KeyCode::Char('x') => {
+            let envelope = app
+                .env_editor
+                .get_envelope_mut(&mut app.song.instruments[idx]);
+            app.env_editor.delete_selected_point(envelope);
+            app.mark_dirty();
+            true
+        }
+        KeyCode::Char('+') | KeyCode::Char('=') => {
+            let envelope = app
+                .env_editor
+                .get_envelope_mut(&mut app.song.instruments[idx]);
+            app.env_editor.change_value(envelope, 0.05);
+            app.mark_dirty();
+            true
+        }
+        KeyCode::Char('-') => {
+            let envelope = app
+                .env_editor
+                .get_envelope_mut(&mut app.song.instruments[idx]);
+            app.env_editor.change_value(envelope, -0.05);
+            app.mark_dirty();
+            true
+        }
+        KeyCode::Char('e') => {
+            app.env_editor
+                .toggle_envelope_enabled(&mut app.song.instruments[idx]);
+            app.mark_dirty();
+            true
+        }
+        _ => false,
+    }
+}
+
+fn handle_waveform_editor_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
+    use crossterm::event::{KeyCode, KeyModifiers};
+    use tracker_core::audio::sample::LoopMode;
+
+    if !app.waveform_editor.focused {
+        return false;
+    }
+
+    if key.modifiers != KeyModifiers::NONE {
+        return false;
+    }
+
+    let idx = match app.instrument_selection() {
+        Some(i) if i < app.song.instruments.len() => i,
+        _ => return false,
+    };
+
+    // Pencil-mode-specific keys
+    if app.waveform_editor.edit_mode == crate::ui::waveform_editor::WaveformEditMode::Pencil {
+        match key.code {
+            KeyCode::Up => {
+                app.waveform_editor.pencil_value_up();
+                return true;
+            }
+            KeyCode::Down => {
+                app.waveform_editor.pencil_value_down();
+                return true;
+            }
+            KeyCode::Enter => {
+                let _ = app.draw_waveform_sample();
+                return true;
+            }
+            KeyCode::Char('p') => {
+                app.waveform_editor.exit_pencil_mode();
+                return true;
+            }
+            _ => {}
+        }
+    }
+
+    // Keys common to both modes
+    match key.code {
+        KeyCode::Char('h') | KeyCode::Left => {
+            if let Some(si) = app.song.instruments[idx].sample_index {
+                if let Some(s) = app.loaded_samples().get(si) {
+                    app.waveform_editor.move_cursor_left(s.frame_count());
+                }
+            }
+            true
+        }
+        KeyCode::Right => {
+            if let Some(si) = app.song.instruments[idx].sample_index {
+                if let Some(s) = app.loaded_samples().get(si) {
+                    app.waveform_editor.move_cursor_right(s.frame_count());
+                }
+            }
+            true
+        }
+        KeyCode::Char('l') => {
+            app.cycle_instrument_loop_mode();
+            true
+        }
+        KeyCode::Char('[') => {
+            if let Some(si) = app.song.instruments[idx].sample_index {
+                if let Some(sample) = app.loaded_samples().get(si) {
+                    let cursor = app.waveform_editor.cursor_sample;
+                    let loop_end = sample.loop_end.max(cursor);
+                    app.set_sample_loop_settings(idx, si, LoopMode::Forward, cursor, loop_end);
+                }
+            }
+            true
+        }
+        KeyCode::Char(']') => {
+            if let Some(si) = app.song.instruments[idx].sample_index {
+                if let Some(sample) = app.loaded_samples().get(si) {
+                    let cursor = app.waveform_editor.cursor_sample;
+                    let loop_start = sample.loop_start.min(cursor);
+                    app.set_sample_loop_settings(idx, si, LoopMode::Forward, loop_start, cursor);
+                }
+            }
+            true
+        }
+        KeyCode::Char('p') => {
+            app.waveform_editor.toggle_pencil_mode();
+            true
+        }
+        KeyCode::Esc => {
+            app.waveform_editor.unfocus();
+            true
+        }
+        _ => false,
+    }
 }
 
 fn handle_code_editor_key(app: &mut App, key: KeyEvent) {
@@ -1695,7 +1995,20 @@ fn handle_file_browser_key(app: &mut App, key: KeyEvent) {
         KeyCode::Char('k') | KeyCode::Up => {
             app.file_browser.move_up();
         }
+        KeyCode::Char('h') | KeyCode::Left => {
+            app.file_browser.go_up();
+        }
+        KeyCode::Char('l') | KeyCode::Right => {
+            if app.file_browser.selected_is_dir() {
+                app.file_browser.enter_selected_dir();
+            }
+        }
         KeyCode::Enter => {
+            if app.file_browser.selected_is_dir() {
+                app.file_browser.enter_selected_dir();
+                return;
+            }
+
             let is_module = app
                 .file_browser
                 .selected_path()

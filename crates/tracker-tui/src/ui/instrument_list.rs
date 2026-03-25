@@ -31,26 +31,16 @@ pub fn render_instrument_list(
         .title_alignment(Alignment::Left);
 
     let inner = block.inner(area);
-    let mut lines: Vec<Line> = Vec::new();
 
-    // Header
-    lines.push(Line::from(vec![Span::styled(
-        format!(
-            "  {:>3}  {:<20}  {:<12}  {:>5}  {:>4}  {:>4}  {}",
-            "Idx", "Name", "Sample", "Vol", "FT", "Loop", "Base"
-        ),
-        Style::default().fg(theme.text_secondary),
-    )]));
+    // Build the instrument rows (excluding header/footer).
+    let mut inst_lines: Vec<Line> = Vec::new();
 
-    // Show song instruments
     if song.instruments.is_empty() && samples.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(
+        inst_lines.push(Line::from(Span::styled(
             "  No instruments defined. Press Ctrl+F to load a sample.",
             Style::default().fg(theme.text_dimmed),
         )));
     } else {
-        // List instruments from the song model
         for (idx, inst) in song.instruments.iter().enumerate() {
             let sample = inst.sample_index.and_then(|si| samples.get(si));
 
@@ -69,7 +59,6 @@ pub fn render_instrument_list(
 
             let base_note = inst.base_note.display_str();
 
-            // Loop mode display: - (none), F (forward), P (ping-pong)
             let loop_display = match sample.map(|s| s.loop_mode).unwrap_or(LoopMode::NoLoop) {
                 LoopMode::NoLoop => "-",
                 LoopMode::Forward => "Fwd",
@@ -94,13 +83,11 @@ pub fn render_instrument_list(
                 Style::default().fg(theme.text)
             };
 
-            lines.push(Line::from(Span::styled(line_text, style)));
+            inst_lines.push(Line::from(Span::styled(line_text, style)));
         }
 
-        // Also list loaded samples that don't have instrument entries yet
         let inst_count = song.instruments.len();
         for (idx, sample) in samples.iter().enumerate() {
-            // Skip samples already covered by instrument entries
             if song.instruments.iter().any(|i| i.sample_index == Some(idx)) {
                 continue;
             }
@@ -116,31 +103,62 @@ pub fn render_instrument_list(
                 "-",
                 "C-4",
             );
-            lines.push(Line::from(Span::styled(
+            inst_lines.push(Line::from(Span::styled(
                 line_text,
                 Style::default().fg(theme.text_dimmed),
             )));
         }
     }
 
-    // Footer
-    let visible_rows = inner.height as usize;
-    let content_lines = lines.len();
-    if content_lines < visible_rows {
-        for _ in content_lines..visible_rows.saturating_sub(2) {
-            lines.push(Line::from(""));
+    // 1 header row + 2 footer rows (blank + hint); remaining rows show instruments.
+    let footer_rows = 2usize;
+    let header_rows = 1usize;
+    let visible_slots = (inner.height as usize).saturating_sub(header_rows + footer_rows);
+
+    // Scroll so the selected item stays visible.
+    let scroll_offset = if let Some(sel) = selection {
+        if sel >= visible_slots {
+            sel - visible_slots + 1
+        } else {
+            0
         }
+    } else {
+        0
+    };
+
+    let header = Line::from(vec![Span::styled(
+        format!(
+            "  {:>3}  {:<20}  {:<12}  {:>5}  {:>4}  {:>4}  {}",
+            "Idx", "Name", "Sample", "Vol", "FT", "Loop", "Base"
+        ),
+        Style::default().fg(theme.text_secondary),
+    )]);
+
+    let footer = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::raw("  "),
+            Span::styled("?", Style::default().fg(theme.success_color())),
+            Span::raw(" help   "),
+            Span::styled("i", Style::default().fg(theme.secondary)),
+            Span::raw(" piano roll preview   "),
+            Span::styled("Esc", Style::default().fg(theme.secondary)),
+            Span::raw(" exit preview   "),
+        ]),
+    ];
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(header);
+
+    let end = (scroll_offset + visible_slots).min(inst_lines.len());
+    let visible = &inst_lines[scroll_offset..end];
+    lines.extend_from_slice(visible);
+
+    // Pad empty rows between list and footer.
+    while lines.len() < inner.height as usize - footer_rows {
+        lines.push(Line::from(""));
     }
-    lines.push(Line::from(""));
-    lines.push(Line::from(vec![
-        Span::raw("  "),
-        Span::styled("?", Style::default().fg(theme.success_color())),
-        Span::raw(" help   "),
-        Span::styled("i", Style::default().fg(theme.secondary)),
-        Span::raw(" piano roll preview   "),
-        Span::styled("Esc", Style::default().fg(theme.secondary)),
-        Span::raw(" exit preview   "),
-    ]));
+    lines.extend(footer);
 
     let paragraph = Paragraph::new(lines)
         .block(block)

@@ -399,8 +399,8 @@ pub fn render_waveform_editor(
 
     let help_text = if state.focused {
         match state.edit_mode {
-            WaveformEditMode::Navigate => "←→: navigate  p: pencil mode  l: toggle loop  Esc: exit",
-            WaveformEditMode::Pencil => "↑↓: draw value  ←→: move  Enter: draw  p: exit",
+            WaveformEditMode::Navigate => "h/←→: cursor  [/]: loop pts  l: cycle loop  p: pencil  Esc: exit",
+            WaveformEditMode::Pencil => "↑↓: draw value  h/←→: move  Enter: draw  p: exit",
         }
     } else {
         "Enter to edit"
@@ -482,14 +482,7 @@ pub fn render_waveform_editor(
     )]));
 
     let content = Paragraph::new(lines).alignment(Alignment::Left);
-
-    let inner_with_border = ratatui::layout::Rect::new(
-        inner.x.saturating_sub(1),
-        inner.y.saturating_sub(1),
-        inner.width + 2,
-        inner.height + 2,
-    );
-    frame.render_widget(content, inner_with_border);
+    frame.render_widget(content, inner);
 }
 
 #[cfg(test)]

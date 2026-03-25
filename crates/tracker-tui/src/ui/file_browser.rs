@@ -13,7 +13,7 @@ const AUDIO_EXTENSIONS: &[&str] = &["wav", "flac", "ogg", "mod", "xm", "it", "s3
 pub struct FileBrowser {
     /// Current directory being browsed
     directory: PathBuf,
-    /// List of audio files found in the directory
+    /// List of entries (directories first, then audio files)
     entries: Vec<PathBuf>,
     /// Currently selected index in the file list
     selected: usize,
@@ -26,7 +26,7 @@ impl FileBrowser {
     ///
     /// Scans the directory for supported audio files (.wav, .flac, .ogg).
     pub fn new(directory: &Path) -> Self {
-        let entries = scan_audio_files(directory);
+        let entries = scan_entries(directory);
         Self {
             directory: directory.to_path_buf(),
             entries,
@@ -37,7 +37,7 @@ impl FileBrowser {
 
     /// Open the file browser (set active and refresh file list).
     pub fn open(&mut self) {
-        self.entries = scan_audio_files(&self.directory);
+        self.entries = scan_entries(&self.directory);
         self.selected = 0;
         self.active = true;
     }
@@ -46,6 +46,34 @@ impl FileBrowser {
     pub fn open_dir(&mut self, directory: &Path) {
         self.directory = directory.to_path_buf();
         self.open();
+    }
+
+    /// Returns true if the currently selected entry is a directory.
+    pub fn selected_is_dir(&self) -> bool {
+        self.entries
+            .get(self.selected)
+            .map(|p| p.is_dir())
+            .unwrap_or(false)
+    }
+
+    /// Navigate into the currently selected directory.
+    pub fn enter_selected_dir(&mut self) {
+        if let Some(path) = self.entries.get(self.selected).cloned() {
+            if path.is_dir() {
+                self.directory = path;
+                self.entries = scan_entries(&self.directory);
+                self.selected = 0;
+            }
+        }
+    }
+
+    /// Navigate up to the parent directory.
+    pub fn go_up(&mut self) {
+        if let Some(parent) = self.directory.parent().map(|p| p.to_path_buf()) {
+            self.directory = parent;
+            self.entries = scan_entries(&self.directory);
+            self.selected = 0;
+        }
     }
 
     /// Close the file browser.
@@ -93,8 +121,9 @@ impl FileBrowser {
     }
 }
 
-/// Scan a directory for audio files with supported extensions.
-fn scan_audio_files(dir: &Path) -> Vec<PathBuf> {
+/// Scan a directory for subdirectories and audio files (directories first, then files).
+fn scan_entries(dir: &Path) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
     let mut files = Vec::new();
 
     let read_dir = match std::fs::read_dir(dir) {
@@ -104,7 +133,17 @@ fn scan_audio_files(dir: &Path) -> Vec<PathBuf> {
 
     for entry in read_dir.flatten() {
         let path = entry.path();
-        if path.is_file() {
+        if path.is_dir() {
+            // Skip hidden directories
+            if path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| !n.starts_with('.'))
+                .unwrap_or(false)
+            {
+                dirs.push(path);
+            }
+        } else if path.is_file() {
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                 if AUDIO_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
                     files.push(path);
@@ -113,8 +152,10 @@ fn scan_audio_files(dir: &Path) -> Vec<PathBuf> {
         }
     }
 
+    dirs.sort();
     files.sort();
-    files
+    dirs.extend(files);
+    dirs
 }
 
 #[cfg(test)]
@@ -278,7 +319,7 @@ mod tests {
         fs::write(dir.join("test.wav"), b"fake").unwrap();
         fs::write(dir.join("test.mp3"), b"fake").unwrap();
 
-        let files = scan_audio_files(&dir);
+        let files = scan_entries(&dir);
         assert_eq!(files.len(), 1);
         assert!(files[0].file_name().unwrap().to_str().unwrap() == "test.wav");
 

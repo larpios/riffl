@@ -1427,6 +1427,10 @@ impl Mixer {
             let pv_frames = pv.frame_count();
             let pv_channels = pv.channels() as usize;
             let pv_data = pv.data();
+            let pv_loop_mode = pv.loop_mode;
+            let pv_loop_start = pv.loop_start;
+            let pv_loop_end = pv.loop_end.min(pv_frames.saturating_sub(1));
+            let looping = pv_loop_mode != LoopMode::NoLoop && pv_loop_end > pv_loop_start;
             let mut done = false;
             for frame in 0..num_frames {
                 let pos = self.preview_pos as usize;
@@ -1443,6 +1447,13 @@ impl Mixer {
                 output[frame * 2] += l * 0.7;
                 output[frame * 2 + 1] += r * 0.7;
                 self.preview_pos += pv_rate;
+                if looping && self.preview_pos as usize > pv_loop_end {
+                    let loop_len = (pv_loop_end - pv_loop_start + 1) as f64;
+                    self.preview_pos -= loop_len;
+                    if self.preview_pos < pv_loop_start as f64 {
+                        self.preview_pos = pv_loop_start as f64;
+                    }
+                }
             }
             done
         } else {
