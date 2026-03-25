@@ -541,17 +541,7 @@ fn convert_s3m_effect(cmd: u8, info: u8) -> Option<Effect> {
                 Some(Effect::new(0x01, info)) // Normal Slide Up
             }
         }
-        'G' => {
-            if x == 0xF {
-                // Extra Fine Portamento (GxF)
-                Some(Effect::new(0x25, y))
-            } else if x == 0xE {
-                // Fine Portamento (GxE)
-                Some(Effect::new(0x26, y))
-            } else {
-                Some(Effect::new(0x03, info)) // Normal Tone Portamento
-            }
-        }
+        'G' => Some(Effect::new(0x03, info)), // Tone Portamento (full param is speed)
         'H' => Some(Effect::new(0x04, info)), // Vibrato
         'I' => Some(Effect::new(0x15, info)), // Tremor
         'J' => Some(Effect::new(0x00, info)), // Arpeggio
@@ -643,7 +633,7 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
             } else {
                 8363
             };
-            let base_note = 48.0 - 12.0 * (c2spd as f64 / 8363.0).log2();
+            let base_note = 60.0 - 12.0 * (c2spd as f64 / 8363.0).log2();
             sample = sample.with_base_note(base_note.round() as u8);
 
             let mut inst = Instrument::new(s3m_inst.name.clone());
@@ -689,7 +679,7 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
                             } else {
                                 8363
                             };
-                            let base_note = 48.0 - 12.0 * (c2spd as f64 / 8363.0).log2();
+                            let base_note = 60.0 - 12.0 * (c2spd as f64 / 8363.0).log2();
                             sample = sample.with_base_note(base_note.round() as u8);
                             sample
                         }

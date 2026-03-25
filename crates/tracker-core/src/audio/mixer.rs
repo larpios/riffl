@@ -730,17 +730,19 @@ impl Mixer {
                                         voice.instrument_index = instrument_idx;
                                         voice.velocity_gain = velocity_gain;
                                         voice.hz_to_rate = hz_to_rate;
-                                        // Update LFO state (reset envelopes) if instrument specified
+
+                                        // Update playback rate to match current sliding frequency with new hz_to_rate
+                                        if let Some(current_freq) =
+                                            self.effect_processor.effective_frequency(ch)
+                                        {
+                                            voice.playback_rate = current_freq * hz_to_rate;
+                                        }
+
+                                        // Update LFO state for new instrument, but do NOT reset
+                                        // envelopes — portamento continues the playing note.
                                         voice.lfo = VoiceLfoState::new(
                                             self.instruments.get(instrument_idx),
                                         );
-                                        // Reset envelopes for new instrument
-                                        voice.volume_envelope_tick = 0;
-                                        voice.panning_envelope_tick = 0;
-                                        voice.pitch_envelope_tick = 0;
-                                        voice.volume_adsr = AdsrState::default();
-                                        voice.panning_adsr = AdsrState::default();
-                                        voice.pitch_adsr = AdsrState::default();
                                     }
                                 }
                             } else {
@@ -815,9 +817,6 @@ impl Mixer {
                         } else {
                             self.voices[ch] = None;
                         }
-                    }
-                    if let Some(s) = self.effect_processor.channel_state_mut(ch) {
-                        s.reset();
                     }
                 }
                 Some(NoteEvent::Cut) => {
@@ -911,20 +910,22 @@ impl Mixer {
                                         voice.velocity_gain = velocity_gain;
                                         voice.hz_to_rate = hz_to_rate;
 
+                                        // Update playback rate to match current sliding frequency with new hz_to_rate
+                                        if let Some(current_freq) =
+                                            self.effect_processor.effective_frequency(ch)
+                                        {
+                                            voice.playback_rate = current_freq * hz_to_rate;
+                                        }
+
                                         // Reset key_on and fadeout state for the new instrument trigger
                                         voice.key_on = true;
                                         voice.fadeout_multiplier = 1.0;
 
+                                        // Update LFO state for new instrument, but do NOT reset
+                                        // envelopes — portamento continues the playing note.
                                         voice.lfo = VoiceLfoState::new(
                                             self.instruments.get(instrument_idx),
                                         );
-                                        // Reset envelopes for new instrument
-                                        voice.volume_envelope_tick = 0;
-                                        voice.panning_envelope_tick = 0;
-                                        voice.pitch_envelope_tick = 0;
-                                        voice.volume_adsr = AdsrState::default();
-                                        voice.panning_adsr = AdsrState::default();
-                                        voice.pitch_adsr = AdsrState::default();
                                     }
 
                                     // Update period clock for the channel if in Amiga mode

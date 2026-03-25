@@ -9,8 +9,8 @@ use tracker_core::format::s3m::import_s3m;
 
 #[test]
 fn test_s3m_pcm_playback() {
-    // Load the test S3M file from research/openmpt/test/test.s3m
-    let data = include_bytes!("../../../research/openmpt/test/test.s3m");
+    // Load the test S3M file
+    let data = include_bytes!("test_modules/test.s3m");
     let format_data = import_s3m(&data[..]).expect("Failed to parse S3M file");
     let song = format_data.song;
     let samples = format_data.samples;

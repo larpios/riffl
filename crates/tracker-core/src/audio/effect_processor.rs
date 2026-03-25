@@ -720,7 +720,9 @@ impl TrackerEffectProcessor {
                     // Set pitch slide up speed
                     if effect.param > 0 {
                         let speed = match state.slide_mode {
-                            SlideMode::Linear => effect.param as f64 / 64.0,
+                            // Linear: 1/64th semitone per tick per unit, with 4x quirk
+                            SlideMode::Linear => effect.param as f64 * 4.0,
+                            // AmigaPeriod: raw period delta per tick, with 4x quirk for high-res
                             SlideMode::AmigaPeriod => {
                                 let mut s = effect.param as f64;
                                 if state.use_high_res_periods {
@@ -743,7 +745,9 @@ impl TrackerEffectProcessor {
                     // Set pitch slide down speed
                     if effect.param > 0 {
                         let speed = match state.slide_mode {
-                            SlideMode::Linear => effect.param as f64 / 64.0,
+                            // Linear: 1/64th semitone per tick per unit, with 4x quirk
+                            SlideMode::Linear => effect.param as f64 * 4.0,
+                            // AmigaPeriod: raw period delta per tick, with 4x quirk for high-res
                             SlideMode::AmigaPeriod => {
                                 let mut s = effect.param as f64;
                                 if state.use_high_res_periods {
@@ -766,9 +770,9 @@ impl TrackerEffectProcessor {
                     // Set portamento speed; target is set when a note is triggered
                     if effect.param > 0 {
                         let speed = match state.slide_mode {
-                            // Linear: 1/64th semitone per tick per unit
-                            SlideMode::Linear => effect.param as f64 / 64.0,
-                            // AmigaPeriod: raw period delta per tick
+                            // Linear: 1/16th semitone per tick per unit (4/64)
+                            SlideMode::Linear => effect.param as f64 / 16.0,
+                            // AmigaPeriod: raw period delta per tick, with 4x quirk for high-res
                             SlideMode::AmigaPeriod => {
                                 let mut s = effect.param as f64;
                                 if state.use_high_res_periods {
@@ -1344,6 +1348,13 @@ impl TrackerEffectProcessor {
             .get(channel)
             .map(|s| s.combined_pitch_ratio())
             .unwrap_or(1.0)
+    }
+
+    /// Get the effective frequency for a channel (including slides and arpeggio).
+    pub fn effective_frequency(&self, channel: usize) -> Option<f64> {
+        self.channels
+            .get(channel)
+            .map(|s| s.combined_pitch_ratio() * s.triggered_note_freq)
     }
 
     /// Get the frequency of the last triggered note on this channel.
@@ -1951,9 +1962,9 @@ mod tests {
         )]; // Up 1
         proc.process_row(0, &effects, None);
 
-        // Should scale speed by 64.0 now (standard 1xx/2xx/3xx unit)
+        // portamento_speed is in semitones: param / 16 = 16/16 = 1.0 semitone/tick
         let state = proc.channel_state(0).unwrap();
-        assert_eq!(state.portamento_speed, 16.0 / 64.0); // 0.25
+        assert_eq!(state.portamento_speed, 16.0 / 16.0); // 1.0
         assert_eq!(state.volume_slide_up, 1);
 
         // Should NOT change volume immediately
