@@ -284,6 +284,14 @@ impl ChannelEffectState {
         let high_res = self.use_high_res_periods;
         let channel_vol = self.channel_volume;
 
+        // Preserve portamento state for pause/resume
+        let porta_target = self.portamento_target;
+        let porta_speed = self.portamento_speed;
+        let prev_porta_speed = self.prev_portamento_speed;
+        let porta_freq = self.portamento_freq;
+        let triggered_freq = self.triggered_note_freq;
+        let pitch_ratio = self.pitch_ratio;
+
         *self = Self {
             frames_per_row: fpr,
             ticks_per_row: tpr,
@@ -291,6 +299,12 @@ impl ChannelEffectState {
             period_clock: clock,
             use_high_res_periods: high_res,
             channel_volume: channel_vol,
+            portamento_target: porta_target,
+            portamento_speed: porta_speed,
+            prev_portamento_speed: prev_porta_speed,
+            portamento_freq: porta_freq,
+            triggered_note_freq: triggered_freq,
+            pitch_ratio,
             ..Self::default()
         };
     }
@@ -304,9 +318,17 @@ impl ChannelEffectState {
         self.tremolo_active = false;
         self.volume_slide_up = 0;
         self.volume_slide_down = 0;
-        self.pitch_slide_up = 0.0;
-        self.pitch_slide_down = 0.0;
-        self.portamento_speed = 0.0;
+        // Preserve pitch slide speeds across rows so empty rows continue sliding
+        if self.pitch_slide_up == 0.0 && self.prev_pitch_slide_up > 0.0 {
+            self.pitch_slide_up = self.prev_pitch_slide_up;
+        }
+        if self.pitch_slide_down == 0.0 && self.prev_pitch_slide_down > 0.0 {
+            self.pitch_slide_down = self.prev_pitch_slide_down;
+        }
+        // Preserve portamento speed across rows so empty rows continue sliding
+        if self.portamento_speed <= 0.0 && self.portamento_target.is_some() {
+            self.portamento_speed = self.prev_portamento_speed;
+        }
         self.sample_offset = None;
         self.channel_volume_slide_up = 0;
         self.channel_volume_slide_down = 0;
@@ -1487,11 +1509,23 @@ mod tests {
             frames_per_row: 12000,
             pitch_ratio: 2.0,
             volume_override: Some(0.5),
+            portamento_target: Some(440.0),
+            portamento_speed: 1.0,
+            prev_portamento_speed: 1.0,
+            portamento_freq: Some(445.0),
+            triggered_note_freq: 440.0,
             ..Default::default()
         };
         state.reset();
         assert_eq!(state.frames_per_row, 12000);
-        assert_eq!(state.pitch_ratio, 1.0);
+        // Portamento state should be preserved for pause/resume
+        assert_eq!(state.pitch_ratio, 2.0);
+        assert_eq!(state.portamento_target, Some(440.0));
+        assert_eq!(state.portamento_speed, 1.0);
+        assert_eq!(state.prev_portamento_speed, 1.0);
+        assert_eq!(state.portamento_freq, Some(445.0));
+        assert_eq!(state.triggered_note_freq, 440.0);
+        // Non-portamento state should still reset
         assert_eq!(state.volume_override, None);
     }
 
