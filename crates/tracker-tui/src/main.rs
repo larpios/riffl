@@ -663,6 +663,8 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                 app.pattern_selection_down();
             } else if app.follow_mode && app.transport.is_playing() && app.current_view == AppView::PatternEditor {
                 // Follow mode: j/k are blocked — the playhead owns vertical position
+            } else if app.current_view == AppView::Arrangement {
+                app.arrangement_selection_down();
             } else if matches!(app.editor.mode(), EditorMode::Insert | EditorMode::Replace) {
                 app.editor.extend_down();
                 app.apply_draw_note();
@@ -678,6 +680,8 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                 app.pattern_selection_up();
             } else if app.follow_mode && app.transport.is_playing() && app.current_view == AppView::PatternEditor {
                 // Follow mode: j/k are blocked — the playhead owns vertical position
+            } else if app.current_view == AppView::Arrangement {
+                app.arrangement_selection_up();
             } else {
                 app.editor.move_up();
             }
@@ -702,6 +706,13 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
 
         // Note entry (Insert mode) — piano keyboard layout
         Action::EnterNote(c) => {
+            if app.current_view == AppView::Arrangement {
+                if let Some(digit) = hex_char_to_digit(c) {
+                    app.arrangement_set_pattern_digit(digit);
+                }
+                return;
+            }
+
             if let Some((pitch, oct_offset)) = Editor::piano_key_to_pitch(c) {
                 let base_octave = app.editor.current_octave();
                 let octave = (base_octave as i8 + oct_offset).clamp(0, 9) as u8;
@@ -813,11 +824,19 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
 
         // Editing
         Action::DeleteCell => {
-            app.editor.delete_cell();
+            if app.current_view == AppView::Arrangement {
+                app.arrangement_delete_at_cursor();
+            } else {
+                app.editor.delete_cell();
+            }
             app.mark_dirty();
         }
         Action::InsertRow => {
-            app.editor.insert_row();
+            if app.current_view == AppView::Arrangement {
+                app.arrangement_add_at_cursor();
+            } else {
+                app.editor.insert_row();
+            }
             app.mark_dirty();
         }
         Action::InsertRowBelow => {
@@ -935,6 +954,11 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
                 }
             } else if app.current_view == AppView::PatternList {
                 app.select_pattern();
+            } else if app.current_view == AppView::Arrangement {
+                let pos = app.arrangement_view.cursor();
+                app.transport.jump_to_arrangement_position(pos);
+                app.load_arrangement_pattern(pos);
+                app.set_view(AppView::PatternEditor);
             }
         }
 
@@ -983,6 +1007,8 @@ fn handle_key_event(app: &mut App, key: KeyEvent) {
         Action::AddPattern => {
             if app.current_view == AppView::PatternList {
                 app.add_pattern();
+            } else if app.current_view == AppView::Arrangement {
+                app.arrangement_create_pattern();
             }
         }
         Action::DeletePattern => {

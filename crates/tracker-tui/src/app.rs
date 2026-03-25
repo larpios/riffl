@@ -679,7 +679,7 @@ impl App {
 
     /// Load the pattern at the given arrangement position into the editor.
     /// Syncs global track state into the pattern so mixing settings persist.
-    fn load_arrangement_pattern(&mut self, arrangement_pos: usize) {
+    pub fn load_arrangement_pattern(&mut self, arrangement_pos: usize) {
         if let Some(&pattern_idx) = self.song.arrangement.get(arrangement_pos) {
             if let Some(pattern) = self.song.patterns.get(pattern_idx) {
                 let mut p = pattern.clone();
@@ -2278,6 +2278,58 @@ impl App {
                 self.transport
                     .set_num_rows(self.song.patterns[idx].num_rows());
             }
+        }
+    }
+
+    /// Move arrangement view cursor up.
+    pub fn arrangement_selection_up(&mut self) {
+        self.arrangement_view.move_up();
+    }
+
+    /// Move arrangement view cursor down.
+    pub fn arrangement_selection_down(&mut self) {
+        self.arrangement_view.move_down(self.song.arrangement.len());
+    }
+
+    /// Add the currently selected pattern to the arrangement at the current cursor position.
+    pub fn arrangement_add_at_cursor(&mut self) {
+        if let Some(idx) = self.pattern_selection {
+            self.arrangement_view.append_pattern(&mut self.song, idx);
+            self.mark_dirty();
+        } else if !self.song.patterns.is_empty() {
+            // Default to pattern 0 if no selection
+            self.arrangement_view.append_pattern(&mut self.song, 0);
+            self.mark_dirty();
+        }
+    }
+
+    /// Delete the arrangement entry at the current cursor position.
+    pub fn arrangement_delete_at_cursor(&mut self) {
+        if self.arrangement_view.remove_at_cursor(&mut self.song) {
+            self.mark_dirty();
+        }
+    }
+
+    /// Create a new empty pattern and insert it into the arrangement.
+    pub fn arrangement_create_pattern(&mut self) {
+        if let Some(idx) = self.arrangement_view.create_new_pattern(&mut self.song) {
+            self.pattern_selection = Some(idx);
+            self.mark_dirty();
+        }
+    }
+
+    /// Change the pattern index at the current arrangement cursor (typed hex digits).
+    pub fn arrangement_set_pattern_digit(&mut self, digit: u8) {
+        let cursor = self.arrangement_view.cursor();
+        if let Some(entry) = self.song.arrangement.get_mut(cursor) {
+            // Hex entry: shift left 4 bits and add new digit, mask to 8 bits (max 255 patterns)
+            *entry = ((*entry << 4) | (digit as usize)) & 0xFF;
+
+            // Ensure the pattern exists, if not, clamp to max available
+            if *entry >= self.song.patterns.len() {
+                *entry = self.song.patterns.len().saturating_sub(1);
+            }
+            self.mark_dirty();
         }
     }
 
