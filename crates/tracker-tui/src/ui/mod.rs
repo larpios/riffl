@@ -504,10 +504,10 @@ fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 }
 
 /// Width of a single channel column (including separator): "│ C#4 01 40 C20 " = 2 + 14 + 1 = 17
-const CHANNEL_COL_WIDTH: u16 = 17;
+pub const CHANNEL_COL_WIDTH: u16 = 17;
 
 /// Width of the row number column: "  XX  " = 6
-const ROW_NUM_WIDTH: u16 = 6;
+pub const ROW_NUM_WIDTH: u16 = 6;
 
 /// Calculate the horizontal channel scroll offset to keep the cursor channel visible.
 fn calculate_channel_scroll(
@@ -1241,7 +1241,8 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .bg(mode_bg)
         .add_modifier(Modifier::BOLD);
 
-    let mut footer_spans = vec![
+    // ── LEFT SECTION ────────────────────────────────────────────────────────
+    let mut left_spans: Vec<Span> = vec![
         Span::raw(" "),
         Span::styled(format!(" {} ", mode_label), mode_style),
         Span::raw(" "),
@@ -1250,11 +1251,11 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     // Show status indicators instead of keybinding hints
     if !app.is_code_editor_active() && app.current_view == AppView::PatternEditor {
         // Octave
-        footer_spans.push(Span::styled(
+        left_spans.push(Span::styled(
             "OCT:",
             Style::default().fg(theme.text_secondary),
         ));
-        footer_spans.push(Span::styled(
+        left_spans.push(Span::styled(
             format!(" {} ", app.editor.current_octave()),
             Style::default()
                 .fg(theme.primary)
@@ -1262,11 +1263,11 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         ));
 
         // Instrument
-        footer_spans.push(Span::styled(
+        left_spans.push(Span::styled(
             "INS:",
             Style::default().fg(theme.text_secondary),
         ));
-        footer_spans.push(Span::styled(
+        left_spans.push(Span::styled(
             format!(" {:02X} ", app.editor.current_instrument()),
             Style::default()
                 .fg(theme.primary)
@@ -1274,27 +1275,27 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         ));
 
         // Step size
-        footer_spans.push(Span::styled(
+        left_spans.push(Span::styled(
             "STP:",
             Style::default().fg(theme.text_secondary),
         ));
-        footer_spans.push(Span::styled(
+        left_spans.push(Span::styled(
             format!(" {} ", app.editor.step_size()),
             Style::default()
                 .fg(theme.primary)
                 .add_modifier(Modifier::BOLD),
         ));
 
-        footer_spans.push(Span::raw(" | "));
+        left_spans.push(Span::raw(" | "));
 
         // Location status
         let pos = app.transport.arrangement_position();
         let total = app.song.arrangement.len();
-        footer_spans.push(Span::styled(
+        left_spans.push(Span::styled(
             "POS:",
             Style::default().fg(theme.text_secondary),
         ));
-        footer_spans.push(Span::styled(
+        left_spans.push(Span::styled(
             format!(" {:02}/{:02} ", pos, total),
             Style::default()
                 .fg(theme.primary)
@@ -1302,11 +1303,11 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         ));
 
         if let Some(&pat_idx) = app.song.arrangement.get(pos) {
-            footer_spans.push(Span::styled(
+            left_spans.push(Span::styled(
                 "PAT:",
                 Style::default().fg(theme.text_secondary),
             ));
-            footer_spans.push(Span::styled(
+            left_spans.push(Span::styled(
                 format!(" {:02} ", pat_idx),
                 Style::default()
                     .fg(theme.primary)
@@ -1323,8 +1324,8 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             {
                 if let Some(effect) = cell.first_effect() {
                     let desc = effect.describe(app.song.effect_mode);
-                    footer_spans.push(Span::raw(" | "));
-                    footer_spans.push(Span::styled(
+                    left_spans.push(Span::raw(" | "));
+                    left_spans.push(Span::styled(
                         format!("[ {} ]", desc),
                         Style::default()
                             .fg(theme.info_color())
@@ -1333,8 +1334,6 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 }
             }
         }
-
-        footer_spans.push(Span::raw("| "));
     } else if !app.is_code_editor_active() {
         // View-specific hints for non-pattern views
         let hint = match app.current_view {
@@ -1357,25 +1356,19 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             _ => "",
         };
         if !hint.is_empty() {
-            footer_spans.push(Span::styled(
+            left_spans.push(Span::styled(
                 hint,
                 Style::default().fg(theme.text_secondary),
             ));
-            footer_spans.push(Span::raw("  "));
         }
     }
 
-    // Help hint
-    footer_spans.extend([
-        Span::raw("  "),
-        Span::styled("?", key_style),
-        Span::raw(" help"),
-    ]);
+    // ── RIGHT SECTION ───────────────────────────────────────────────────────
+    let mut right_spans: Vec<Span> = Vec::new();
 
     // Follow mode indicator
     if app.follow_mode {
-        footer_spans.extend([
-            Span::raw(" "),
+        right_spans.extend([
             Span::styled(
                 " FOL ",
                 Style::default()
@@ -1383,13 +1376,13 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     .bg(theme.success_color())
                     .add_modifier(Modifier::BOLD),
             ),
+            Span::raw(" "),
         ]);
     }
 
     // Draw mode indicator
     if app.draw_mode {
-        footer_spans.extend([
-            Span::raw(" "),
+        right_spans.extend([
             Span::styled(
                 " DRW ",
                 Style::default()
@@ -1397,6 +1390,7 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     .bg(theme.success_color())
                     .add_modifier(Modifier::BOLD),
             ),
+            Span::raw(" "),
         ]);
     }
 
@@ -1413,8 +1407,7 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 theme.text_secondary,
             )
         };
-        footer_spans.extend([
-            Span::raw(" "),
+        right_spans.extend([
             Span::styled(
                 label,
                 Style::default()
@@ -1422,22 +1415,96 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                     .bg(bg)
                     .add_modifier(Modifier::BOLD),
             ),
+            Span::raw(" "),
         ]);
     }
 
-    // Pattern length indicator (always visible in pattern-related views)
+    // Cursor position
+    if status_bar_cfg.show_pattern_row {
+        right_spans.extend([
+            Span::styled(
+                format!("CH:{} ROW:{:02X}", cursor_channel, cursor_row),
+                Style::default().fg(theme.primary),
+            ),
+            Span::raw("  "),
+        ]);
+    }
+
+    // Selection indicator
+    if status_bar_cfg.show_selection {
+        if let Some(((r0, c0), (r1, c1))) = app.editor.visual_selection() {
+            let sel_text = if r0 == r1 && c0 == c1 {
+                format!("SEL:{}:{:02X}", c0, r0)
+            } else {
+                format!("SEL:{}:{:02X}-{}:{:02X}", c0, r0, c1, r1)
+            };
+            right_spans.extend([
+                Span::styled(sel_text, Style::default().fg(theme.secondary)),
+                Span::raw("  "),
+            ]);
+        }
+    }
+
+    // Pattern length
     if matches!(
         app.current_view,
         AppView::PatternEditor | AppView::PatternList
     ) {
         let row_count = app.editor.pattern().row_count();
-        footer_spans.extend([
-            Span::raw("  "),
+        right_spans.extend([
             Span::styled(
                 format!("Len:{}", row_count),
                 Style::default().fg(theme.info_color()),
             ),
+            Span::raw("  "),
         ]);
+    }
+
+    // Instrument count
+    if status_bar_cfg.show_instrument_count {
+        right_spans.extend([
+            Span::styled(
+                format!("Inst:{}", app.instrument_count()),
+                Style::default().fg(theme.text_secondary),
+            ),
+            Span::raw("  "),
+        ]);
+    }
+
+    // System resource indicators
+    if status_bar_cfg.show_cpu || status_bar_cfg.show_memory {
+        if let Some((cpu, mem)) = app.system_stats() {
+            if status_bar_cfg.show_cpu {
+                right_spans.extend([
+                    Span::styled(
+                        format!("CPU:{:.0}%", cpu),
+                        Style::default().fg(if cpu > 80.0 {
+                            theme.status_error
+                        } else if cpu > 50.0 {
+                            theme.status_warning
+                        } else {
+                            theme.text_dimmed
+                        }),
+                    ),
+                    Span::raw(" "),
+                ]);
+            }
+            if status_bar_cfg.show_memory {
+                right_spans.extend([
+                    Span::styled(
+                        format!("MEM:{:.0}%", mem),
+                        Style::default().fg(if mem > 80.0 {
+                            theme.status_error
+                        } else if mem > 50.0 {
+                            theme.status_warning
+                        } else {
+                            theme.text_dimmed
+                        }),
+                    ),
+                    Span::raw(" "),
+                ]);
+            }
+        }
     }
 
     // View indicator
@@ -1453,90 +1520,33 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             AppView::SampleBrowser => "6:SAMPLES",
         }
     };
-    footer_spans.extend([
-        Span::raw(" | "),
+    right_spans.extend([
         Span::styled(
             view_label,
             Style::default()
                 .fg(theme.info_color())
                 .add_modifier(Modifier::BOLD),
         ),
+        Span::raw("  "),
     ]);
 
-    // Pattern/Row indicator (cursor position)
-    if status_bar_cfg.show_pattern_row {
-        footer_spans.extend([
-            Span::raw(" | "),
-            Span::styled(
-                format!("CH:{} ROW:{:02X}", cursor_channel, cursor_row),
-                Style::default().fg(theme.primary),
-            ),
-        ]);
-    }
+    // ? help — always rightmost
+    right_spans.extend([
+        Span::styled("?", key_style),
+        Span::raw(" help "),
+    ]);
 
-    // Selection indicator (visual selection range)
-    if status_bar_cfg.show_selection {
-        if let Some(((r0, c0), (r1, c1))) = app.editor.visual_selection() {
-            let sel_text = if r0 == r1 && c0 == c1 {
-                format!("SEL:{}:{:02X}", c0, r0)
-            } else {
-                format!("SEL:{}:{:02X}-{}:{:02X}", c0, r0, c1, r1)
-            };
-            footer_spans.extend([
-                Span::raw(" "),
-                Span::styled(sel_text, Style::default().fg(theme.secondary)),
-            ]);
-        }
-    }
+    // ── COMPOSE: pad between left and right ─────────────────────────────────
+    let left_width: usize = left_spans.iter().map(|s| s.content.len()).sum();
+    let right_width: usize = right_spans.iter().map(|s| s.content.len()).sum();
+    let total_width = area.width as usize;
+    let padding = total_width.saturating_sub(left_width + right_width);
 
-    // Instrument count
-    if status_bar_cfg.show_instrument_count {
-        footer_spans.extend([
-            Span::raw(" "),
-            Span::styled(
-                format!("Inst:{}", app.instrument_count()),
-                Style::default().fg(theme.text_secondary),
-            ),
-        ]);
-    }
+    let mut all_spans = left_spans;
+    all_spans.push(Span::raw(" ".repeat(padding)));
+    all_spans.extend(right_spans);
 
-    // System resource indicators (CPU, Memory)
-    if status_bar_cfg.show_cpu || status_bar_cfg.show_memory {
-        if let Some((cpu, mem)) = app.system_stats() {
-            if status_bar_cfg.show_cpu {
-                footer_spans.extend([
-                    Span::raw(" "),
-                    Span::styled(
-                        format!("CPU:{:.0}%", cpu),
-                        Style::default().fg(if cpu > 80.0 {
-                            theme.status_error
-                        } else if cpu > 50.0 {
-                            theme.status_warning
-                        } else {
-                            theme.text_dimmed
-                        }),
-                    ),
-                ]);
-            }
-            if status_bar_cfg.show_memory {
-                footer_spans.extend([
-                    Span::raw(" "),
-                    Span::styled(
-                        format!("MEM:{:.0}%", mem),
-                        Style::default().fg(if mem > 80.0 {
-                            theme.status_error
-                        } else if mem > 50.0 {
-                            theme.status_warning
-                        } else {
-                            theme.text_dimmed
-                        }),
-                    ),
-                ]);
-            }
-        }
-    }
-
-    let footer = Paragraph::new(Line::from(footer_spans)).style(theme.footer_style());
+    let footer = Paragraph::new(Line::from(all_spans)).style(theme.footer_style());
 
     frame.render_widget(footer, area);
 }
