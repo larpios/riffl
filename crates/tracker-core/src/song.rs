@@ -10,6 +10,16 @@ use crate::audio::pitch::SlideMode;
 use crate::pattern::effect::EffectMode;
 use crate::pattern::{Note, Pattern, Pitch, Track};
 
+/// Panning laws used for stereo positioning.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum PanningLaw {
+    /// Equal-power panning (-3dB center). Maintains constant volume as you pan.
+    #[default]
+    EqualPower,
+    /// Linear panning (-6dB center). Traditional tracker behavior.
+    Linear,
+}
+
 /// A point in an envelope.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EnvelopePoint {
@@ -411,6 +421,10 @@ pub struct Song {
     pub format_is_s3m: bool,
     /// Set to true if the song is an IT (uses 128-unit global volume).
     pub format_is_it: bool,
+    /// Global panning separation (0-128, 128 is full stereo).
+    pub pan_separation: u8,
+    /// Panning law to use for this song.
+    pub panning_law: PanningLaw,
     /// Pattern pool (up to 256 patterns).
     pub patterns: Vec<Pattern>,
     /// Arrangement: ordered list of pattern indices forming the song sequence.
@@ -447,6 +461,8 @@ impl Song {
             arrangement: vec![0],
             tracks,
             global_volume: 1.0,
+            pan_separation: 128,
+            panning_law: PanningLaw::EqualPower,
             instruments: Vec::new(),
         }
     }

@@ -4,3 +4,4 @@
 /// and vim-style keybindings.
 // Submodules
 pub mod keybindings;
+pub mod handler;

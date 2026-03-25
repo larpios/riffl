@@ -19,6 +19,9 @@ pub mod mixer;
 pub mod pitch;
 pub mod sample;
 pub mod stream;
+pub mod voice;
+pub mod pending_note;
+pub mod visualizer;
 
 pub use bus::{BusSystem, SendBus, DEFAULT_NUM_BUSES};
 pub use channel_strip::ChannelStrip;
@@ -34,3 +37,6 @@ pub use mixer::Mixer;
 pub use pitch::SlideMode;
 pub use sample::{LoopMode, Sample, C4_MIDI};
 pub use stream::{AudioCallback, AudioStream, StreamConfig};
+pub use voice::{AdsrState, Voice, VoiceLfoState};
+pub use pending_note::PendingNote;
+pub use visualizer::Visualizer;

@@ -38,7 +38,8 @@ node_modules
 .opencode
 .codex
 research/
-openspec
+openspec/
+conductor/
 
 # Test OPL build artifacts
 test-opl/target

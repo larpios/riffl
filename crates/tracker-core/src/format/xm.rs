@@ -8,7 +8,7 @@ use crate::audio::sample::{LoopMode, Sample};
 use crate::pattern::effect::{Effect, EffectMode};
 use crate::pattern::note::{Note, Pitch};
 use crate::pattern::{Cell, NoteEvent, Pattern};
-use crate::song::{Envelope, EnvelopePoint, Instrument, Song};
+use crate::song::{Envelope, EnvelopePoint, Instrument, PanningLaw, Song};
 
 use super::{FormatData, FormatError, FormatResult, ModuleLoader};
 
@@ -767,7 +767,12 @@ pub fn import_xm(data: &[u8]) -> Result<FormatData, String> {
             if xm_inst.panning_envelope_flags & 0x01 != 0 && !xm_inst.panning_envelope.is_empty() {
                 inst.panning_envelope = Some(Envelope {
                     enabled: true,
-                    points: xm_inst.panning_envelope.clone(),
+                    points: xm_inst.panning_envelope.iter().map(|p| EnvelopePoint {
+                        frame: p.frame,
+                        // p.value is already normalized to 0..1 by parse_envelope_points;
+                        // remap to -1..1 (-1=left, 0=center, +1=right).
+                        value: p.value * 2.0 - 1.0,
+                    }).collect(),
                     sustain_enabled: xm_inst.panning_envelope_flags & 0x02 != 0,
                     sustain_start_point: xm_inst.panning_sustain_point as usize,
                     sustain_end_point: xm_inst.panning_sustain_point as usize,
@@ -916,6 +921,8 @@ pub fn import_xm(data: &[u8]) -> Result<FormatData, String> {
     }
 
     song.effect_mode = EffectMode::Compatible;
+    // FT2/XM uses linear panning (amplitude proportional to pan position).
+    song.panning_law = PanningLaw::Linear;
     if header.linear_frequencies {
         song.slide_mode = crate::audio::pitch::SlideMode::Linear;
         song.format_is_s3m = false;

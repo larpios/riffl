@@ -101,8 +101,8 @@ impl ChannelStrip {
     /// - pan = -1.0: full left (L=1.0, R=0.0)
     /// - pan = 0.0: center (L≈0.707, R≈0.707)
     /// - pan = 1.0: full right (L=0.0, R=1.0)
-    pub fn next_gains(&mut self) -> (f32, f32) {
-        self.next_gains_modulated(1.0, 0.0, None)
+    pub fn next_gains(&mut self, law: crate::song::PanningLaw) -> (f32, f32) {
+        self.next_gains_modulated(1.0, 0.0, None, law)
     }
 
     /// Compute modulated gains incorporating per-voice envelopes and LFOs.
@@ -116,6 +116,7 @@ impl ChannelStrip {
         mod_vol: f32,
         mod_pan: f32,
         pan_override: Option<f32>,
+        law: crate::song::PanningLaw,
     ) -> (f32, f32) {
         let vol = self.volume.next() * mod_vol;
         let mute = self.mute_gain.next();
@@ -126,7 +127,7 @@ impl ChannelStrip {
         let base_pan = pan_override.unwrap_or(strip_pan);
 
         let total_pan = (base_pan + mod_pan).clamp(-1.0, 1.0);
-        let (pan_l, pan_r) = Self::pan_gains(total_pan);
+        let (pan_l, pan_r) = Self::pan_gains(total_pan, law);
         let combined = vol * mute * solo;
 
         (combined * pan_l, combined * pan_r)
@@ -157,13 +158,13 @@ impl ChannelStrip {
     }
 
     /// Get the current left/right gains without advancing the ramp.
-    pub fn current_gains(&self) -> (f32, f32) {
+    pub fn current_gains(&self, law: crate::song::PanningLaw) -> (f32, f32) {
         let vol = self.volume.current();
         let pan = self.pan.current();
         let mute = self.mute_gain.current();
         let solo = self.solo_gain.current();
 
-        let (pan_l, pan_r) = Self::pan_gains(pan);
+        let (pan_l, pan_r) = Self::pan_gains(pan, law);
         let combined = vol * mute * solo;
 
         (combined * pan_l, combined * pan_r)
@@ -189,16 +190,25 @@ impl ChannelStrip {
         self.mute_gain.target() == 0.0 || self.solo_gain.target() == 0.0
     }
 
-    /// Linear pan gains from pan position (matching classic tracker behavior).
-    fn pan_gains(pan: f32) -> (f32, f32) {
+    /// Panning gains from pan position (-1 to 1).
+    fn pan_gains(pan: f32, law: crate::song::PanningLaw) -> (f32, f32) {
         let pan = pan.clamp(-1.0, 1.0);
-        // Equal-power panning (-3dB center)
-        // Map pan (-1.0 to 1.0) to an angle from 0 to pi/2 (90 degrees).
-        // At pan = -1.0: angle = 0
-        // At pan = 0.0: angle = pi/4 (45 degrees)
-        // At pan = 1.0: angle = pi/2 (90 degrees)
-        let angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
-        (angle.cos(), angle.sin())
+        match law {
+            crate::song::PanningLaw::EqualPower => {
+                // Map pan (-1.0 to 1.0) to an angle from 0 to pi/2 (90 degrees).
+                // At pan = -1.0: angle = 0
+                // At pan = 0.0: angle = pi/4 (45 degrees)
+                // At pan = 1.0: angle = pi/2 (90 degrees)
+                let angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
+                (angle.cos(), angle.sin())
+            }
+            crate::song::PanningLaw::Linear => {
+                // Linear panning (-6dB center)
+                // Map pan (-1.0 to 1.0) to 0.0 to 1.0 for right channel.
+                let p_01 = (pan + 1.0) * 0.5;
+                (1.0 - p_01, p_01)
+            }
+        }
     }
 }
 
@@ -214,14 +224,14 @@ mod tests {
 
     fn run_to_target(strip: &mut ChannelStrip) {
         for _ in 0..320 {
-            let _ = strip.next_gains();
+            let _ = strip.next_gains(crate::song::PanningLaw::EqualPower);
         }
     }
 
     #[test]
     fn test_channel_strip_default() {
         let strip = ChannelStrip::new();
-        let (left, right) = strip.current_gains();
+        let (left, right) = strip.current_gains(crate::song::PanningLaw::EqualPower);
         let center = std::f32::consts::FRAC_1_SQRT_2;
         assert!((left - center).abs() < 0.0001);
         assert!((right - center).abs() < 0.0001);
@@ -232,9 +242,11 @@ mod tests {
     fn test_channel_strip_update_volume() {
         let mut strip = ChannelStrip::new();
         strip.update_from_track(0.5, 0.0, false, false, false, &[]);
-        run_to_target(&mut strip);
+        for _ in 0..320 {
+            let _ = strip.next_gains(crate::song::PanningLaw::EqualPower);
+        }
 
-        let (left, right) = strip.current_gains();
+        let (left, right) = strip.current_gains(crate::song::PanningLaw::EqualPower);
         let center_half = 0.5 * std::f32::consts::FRAC_1_SQRT_2;
         assert!((left - center_half).abs() < 0.001);
         assert!((right - center_half).abs() < 0.001);
@@ -244,9 +256,11 @@ mod tests {
     fn test_channel_strip_update_pan_left() {
         let mut strip = ChannelStrip::new();
         strip.update_from_track(1.0, -1.0, false, false, false, &[]);
-        run_to_target(&mut strip);
+        for _ in 0..320 {
+            let _ = strip.next_gains(crate::song::PanningLaw::EqualPower);
+        }
 
-        let (left, right) = strip.current_gains();
+        let (left, right) = strip.current_gains(crate::song::PanningLaw::EqualPower);
         assert!((left - 1.0).abs() < 0.001);
         assert!(right.abs() < 0.001);
     }
@@ -255,9 +269,11 @@ mod tests {
     fn test_channel_strip_update_pan_right() {
         let mut strip = ChannelStrip::new();
         strip.update_from_track(1.0, 1.0, false, false, false, &[]);
-        run_to_target(&mut strip);
+        for _ in 0..320 {
+            let _ = strip.next_gains(crate::song::PanningLaw::EqualPower);
+        }
 
-        let (left, right) = strip.current_gains();
+        let (left, right) = strip.current_gains(crate::song::PanningLaw::EqualPower);
         assert!(left.abs() < 0.001);
         assert!((right - 1.0).abs() < 0.001);
     }
@@ -266,9 +282,11 @@ mod tests {
     fn test_channel_strip_mute() {
         let mut strip = ChannelStrip::new();
         strip.update_from_track(1.0, 0.0, true, false, false, &[]);
-        run_to_target(&mut strip);
+        for _ in 0..320 {
+            let _ = strip.next_gains(crate::song::PanningLaw::EqualPower);
+        }
 
-        let (left, right) = strip.current_gains();
+        let (left, right) = strip.current_gains(crate::song::PanningLaw::EqualPower);
         assert!(left.abs() < 0.001);
         assert!(right.abs() < 0.001);
         assert!(strip.is_silent());
@@ -278,9 +296,11 @@ mod tests {
     fn test_channel_strip_solo() {
         let mut strip = ChannelStrip::new();
         strip.update_from_track(1.0, 0.0, false, true, false, &[]);
-        run_to_target(&mut strip);
+        for _ in 0..320 {
+            let _ = strip.next_gains(crate::song::PanningLaw::EqualPower);
+        }
 
-        let (left, right) = strip.current_gains();
+        let (left, right) = strip.current_gains(crate::song::PanningLaw::EqualPower);
         assert!(left.abs() < 0.001);
         assert!(right.abs() < 0.001);
         assert!(strip.is_silent());
@@ -302,15 +322,17 @@ mod tests {
     fn test_channel_strip_ramp_no_click() {
         let mut strip = ChannelStrip::new();
 
-        let (before_l, before_r) = strip.current_gains();
+        let (before_l, before_r) = strip.current_gains(crate::song::PanningLaw::EqualPower);
         strip.update_from_track(0.0, 0.0, false, false, false, &[]);
-        let (after_one_l, after_one_r) = strip.next_gains();
+        let (after_one_l, after_one_r) = strip.next_gains(crate::song::PanningLaw::EqualPower);
 
         assert!(after_one_l > 0.0 && after_one_l < before_l);
         assert!(after_one_r > 0.0 && after_one_r < before_r);
 
-        run_to_target(&mut strip);
-        let (final_l, final_r) = strip.current_gains();
+        for _ in 0..320 {
+            let _ = strip.next_gains(crate::song::PanningLaw::EqualPower);
+        }
+        let (final_l, final_r) = strip.current_gains(crate::song::PanningLaw::EqualPower);
         assert!(final_l.abs() < 0.001);
         assert!(final_r.abs() < 0.001);
     }

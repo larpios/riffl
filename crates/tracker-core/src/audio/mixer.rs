@@ -7,345 +7,17 @@ use crate::audio::bus::{self, BusSystem};
 use crate::audio::channel_strip::ChannelStrip;
 use crate::audio::dsp::ProcessSpec;
 use crate::audio::effect_processor::{TrackerEffectProcessor, TransportCommand};
+use crate::audio::pending_note::PendingNote;
 use crate::audio::sample::{LoopMode, Sample};
+use crate::audio::visualizer::Visualizer;
+use crate::audio::voice::{AdsrPhase, Voice, VoiceLfoState};
 use crate::pattern::note::NoteEvent;
 use crate::pattern::pattern::Pattern;
 use crate::pattern::track::Track;
 use crate::pattern::EffectType;
-use crate::song::{Adsr, Instrument, LfoWaveform};
-use std::sync::atomic::{AtomicU32, Ordering};
+use crate::song::Instrument;
+
 use std::sync::Arc;
-
-/// Number of samples in each per-channel oscilloscope ring buffer.
-pub const OSCILLOSCOPE_BUF_SIZE: usize = 512;
-
-/// Number of samples in the master bus FFT capture buffer.
-pub const FFT_BUF_SIZE: usize = 1024;
-
-fn f32_to_u32_bits(f: f32) -> u32 {
-    f.to_bits()
-}
-
-fn u32_bits_to_f32(bits: u32) -> f32 {
-    f32::from_bits(bits)
-}
-
-fn atomic_max_f32(atomic: &AtomicU32, new_val: f32) {
-    let new_bits = f32_to_u32_bits(new_val);
-    let old_bits = atomic.load(Ordering::Relaxed);
-    if new_bits > old_bits {
-        atomic.store(new_bits, Ordering::Relaxed);
-    }
-}
-
-/// Evaluates an LFO waveform at the given phase (0.0 to 1.0).
-/// Returns a value in the range [-1.0, 1.0].
-fn evaluate_lfo_waveform(waveform: LfoWaveform, phase: f32) -> f32 {
-    match waveform {
-        LfoWaveform::Sine => (phase * 2.0 * std::f32::consts::PI).sin(),
-        LfoWaveform::Triangle => {
-            if phase < 0.25 {
-                phase * 4.0
-            } else if phase < 0.75 {
-                2.0 - phase * 4.0
-            } else {
-                phase * 4.0 - 4.0
-            }
-        }
-        LfoWaveform::Square => {
-            if phase < 0.5 {
-                1.0
-            } else {
-                -1.0
-            }
-        }
-        LfoWaveform::Sawtooth => phase * 2.0 - 1.0,
-        LfoWaveform::ReverseSaw => 1.0 - phase * 2.0,
-        LfoWaveform::Random => {
-            let bits = phase.to_bits();
-            let mut x = bits ^ (bits >> 16);
-            x = x.wrapping_mul(0x85ebca6b);
-            x = x ^ (x >> 13);
-            x = x.wrapping_mul(0xc2b2ae35);
-            x = x ^ (x >> 16);
-            (x as f32 / u32::MAX as f32) * 2.0 - 1.0
-        }
-    }
-}
-
-/// Per-voice LFO position state for parameter modulation.
-#[derive(Debug, Clone, Copy, Default)]
-struct VoiceLfoState {
-    /// LFO position for volume modulation (0.0 to 1.0, wraps each cycle).
-    volume: f32,
-    /// LFO position for panning modulation.
-    panning: f32,
-    /// LFO position for pitch modulation.
-    pitch: f32,
-}
-
-impl VoiceLfoState {
-    fn new(instrument: Option<&Instrument>) -> Self {
-        Self {
-            volume: instrument
-                .and_then(|i| i.volume_lfo.as_ref())
-                .map(|l| l.phase)
-                .unwrap_or(0.0),
-            panning: instrument
-                .and_then(|i| i.panning_lfo.as_ref())
-                .map(|l| l.phase)
-                .unwrap_or(0.0),
-            pitch: instrument
-                .and_then(|i| i.pitch_lfo.as_ref())
-                .map(|l| l.phase)
-                .unwrap_or(0.0),
-        }
-    }
-
-    fn update(&mut self, instrument: &Instrument, sample_rate: u32, bpm: f64) {
-        if let Some(lfo) = &instrument.volume_lfo {
-            if lfo.enabled && lfo.rate > 0.0 {
-                let rate_hz = if lfo.sync_to_bpm {
-                    bpm / 60.0 * lfo.rate as f64
-                } else {
-                    lfo.rate as f64
-                };
-                self.volume = (self.volume + rate_hz as f32 / sample_rate as f32) % 1.0;
-            }
-        }
-        if let Some(lfo) = &instrument.panning_lfo {
-            if lfo.enabled && lfo.rate > 0.0 {
-                let rate_hz = if lfo.sync_to_bpm {
-                    bpm / 60.0 * lfo.rate as f64
-                } else {
-                    lfo.rate as f64
-                };
-                self.panning = (self.panning + rate_hz as f32 / sample_rate as f32) % 1.0;
-            }
-        }
-        if let Some(lfo) = &instrument.pitch_lfo {
-            if lfo.enabled && lfo.rate > 0.0 {
-                let rate_hz = if lfo.sync_to_bpm {
-                    bpm / 60.0 * lfo.rate as f64
-                } else {
-                    lfo.rate as f64
-                };
-                self.pitch = (self.pitch + rate_hz as f32 / sample_rate as f32) % 1.0;
-            }
-        }
-    }
-
-    fn get_vol_value(&self, lfo: &crate::song::Lfo) -> f32 {
-        self.calculate_value(self.volume, lfo)
-    }
-
-    fn get_pan_value(&self, lfo: &crate::song::Lfo) -> f32 {
-        self.calculate_value(self.panning, lfo)
-    }
-
-    fn get_pitch_value(&self, lfo: &crate::song::Lfo) -> f32 {
-        self.calculate_value(self.pitch, lfo)
-    }
-
-    fn calculate_value(&self, phase: f32, lfo: &crate::song::Lfo) -> f32 {
-        if !lfo.enabled {
-            return 0.0;
-        }
-
-        let raw_val = evaluate_lfo_waveform(lfo.waveform, phase);
-        lfo.offset + raw_val * lfo.depth
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-enum AdsrPhase {
-    #[default]
-    Attack,
-    Decay,
-    Sustain,
-    Release,
-    Done,
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-struct AdsrState {
-    phase: AdsrPhase,
-    value: f32,
-    /// Current time in the phase (seconds).
-    phase_time: f32,
-    /// Value when entering the release phase.
-    release_start_value: f32,
-}
-
-impl AdsrState {
-    fn update(&mut self, adsr: &Adsr, key_on: bool, sample_rate: u32) -> f32 {
-        let dt = 1.0 / sample_rate as f32;
-
-        if !key_on && self.phase != AdsrPhase::Release && self.phase != AdsrPhase::Done {
-            self.phase = AdsrPhase::Release;
-            self.phase_time = 0.0;
-            self.release_start_value = self.value;
-        }
-
-        match self.phase {
-            AdsrPhase::Attack => {
-                let attack_secs = adsr.attack / 1000.0;
-                if attack_secs > 0.0 {
-                    self.value = (self.phase_time / attack_secs).min(1.0);
-                    self.phase_time += dt;
-                    if self.phase_time >= attack_secs {
-                        self.phase = AdsrPhase::Decay;
-                        self.phase_time = 0.0;
-                    }
-                } else {
-                    self.value = 1.0;
-                    self.phase = AdsrPhase::Decay;
-                    self.phase_time = 0.0;
-                }
-            }
-            AdsrPhase::Decay => {
-                let decay_secs = adsr.decay / 1000.0;
-                if decay_secs > 0.0 {
-                    let range = 1.0 - adsr.sustain;
-                    self.value = 1.0 - (self.phase_time / decay_secs).min(1.0) * range;
-                    self.phase_time += dt;
-                    if self.phase_time >= decay_secs {
-                        self.phase = AdsrPhase::Sustain;
-                        self.phase_time = 0.0;
-                        self.value = adsr.sustain;
-                    }
-                } else {
-                    self.value = adsr.sustain;
-                    self.phase = AdsrPhase::Sustain;
-                    self.phase_time = 0.0;
-                }
-            }
-            AdsrPhase::Sustain => {
-                self.value = adsr.sustain;
-                // stays here until key_on is false
-            }
-            AdsrPhase::Release => {
-                let release_secs = adsr.release / 1000.0;
-                if release_secs > 0.0 {
-                    // start from capture value (which might be sustain level or somewhere in A/D)
-                    let remaining = (self.phase_time / release_secs).min(1.0);
-                    self.value = self.release_start_value * (1.0 - remaining);
-                    self.phase_time += dt;
-                    if self.phase_time >= release_secs {
-                        self.phase = AdsrPhase::Done;
-                        self.value = 0.0;
-                    }
-                } else {
-                    self.value = 0.0;
-                    self.phase = AdsrPhase::Done;
-                }
-            }
-            AdsrPhase::Done => {
-                self.value = 0.0;
-            }
-        }
-
-        self.value
-    }
-}
-
-/// State for a single voice playing a sample.
-#[derive(Debug, Clone)]
-struct Voice {
-    /// Index into the mixer's instrument list.
-    instrument_index: usize,
-    /// Index into the mixer's sample list.
-    sample_index: usize,
-    /// Current read position within the sample's audio data (in frames).
-    position: f64,
-    /// Playback rate relative to the sample's base rate (for pitch shifting).
-    #[allow(dead_code)]
-    playback_rate: f64,
-    /// Volume multiplier derived from note velocity (0.0 - 1.0).
-    velocity_gain: f32,
-    /// Whether this voice is actively producing audio.
-    active: bool,
-    /// Current playback direction (1.0 for forward, -1.0 for reverse).
-    /// Used for ping-pong loops.
-    loop_direction: f64,
-    /// Whether the key is currently held down.
-    key_on: bool,
-    /// Current volume envelope position in ticks.
-    volume_envelope_tick: usize,
-    /// Current panning envelope position in ticks.
-    panning_envelope_tick: usize,
-    /// Current pitch envelope position in ticks.
-    pitch_envelope_tick: usize,
-    /// ADSR state for volume.
-    volume_adsr: AdsrState,
-    /// ADSR state for panning.
-    panning_adsr: AdsrState,
-    /// ADSR state for pitch.
-    pitch_adsr: AdsrState,
-    /// Ratio to convert an absolute frequency (Hz) into relative playback_rate.
-    hz_to_rate: f64,
-    /// The absolute frequency of the note that triggered this voice.
-    triggered_note_freq: f64,
-    /// Fadeout multiplier for IT/XM instruments (0.0 - 1.0).
-    /// Decreased by instrument.fadeout every tick when key_on is false.
-    fadeout_multiplier: f32,
-    /// Per-voice LFO phase positions for volume, panning, and pitch.
-    lfo: VoiceLfoState,
-}
-
-impl Voice {
-    fn new(
-        instrument: Option<&Instrument>,
-        instrument_index: usize,
-        sample_index: usize,
-        playback_rate: f64,
-        velocity_gain: f32,
-        hz_to_rate: f64,
-        triggered_note_freq: f64,
-    ) -> Self {
-        Self {
-            instrument_index,
-            sample_index,
-            position: 0.0,
-            playback_rate,
-            velocity_gain,
-            active: true,
-            loop_direction: 1.0,
-            key_on: true,
-            volume_envelope_tick: 0,
-            panning_envelope_tick: 0,
-            pitch_envelope_tick: 0,
-            volume_adsr: AdsrState::default(),
-            panning_adsr: AdsrState::default(),
-            pitch_adsr: AdsrState::default(),
-            hz_to_rate,
-            triggered_note_freq,
-            fadeout_multiplier: 1.0,
-            lfo: VoiceLfoState::new(instrument),
-        }
-    }
-
-    fn with_position(mut self, position: f64) -> Self {
-        self.position = position;
-        self
-    }
-}
-
-/// Pending note trigger for Note Delay (EDx).
-#[derive(Debug, Clone)]
-struct PendingNote {
-    channel: usize,
-    instrument_index: usize,
-    sample_index: usize,
-    playback_rate: f64,
-    velocity_gain: f32,
-    hz_to_rate: f64,
-    triggered_note_freq: f64,
-    /// Effective Amiga period clock for this note trigger.
-    period_clock: f64,
-    offset: Option<usize>,
-    trigger_frame: u32,
-}
 
 /// Audio mixer that reads pattern data and produces mixed audio output.
 ///
@@ -384,21 +56,14 @@ pub struct Mixer {
     preview_pos: f64,
     /// Playback rate for the preview voice (accounts for pitch + sample/output rate ratio).
     preview_rate: f64,
-    /// Per-channel peak levels for VU meters (left, right) as atomic u32 bit patterns.
-    /// Updated during render(), read by UI thread.
-    channel_levels: Vec<(AtomicU32, AtomicU32)>,
-    /// Per-channel oscilloscope ring buffers (mono mix of L+R).
-    /// Written by the audio thread in render(), read by the UI thread for display.
-    /// Each buffer is OSCILLOSCOPE_BUF_SIZE samples, written circularly.
-    oscilloscope_bufs: Vec<Vec<f32>>,
-    /// Per-channel write position into the oscilloscope ring buffer.
-    oscilloscope_write_pos: Vec<AtomicU32>,
-    /// Master bus FFT capture ring buffer (mono).
-    fft_buf: Vec<f32>,
-    /// Write position into the FFT ring buffer.
-    fft_write_pos: AtomicU32,
+    /// Visualization and monitoring state.
+    pub visualizer: Visualizer,
     /// Current BPM for BPM-synced LFO calculations.
     bpm: f64,
+    /// Global panning separation (0-128, 128 is full stereo).
+    pan_separation: u8,
+    /// Panning law to use for rendering.
+    panning_law: crate::song::PanningLaw,
 }
 
 impl Mixer {
@@ -431,16 +96,6 @@ impl Mixer {
             })
             .collect();
 
-        let channel_levels: Vec<(AtomicU32, AtomicU32)> = (0..num_channels)
-            .map(|_| (AtomicU32::new(0), AtomicU32::new(0)))
-            .collect();
-
-        let oscilloscope_bufs: Vec<Vec<f32>> = (0..num_channels)
-            .map(|_| vec![0.0f32; OSCILLOSCOPE_BUF_SIZE])
-            .collect();
-        let oscilloscope_write_pos: Vec<AtomicU32> =
-            (0..num_channels).map(|_| AtomicU32::new(0)).collect();
-
         Self {
             format_is_s3m: false,
             samples,
@@ -455,12 +110,10 @@ impl Mixer {
             preview_sample: None,
             preview_pos: 0.0,
             preview_rate: 1.0,
-            channel_levels,
-            oscilloscope_bufs,
-            oscilloscope_write_pos,
-            fft_buf: vec![0.0f32; FFT_BUF_SIZE],
-            fft_write_pos: AtomicU32::new(0),
+            visualizer: Visualizer::new(num_channels),
             bpm: 120.0,
+            pan_separation: 128,
+            panning_law: crate::song::PanningLaw::EqualPower,
         }
     }
 
@@ -478,26 +131,30 @@ impl Mixer {
                 strip.set_sample_rate(sample_rate);
                 strip.ensure_send_levels(num_buses);
                 self.channel_strips.push(strip);
-
-                self.channel_levels.push((
-                    std::sync::atomic::AtomicU32::new(0),
-                    std::sync::atomic::AtomicU32::new(0),
-                ));
-                self.oscilloscope_bufs
-                    .push(vec![0.0f32; OSCILLOSCOPE_BUF_SIZE]);
-                self.oscilloscope_write_pos.push(AtomicU32::new(0));
             }
         } else {
             // trim tracks if shrinking
             self.voices.truncate(num_channels);
             self.channel_strips.truncate(num_channels);
-            self.channel_levels.truncate(num_channels);
-            self.oscilloscope_bufs.truncate(num_channels);
-            self.oscilloscope_write_pos.truncate(num_channels);
         }
+
+        self.visualizer.set_num_channels(num_channels);
 
         // Push the changes down to the effect processor as well
         self.effect_processor.resize_channels(num_channels);
+    }
+
+    /// Snap all channel strip pans to match the provided tracks immediately (no ramp).
+    ///
+    /// Call this once when loading a file so that even the very first rendered
+    /// sample plays at the correct stereo position. Regular `update_tracks` uses
+    /// a smoothing ramp which causes a 5ms delay before reaching the target,
+    /// making note attacks sound centered.
+    pub fn snap_channel_pans(&mut self, tracks: &[Track]) {
+        for (ch, strip) in self.channel_strips.iter_mut().enumerate() {
+            let pan = tracks.get(ch).map_or(0.0, |t| t.pan);
+            strip.set_effect_pan_immediate(pan);
+        }
     }
 
     /// Update per-channel mixing state from track metadata.
@@ -600,9 +257,10 @@ impl Mixer {
 
             transport_commands.extend(cmds);
 
-            // Apply effect-based panning override (8xx) to the channel strip.
+            // Apply effect-based panning (8xx/panbrello) to the channel strip.
+            // Only effect panning updates the strip; instrument panning is applied at render time.
             // Panning is stored as 0.0 (left) → 1.0 (right); strip uses -1.0 → 1.0.
-            if let Some(pan_01) = self.effect_processor.channel_panning(ch) {
+            if let Some(pan_01) = self.effect_processor.channel_effect_panning(ch) {
                 let pan = pan_01 * 2.0 - 1.0;
                 if let Some(strip) = self.channel_strips.get_mut(ch) {
                     strip.set_effect_pan_immediate(pan);
@@ -708,13 +366,15 @@ impl Mixer {
                             let velocity = note.velocity as f32;
                             let velocity_gain = (velocity / 127.0) * inst_vol * sample.volume;
 
-                            // Apply instrument panning override to the effect processor
-                            if let Some(inst_pan) =
-                                self.instruments.get(instrument_idx).and_then(|i| i.panning)
-                            {
-                                if let Some(state) = self.effect_processor.channel_state_mut(ch) {
-                                    state.panning_override = Some((inst_pan + 1.0) / 2.0);
-                                }
+                            // Apply instrument panning to instrument_pan_override.
+                            // If the instrument has no default panning, clear it so the
+                            // channel's base pan (strip or 8xx effect) is used instead.
+                            if let Some(state) = self.effect_processor.channel_state_mut(ch) {
+                                state.instrument_pan_override = self
+                                    .instruments
+                                    .get(instrument_idx)
+                                    .and_then(|i| i.panning)
+                                    .map(|p| (p + 1.0) / 2.0);
                             }
 
                             if has_tone_porta && self.voices[ch].is_some() {
@@ -893,15 +553,15 @@ impl Mixer {
                                         .unwrap_or(1.0);
                                     let velocity_gain = (100.0 / 127.0) * inst_vol * sample.volume;
 
-                                    // Apply instrument panning override to the effect processor
-                                    if let Some(inst_pan) =
-                                        self.instruments.get(instrument_idx).and_then(|i| i.panning)
+                                    // Apply instrument panning to instrument_pan_override.
+                                    if let Some(state) =
+                                        self.effect_processor.channel_state_mut(ch)
                                     {
-                                        if let Some(state) =
-                                            self.effect_processor.channel_state_mut(ch)
-                                        {
-                                            state.panning_override = Some((inst_pan + 1.0) / 2.0);
-                                        }
+                                        state.instrument_pan_override = self
+                                            .instruments
+                                            .get(instrument_idx)
+                                            .and_then(|i| i.panning)
+                                            .map(|p| (p + 1.0) / 2.0);
                                     }
 
                                     if let Some(voice) = &mut self.voices[ch] {
@@ -1191,7 +851,7 @@ impl Mixer {
                             if pan_env.enabled {
                                 let (val, next_tick) =
                                     pan_env.evaluate(voice.panning_envelope_tick, voice.key_on);
-                                env_pan += val * 2.0 - 1.0;
+                                env_pan += val;
                                 if tick_frame == frames_per_tick.saturating_sub(1) {
                                     voice.panning_envelope_tick = next_tick;
                                 }
@@ -1362,10 +1022,35 @@ impl Mixer {
                     let combined_channel_gain =
                         render_state.gain.unwrap_or(render_state.channel_volume);
 
+                    let pan_sep_mult = self.pan_separation as f32 / 128.0;
+                    
+                    // Combine base pan (track or override)
+                    let base_pan = render_state.pan_override
+                        .map(|p| p * 2.0 - 1.0)
+                        .unwrap_or(strip.current_pan());
+                    
+                    // IF we have a panning envelope enabled, it OVERRIDES the base panning (IT behavior)
+                    let pan_env_active = self.instruments.get(voice.instrument_index)
+                        .and_then(|i| i.panning_envelope.as_ref())
+                        .map(|e| e.enabled)
+                        .unwrap_or(false);
+                    
+                    // When a panning envelope is active, it provides the absolute
+                    // pan position (IT/XM behaviour).  When inactive, env_pan holds
+                    // any ADSR / LFO offsets that should still be added to base_pan.
+                    let final_pan = if pan_env_active {
+                        env_pan
+                    } else {
+                        (base_pan + env_pan).clamp(-1.0, 1.0)
+                    };
+                    
+                    let total_pan = (final_pan * pan_sep_mult).clamp(-1.0, 1.0);
+
                     let (left_gain, right_gain) = strip.next_gains_modulated(
                         env_vol * combined_channel_gain,
-                        env_pan,
-                        render_state.pan_override.map(|p| p * 2.0 - 1.0),
+                        0.0,
+                        Some(total_pan),
+                        self.panning_law,
                     );
 
                     let out_idx = frame * 2;
@@ -1384,23 +1069,10 @@ impl Mixer {
                     output[out_idx] += post_l;
                     output[out_idx + 1] += post_r;
 
-                    let (peak_l, peak_r) = &self.channel_levels[ch];
-                    atomic_max_f32(peak_l, post_l.abs());
-                    atomic_max_f32(peak_r, post_r.abs());
+                    self.visualizer.update_channel_levels(ch, post_l.abs(), post_r.abs());
 
                     // Write mono mix to oscilloscope ring buffer
-                    if let (Some(buf), Some(pos_atomic)) = (
-                        self.oscilloscope_bufs.get_mut(ch),
-                        self.oscilloscope_write_pos.get(ch),
-                    ) {
-                        let pos =
-                            pos_atomic.load(Ordering::Relaxed) as usize % OSCILLOSCOPE_BUF_SIZE;
-                        buf[pos] = (post_l + post_r) * 0.5;
-                        pos_atomic.store(
-                            ((pos + 1) % OSCILLOSCOPE_BUF_SIZE) as u32,
-                            Ordering::Relaxed,
-                        );
-                    }
+                    self.visualizer.record_oscilloscope_sample(ch, (post_l + post_r) * 0.5);
 
                     for bus_idx in 0..num_buses {
                         let send_level = strip.next_send_level(bus_idx);
@@ -1466,10 +1138,7 @@ impl Mixer {
         // Write mono mix to FFT capture buffer
         for frame in 0..num_frames {
             let mono = (output[frame * 2] + output[frame * 2 + 1]) * 0.5;
-            let pos = self.fft_write_pos.load(Ordering::Relaxed) as usize % FFT_BUF_SIZE;
-            self.fft_buf[pos] = mono;
-            self.fft_write_pos
-                .store(((pos + 1) % FFT_BUF_SIZE) as u32, Ordering::Relaxed);
+            self.visualizer.record_fft_sample_mut(mono);
         }
 
         // Clamp output to [-1.0, 1.0] to prevent clipping distortion
@@ -1604,8 +1273,7 @@ impl Mixer {
 
     /// Reset the FFT capture buffer to silence.
     pub fn reset_fft_buffer(&mut self) {
-        self.fft_buf.fill(0.0);
-        self.fft_write_pos.store(0, Ordering::Relaxed);
+        self.visualizer.reset_fft_buffer();
     }
 
     /// Set the ticks per line (TPL) for the mixer and its effect processor.
@@ -1616,6 +1284,16 @@ impl Mixer {
                 state.ticks_per_row = self.tpl as u8;
             }
         }
+    }
+
+    /// Set the global panning separation (0-128, 128 is full stereo).
+    pub fn set_pan_separation(&mut self, sep: u8) {
+        self.pan_separation = sep;
+    }
+
+    /// Set the panning law for the mixer.
+    pub fn set_panning_law(&mut self, law: crate::song::PanningLaw) {
+        self.panning_law = law;
     }
 
     /// Update the effect processor's tempo (frames per row).
@@ -1681,77 +1359,35 @@ impl Mixer {
     /// Get the peak level for a channel (left, right).
     /// Returns (0.0, 0.0) for invalid channel indices.
     pub fn get_channel_level(&self, channel: usize) -> (f32, f32) {
-        self.channel_levels
-            .get(channel)
-            .map(|(l, r)| {
-                (
-                    u32_bits_to_f32(l.load(Ordering::Relaxed)),
-                    u32_bits_to_f32(r.load(Ordering::Relaxed)),
-                )
-            })
-            .unwrap_or((0.0, 0.0))
+        self.visualizer.get_channel_level(channel)
     }
 
     /// Reset all channel levels to zero.
     pub fn reset_channel_levels(&mut self) {
-        for (l, r) in &self.channel_levels {
-            l.store(0u32, Ordering::Relaxed);
-            r.store(0u32, Ordering::Relaxed);
-        }
+        self.visualizer.reset_channel_levels();
     }
 
     /// Reset all oscilloscope buffers to zero.
     pub fn reset_oscilloscope_buffers(&mut self) {
-        for buf in &mut self.oscilloscope_bufs {
-            buf.fill(0.0);
-        }
-        for pos in &self.oscilloscope_write_pos {
-            // Use atomic store to reset position
-            pos.store(0, Ordering::Relaxed);
-        }
+        self.visualizer.reset_oscilloscope_buffers();
     }
 
     /// Read the oscilloscope waveform for a channel.
     /// Returns a slice of the ring buffer in chronological order (oldest first).
     /// The returned Vec has exactly `OSCILLOSCOPE_BUF_SIZE` samples.
     pub fn oscilloscope_data(&self, channel: usize) -> Vec<f32> {
-        if let (Some(buf), Some(pos_atomic)) = (
-            self.oscilloscope_bufs.get(channel),
-            self.oscilloscope_write_pos.get(channel),
-        ) {
-            let write_pos = pos_atomic.load(Ordering::Relaxed) as usize % OSCILLOSCOPE_BUF_SIZE;
-            let mut result = Vec::with_capacity(OSCILLOSCOPE_BUF_SIZE);
-            // Read from write_pos (oldest) wrapping around to write_pos-1 (newest)
-            for i in 0..OSCILLOSCOPE_BUF_SIZE {
-                result.push(buf[(write_pos + i) % OSCILLOSCOPE_BUF_SIZE]);
-            }
-            result
-        } else {
-            vec![0.0; OSCILLOSCOPE_BUF_SIZE]
-        }
+        self.visualizer.oscilloscope_data(channel)
     }
 
     /// Read the master bus FFT capture buffer in chronological order.
     pub fn fft_data(&self) -> Vec<f32> {
-        let write_pos = self.fft_write_pos.load(Ordering::Relaxed) as usize % FFT_BUF_SIZE;
-        let mut result = Vec::with_capacity(FFT_BUF_SIZE);
-        for i in 0..FFT_BUF_SIZE {
-            result.push(self.fft_buf[(write_pos + i) % FFT_BUF_SIZE]);
-        }
-        result
+        self.visualizer.fft_data()
     }
 
     /// Decay all channel levels by the given factor (0.0 to 1.0).
     /// Called from the UI update loop for visual smoothing.
     pub fn decay_channel_levels(&mut self, decay_factor: f32) {
-        for (l, r) in &self.channel_levels {
-            let current_l = u32_bits_to_f32(l.load(Ordering::Relaxed));
-            let current_r = u32_bits_to_f32(r.load(Ordering::Relaxed));
-            let decayed_l = current_l * decay_factor;
-            let decayed_r = current_r * decay_factor;
-            l.store(f32_to_u32_bits(decayed_l), Ordering::Relaxed);
-            r.store(f32_to_u32_bits(decayed_r), Ordering::Relaxed);
-        }
+        self.visualizer.decay_channel_levels(decay_factor);
     }
 }
 

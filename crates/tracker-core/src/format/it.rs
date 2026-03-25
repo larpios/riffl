@@ -8,7 +8,7 @@ use crate::audio::sample::{LoopMode, Sample};
 use crate::pattern::effect::{Effect, EffectMode};
 use crate::pattern::note::{Note, Pitch};
 use crate::pattern::{Cell, NoteEvent, Pattern, Track};
-use crate::song::{Envelope, EnvelopePoint, Instrument, Song};
+use crate::song::{Envelope, EnvelopePoint, Instrument, PanningLaw, Song};
 
 use super::{FormatData, FormatError, FormatResult, ModuleLoader};
 
@@ -133,6 +133,7 @@ struct ItHeader {
     initial_bpm: u8,
     global_volume: u8,
     mix_volume: u8,
+    pan_separation: u8,
     initial_channel_pan: [u8; 64],
     initial_channel_volume: [u8; 64],
     orders: Vec<u8>,
@@ -169,7 +170,7 @@ fn parse_it_header(data: &[u8]) -> Result<ItHeader, String> {
     let mix_volume = read_u8(data, &mut off);
     let initial_speed = read_u8(data, &mut off);
     let initial_bpm = read_u8(data, &mut off);
-    let _pan_separation = read_u8(data, &mut off);
+    let pan_separation = read_u8(data, &mut off);
     let _pitch_wheel_depth = read_u8(data, &mut off);
     let _message_length = read_u16_le(data, &mut off);
     let _message_offset = read_u32_le(data, &mut off);
@@ -221,6 +222,7 @@ fn parse_it_header(data: &[u8]) -> Result<ItHeader, String> {
         initial_bpm,
         global_volume,
         mix_volume,
+        pan_separation,
         initial_channel_pan,
         initial_channel_volume,
         orders,
@@ -766,9 +768,16 @@ struct ItInstrData {
     panning_envelope: Option<Envelope>,
     fadeout: u16,
     global_volume: u8,
+    /// Raw default_pan byte from the IT instrument header.
+    /// Bit 7 set means "use this panning value"; bit 7 clear = use channel pan.
+    /// Lower 7 bits are the pan value (0-64, 32 = centre).
+    default_pan: u8,
 }
 
-fn parse_it_envelope(data: &[u8], offset: &mut usize) -> Envelope {
+/// Panning and pitch envelope values are 0-64 where 32 is center.
+/// Volume envelope values are 0-64.
+/// Both types are normalized to a bipolar scale for spatial/frequency logic if `bipolar` is true.
+fn parse_it_envelope(data: &[u8], offset: &mut usize, bipolar: bool) -> Envelope {
     let flags = read_u8(data, offset);
     let node_count = read_u8(data, offset);
     let loop_start = read_u8(data, offset);
@@ -778,11 +787,20 @@ fn parse_it_envelope(data: &[u8], offset: &mut usize) -> Envelope {
 
     let mut points = Vec::new();
     for _ in 0..25 {
-        let value = read_i8(data, offset) as u8;
+        let raw = data[*offset];
+        *offset += 1;
         let frame = read_u16_le(data, offset);
+        
+        let value = if bipolar {
+            // Panning/Pitch: 0..64 mapped to -1.0..1.0 (32 = center)
+            (raw as f32 - 32.0) / 32.0
+        } else {
+            // Volume: 0..64 mapped to 0.0..1.0
+            raw as f32 / 64.0
+        };
         points.push(EnvelopePoint {
             frame,
-            value: value as f32 / 64.0,
+            value: value.clamp(if bipolar { -1.0 } else { 0.0 }, 1.0),
         });
     }
     points.truncate(node_count.min(25) as usize);
@@ -822,7 +840,7 @@ fn parse_it_instrument_post2(data: &[u8], offset: u32) -> Result<ItInstrData, St
     let _pps = read_i8(data, &mut off);
     let _ppc = read_u8(data, &mut off);
     let global_volume = read_u8(data, &mut off);
-    let _default_pan = read_u8(data, &mut off);
+    let default_pan = read_u8(data, &mut off);
     let _rvv = read_u8(data, &mut off);
     let _rpv = read_u8(data, &mut off);
     let _tracker_version = read_u16_le(data, &mut off);
@@ -844,9 +862,12 @@ fn parse_it_instrument_post2(data: &[u8], offset: u32) -> Result<ItInstrData, St
     }
 
     // Envelopes
-    let volume_envelope = parse_it_envelope(data, &mut off);
-    let panning_envelope = parse_it_envelope(data, &mut off);
-    let _pitch_envelope = parse_it_envelope(data, &mut off);
+    // Volume: unsigned 0..64
+    // Panning: signed -32..+32
+    // Pitch: signed -32..+32
+    let volume_envelope = parse_it_envelope(data, &mut off, false);
+    let panning_envelope = parse_it_envelope(data, &mut off, true);
+    let _pitch_envelope = parse_it_envelope(data, &mut off, true);
 
     let vol_env = if volume_envelope.enabled {
         Some(volume_envelope)
@@ -866,6 +887,7 @@ fn parse_it_instrument_post2(data: &[u8], offset: u32) -> Result<ItInstrData, St
         panning_envelope: pan_env,
         fadeout,
         global_volume,
+        default_pan,
     })
 }
 
@@ -895,15 +917,15 @@ fn convert_it_volume_column(vol: u8) -> (Option<u8>, Option<Effect>) {
             let param = vol - 95;
             (None, Some(Effect::new(0x0A, param)))
         }
-        // 105-114: Portamento down
+        // 105-114: Pan slide left (Lx), x = vol - 105
         105..=114 => {
-            let param = vol - 105;
-            (None, Some(Effect::new(0x02, param)))
+            let x = vol - 105;
+            (None, Some(Effect::new(0x12, x))) // PanningSlide: low nibble = left speed
         }
-        // 115-124: Portamento up
+        // 115-124: Pan slide right (Rx), x = vol - 115
         115..=124 => {
-            let param = vol - 115;
-            (None, Some(Effect::new(0x01, param)))
+            let x = vol - 115;
+            (None, Some(Effect::new(0x12, x << 4))) // PanningSlide: high nibble = right speed
         }
         // 128-192: Set panning
         128..=192 => {
@@ -1106,7 +1128,18 @@ fn convert_it_effect(cmd: u8, param: u8) -> Option<Effect> {
         0x17 => Some(Effect::new(0x11, param)),
 
         // X: Set panning
-        0x18 => Some(Effect::new(0x08, param)),
+        0x18 => {
+            if param == 0x80 {
+                // Surround: map to center for now
+                Some(Effect::new(0x08, 128))
+            } else if param <= 0x40 {
+                // IT panning is 0..64 (0x40). Internal engine uses 0..255.
+                let scaled = (param as u32 * 255 / 64) as u8;
+                Some(Effect::new(0x08, scaled))
+            } else {
+                None
+            }
+        }
 
         // Y: Panbrello
         0x19 => Some(Effect::new(0x18, param)),
@@ -1150,6 +1183,7 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
                         panning_envelope: None,
                         fadeout: 0,
                         global_volume: 128,
+                        default_pan: 0, // no override
                     });
                 }
             }
@@ -1233,9 +1267,10 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
             sample.volume = (sh.default_volume as f32 / 64.0) * (sh.global_volume as f32 / 64.0);
             inst.volume = 1.0; // instrument global volume will be multiplied in later
 
-            // Default panning (0-64). 128+ means use tracker channel pan.
-            if sh.default_pan <= 64 {
-                inst.panning = Some((sh.default_pan as f32 - 32.0) / 32.0);
+            // Bit 7 set means "use this panning value"; bit 7 clear means "use channel pan".
+            if sh.default_pan & 0x80 != 0 {
+                let pan_val = sh.default_pan & 0x7F; // 0..64, 32 = centre
+                inst.panning = Some((pan_val as f32 - 32.0) / 32.0);
             }
 
             out_samples.push(sample);
@@ -1279,6 +1314,13 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
                     out_instruments[tracker_idx].volume *= *vol;
                     out_instruments[tracker_idx].fadeout = it_inst.fadeout;
 
+                    // Apply instrument default panning if bit 7 is set (overrides channel/sample pan).
+                    if it_inst.default_pan & 0x80 != 0 {
+                        let pan_val = it_inst.default_pan & 0x7F; // 0..64, 32 = centre
+                        out_instruments[tracker_idx].panning =
+                            Some((pan_val as f32 - 32.0) / 32.0);
+                    }
+
                     if out_instruments[tracker_idx].volume_envelope.is_none() {
                         out_instruments[tracker_idx].volume_envelope =
                             it_inst.volume_envelope.clone();
@@ -1321,34 +1363,38 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
         max_ch.max(1)
     };
 
-    // Initialize track metadata from IT header
-    let mut tracks = Vec::with_capacity(num_channels);
-    for i in 0..num_channels {
-        let it_vol = header.initial_channel_volume.get(i).copied().unwrap_or(64);
-        let it_pan = header.initial_channel_pan.get(i).copied().unwrap_or(32);
+    // Initialize all 64 tracks from IT header
+    let mut tracks = Vec::with_capacity(64);
+    for i in 0..64 {
+        let it_vol = header.initial_channel_volume[i];
+        let it_pan = header.initial_channel_pan[i];
         let mut t = Track::with_number(i + 1);
+        
         // IT channel volume is 0-64.
         t.volume = it_vol as f32 / 64.0;
-        // IT channel pan is 0(L) to 32(C) to 64(R). 100 means surround (map to C for now).
-        // If high bit (128) is set, the channel is muted.
+        
+        // IT channel pan is 0(L) to 32(C) to 64(R). 100/128+ are surround/muted.
         let pan_val = if (it_pan & 127) <= 64 {
             it_pan & 127
         } else {
             32
         };
         t.pan = (pan_val as f32 - 32.0) / 32.0;
+
         if (it_pan & 128) != 0 {
             t.muted = true;
         }
         tracks.push(t);
     }
     song.tracks = tracks;
+    let num_channels = 64; // IT always has 64 channels in the header environment
 
-    // Set Global volume combined with MixVolume
-    // This helps avoid clipping in busy modules.
     song.global_volume = (header.global_volume as f32 / 128.0) * (header.mix_volume as f32 / 128.0);
     // If Global Volume is 128 and Mix Volume is 128, it will be 1.0.
     // If Global Vol is 128 and Mix Vol is 48 (standard), it will be ~0.375.
+
+    song.pan_separation = header.pan_separation;
+    song.panning_law = PanningLaw::Linear; // IT uses linear panning (amplitude proportional to pan position)
 
     // ── Convert patterns ──
     song.patterns.clear();
@@ -1359,6 +1405,14 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
         let it_pat = parse_it_pattern(data, offset)?;
         let num_rows = it_pat.num_rows as usize;
         let mut pat = Pattern::new(num_rows.max(1), num_channels);
+
+        // Copy IT channel panning/volume/mute from song.tracks into the pattern tracks,
+        // so that mixer.tick(pattern) sees the correct initial panning every row.
+        for (pat_track, song_track) in pat.tracks_mut().iter_mut().zip(song.tracks.iter()) {
+            pat_track.pan = song_track.pan;
+            pat_track.volume = song_track.volume;
+            pat_track.muted = song_track.muted;
+        }
 
         for (r_idx, row) in it_pat.slots.iter().enumerate() {
             for c_idx in 0..num_channels {
