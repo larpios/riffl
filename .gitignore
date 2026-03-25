@@ -43,3 +43,6 @@ openspec
 
 # Test OPL build artifacts
 test-opl/target
+
+# Nix build result
+result
