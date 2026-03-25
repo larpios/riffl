@@ -690,7 +690,8 @@ fn load_it_sample_data(file_data: &[u8], sh: &ItSampleHeader) -> Option<Vec<f32>
         } else {
             // Uncompressed
             let block_data = current_sample_data;
-            let res = if is_16bit {
+
+            if is_16bit {
                 let mut raw = Vec::with_capacity(num_frames);
                 let mut sum = 0i16;
                 let xor_val = if !is_signed { -32768i16 } else { 0 };
@@ -729,8 +730,7 @@ fn load_it_sample_data(file_data: &[u8], sh: &ItSampleHeader) -> Option<Vec<f32>
                 current_sample_data =
                     &current_sample_data[num_frames.min(current_sample_data.len())..];
                 raw
-            };
-            res
+            }
         };
         channels_pcm.push(pcm_float);
     }

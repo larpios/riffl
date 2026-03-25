@@ -304,6 +304,9 @@ impl ChannelEffectState {
         self.tremolo_active = false;
         self.volume_slide_up = 0;
         self.volume_slide_down = 0;
+        self.pitch_slide_up = 0.0;
+        self.pitch_slide_down = 0.0;
+        self.portamento_speed = 0.0;
         self.sample_offset = None;
         self.channel_volume_slide_up = 0;
         self.channel_volume_slide_down = 0;
@@ -352,11 +355,7 @@ impl ChannelEffectState {
 
         // Vibrato depth: each unit = ~1/16 semitone
         let mut depth_semitones = self.vibrato_depth as f64 / 16.0;
-        // In high-res Amiga modes (S3M), vibrato depth is 4x finer.
-        // In XM (Linear mode), vibrato depth matches ProTracker/MOD (1x).
-        if self.use_high_res_periods && self.slide_mode == SlideMode::AmigaPeriod {
-            depth_semitones /= 4.0;
-        }
+
         // S3M Fine Vibrato (Uxy) is 4x finer than normal S3M vibrato (Hxy).
         if self.is_fine_vibrato {
             depth_semitones /= 4.0;
@@ -646,6 +645,12 @@ impl TrackerEffectProcessor {
         }
     }
 
+    /// Reset global slide state at the start of a row.
+    pub fn reset_row_slides(&mut self) {
+        self.global_volume_slide_up = 0;
+        self.global_volume_slide_down = 0;
+    }
+
     /// Set high-resolution period math (14.3MHz clock) for all channels.
     pub fn set_use_high_res_periods(&mut self, use_high_res: bool) {
         for ch in &mut self.channels {
@@ -726,7 +731,8 @@ impl TrackerEffectProcessor {
                         };
                         state.pitch_slide_up = speed;
                         state.prev_pitch_slide_up = speed;
-                    } else if self.mode == EffectMode::Compatible {
+                    } else if self.mode == EffectMode::Compatible || self.mode == EffectMode::Amiga
+                    {
                         state.pitch_slide_up = state.prev_pitch_slide_up;
                     } else {
                         state.pitch_slide_up = 0.0;
@@ -748,7 +754,8 @@ impl TrackerEffectProcessor {
                         };
                         state.pitch_slide_down = speed;
                         state.prev_pitch_slide_down = speed;
-                    } else if self.mode == EffectMode::Compatible {
+                    } else if self.mode == EffectMode::Compatible || self.mode == EffectMode::Amiga
+                    {
                         state.pitch_slide_down = state.prev_pitch_slide_down;
                     } else {
                         state.pitch_slide_down = 0.0;
@@ -772,7 +779,8 @@ impl TrackerEffectProcessor {
                         };
                         state.portamento_speed = speed;
                         state.prev_portamento_speed = speed;
-                    } else if self.mode == EffectMode::Compatible {
+                    } else if self.mode == EffectMode::Compatible || self.mode == EffectMode::Amiga
+                    {
                         state.portamento_speed = state.prev_portamento_speed;
                     } else {
                         state.portamento_speed = 0.0;
@@ -794,19 +802,16 @@ impl TrackerEffectProcessor {
                     if effect.param_x() > 0 {
                         state.vibrato_speed = effect.param_x();
                         state.prev_vibrato_speed = effect.param_x();
-                    } else if self.mode == EffectMode::Compatible {
+                    } else if self.mode == EffectMode::Compatible || self.mode == EffectMode::Amiga
+                    {
                         state.vibrato_speed = state.prev_vibrato_speed;
                     }
                     if effect.param_y() > 0 {
                         state.vibrato_depth = effect.param_y();
                         state.prev_vibrato_depth = effect.param_y();
-                    } else if self.mode == EffectMode::Compatible {
+                    } else if self.mode == EffectMode::Compatible || self.mode == EffectMode::Amiga
+                    {
                         state.vibrato_depth = state.prev_vibrato_depth;
-                    }
-
-                    // In Amiga mode, 400 stops the vibrato
-                    if self.mode == EffectMode::Amiga && effect.param == 0 {
-                        state.vibrato_active = false;
                     }
                 }
 
@@ -816,21 +821,16 @@ impl TrackerEffectProcessor {
                     if effect.param_x() > 0 {
                         state.vibrato_speed = effect.param_x();
                         state.prev_vibrato_speed = effect.param_x();
-                    } else if self.mode == EffectMode::Compatible {
+                    } else if self.mode == EffectMode::Compatible || self.mode == EffectMode::Amiga
+                    {
                         state.vibrato_speed = state.prev_vibrato_speed;
                     }
                     if effect.param_y() > 0 {
                         state.vibrato_depth = effect.param_y();
                         state.prev_vibrato_depth = effect.param_y();
-                    } else if self.mode == EffectMode::Compatible {
+                    } else if self.mode == EffectMode::Compatible || self.mode == EffectMode::Amiga
+                    {
                         state.vibrato_depth = state.prev_vibrato_depth;
-                    }
-
-                    // S3M U00 also stops vibrato (or continues, depending on tracker, but usually 00 = stop in S3M if not compatible)
-                    // Actually S3M is usually "Compatible" so it continues.
-                    // But if someone uses Amiga mode with S3M (unlikely), we stop.
-                    if self.mode == EffectMode::Amiga && effect.param == 0 {
-                        state.vibrato_active = false;
                     }
                 }
 
@@ -842,7 +842,8 @@ impl TrackerEffectProcessor {
                         state.volume_slide_down = effect.param_y();
                         state.prev_volume_slide_up = effect.param_x();
                         state.prev_volume_slide_down = effect.param_y();
-                    } else if self.mode == EffectMode::Compatible {
+                    } else if self.mode == EffectMode::Compatible || self.mode == EffectMode::Amiga
+                    {
                         state.volume_slide_up = state.prev_volume_slide_up;
                         state.volume_slide_down = state.prev_volume_slide_down;
                     }
@@ -869,7 +870,8 @@ impl TrackerEffectProcessor {
                         state.volume_slide_down = effect.param_y();
                         state.prev_volume_slide_up = effect.param_x();
                         state.prev_volume_slide_down = effect.param_y();
-                    } else if self.mode == EffectMode::Compatible {
+                    } else if self.mode == EffectMode::Compatible || self.mode == EffectMode::Amiga
+                    {
                         state.volume_slide_up = state.prev_volume_slide_up;
                         state.volume_slide_down = state.prev_volume_slide_down;
                     }
@@ -885,9 +887,6 @@ impl TrackerEffectProcessor {
                     if effect.param_y() > 0 {
                         state.tremolo_depth = effect.param_y();
                     }
-                    if self.mode == EffectMode::Amiga && effect.param == 0 {
-                        state.tremolo_active = false;
-                    }
                 }
 
                 EffectType::SampleOffset => {
@@ -901,7 +900,8 @@ impl TrackerEffectProcessor {
                         state.volume_slide_down = effect.param_y();
                         state.prev_volume_slide_up = effect.param_x();
                         state.prev_volume_slide_down = effect.param_y();
-                    } else if self.mode == EffectMode::Compatible {
+                    } else if self.mode == EffectMode::Compatible || self.mode == EffectMode::Amiga
+                    {
                         state.volume_slide_up = state.prev_volume_slide_up;
                         state.volume_slide_down = state.prev_volume_slide_down;
                     }
@@ -935,13 +935,7 @@ impl TrackerEffectProcessor {
                                 }
                                 SlideMode::AmigaPeriod => {
                                     let freq = state.pitch_ratio * state.triggered_note_freq;
-                                    let delta = if state.use_high_res_periods {
-                                        // XM Amiga mode: E1x is 1 MOD unit = 4 high-res units
-                                        sub_param as f64 * 4.0
-                                    } else {
-                                        // MOD mode: 1 unit
-                                        sub_param as f64
-                                    };
+                                    let delta = sub_param as f64;
                                     let new_freq = PitchCalculator::apply_slide(
                                         freq,
                                         delta,
@@ -964,11 +958,7 @@ impl TrackerEffectProcessor {
                                 }
                                 SlideMode::AmigaPeriod => {
                                     let freq = state.pitch_ratio * state.triggered_note_freq;
-                                    let delta = if state.use_high_res_periods {
-                                        sub_param as f64 * 4.0
-                                    } else {
-                                        sub_param as f64
-                                    };
+                                    let delta = sub_param as f64;
                                     let new_freq = PitchCalculator::apply_slide(
                                         freq,
                                         0.0,
@@ -1128,13 +1118,7 @@ impl TrackerEffectProcessor {
                             }
                             SlideMode::AmigaPeriod => {
                                 let freq = state.pitch_ratio * state.triggered_note_freq;
-                                let delta = if state.use_high_res_periods {
-                                    // S3M Extra-fine is 1 unit of 14.3MHz
-                                    effect.param as f64
-                                } else {
-                                    // MOD Fine is 1 unit of 3.5MHz
-                                    effect.param as f64
-                                };
+                                let delta = effect.param as f64;
                                 let new_freq = PitchCalculator::apply_slide(
                                     freq,
                                     delta,
@@ -1157,13 +1141,7 @@ impl TrackerEffectProcessor {
                             }
                             SlideMode::AmigaPeriod => {
                                 let freq = state.pitch_ratio * state.triggered_note_freq;
-                                let delta = if state.use_high_res_periods {
-                                    // S3M Extra-fine is 1 unit of 14.3MHz
-                                    effect.param as f64
-                                } else {
-                                    // MOD Fine is 1 unit of 3.5MHz
-                                    effect.param as f64
-                                };
+                                let delta = effect.param as f64;
                                 let new_freq = PitchCalculator::apply_slide(
                                     freq,
                                     0.0,
@@ -1186,12 +1164,10 @@ impl TrackerEffectProcessor {
                             }
                             SlideMode::AmigaPeriod => {
                                 let freq = state.pitch_ratio * state.triggered_note_freq;
-                                let delta = if state.use_high_res_periods {
-                                    // S3M Fine Slide is 4 units of 14.3MHz (1 MOD unit)
-                                    effect.param as f64 * 4.0
-                                } else {
-                                    effect.param as f64
-                                };
+                                let mut delta = effect.param as f64;
+                                if state.use_high_res_periods {
+                                    delta *= 4.0;
+                                }
                                 let new_freq = PitchCalculator::apply_slide(
                                     freq,
                                     delta,
@@ -1214,12 +1190,10 @@ impl TrackerEffectProcessor {
                             }
                             SlideMode::AmigaPeriod => {
                                 let freq = state.pitch_ratio * state.triggered_note_freq;
-                                let delta = if state.use_high_res_periods {
-                                    // S3M Fine Slide is 4 units of 14.3MHz (1 MOD unit)
-                                    effect.param as f64 * 4.0
-                                } else {
-                                    effect.param as f64
-                                };
+                                let mut delta = effect.param as f64;
+                                if state.use_high_res_periods {
+                                    delta *= 4.0;
+                                }
                                 let new_freq = PitchCalculator::apply_slide(
                                     freq,
                                     0.0,
@@ -1250,13 +1224,7 @@ impl TrackerEffectProcessor {
                                 state.pitch_ratio = new_freq / state.triggered_note_freq;
                             }
                             SlideMode::AmigaPeriod => {
-                                let delta = if state.use_high_res_periods {
-                                    // S3M Extra-fine is 1 unit of 14.3MHz
-                                    effect.param as f64
-                                } else {
-                                    // MOD Fine is 1 unit of 3.5MHz
-                                    effect.param as f64
-                                };
+                                let delta = effect.param as f64;
                                 let new_freq = PitchCalculator::apply_portamento(
                                     current_freq,
                                     target_freq,
@@ -1287,12 +1255,7 @@ impl TrackerEffectProcessor {
                                 state.pitch_ratio = new_freq / state.triggered_note_freq;
                             }
                             SlideMode::AmigaPeriod => {
-                                let delta = if state.use_high_res_periods {
-                                    // S3M Fine Portamento is 4 units of 14.3MHz (1 MOD unit)
-                                    effect.param as f64 * 4.0
-                                } else {
-                                    effect.param as f64
-                                };
+                                let delta = effect.param as f64;
                                 let new_freq = PitchCalculator::apply_portamento(
                                     current_freq,
                                     target_freq,
@@ -1567,20 +1530,24 @@ mod tests {
 
     #[test]
     fn test_arpeggio_zero_params_returns_zero() {
-        let mut state = ChannelEffectState::default();
-        state.arpeggio_active = true;
-        state.arpeggio_x = 0;
-        state.arpeggio_y = 0;
+        let state = ChannelEffectState {
+            arpeggio_active: true,
+            arpeggio_x: 0,
+            arpeggio_y: 0,
+            ..Default::default()
+        };
         assert_eq!(state.arpeggio_semitone_offset(), 0.0);
     }
 
     #[test]
     fn test_arpeggio_cycles_through_phases() {
-        let mut state = ChannelEffectState::default();
-        state.arpeggio_active = true;
-        state.arpeggio_x = 4;
-        state.arpeggio_y = 7;
-        state.frames_per_row = 300;
+        let mut state = ChannelEffectState {
+            arpeggio_active: true,
+            arpeggio_x: 4,
+            arpeggio_y: 7,
+            frames_per_row: 300,
+            ..Default::default()
+        };
 
         // Phase 0: base note
         state.row_frame_counter = 0;

@@ -552,6 +552,7 @@ impl Mixer {
 
         // Clear pending notes from previous row
         self.pending_notes.clear();
+        self.effect_processor.reset_row_slides();
 
         let mut transport_commands = Vec::new();
 
@@ -719,14 +720,28 @@ impl Mixer {
                             if has_tone_porta && self.voices[ch].is_some() {
                                 // A tone portamento effect exists and a voice is already playing.
                                 // Do not trigger a new sample. The TrackerEffectProcessor handles target pitch updates.
-                                // However, we update the voice's instrument settings (volume, panning, etc) without retriggering.
+                                // However, we update the voice's instrument settings (volume, panning, etc) if an instrument is specified.
                                 if let Some(voice) = &mut self.voices[ch] {
-                                    voice.instrument_index = instrument_idx;
-                                    voice.velocity_gain = velocity_gain;
-                                    voice.hz_to_rate = hz_to_rate;
-                                    // Update LFO state if instrument changed
-                                    voice.lfo =
-                                        VoiceLfoState::new(self.instruments.get(instrument_idx));
+                                    // Reset key_on and fadeout state for the new note
+                                    voice.key_on = true;
+                                    voice.fadeout_multiplier = 1.0;
+
+                                    if cell.instrument.is_some() {
+                                        voice.instrument_index = instrument_idx;
+                                        voice.velocity_gain = velocity_gain;
+                                        voice.hz_to_rate = hz_to_rate;
+                                        // Update LFO state (reset envelopes) if instrument specified
+                                        voice.lfo = VoiceLfoState::new(
+                                            self.instruments.get(instrument_idx),
+                                        );
+                                        // Reset envelopes for new instrument
+                                        voice.volume_envelope_tick = 0;
+                                        voice.panning_envelope_tick = 0;
+                                        voice.pitch_envelope_tick = 0;
+                                        voice.volume_adsr = AdsrState::default();
+                                        voice.panning_adsr = AdsrState::default();
+                                        voice.pitch_adsr = AdsrState::default();
+                                    }
                                 }
                             } else {
                                 // Check for Note Delay (EDx)
@@ -893,11 +908,23 @@ impl Mixer {
                                     if let Some(voice) = &mut self.voices[ch] {
                                         voice.instrument_index = instrument_idx;
                                         voice.sample_index = resolved_sample_idx;
-                                        voice.velocity_gain = velocity_gain as f32;
+                                        voice.velocity_gain = velocity_gain;
                                         voice.hz_to_rate = hz_to_rate;
+
+                                        // Reset key_on and fadeout state for the new instrument trigger
+                                        voice.key_on = true;
+                                        voice.fadeout_multiplier = 1.0;
+
                                         voice.lfo = VoiceLfoState::new(
                                             self.instruments.get(instrument_idx),
                                         );
+                                        // Reset envelopes for new instrument
+                                        voice.volume_envelope_tick = 0;
+                                        voice.panning_envelope_tick = 0;
+                                        voice.pitch_envelope_tick = 0;
+                                        voice.volume_adsr = AdsrState::default();
+                                        voice.panning_adsr = AdsrState::default();
+                                        voice.pitch_adsr = AdsrState::default();
                                     }
 
                                     // Update period clock for the channel if in Amiga mode

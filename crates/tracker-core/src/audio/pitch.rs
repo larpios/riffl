@@ -7,8 +7,7 @@
 pub const AMIGA_PAL_CLOCK: f64 = 3_546_894.6;
 
 /// S3M period clock constant (8363Hz * 1712 = 14317456).
-/// Actually 14317056 in most trackers.
-pub const AMIGA_S3M_CLOCK: f64 = 14_317_056.0;
+pub const AMIGA_S3M_CLOCK: f64 = 14_317_456.0;
 
 /// Determines how pitch slide and portamento math is computed.
 ///

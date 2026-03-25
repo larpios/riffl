@@ -310,18 +310,16 @@ pub fn parse_s3m_instrument(
             }
         }
         fd
+    } else if signed_samples {
+        raw_slice
+            .iter()
+            .map(|&b| (b as i8) as f32 / 128.0)
+            .collect()
     } else {
-        if signed_samples {
-            raw_slice
-                .iter()
-                .map(|&b| (b as i8) as f32 / 128.0)
-                .collect()
-        } else {
-            raw_slice
-                .iter()
-                .map(|&b| (b as i16 - 128) as f32 / 128.0)
-                .collect()
-        }
+        raw_slice
+            .iter()
+            .map(|&b| (b as i16 - 128) as f32 / 128.0)
+            .collect()
     };
 
     Ok(S3mInstrument {
@@ -545,10 +543,10 @@ fn convert_s3m_effect(cmd: u8, info: u8) -> Option<Effect> {
         }
         'G' => {
             if x == 0xF {
-                // Extra Fine Portamento (GFx)
+                // Extra Fine Portamento (GxF)
                 Some(Effect::new(0x25, y))
             } else if x == 0xE {
-                // Fine Portamento (GEx)
+                // Fine Portamento (GxE)
                 Some(Effect::new(0x26, y))
             } else {
                 Some(Effect::new(0x03, info)) // Normal Tone Portamento
@@ -645,7 +643,7 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
             } else {
                 8363
             };
-            let base_note = 60.0 - 12.0 * (c2spd as f64 / 8363.0).log2();
+            let base_note = 48.0 - 12.0 * (c2spd as f64 / 8363.0).log2();
             sample = sample.with_base_note(base_note.round() as u8);
 
             let mut inst = Instrument::new(s3m_inst.name.clone());
@@ -691,7 +689,7 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
                             } else {
                                 8363
                             };
-                            let base_note = 60.0 - 12.0 * (c2spd as f64 / 8363.0).log2();
+                            let base_note = 48.0 - 12.0 * (c2spd as f64 / 8363.0).log2();
                             sample = sample.with_base_note(base_note.round() as u8);
                             sample
                         }
