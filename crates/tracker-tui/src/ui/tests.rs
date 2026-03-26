@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::pattern_renderer::{calculate_scroll_offset, format_cell_display, format_cell_parts};
 
 #[test]
 fn test_scroll_offset_small_pattern() {

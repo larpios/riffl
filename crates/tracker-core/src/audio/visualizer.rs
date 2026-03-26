@@ -76,8 +76,10 @@ impl Visualizer {
         if ch < self.oscilloscope_bufs.len() {
             let write_pos = self.oscilloscope_write_pos[ch].load(Ordering::Relaxed) as usize;
             self.oscilloscope_bufs[ch][write_pos] = sample;
-            self.oscilloscope_write_pos[ch]
-                .store(((write_pos + 1) % OSCILLOSCOPE_BUF_SIZE) as u32, Ordering::Relaxed);
+            self.oscilloscope_write_pos[ch].store(
+                ((write_pos + 1) % OSCILLOSCOPE_BUF_SIZE) as u32,
+                Ordering::Relaxed,
+            );
         }
     }
 
@@ -168,7 +170,8 @@ impl Visualizer {
     pub fn set_num_channels(&mut self, num_channels: usize) {
         if num_channels > self.channel_levels.len() {
             for _ in self.channel_levels.len()..num_channels {
-                self.channel_levels.push((AtomicU32::new(0), AtomicU32::new(0)));
+                self.channel_levels
+                    .push((AtomicU32::new(0), AtomicU32::new(0)));
                 self.oscilloscope_bufs
                     .push(vec![0.0f32; OSCILLOSCOPE_BUF_SIZE]);
                 self.oscilloscope_write_pos.push(AtomicU32::new(0));

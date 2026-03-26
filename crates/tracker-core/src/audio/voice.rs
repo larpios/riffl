@@ -3,7 +3,7 @@
 //! This module contains the `Voice` struct and its related modulation states
 //! like LFO and ADSR envelopes.
 
-use crate::song::{Adsr, Instrument, LfoWaveform, Lfo};
+use crate::song::{Adsr, Instrument, Lfo, LfoWaveform};
 
 /// Evaluates an LFO waveform at the given phase (0.0 to 1.0).
 /// Returns a value in the range [-1.0, 1.0].

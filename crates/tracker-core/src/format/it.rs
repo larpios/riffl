@@ -790,7 +790,7 @@ fn parse_it_envelope(data: &[u8], offset: &mut usize, bipolar: bool) -> Envelope
         let raw = data[*offset];
         *offset += 1;
         let frame = read_u16_le(data, offset);
-        
+
         let value = if bipolar {
             // Panning/Pitch: 0..64 mapped to -1.0..1.0 (32 = center)
             (raw as f32 - 32.0) / 32.0
@@ -1317,8 +1317,7 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
                     // Apply instrument default panning if bit 7 is set (overrides channel/sample pan).
                     if it_inst.default_pan & 0x80 != 0 {
                         let pan_val = it_inst.default_pan & 0x7F; // 0..64, 32 = centre
-                        out_instruments[tracker_idx].panning =
-                            Some((pan_val as f32 - 32.0) / 32.0);
+                        out_instruments[tracker_idx].panning = Some((pan_val as f32 - 32.0) / 32.0);
                     }
 
                     if out_instruments[tracker_idx].volume_envelope.is_none() {
@@ -1369,10 +1368,10 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
         let it_vol = header.initial_channel_volume[i];
         let it_pan = header.initial_channel_pan[i];
         let mut t = Track::with_number(i + 1);
-        
+
         // IT channel volume is 0-64.
         t.volume = it_vol as f32 / 64.0;
-        
+
         // IT channel pan is 0(L) to 32(C) to 64(R). 100/128+ are surround/muted.
         let pan_val = if (it_pan & 127) <= 64 {
             it_pan & 127

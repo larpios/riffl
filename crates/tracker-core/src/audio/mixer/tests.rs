@@ -1,14 +1,15 @@
 use super::Mixer;
 use crate::audio::sample::Sample;
 use crate::audio::voice::evaluate_lfo_waveform;
-use crate::pattern::pattern::Pattern;
-use crate::song::Instrument;
-use std::sync::Arc;
+use crate::audio::voice::VoiceLfoState;
 use crate::pattern::effect::{Effect, EffectType};
 use crate::pattern::note::{Note, NoteEvent, Pitch};
+use crate::pattern::pattern::Pattern;
 use crate::pattern::row::Cell;
+use crate::pattern::track::Track;
+use crate::song::Instrument;
 use crate::song::{Lfo, LfoWaveform};
-
+use std::sync::Arc;
 
 /// Create a simple sine wave sample at 440Hz for testing.
 /// Base note is set to A-4 (MIDI 57) to match the 440Hz content.
@@ -397,10 +398,8 @@ fn test_mixer_higher_note_plays_faster() {
 
     // The high-pitched version should have progressed further through the ramp sample,
     // producing higher average values in the output (since the ramp goes 0→1)
-    let avg_low: f32 =
-        output_low.iter().map(|s| s.abs()).sum::<f32>() / output_low.len() as f32;
-    let avg_high: f32 =
-        output_high.iter().map(|s| s.abs()).sum::<f32>() / output_high.len() as f32;
+    let avg_low: f32 = output_low.iter().map(|s| s.abs()).sum::<f32>() / output_low.len() as f32;
+    let avg_high: f32 = output_high.iter().map(|s| s.abs()).sum::<f32>() / output_high.len() as f32;
     assert!(
         avg_high > avg_low,
         "Higher note should progress faster through sample (avg_high={} > avg_low={})",
@@ -934,8 +933,7 @@ fn test_mixer_pingpong_loop_boundary() {
     use crate::audio::sample::LoopMode;
     // Values: 0.0, 0.1, 0.2, ..., 0.9
     let data: Vec<f32> = (0..10).map(|i| i as f32 / 10.0).collect();
-    let sample =
-        Arc::new(Sample::new(data, 44100, 1, None).with_loop(LoopMode::PingPong, 5, 9));
+    let sample = Arc::new(Sample::new(data, 44100, 1, None).with_loop(LoopMode::PingPong, 5, 9));
 
     let mut mixer = Mixer::new(vec![sample], Vec::new(), 1, 44100);
     let mut pattern = Pattern::new(16, 1);
@@ -954,13 +952,13 @@ fn test_mixer_pingpong_loop_boundary() {
 
     // Frame 1: pos 8.5. No reversal. pos -> 9.5
     // Frame 2: pos 9.5. No reversal (9 > 9 is false). pos -> 10.5
-    // Frame 3: pos 10.5. src_frame = 10. 10 > 9 is true. REVERSAL.
-    //          loop_dir -> -1.0. pos -> 9.0.
-    //          Then it renders pos 9.0. pos -> 9.0 + (-1.0) = 8.0.
+    // Frame 3: pos 10.5. 10.5 >= (9 + 1 = 10.0) is true. REVERSAL.
+    //          loop_dir -> -1.0. pos -> 9.0 - (10.5 - 10.0) = 8.5.
+    //          Then it renders pos 8.5. pos -> 8.5 + (-1.0) = 7.5.
 
     let voice = mixer.voices[0].as_ref().unwrap();
     assert_eq!(voice.loop_direction, -1.0);
-    assert_eq!(voice.position, 8.0);
+    assert_eq!(voice.position, 7.5);
 }
 
 // --- Preview toggle & scrub ---
@@ -1817,8 +1815,7 @@ fn test_mixer_lfo_pitch_modulation() {
     inst_with_lfo.sample_index = Some(0);
     inst_with_lfo.pitch_lfo = Some(Lfo::sine(10.0, 0.5));
 
-    let mut mixer_no_lfo =
-        Mixer::new(vec![Arc::new(sample.clone())], vec![inst_no_lfo], 4, 48000);
+    let mut mixer_no_lfo = Mixer::new(vec![Arc::new(sample.clone())], vec![inst_no_lfo], 4, 48000);
     let mut mixer_with_lfo = Mixer::new(
         vec![Arc::new(sample.clone())],
         vec![inst_with_lfo],

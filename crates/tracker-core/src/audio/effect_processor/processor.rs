@@ -1,9 +1,9 @@
 //! Effect processor implementation.
 
-use crate::audio::pitch::{PitchCalculator, SlideMode};
-use crate::pattern::effect::{Effect, EffectMode, EffectType};
 use super::state::ChannelEffectState;
 use super::types::{TransportCommand, VoiceRenderState};
+use crate::audio::pitch::{PitchCalculator, SlideMode};
+use crate::pattern::effect::{Effect, EffectMode, EffectType};
 
 /// Effect processor that manages per-channel effect state.
 pub struct TrackerEffectProcessor {
@@ -316,50 +316,46 @@ impl TrackerEffectProcessor {
                     let sub_param = effect.param_y();
 
                     match sub_command {
-                        0x1 => {
-                            match state.slide_mode {
-                                SlideMode::Linear => {
-                                    let semitones = sub_param as f64 / 16.0;
-                                    state.pitch_ratio *= 2.0_f64.powf(semitones / 12.0);
-                                }
-                                SlideMode::AmigaPeriod => {
-                                    let freq = state.pitch_ratio * state.triggered_note_freq;
-                                    let delta = sub_param as f64;
-                                    let new_freq = PitchCalculator::apply_slide(
-                                        freq,
-                                        delta,
-                                        0.0,
-                                        state.slide_mode,
-                                        state.period_clock,
-                                    );
-                                    if state.triggered_note_freq > 0.0 {
-                                        state.pitch_ratio = new_freq / state.triggered_note_freq;
-                                    }
+                        0x1 => match state.slide_mode {
+                            SlideMode::Linear => {
+                                let semitones = sub_param as f64 / 16.0;
+                                state.pitch_ratio *= 2.0_f64.powf(semitones / 12.0);
+                            }
+                            SlideMode::AmigaPeriod => {
+                                let freq = state.pitch_ratio * state.triggered_note_freq;
+                                let delta = sub_param as f64;
+                                let new_freq = PitchCalculator::apply_slide(
+                                    freq,
+                                    delta,
+                                    0.0,
+                                    state.slide_mode,
+                                    state.period_clock,
+                                );
+                                if state.triggered_note_freq > 0.0 {
+                                    state.pitch_ratio = new_freq / state.triggered_note_freq;
                                 }
                             }
-                        }
-                        0x2 => {
-                            match state.slide_mode {
-                                SlideMode::Linear => {
-                                    let semitones = sub_param as f64 / 16.0;
-                                    state.pitch_ratio *= 2.0_f64.powf(-semitones / 12.0);
-                                }
-                                SlideMode::AmigaPeriod => {
-                                    let freq = state.pitch_ratio * state.triggered_note_freq;
-                                    let delta = sub_param as f64;
-                                    let new_freq = PitchCalculator::apply_slide(
-                                        freq,
-                                        0.0,
-                                        delta,
-                                        state.slide_mode,
-                                        state.period_clock,
-                                    );
-                                    if state.triggered_note_freq > 0.0 {
-                                        state.pitch_ratio = new_freq / state.triggered_note_freq;
-                                    }
+                        },
+                        0x2 => match state.slide_mode {
+                            SlideMode::Linear => {
+                                let semitones = sub_param as f64 / 16.0;
+                                state.pitch_ratio *= 2.0_f64.powf(-semitones / 12.0);
+                            }
+                            SlideMode::AmigaPeriod => {
+                                let freq = state.pitch_ratio * state.triggered_note_freq;
+                                let delta = sub_param as f64;
+                                let new_freq = PitchCalculator::apply_slide(
+                                    freq,
+                                    0.0,
+                                    delta,
+                                    state.slide_mode,
+                                    state.period_clock,
+                                );
+                                if state.triggered_note_freq > 0.0 {
+                                    state.pitch_ratio = new_freq / state.triggered_note_freq;
                                 }
                             }
-                        }
+                        },
                         0x3 => {
                             state.glissando = sub_param != 0;
                         }
@@ -723,10 +719,16 @@ impl TrackerEffectProcessor {
 
     pub fn channel_panning(&self, channel: usize) -> Option<f32> {
         self.channels.get(channel).and_then(|s| {
-            if s.panning_override.is_none() && s.instrument_pan_override.is_none() && !s.panbrello_active {
+            if s.panning_override.is_none()
+                && s.instrument_pan_override.is_none()
+                && !s.panbrello_active
+            {
                 return None;
             }
-            let base = s.panning_override.or(s.instrument_pan_override).unwrap_or(0.5);
+            let base = s
+                .panning_override
+                .or(s.instrument_pan_override)
+                .unwrap_or(0.5);
             let panbrello = if s.panbrello_active {
                 (s.panbrello_phase.sin() * s.panbrello_depth as f64 / 64.0) as f32
             } else {

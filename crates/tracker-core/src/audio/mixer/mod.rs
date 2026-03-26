@@ -16,11 +16,11 @@ use crate::song::Instrument;
 
 use std::sync::Arc;
 
-mod tick;
-mod render;
 mod preview;
+mod render;
 #[cfg(test)]
 mod tests;
+mod tick;
 
 /// Audio mixer that reads pattern data and produces mixed audio output.
 ///

@@ -767,12 +767,16 @@ pub fn import_xm(data: &[u8]) -> Result<FormatData, String> {
             if xm_inst.panning_envelope_flags & 0x01 != 0 && !xm_inst.panning_envelope.is_empty() {
                 inst.panning_envelope = Some(Envelope {
                     enabled: true,
-                    points: xm_inst.panning_envelope.iter().map(|p| EnvelopePoint {
-                        frame: p.frame,
-                        // p.value is already normalized to 0..1 by parse_envelope_points;
-                        // remap to -1..1 (-1=left, 0=center, +1=right).
-                        value: p.value * 2.0 - 1.0,
-                    }).collect(),
+                    points: xm_inst
+                        .panning_envelope
+                        .iter()
+                        .map(|p| EnvelopePoint {
+                            frame: p.frame,
+                            // p.value is already normalized to 0..1 by parse_envelope_points;
+                            // remap to -1..1 (-1=left, 0=center, +1=right).
+                            value: p.value * 2.0 - 1.0,
+                        })
+                        .collect(),
                     sustain_enabled: xm_inst.panning_envelope_flags & 0x02 != 0,
                     sustain_start_point: xm_inst.panning_sustain_point as usize,
                     sustain_end_point: xm_inst.panning_sustain_point as usize,

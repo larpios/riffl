@@ -321,7 +321,7 @@ impl super::Mixer {
                             }
                         }
                         LoopMode::Forward => {
-                            if voice.position > eff_loop_end as f64 {
+                            if voice.position >= (eff_loop_end + 1) as f64 {
                                 let loop_len = (eff_loop_end - eff_loop_start + 1) as f64;
                                 let offset =
                                     (voice.position - eff_loop_start as f64).rem_euclid(loop_len);
@@ -329,12 +329,19 @@ impl super::Mixer {
                             }
                         }
                         LoopMode::PingPong => {
-                            if voice.loop_direction > 0.0 && src_frame > eff_loop_end {
+                            if voice.loop_direction > 0.0
+                                && voice.position >= (eff_loop_end + 1) as f64
+                            {
                                 voice.loop_direction = -1.0;
-                                voice.position = eff_loop_end as f64;
-                            } else if voice.loop_direction < 0.0 && src_frame < eff_loop_start {
+                                // Invert fractional component when reversing direction
+                                let overshoot = voice.position - (eff_loop_end + 1) as f64;
+                                voice.position = eff_loop_end as f64 - overshoot;
+                            } else if voice.loop_direction < 0.0
+                                && voice.position < eff_loop_start as f64
+                            {
                                 voice.loop_direction = 1.0;
-                                voice.position = eff_loop_start as f64;
+                                let overshoot = eff_loop_start as f64 - voice.position;
+                                voice.position = eff_loop_start as f64 + overshoot;
                             }
                         }
                     }
@@ -407,18 +414,21 @@ impl super::Mixer {
                         render_state.gain.unwrap_or(render_state.channel_volume);
 
                     let pan_sep_mult = self.pan_separation as f32 / 128.0;
-                    
+
                     // Combine base pan (track or override)
-                    let base_pan = render_state.pan_override
+                    let base_pan = render_state
+                        .pan_override
                         .map(|p| p * 2.0 - 1.0)
                         .unwrap_or(strip.current_pan());
-                    
+
                     // IF we have a panning envelope enabled, it OVERRIDES the base panning (IT behavior)
-                    let pan_env_active = self.instruments.get(voice.instrument_index)
+                    let pan_env_active = self
+                        .instruments
+                        .get(voice.instrument_index)
                         .and_then(|i| i.panning_envelope.as_ref())
                         .map(|e| e.enabled)
                         .unwrap_or(false);
-                    
+
                     // When a panning envelope is active, it provides the absolute
                     // pan position (IT/XM behaviour).  When inactive, env_pan holds
                     // any ADSR / LFO offsets that should still be added to base_pan.
@@ -427,7 +437,7 @@ impl super::Mixer {
                     } else {
                         (base_pan + env_pan).clamp(-1.0, 1.0)
                     };
-                    
+
                     let total_pan = (final_pan * pan_sep_mult).clamp(-1.0, 1.0);
 
                     let (left_gain, right_gain) = strip.next_gains_modulated(
@@ -453,10 +463,12 @@ impl super::Mixer {
                     output[out_idx] += post_l;
                     output[out_idx + 1] += post_r;
 
-                    self.visualizer.update_channel_levels(ch, post_l.abs(), post_r.abs());
+                    self.visualizer
+                        .update_channel_levels(ch, post_l.abs(), post_r.abs());
 
                     // Write mono mix to oscilloscope ring buffer
-                    self.visualizer.record_oscilloscope_sample(ch, (post_l + post_r) * 0.5);
+                    self.visualizer
+                        .record_oscilloscope_sample(ch, (post_l + post_r) * 0.5);
 
                     for bus_idx in 0..num_buses {
                         let send_level = strip.next_send_level(bus_idx);
@@ -503,12 +515,10 @@ impl super::Mixer {
                 output[frame * 2] += l * 0.7;
                 output[frame * 2 + 1] += r * 0.7;
                 self.preview_pos += pv_rate;
-                if looping && self.preview_pos as usize > pv_loop_end {
+                if looping && self.preview_pos >= (pv_loop_end + 1) as f64 {
                     let loop_len = (pv_loop_end - pv_loop_start + 1) as f64;
-                    self.preview_pos -= loop_len;
-                    if self.preview_pos < pv_loop_start as f64 {
-                        self.preview_pos = pv_loop_start as f64;
-                    }
+                    let offset = (self.preview_pos - pv_loop_start as f64).rem_euclid(loop_len);
+                    self.preview_pos = pv_loop_start as f64 + offset;
                 }
             }
             done

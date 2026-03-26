@@ -503,7 +503,8 @@ impl ChannelEffectState {
     /// Advance panning slide by one tick.
     pub fn advance_panning_slide_tick(&mut self) {
         if self.panning_slide_right > 0 || self.panning_slide_left > 0 {
-            let current_pan = self.panning_override
+            let current_pan = self
+                .panning_override
                 .or(self.instrument_pan_override)
                 .unwrap_or(0.5);
             let delta_per_tick =

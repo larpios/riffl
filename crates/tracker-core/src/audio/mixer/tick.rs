@@ -374,8 +374,7 @@ impl super::Mixer {
                                     let velocity_gain = (100.0 / 127.0) * inst_vol * sample.volume;
 
                                     // Apply instrument panning to instrument_pan_override.
-                                    if let Some(state) =
-                                        self.effect_processor.channel_state_mut(ch)
+                                    if let Some(state) = self.effect_processor.channel_state_mut(ch)
                                     {
                                         state.instrument_pan_override = self
                                             .instruments
