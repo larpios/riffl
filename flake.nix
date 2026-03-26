@@ -24,20 +24,20 @@
 
         devTools = with pkgs; [
           rustup
-          cargo-audit
-          lldb
         ];
       in {
         # The environment for 'nix develop' or 'direnv'
         devShells.default = pkgs.mkShell {
+          nativeBuildInputs = with pkgs; [pkg-config];
+
           buildInputs = commonInputs ++ devTools;
 
           shellHook = ''
-            echo "Entering riffl development environment!"
+                          echo "Entering riffl development environment!"
             # Ensure the toolchain is ready
-            rustup override set stable 2>/dev/null || true
-            rustup default stable
-            rustup component add rustfmt
+                          rustup override set stable 2>/dev/null || true
+                          rustup default stable
+                          rustup component add rustfmt
           '';
         };
 
