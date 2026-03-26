@@ -98,3 +98,36 @@ impl App {
         self.editor.go_to_row(usize::MAX);
     }
 }
+
+use crate::editor::Editor;
+
+impl App {
+    pub fn flush_editor_pattern(&mut self, arrangement_pos: usize) {
+        if let Some(&pattern_idx) = self.song.arrangement.get(arrangement_pos) {
+            if let Some(pattern) = self.song.patterns.get_mut(pattern_idx) {
+                *pattern = self.editor.pattern().clone();
+            }
+        }
+    }
+
+    /// Load the pattern at the given arrangement position into the editor.
+    /// Syncs global track state into the pattern so mixing settings persist.
+    pub fn load_arrangement_pattern(&mut self, arrangement_pos: usize) {
+        if let Some(&pattern_idx) = self.song.arrangement.get(arrangement_pos) {
+            if let Some(pattern) = self.song.patterns.get(pattern_idx) {
+                let mut p = pattern.clone();
+                // Sync tracks from song
+                for (ch, track) in p.tracks_mut().iter_mut().enumerate() {
+                    if let Some(song_track) = self.song.tracks.get(ch) {
+                        track.muted = song_track.muted;
+                        track.solo = song_track.solo;
+                        track.volume = song_track.volume;
+                        track.pan = song_track.pan;
+                    }
+                }
+                self.editor = Editor::new(p);
+                self.transport.set_num_rows(pattern.num_rows());
+            }
+        }
+    }
+}

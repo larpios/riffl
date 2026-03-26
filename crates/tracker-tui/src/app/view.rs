@@ -100,3 +100,50 @@ impl App {
         self.channel_scroll = self.channel_scroll.saturating_sub(1);
     }
 }
+
+use crate::editor::EditorMode;
+use crate::ui::modal::Modal;
+
+impl App {
+    /// Check if the application should continue running
+    pub fn should_run(&self) -> bool {
+        self.running && !self.should_quit
+    }
+
+    /// Get the current editor mode
+    pub fn editor_mode(&self) -> EditorMode {
+        self.editor.mode()
+    }
+
+    /// Handle application quit with audio cleanup
+    pub fn quit(&mut self) {
+        if self.is_dirty {
+            self.pending_quit = true;
+            self.open_modal(Modal::confirmation(
+                "Unsaved Changes".to_string(),
+                "Quit without saving?".to_string(),
+            ));
+            return;
+        }
+        self.force_quit();
+    }
+
+    pub fn force_quit(&mut self) {
+        if !self.transport.is_stopped() {
+            self.transport.stop();
+            if let Ok(mut mixer) = self.mixer.lock() {
+                mixer.stop_all();
+            }
+        }
+        if let Some(ref mut engine) = self.audio_engine {
+            engine.stop();
+        }
+        self.should_quit = true;
+        self.running = false;
+    }
+
+    /// Mark the project as having unsaved changes.
+    pub fn mark_dirty(&mut self) {
+        self.is_dirty = true;
+    }
+}

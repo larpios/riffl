@@ -356,3 +356,112 @@ impl App {
         self.instrument_names.len()
     }
 }
+
+use std::path::Path;
+use std::sync::Arc;
+use tracker_core::audio::{ChipRenderData, Sample, load_sample};
+
+impl App {
+    /// Loads the audio from `path` into the mixer and updates the instrument's
+    /// `sample_index` and `sample_path`. The instrument name is preserved.
+    pub fn assign_sample_to_instrument(
+        &mut self,
+        path: &Path,
+        inst_idx: usize,
+    ) -> Result<(), String> {
+        let output_sample_rate = self
+            .audio_engine
+            .as_ref()
+            .map(|e| e.sample_rate())
+            .unwrap_or(44100);
+
+        let sample =
+            load_sample(path, output_sample_rate).map_err(|e| format!("Failed to load: {e}"))?;
+        let chip_render = ChipRenderData::from_sample(&sample);
+
+        let sample_idx = if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.add_sample(Arc::new(sample))
+        } else {
+            return Err("Failed to lock mixer".to_string());
+        };
+
+        let inst = self
+            .song
+            .instruments
+            .get_mut(inst_idx)
+            .ok_or_else(|| format!("Instrument slot {inst_idx:02X} does not exist"))?;
+
+        inst.sample_index = Some(sample_idx);
+        inst.sample_path = Some(path.display().to_string());
+        inst.chip_render = Some(chip_render);
+        self.sync_mixer_instruments();
+        self.mark_dirty();
+        Ok(())
+    }
+
+    /// Replace an assigned sample and refresh the instrument's derived chip data.
+    pub fn replace_instrument_sample(
+        &mut self,
+        inst_idx: usize,
+        sample_idx: usize,
+        sample: Sample,
+    ) -> Result<(), String> {
+        let chip_render = ChipRenderData::from_sample(&sample);
+
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.replace_sample(sample_idx, Arc::new(sample));
+        } else {
+            return Err("Failed to lock mixer".to_string());
+        }
+
+        let inst = self
+            .song
+            .instruments
+            .get_mut(inst_idx)
+            .ok_or_else(|| format!("Instrument slot {inst_idx:02X} does not exist"))?;
+        inst.chip_render = Some(chip_render);
+
+        self.sync_mixer_instruments();
+        self.mark_dirty();
+        Ok(())
+    }
+
+    /// Preview a note pitch through a specific instrument's sample.
+    pub fn preview_instrument_note_pitch(&mut self, inst_idx: usize, pitch: Pitch, octave: u8) {
+        let note = Note::simple(pitch, octave);
+        let target_freq = note.frequency();
+
+        let sample = {
+            let mixer = match self.mixer.lock() {
+                Ok(m) => m,
+                Err(_) => return,
+            };
+            mixer.samples().get(inst_idx).cloned()
+        };
+
+        let sample = match sample {
+            Some(s) => s,
+            None => return,
+        };
+
+        let output_sample_rate = self
+            .audio_engine
+            .as_ref()
+            .map(|e| e.sample_rate())
+            .unwrap_or(44100);
+
+        let base_freq = sample.base_frequency();
+        let rate =
+            (target_freq / base_freq) * (sample.sample_rate() as f64 / output_sample_rate as f64);
+
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.trigger_preview(sample, rate);
+        }
+
+        if let Some(ref mut engine) = self.audio_engine {
+            if !engine.is_playing() {
+                let _ = engine.start();
+            }
+        }
+    }
+}

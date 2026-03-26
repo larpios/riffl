@@ -265,3 +265,71 @@ impl App {
         }
     }
 }
+
+use tracker_core::audio::TransportCommand;
+
+impl App {
+    /// Apply transport commands produced by effect processing (Fxx, Bxx, Dxx).
+    ///
+    /// These commands are returned by `mixer.tick()` when pattern effects fire:
+    /// - `SetBpm`: Update tempo on both transport and mixer effect processor.
+    /// - `PositionJump (Bxx)`: Jump to arrangement position; loads new pattern in Song mode.
+    /// - `PatternBreak (Dxx)`: Advance to next arrangement entry at the given row.
+    pub(super) fn apply_effect_transport_commands(&mut self, commands: Vec<TransportCommand>) {
+        for cmd in commands {
+            match cmd {
+                TransportCommand::SetBpm(bpm) => {
+                    let clamped = bpm.clamp(20.0, 999.0);
+                    self.transport.set_bpm(clamped);
+                    self.song.bpm = clamped;
+                    if let Ok(mut mixer) = self.mixer.lock() {
+                        mixer.update_tempo(clamped);
+                    }
+                }
+                TransportCommand::SetTpl(tpl) => {
+                    self.transport.set_tpl(tpl);
+                    if let Ok(mut mixer) = self.mixer.lock() {
+                        mixer.set_tpl(tpl);
+                    }
+                }
+                TransportCommand::PositionJump(pos) => {
+                    let old_pos = self.transport.arrangement_position();
+                    if self.transport.jump_to_arrangement_position(pos) && pos != old_pos {
+                        self.flush_editor_pattern(old_pos);
+                        self.load_arrangement_pattern(pos);
+                    }
+                }
+                TransportCommand::PatternBreak(row) => {
+                    let old_pos = self.transport.arrangement_position();
+                    if self.transport.pattern_break(row) {
+                        let new_pos = self.transport.arrangement_position();
+                        self.flush_editor_pattern(old_pos);
+                        self.load_arrangement_pattern(new_pos);
+                    }
+                }
+                TransportCommand::PatternLoop(sub_param) => {
+                    if sub_param == 0 {
+                        // E60: set loop point
+                        self.transport.set_pattern_loop_start();
+                    } else {
+                        // E6x (x>0): jump back to loop point x times
+                        if let Some(target) = self.transport.handle_pattern_loop(sub_param) {
+                            if self.follow_mode {
+                                self.editor.go_to_row(target);
+                            }
+                        }
+                    }
+                }
+                TransportCommand::PatternDelay(delay) => {
+                    // EEx: pattern delay
+                    self.transport.set_pattern_delay(delay);
+                }
+                TransportCommand::ScriptTrigger { channel, param } => {
+                    // Zxx: custom effect command for Rhai script triggering.
+                    // Store for the app layer to process (e.g., invoke a registered macro).
+                    self.pending_script_triggers.push((channel, param));
+                }
+            }
+        }
+    }
+}
