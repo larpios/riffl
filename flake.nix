@@ -26,7 +26,6 @@
           rustup
         ];
       in {
-        # The environment for 'nix develop' or 'direnv'
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [pkg-config];
 
@@ -41,14 +40,12 @@
           '';
         };
 
-        # The recipe for 'nix build'
         packages.default = pkgs.rustPlatform.buildRustPackage {
           pname = "riffl";
           version = "0.1.0";
           src = self;
 
-          # This must be updated whenever Cargo.toml/Cargo.lock changes
-          cargoHash = "sha256-Mm4xjrZEZoiwuz/bKSg/46cWGfGq54lK1nePNT6tBxo=";
+          cargoLock.lockFile = ./Cargo.lock;
 
           buildInputs = commonInputs;
 
