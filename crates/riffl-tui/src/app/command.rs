@@ -577,6 +577,223 @@ impl super::App {
             return;
         }
 
+        // :keyzone list — list keyzones for the current instrument
+        // :keyzone add <note_min> <note_max> <vel_min> <vel_max> <sample_idx> — add a keyzone
+        // :keyzone del <index> — delete a keyzone by index
+        // :keyzone clear — clear all keyzones for current instrument
+        if parts[0] == "keyzone" || parts[0] == "kz" {
+            let idx = self.instrument_selection().unwrap_or(0);
+            // Re-split the full args from parts[1] if present
+            let sub_parts: Vec<&str> = parts
+                .get(1)
+                .map(|s| s.split_whitespace().collect())
+                .unwrap_or_default();
+            let sub = sub_parts.first().copied().unwrap_or("list");
+            match sub {
+                "list" | "ls" => {
+                    if let Some(inst) = self.song.instruments.get(idx) {
+                        if inst.keyzones.is_empty() {
+                            self.open_modal(Modal::info(
+                                format!("Keyzones: {}", inst.name),
+                                format!("No keyzones (using sample_index: {:?})\nAdd with: :keyzone add <note_min> <note_max> <vel_min> <vel_max> <sample_idx>", inst.sample_index),
+                            ));
+                        } else {
+                            let lines: Vec<String> = inst.keyzones.iter().enumerate().map(|(i, kz)| {
+                                format!("  [{}] notes {:3}-{:3}  vel {:3}-{:3}  → sample {}", i, kz.note_min, kz.note_max, kz.velocity_min, kz.velocity_max, kz.sample_index)
+                            }).collect();
+                            self.open_modal(Modal::info(
+                                format!("Keyzones: {} ({} zones)", inst.name, inst.keyzones.len()),
+                                lines.join("\n"),
+                            ));
+                        }
+                    }
+                }
+                "add" => {
+                    let rest = parts.get(1).map(|s| s.trim()).unwrap_or("");
+                    // Skip the "add" subcommand word to get the numeric arguments
+                    let rest_after_add = rest.splitn(2, ' ').nth(1).unwrap_or("").trim();
+                    let nums: Vec<u64> = rest_after_add
+                        .split_whitespace()
+                        .filter_map(|t| t.parse::<u64>().ok())
+                        .collect();
+                    if nums.len() >= 5 {
+                        use riffl_core::song::Keyzone;
+                        let kz = Keyzone {
+                            note_min: (nums[0] as u8).min(119),
+                            note_max: (nums[1] as u8).min(119),
+                            velocity_min: (nums[2] as u8).min(127),
+                            velocity_max: (nums[3] as u8).min(127),
+                            sample_index: nums[4] as usize,
+                            base_note_override: None,
+                        };
+                        if let Some(inst) = self.song.instruments.get_mut(idx) {
+                            inst.keyzones.push(kz);
+                            inst.keyzones.sort_by_key(|k| k.note_min);
+                            self.sync_mixer_instruments();
+                            self.mark_dirty();
+                            self.open_modal(Modal::info(
+                                "Keyzone Added".to_string(),
+                                format!("notes {}-{}  vel {}-{}  → sample {}", nums[0], nums[1], nums[2], nums[3], nums[4]),
+                            ));
+                        }
+                    } else {
+                        self.open_modal(Modal::error(
+                            "Invalid keyzone".to_string(),
+                            "Usage: :keyzone add <note_min> <note_max> <vel_min> <vel_max> <sample_idx>\nMIDI notes 0-119, velocities 0-127".to_string(),
+                        ));
+                    }
+                }
+                "del" | "delete" | "remove" | "rm" => {
+                    let zone_idx: Option<usize> = sub_parts.get(1).and_then(|s| s.trim().parse().ok());
+                    if let Some(zi) = zone_idx {
+                        if let Some(inst) = self.song.instruments.get_mut(idx) {
+                            if zi < inst.keyzones.len() {
+                                inst.keyzones.remove(zi);
+                                self.sync_mixer_instruments();
+                                self.mark_dirty();
+                            }
+                        }
+                    } else {
+                        self.open_modal(Modal::error(
+                            "Invalid index".to_string(),
+                            "Usage: :keyzone del <index>  (use :keyzone list to see indices)".to_string(),
+                        ));
+                    }
+                }
+                "clear" => {
+                    if let Some(inst) = self.song.instruments.get_mut(idx) {
+                        inst.keyzones.clear();
+                        self.sync_mixer_instruments();
+                        self.mark_dirty();
+                    }
+                }
+                _ => {
+                    self.open_modal(Modal::error(
+                        "Unknown keyzone subcommand".to_string(),
+                        "Usage: :keyzone <list|add|del|clear>".to_string(),
+                    ));
+                }
+            }
+            return;
+        }
+
+        // :automate vol <start_vol> <end_vol> — fill channel with volume slide effects
+        // :automate pan <start_pan> <end_pan> — fill channel with pan effects
+        // Generates a linear ramp of Cxx/8xx effect commands across the visual selection
+        // or entire current channel if not in visual mode.
+        if parts[0] == "automate" || parts[0] == "auto" {
+            let sub_parts: Vec<&str> = parts
+                .get(1)
+                .map(|s| s.split_whitespace().collect())
+                .unwrap_or_default();
+            match sub_parts.first().copied() {
+                Some("vol") | Some("volume") => {
+                    let start = sub_parts.get(1).and_then(|s| s.parse::<f64>().ok());
+                    let end = sub_parts.get(2).and_then(|s| s.parse::<f64>().ok());
+                    if let (Some(sv), Some(ev)) = (start, end) {
+                        use riffl_core::pattern::effect::Effect;
+                        use crate::editor::EditorMode;
+                        let ch = self.editor.cursor_channel();
+                        let num_rows = self.editor.pattern().num_rows();
+                        let (r0, r1) = if self.editor.mode() == EditorMode::Visual {
+                            self.editor.visual_selection()
+                                .map(|((r0, _), (r1, _))| (r0, r1))
+                                .unwrap_or((0, num_rows.saturating_sub(1)))
+                        } else {
+                            (0, num_rows.saturating_sub(1))
+                        };
+                        let span = (r1 - r0) as f64;
+                        for row in r0..=r1 {
+                            let t = if span > 0.0 { (row - r0) as f64 / span } else { 0.0 };
+                            let vol = (sv + t * (ev - sv)).clamp(0.0, 255.0).round() as u8;
+                            if let Some(cell) = self.editor.pattern_mut().get_cell_mut(row, ch) {
+                                cell.set_effect(Effect::new(0xC, vol));
+                            }
+                        }
+                        self.mark_dirty();
+                        self.open_modal(Modal::info(
+                            "Volume Automation".to_string(),
+                            format!("Applied vol ramp {:.0}→{:.0} over rows {}-{} on channel {}", sv, ev, r0, r1, ch + 1),
+                        ));
+                    } else {
+                        self.open_modal(Modal::error(
+                            "Invalid automate".to_string(),
+                            "Usage: :automate vol <start_vol> <end_vol>  (0-255)\nApplies Cxx volume commands across the selection or current channel.".to_string(),
+                        ));
+                    }
+                }
+                Some("pan") | Some("panning") => {
+                    let start = sub_parts.get(1).and_then(|s| s.parse::<f64>().ok());
+                    let end = sub_parts.get(2).and_then(|s| s.parse::<f64>().ok());
+                    if let (Some(sp), Some(ep)) = (start, end) {
+                        use riffl_core::pattern::effect::Effect;
+                        use crate::editor::EditorMode;
+                        let ch = self.editor.cursor_channel();
+                        let num_rows = self.editor.pattern().num_rows();
+                        let (r0, r1) = if self.editor.mode() == EditorMode::Visual {
+                            self.editor.visual_selection()
+                                .map(|((r0, _), (r1, _))| (r0, r1))
+                                .unwrap_or((0, num_rows.saturating_sub(1)))
+                        } else {
+                            (0, num_rows.saturating_sub(1))
+                        };
+                        let span = (r1 - r0) as f64;
+                        for row in r0..=r1 {
+                            let t = if span > 0.0 { (row - r0) as f64 / span } else { 0.0 };
+                            let pan = (sp + t * (ep - sp)).clamp(0.0, 255.0).round() as u8;
+                            if let Some(cell) = self.editor.pattern_mut().get_cell_mut(row, ch) {
+                                cell.set_effect(Effect::new(0x8, pan));
+                            }
+                        }
+                        self.mark_dirty();
+                        self.open_modal(Modal::info(
+                            "Pan Automation".to_string(),
+                            format!("Applied pan ramp {:.0}→{:.0} over rows {}-{} on channel {}", sp, ep, r0, r1, ch + 1),
+                        ));
+                    } else {
+                        self.open_modal(Modal::error(
+                            "Invalid automate".to_string(),
+                            "Usage: :automate pan <start_pan> <end_pan>  (0-255)\nApplies 8xx pan commands across the selection or current channel.".to_string(),
+                        ));
+                    }
+                }
+                _ => {
+                    self.open_modal(Modal::error(
+                        "Unknown automate subcommand".to_string(),
+                        "Usage: :automate <vol|pan> <start> <end>".to_string(),
+                    ));
+                }
+            }
+            return;
+        }
+
+        // :instruments / :insts — list all instruments with their sample assignments
+        if parts[0] == "instruments" || parts[0] == "insts" || parts[0] == "inst" {
+            if self.song.instruments.is_empty() {
+                self.open_modal(Modal::info("Instruments".to_string(), "(none loaded)".to_string()));
+            } else {
+                let lines: Vec<String> = self.song.instruments.iter().enumerate().map(|(i, inst)| {
+                    let sample_info = if inst.keyzones.is_empty() {
+                        inst.sample_index.map(|si| format!("→ sample {}", si))
+                            .unwrap_or_else(|| "(no sample)".to_string())
+                    } else {
+                        format!("{} keyzones", inst.keyzones.len())
+                    };
+                    let vol_info = if (inst.volume - 1.0).abs() > 0.01 {
+                        format!(" vol:{:.0}%", inst.volume * 100.0)
+                    } else {
+                        String::new()
+                    };
+                    format!("  [{:02X}] {:<20} {}{}", i, inst.name, sample_info, vol_info)
+                }).collect();
+                self.open_modal(Modal::info(
+                    format!("Instruments ({} total)", self.song.instruments.len()),
+                    lines.join("\n"),
+                ));
+            }
+            return;
+        }
+
         // :<number> — jump to specific row
         if let Ok(row) = cmd.parse::<usize>() {
             self.editor.go_to_row(row.saturating_sub(1));

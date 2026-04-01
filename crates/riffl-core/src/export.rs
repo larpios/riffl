@@ -22,6 +22,8 @@ pub enum BitDepth {
     Bits16,
     /// 24-bit integer samples.
     Bits24,
+    /// 32-bit floating point samples (IEEE 754).
+    Bits32Float,
 }
 
 impl BitDepth {
@@ -30,8 +32,22 @@ impl BitDepth {
         match self {
             BitDepth::Bits16 => 16,
             BitDepth::Bits24 => 24,
+            BitDepth::Bits32Float => 32,
         }
     }
+}
+
+/// Dithering mode for bit depth reduction during export.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DitherMode {
+    /// No dithering (hard truncation).
+    #[default]
+    None,
+    /// Rectangular dithering (uniform noise, ±0.5 LSB).
+    Rectangular,
+    /// Triangular (TPDF) dithering (two rectangular dither sources summed, ±1 LSB).
+    /// Better spectral properties than rectangular — the recommended default for 16-bit export.
+    Triangular,
 }
 
 /// Configuration for WAV export.
@@ -41,6 +57,8 @@ pub struct ExportConfig {
     pub sample_rate: u32,
     /// Bit depth for the output WAV file.
     pub bit_depth: BitDepth,
+    /// Dithering algorithm applied during bit depth reduction.
+    pub dither: DitherMode,
 }
 
 impl Default for ExportConfig {
@@ -48,6 +66,7 @@ impl Default for ExportConfig {
         Self {
             sample_rate: 44100,
             bit_depth: BitDepth::Bits16,
+            dither: DitherMode::None,
         }
     }
 }
@@ -120,6 +139,9 @@ where
     let mut writer = WavWriter::create(path, spec).context("Failed to create WAV file")?;
 
     let mut rows_rendered: usize = 0;
+    let mut dither_state: u64 = 0xdeadbeefcafe1234;
+    let dither_scale_16 = 1.0 / i16::MAX as f32;   // 1 LSB at 16-bit
+    let dither_scale_24 = 1.0 / 8_388_607.0_f32;   // 1 LSB at 24-bit
 
     // Process each pattern in the arrangement
     for &pattern_idx in &song.arrangement {
@@ -159,7 +181,8 @@ where
             match config.bit_depth {
                 BitDepth::Bits16 => {
                     for &sample in &row_buffer {
-                        let scaled = (sample * i16::MAX as f32) as i16;
+                        let dithered = sample + dither_sample(config.dither, &mut dither_state, dither_scale_16);
+                        let scaled = (dithered.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
                         writer
                             .write_sample(scaled)
                             .context("Failed to write 16-bit sample")?;
@@ -167,10 +190,18 @@ where
                 }
                 BitDepth::Bits24 => {
                     for &sample in &row_buffer {
-                        let scaled = (sample * 8_388_607.0) as i32; // 2^23 - 1
+                        let dithered = sample + dither_sample(config.dither, &mut dither_state, dither_scale_24);
+                        let scaled = (dithered.clamp(-1.0, 1.0) * 8_388_607.0) as i32;
                         writer
                             .write_sample(scaled)
                             .context("Failed to write 24-bit sample")?;
+                    }
+                }
+                BitDepth::Bits32Float => {
+                    for &sample in &row_buffer {
+                        writer
+                            .write_sample(sample)
+                            .context("Failed to write 32-bit float sample")?;
                     }
                 }
             }
@@ -186,11 +217,39 @@ where
 
 /// Build a `WavSpec` from the export configuration.
 fn wav_spec(config: &ExportConfig) -> WavSpec {
+    let (bits, fmt) = match config.bit_depth {
+        BitDepth::Bits16 => (16, SampleFormat::Int),
+        BitDepth::Bits24 => (24, SampleFormat::Int),
+        BitDepth::Bits32Float => (32, SampleFormat::Float),
+    };
     WavSpec {
         channels: 2, // Stereo output
         sample_rate: config.sample_rate,
-        bits_per_sample: config.bit_depth.bits_per_sample(),
-        sample_format: SampleFormat::Int,
+        bits_per_sample: bits,
+        sample_format: fmt,
+    }
+}
+
+/// Generate a single dither noise value for the given mode.
+///
+/// Uses a simple LCG to avoid pulling in rand as a dependency. Returns a
+/// noise value in the range [-1, +1] scaled to the quantization step size.
+fn dither_sample(mode: DitherMode, state: &mut u64, scale: f32) -> f32 {
+    match mode {
+        DitherMode::None => 0.0,
+        DitherMode::Rectangular => {
+            *state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let r = (*state >> 33) as f32 / u32::MAX as f32; // 0..1
+            (r - 0.5) * scale
+        }
+        DitherMode::Triangular => {
+            // TPDF: sum of two independent rectangular sources
+            *state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let r1 = (*state >> 33) as f32 / u32::MAX as f32;
+            *state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let r2 = (*state >> 33) as f32 / u32::MAX as f32;
+            (r1 + r2 - 1.0) * scale
+        }
     }
 }
 
@@ -282,6 +341,7 @@ mod tests {
         let config = ExportConfig {
             sample_rate: 44100,
             bit_depth: BitDepth::Bits16,
+            dither: DitherMode::None,
         };
 
         export_wav(
@@ -385,6 +445,7 @@ mod tests {
         let config = ExportConfig {
             sample_rate: 48000,
             bit_depth: BitDepth::Bits16,
+            dither: DitherMode::None,
         };
 
         export_wav(
@@ -413,6 +474,7 @@ mod tests {
         let config = ExportConfig {
             sample_rate: 44100,
             bit_depth: BitDepth::Bits24,
+            dither: DitherMode::None,
         };
 
         export_wav(
@@ -580,6 +642,7 @@ mod tests {
         let config = ExportConfig {
             sample_rate: 48000,
             bit_depth: BitDepth::Bits24,
+            dither: DitherMode::None,
         };
 
         export_wav(

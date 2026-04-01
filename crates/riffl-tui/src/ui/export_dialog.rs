@@ -14,15 +14,17 @@ use ratatui::{
 
 use super::layout::create_centered_rect;
 use super::theme::Theme;
-use riffl_core::export::{BitDepth, ExportConfig};
+use riffl_core::export::{BitDepth, DitherMode, ExportConfig};
 
 /// Which field the user is currently editing in the export dialog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportField {
-    /// Sample rate selection (44100 / 48000)
+    /// Sample rate selection (22050 / 44100 / 48000 / 96000)
     SampleRate,
-    /// Bit depth selection (16-bit / 24-bit)
+    /// Bit depth selection (16-bit / 24-bit / 32-bit float)
     BitDepth,
+    /// Dither mode selection (None / Rectangular / Triangular)
+    Dither,
     /// Confirm / cancel row
     Confirm,
 }
@@ -49,10 +51,12 @@ pub struct ExportDialog {
     pub phase: ExportPhase,
     /// Currently focused field during configuration.
     pub focused_field: ExportField,
-    /// Selected sample rate (44100 or 48000).
+    /// Selected sample rate (22050 / 44100 / 48000 / 96000).
     pub sample_rate: u32,
     /// Selected bit depth.
     pub bit_depth: BitDepth,
+    /// Selected dither mode.
+    pub dither: DitherMode,
     /// Output file path.
     pub output_path: String,
     /// Export progress (0-100).
@@ -70,6 +74,7 @@ impl ExportDialog {
             focused_field: ExportField::SampleRate,
             sample_rate: 44100,
             bit_depth: BitDepth::Bits16,
+            dither: DitherMode::None,
             output_path: String::new(),
             progress: 0,
             result_message: String::new(),
@@ -83,6 +88,7 @@ impl ExportDialog {
         self.focused_field = ExportField::SampleRate;
         self.sample_rate = 44100;
         self.bit_depth = BitDepth::Bits16;
+        self.dither = DitherMode::None;
         self.output_path = default_path.to_string();
         self.progress = 0;
         self.result_message.clear();
@@ -97,7 +103,8 @@ impl ExportDialog {
     pub fn next_field(&mut self) {
         self.focused_field = match self.focused_field {
             ExportField::SampleRate => ExportField::BitDepth,
-            ExportField::BitDepth => ExportField::Confirm,
+            ExportField::BitDepth => ExportField::Dither,
+            ExportField::Dither => ExportField::Confirm,
             ExportField::Confirm => ExportField::SampleRate,
         };
     }
@@ -107,7 +114,8 @@ impl ExportDialog {
         self.focused_field = match self.focused_field {
             ExportField::SampleRate => ExportField::Confirm,
             ExportField::BitDepth => ExportField::SampleRate,
-            ExportField::Confirm => ExportField::BitDepth,
+            ExportField::Dither => ExportField::BitDepth,
+            ExportField::Confirm => ExportField::Dither,
         };
     }
 
@@ -115,16 +123,25 @@ impl ExportDialog {
     pub fn toggle_value(&mut self) {
         match self.focused_field {
             ExportField::SampleRate => {
-                self.sample_rate = if self.sample_rate == 44100 {
-                    48000
-                } else {
-                    44100
+                self.sample_rate = match self.sample_rate {
+                    22050 => 44100,
+                    44100 => 48000,
+                    48000 => 96000,
+                    _ => 44100,
                 };
             }
             ExportField::BitDepth => {
                 self.bit_depth = match self.bit_depth {
                     BitDepth::Bits16 => BitDepth::Bits24,
-                    BitDepth::Bits24 => BitDepth::Bits16,
+                    BitDepth::Bits24 => BitDepth::Bits32Float,
+                    BitDepth::Bits32Float => BitDepth::Bits16,
+                };
+            }
+            ExportField::Dither => {
+                self.dither = match self.dither {
+                    DitherMode::None => DitherMode::Rectangular,
+                    DitherMode::Rectangular => DitherMode::Triangular,
+                    DitherMode::Triangular => DitherMode::None,
                 };
             }
             ExportField::Confirm => {
@@ -138,6 +155,7 @@ impl ExportDialog {
         ExportConfig {
             sample_rate: self.sample_rate,
             bit_depth: self.bit_depth,
+            dither: self.dither,
         }
     }
 
@@ -268,7 +286,11 @@ fn render_configure_phase(lines: &mut Vec<Line>, dialog: &ExportDialog, theme: &
     ]));
 
     // Bit depth field
-    let bd_label = format!("  {}-bit", dialog.bit_depth.bits_per_sample());
+    let bd_label = match dialog.bit_depth {
+        BitDepth::Bits16 => "  16-bit".to_string(),
+        BitDepth::Bits24 => "  24-bit".to_string(),
+        BitDepth::Bits32Float => "  32-bit float".to_string(),
+    };
     let bd_style = if dialog.focused_field == ExportField::BitDepth {
         focused_style
     } else {
@@ -277,6 +299,22 @@ fn render_configure_phase(lines: &mut Vec<Line>, dialog: &ExportDialog, theme: &
     lines.push(Line::from(vec![
         Span::styled("  Bit Depth:    ", label_style),
         Span::styled(bd_label, bd_style),
+    ]));
+
+    // Dither field
+    let dither_label = match dialog.dither {
+        DitherMode::None => "  None",
+        DitherMode::Rectangular => "  Rectangular",
+        DitherMode::Triangular => "  Triangular",
+    };
+    let dither_style = if dialog.focused_field == ExportField::Dither {
+        focused_style
+    } else {
+        normal_style
+    };
+    lines.push(Line::from(vec![
+        Span::styled("  Dither:       ", label_style),
+        Span::styled(dither_label, dither_style),
     ]));
 
     lines.push(Line::from(""));
@@ -448,6 +486,8 @@ mod tests {
         dialog.next_field();
         assert_eq!(dialog.focused_field, ExportField::BitDepth);
         dialog.next_field();
+        assert_eq!(dialog.focused_field, ExportField::Dither);
+        dialog.next_field();
         assert_eq!(dialog.focused_field, ExportField::Confirm);
         dialog.next_field();
         assert_eq!(dialog.focused_field, ExportField::SampleRate);
@@ -459,6 +499,8 @@ mod tests {
         assert_eq!(dialog.focused_field, ExportField::SampleRate);
         dialog.prev_field();
         assert_eq!(dialog.focused_field, ExportField::Confirm);
+        dialog.prev_field();
+        assert_eq!(dialog.focused_field, ExportField::Dither);
         dialog.prev_field();
         assert_eq!(dialog.focused_field, ExportField::BitDepth);
         dialog.prev_field();
@@ -473,6 +515,8 @@ mod tests {
         dialog.toggle_value();
         assert_eq!(dialog.sample_rate, 48000);
         dialog.toggle_value();
+        assert_eq!(dialog.sample_rate, 96000);
+        dialog.toggle_value();
         assert_eq!(dialog.sample_rate, 44100);
     }
 
@@ -484,7 +528,22 @@ mod tests {
         dialog.toggle_value();
         assert_eq!(dialog.bit_depth, BitDepth::Bits24);
         dialog.toggle_value();
+        assert_eq!(dialog.bit_depth, BitDepth::Bits32Float);
+        dialog.toggle_value();
         assert_eq!(dialog.bit_depth, BitDepth::Bits16);
+    }
+
+    #[test]
+    fn test_toggle_dither() {
+        let mut dialog = ExportDialog::new();
+        dialog.focused_field = ExportField::Dither;
+        assert_eq!(dialog.dither, DitherMode::None);
+        dialog.toggle_value();
+        assert_eq!(dialog.dither, DitherMode::Rectangular);
+        dialog.toggle_value();
+        assert_eq!(dialog.dither, DitherMode::Triangular);
+        dialog.toggle_value();
+        assert_eq!(dialog.dither, DitherMode::None);
     }
 
     #[test]
@@ -554,6 +613,7 @@ mod tests {
         dialog.focused_field = ExportField::Confirm;
         dialog.sample_rate = 48000;
         dialog.bit_depth = BitDepth::Bits24;
+        dialog.dither = DitherMode::Triangular;
         dialog.phase = ExportPhase::Done;
         dialog.progress = 100;
 
@@ -563,6 +623,7 @@ mod tests {
         assert_eq!(dialog.focused_field, ExportField::SampleRate);
         assert_eq!(dialog.sample_rate, 44100);
         assert_eq!(dialog.bit_depth, BitDepth::Bits16);
+        assert_eq!(dialog.dither, DitherMode::None);
         assert_eq!(dialog.phase, ExportPhase::Configure);
         assert_eq!(dialog.progress, 0);
     }
