@@ -90,41 +90,26 @@ fn extract_tempo_from_patterns(patterns: &[Pattern], arrangement: &[usize]) -> (
     let mut out_speed = 6u8;
     let mut out_bpm = 125.0;
 
-    // We just want to find the first occurrence of each to set the initial Song tempo.
-    let mut found_speed = false;
-    let mut found_bpm = false;
-
-    // Iterate in arrangement order to match actual playback sequence.
-    // Fall back to array order if arrangement is empty (e.g., unit tests).
-    let order: Box<dyn Iterator<Item = &Pattern>> = if arrangement.is_empty() {
-        Box::new(patterns.iter())
+    // Standard tracker behavior: initial tempo is defined by the default (125/6)
+    // or by Fxx effects on the very first row of the song.
+    let first_pattern_idx = if arrangement.is_empty() {
+        0
     } else {
-        Box::new(
-            arrangement
-                .iter()
-                .filter_map(|&idx| patterns.get(idx)),
-        )
+        arrangement[0]
     };
 
-    for pattern in order {
-        for row_idx in 0..pattern.num_rows() {
-            if let Some(row) = pattern.get_row(row_idx) {
-                for cell in row.iter() {
-                    if let Some(effect) = cell.effects.first() {
-                        if effect.effect_type() == Some(EffectType::SetSpeed) {
-                            if !found_bpm && effect.param >= 32 {
-                                out_bpm = effect.param as f64;
-                                found_bpm = true;
-                            } else if !found_speed && effect.param > 0 && effect.param < 32 {
-                                out_speed = effect.param;
-                                found_speed = true;
-                            }
+    if let Some(pattern) = patterns.get(first_pattern_idx) {
+        if let Some(row) = pattern.get_row(0) {
+            for cell in row.iter() {
+                for effect in &cell.effects {
+                    if effect.effect_type() == Some(EffectType::SetSpeed) {
+                        if effect.param >= 32 {
+                            out_bpm = effect.param as f64;
+                        } else if effect.param > 0 {
+                            out_speed = effect.param;
                         }
                     }
                 }
-            }
-            if found_speed && found_bpm {
-                return (out_speed, out_bpm);
             }
         }
     }
