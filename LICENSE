@@ -1,0 +1,37 @@
+Business Source License 1.1
+
+Parameters
+
+Licensor:           larpios
+Licensed Work:      Riffl (including riffl-core and riffl-tui)
+Additional Use Grant: None. (The Licensed Work is free for non-commercial and personal use).
+Change Date:        2030-04-01
+Change License:     GNU General Public License v3.0 or later
+
+Licensed Work is (c) 2026 larpios
+
+Terms
+
+1. A License Grant. Effective on the Change Date, the Licensor hereby grants you a
+   license to use the Licensed Work under the Change License.
+
+2. B Limited License Grant. Before the Change Date, the Licensor hereby grants you a
+   limited, non-exclusive, royalty-free, worldwide copyright license to use the
+   Licensed Work for any purpose other than a Commercial Purpose.
+
+3. C Commercial Purpose. "Commercial Purpose" means any use of the Licensed Work
+   by a commercial entity or for-profit organization for any purpose, or any use
+   that generates revenue.
+
+4. D Distribution. You may distribute copies of the Licensed Work, provided that
+   you include this License and the original copyright notice.
+
+5. E No Warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+   LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY.
+
+---
+The Business Source License (BSL) is a source-available license that allows
+users to use the software for non-commercial purposes, but requires a
+commercial license for for-profit use until a specified Change Date, at which
+point the software becomes Open Source.
