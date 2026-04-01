@@ -52,7 +52,7 @@ cargo install --git https://github.com/larpios/riffl riffl-tui
 You can also just clone the repository and build and run the project like so:
 
 ```bash
-cargo run -p riffl-tui
+cargo run --bin riffl
 ```
 
 ## ☕ Support the Project

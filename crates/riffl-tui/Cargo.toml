@@ -9,6 +9,10 @@ license-file = "../../LICENSE"
 keywords = ["tui", "music", "tracker", "sequencer", "ratatui"]
 categories = ["multimedia::audio", "command-line-utilities"]
 
+[[bin]]
+name = "riffl"
+path = "src/main.rs"
+
 [dependencies]
 riffl_core = { package = "riffl-core", path = "../riffl-core", version ="0.1.0", features = ["adlib"] }
 ratatui = "0.30"
