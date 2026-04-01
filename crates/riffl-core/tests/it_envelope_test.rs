@@ -42,9 +42,7 @@ fn test_volume_envelope_sustain_looping_repro() {
     mixer.set_tpl(6);
 
     let mut pattern = Pattern::new(1, 1);
-    let mut cell = Cell::default();
-    cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
-    cell.instrument = Some(0);
+    let mut cell = riffl_core::pattern::row::Cell { note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0))), instrument: Some(0), ..Default::default() };
     pattern.set_cell(0, 0, cell);
 
     mixer.tick(0, &pattern);
@@ -113,9 +111,7 @@ fn test_fast_volume_envelope_looping() {
     mixer.set_tpl(6);
 
     let mut pattern = Pattern::new(1, 1);
-    let mut cell = Cell::default();
-    cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
-    cell.instrument = Some(0);
+    let mut cell = riffl_core::pattern::row::Cell { note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0))), instrument: Some(0), ..Default::default() };
     pattern.set_cell(0, 0, cell);
 
     mixer.tick(0, &pattern);

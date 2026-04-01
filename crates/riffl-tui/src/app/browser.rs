@@ -80,9 +80,137 @@ impl super::App {
         self.sample_browser.set_bookmarks(bookmarks);
     }
 
-    /// Open the file browser overlay
+    /// Open the file browser overlay, delegating to an external picker or the built-in browser.
+    ///
+    /// Behaviour is controlled by `config.file_picker`:
+    ///   "auto"    — try yazi, fall back to built-in on failure (default)
+    ///   "builtin" — always use the built-in overlay browser
+    ///   "yazi"    — always use yazi (no fallback)
+    ///   "<name>"  — run `<name> --chooser-file <tmpfile> <dir>` (yazi-compatible protocol)
     pub fn open_file_browser(&mut self) {
-        self.file_browser.open();
+        let start_dir = self
+            .configured_sample_dirs
+            .first()
+            .cloned()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+
+        let picker = self.config.file_picker.clone();
+
+        if picker == "builtin" {
+            self.file_browser = crate::ui::file_browser::FileBrowser::new(&start_dir);
+            self.file_browser.open();
+            return;
+        }
+
+        // Determine the external command to try (empty string = skip external)
+        let cmd = if picker == "auto" || picker == "yazi" {
+            "yazi".to_string()
+        } else {
+            picker.clone()
+        };
+
+        use crossterm::{
+            execute,
+            terminal::{
+                disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+            },
+        };
+
+        let mut stdout = std::io::stdout();
+        let _ = execute!(stdout, LeaveAlternateScreen);
+        let _ = disable_raw_mode();
+
+        let temp_file = std::env::temp_dir().join("riffl_picker_selection");
+        let _ = std::fs::remove_file(&temp_file);
+
+        let status = std::process::Command::new(&cmd)
+            .arg("--chooser-file")
+            .arg(&temp_file)
+            .arg(&start_dir)
+            .status();
+
+        // Restore UI
+        let _ = enable_raw_mode();
+        let _ = execute!(stdout, EnterAlternateScreen);
+
+        // Force ratatui to flush its full buffer on the next draw cycle —
+        // without this the screen stays blank until the user presses a key.
+        self.needs_full_redraw = true;
+
+        match status {
+            Ok(s) if s.success() => {
+                if let Ok(path_str) = std::fs::read_to_string(&temp_file) {
+                    let trimmed = path_str.trim();
+                    if !trimmed.is_empty() {
+                        let path = std::path::PathBuf::from(trimmed);
+                        let is_module = path
+                            .extension()
+                            .and_then(|e| e.to_str())
+                            .map(|e| {
+                                let e = e.to_ascii_lowercase();
+                                e == "mod" || e == "xm" || e == "it" || e == "s3m" || e == "rtm"
+                            })
+                            .unwrap_or(false);
+
+                        if is_module {
+                            match self.import_file(&path) {
+                                Ok(()) => {
+                                    let name = path
+                                        .file_name()
+                                        .and_then(|n| n.to_str())
+                                        .unwrap_or("unknown")
+                                        .to_string();
+                                    self.open_modal(crate::ui::modal::Modal::info(
+                                        "Module Imported".to_string(),
+                                        format!("Imported '{}'", name),
+                                    ));
+                                }
+                                Err(msg) => {
+                                    self.open_modal(crate::ui::modal::Modal::error(
+                                        "Import Failed".to_string(),
+                                        msg,
+                                    ));
+                                }
+                            }
+                        } else {
+                            match self.load_sample_from_path(&path) {
+                                Ok(idx) => {
+                                    let name = self
+                                        .song
+                                        .instruments
+                                        .get(idx)
+                                        .map(|i| i.name.clone())
+                                        .unwrap_or_default();
+                                    self.open_modal(crate::ui::modal::Modal::info(
+                                        "Sample Loaded".to_string(),
+                                        format!("Loaded '{}' to instrument {:02X}", name, idx),
+                                    ));
+                                }
+                                Err(msg) => {
+                                    self.open_modal(crate::ui::modal::Modal::error(
+                                        "Load Failed".to_string(),
+                                        msg,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(_) => {
+                // External picker closed without selecting a file — nothing to do.
+            }
+            Err(_) => {
+                // Command not found or failed to spawn.
+                if picker == "auto" {
+                    // Fall back to built-in browser.
+                    self.file_browser = crate::ui::file_browser::FileBrowser::new(&start_dir);
+                    self.file_browser.open();
+                }
+                // For "yazi" or a named command we don't silently fall back,
+                // so the user knows their configured picker isn't available.
+            }
+        }
     }
 
     /// Close the file browser overlay

@@ -1042,10 +1042,7 @@ fn test_mixer_note_delay_edx() {
     // 120 BPM => 125ms per row. 6 ticks => 20.83ms per tick.
     // 3 ticks => 62.5ms. At 44100Hz => 2756.25 frames.
     // trigger_frame = 3 * (5512 / 6) = 3 * 918 = 2754.
-    let mut cell = Cell::default();
-    cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
-    cell.effects
-        .push(Effect::from_type(EffectType::Extended, 0xD3));
+    let mut cell = riffl_core::pattern::row::Cell { note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0))), instrument: Some(0), effects: vec![Effect::from_type(EffectType::Extended, 0xD3)], ..Default::default() };
     pattern.set_cell(0, 0, cell);
 
     mixer.tick(0, &pattern);
@@ -1079,10 +1076,7 @@ fn test_mixer_note_cut_ecx() {
     let mut pattern = Pattern::new(16, 1);
 
     // EC2: Cut after 2 ticks. 2 ticks = 2 * 918 = 1836 frames.
-    let mut cell = Cell::default();
-    cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
-    cell.effects
-        .push(Effect::from_type(EffectType::Extended, 0xC2));
+    let mut cell = riffl_core::pattern::row::Cell { note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0))), instrument: Some(0), effects: vec![Effect::from_type(EffectType::Extended, 0xC2)], ..Default::default() };
     pattern.set_cell(0, 0, cell);
 
     mixer.tick(0, &pattern);
@@ -1112,10 +1106,7 @@ fn test_mixer_tremor_effect() {
 
     // Txy: Tremor - ON for x ticks, OFF for y ticks
     // T31: 3 ticks on, 1 tick off
-    let mut cell = Cell::default();
-    cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
-    cell.effects
-        .push(Effect::from_type(EffectType::Tremor, 0x31));
+    let mut cell = riffl_core::pattern::row::Cell { note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0))), instrument: Some(0), effects: vec![Effect::from_type(EffectType::Tremor, 0x31)], ..Default::default() };
     pattern.set_cell(0, 0, cell);
 
     mixer.tick(0, &pattern);
@@ -1276,10 +1267,7 @@ fn test_mixer_arpeggio_effect_changes_pitch() {
 
     // 0xy: arpeggio with x=4 (major third), y=7 (perfect fifth)
     // C-4 → C-4 → E-4 → G-4 cycles
-    let mut cell = Cell::default();
-    cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
-    cell.effects
-        .push(Effect::from_type(EffectType::Arpeggio, 0x47));
+    let mut cell = riffl_core::pattern::row::Cell { note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0))), instrument: Some(0), effects: vec![Effect::from_type(EffectType::Arpeggio, 0x47)], ..Default::default() };
     pattern.set_cell(0, 0, cell);
 
     mixer.tick(0, &pattern);
@@ -1360,9 +1348,7 @@ fn test_mixer_tone_portamento_updates_instrument() {
     let mut pattern = Pattern::new(16, 1);
 
     // Row 0: Start note with instrument 0 (vol 0.5)
-    let mut cell0 = Cell::default();
-    cell0.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
-    cell0.instrument = Some(0);
+    let mut cell0 = riffl_core::pattern::row::Cell { note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0))), instrument: Some(0), ..Default::default() };
     pattern.set_cell(0, 0, cell0);
 
     mixer.tick(0, &pattern);
@@ -1419,9 +1405,7 @@ fn test_mixer_tone_portamento_instrument_only() {
     );
 
     // Row 0: Start note with instrument 0 (vol 0.5)
-    let mut cell0 = Cell::default();
-    cell0.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
-    cell0.instrument = Some(0);
+    let mut cell0 = riffl_core::pattern::row::Cell { note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0))), instrument: Some(0), ..Default::default() };
     pattern.set_cell(0, 0, cell0);
 
     mixer.tick(0, &pattern);
@@ -1518,10 +1502,7 @@ fn test_mixer_set_volume_effect_cxx() {
     let mut pattern = Pattern::new(16, 1);
 
     // C20: set volume to 32/64 = 0.5
-    let mut cell = Cell::default();
-    cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
-    cell.effects
-        .push(Effect::from_type(EffectType::SetVolume, 0x20));
+    let mut cell = riffl_core::pattern::row::Cell { note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0))), effects: vec![Effect::from_type(EffectType::Extended, 0xD3)], ..Default::default() };
     pattern.set_cell(0, 0, cell);
 
     mixer.tick(0, &pattern);
@@ -1562,10 +1543,7 @@ fn test_mixer_sample_offset_9xx() {
     let mut pattern = Pattern::new(16, 1);
 
     // 9xx: sample offset 512 bytes (2 * 256)
-    let mut cell = Cell::default();
-    cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
-    cell.effects
-        .push(Effect::from_type(EffectType::SampleOffset, 0x02));
+    let mut cell = riffl_core::pattern::row::Cell { note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0))), effects: vec![Effect::from_type(EffectType::Extended, 0xD3)], ..Default::default() };
     pattern.set_cell(0, 0, cell);
 
     mixer.tick(0, &pattern);
@@ -1586,10 +1564,7 @@ fn test_mixer_set_panning_8xx() {
     let mut pattern = Pattern::new(16, 1);
 
     // 8xx: set panning (0x00=full left, 0x80=center, 0xFF=full right)
-    let mut cell = Cell::default();
-    cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
-    cell.effects
-        .push(Effect::from_type(EffectType::SetPanning, 0x00));
+    let mut cell = riffl_core::pattern::row::Cell { note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0))), effects: vec![Effect::from_type(EffectType::Extended, 0xD3)], ..Default::default() };
     pattern.set_cell(0, 0, cell);
 
     mixer.tick(0, &pattern);
@@ -2062,9 +2037,7 @@ fn test_volume_envelope_applied() {
 
     // Trigger a note
     let mut pattern = Pattern::new(1, 1);
-    let mut cell = Cell::default();
-    cell.note = Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0)));
-    cell.instrument = Some(0);
+    let mut cell = riffl_core::pattern::row::Cell { note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0))), instrument: Some(0), effects: vec![Effect::from_type(EffectType::Extended, 0xD3)], ..Default::default() };
     pattern.set_cell(0, 0, cell);
     mixer.tick(0, &pattern);
 

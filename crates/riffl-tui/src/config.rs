@@ -72,8 +72,21 @@ pub struct Config {
     /// When > 0, the project is silently saved every N seconds if there are unsaved changes.
     #[serde(default)]
     pub autosave_interval_secs: u64,
+
+    /// External file picker to use when opening files (Ctrl+F).
+    ///
+    /// Accepted values:
+    ///   "auto"    — try yazi first, fall back to the built-in browser (default)
+    ///   "builtin" — always use the built-in overlay browser
+    ///   "yazi"    — always use yazi (no fallback)
+    ///   "<name>"  — run `<name> --chooser-file <tmpfile> <dir>` (same protocol as yazi)
+    #[serde(default = "default_file_picker")]
+    pub file_picker: String,
 }
 
+fn default_file_picker() -> String {
+    "auto".to_string()
+}
 fn default_step_size() -> usize {
     1
 }
@@ -102,6 +115,7 @@ impl Default for Config {
             default_octave: default_octave(),
             beat_rows: default_beat_rows(),
             autosave_interval_secs: 0,
+            file_picker: default_file_picker(),
         }
     }
 }
@@ -351,6 +365,7 @@ mod tests {
             default_octave: 4,
             beat_rows: 4,
             autosave_interval_secs: 0,
+            file_picker: "builtin".to_string(),
         };
         let s = toml::to_string_pretty(&cfg).unwrap();
         let restored: Config = toml::from_str(&s).unwrap();

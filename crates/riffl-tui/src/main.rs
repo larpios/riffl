@@ -115,6 +115,10 @@ fn restore_terminal() -> Result<()> {
 
 fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> Result<()> {
     while app.should_run() {
+        if app.needs_full_redraw {
+            app.needs_full_redraw = false;
+            terminal.clear()?;
+        }
         terminal.draw(|frame| ui::render(frame, app))?;
 
         if event::poll(TICK_RATE)? {

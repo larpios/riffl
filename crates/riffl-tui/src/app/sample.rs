@@ -11,34 +11,7 @@ impl super::App {
             .ok_or_else(|| "No file selected".to_string())?
             .to_path_buf();
 
-        let output_sample_rate = self
-            .audio_engine
-            .as_ref()
-            .map(|e| e.sample_rate())
-            .unwrap_or(44100);
-
-        let sample =
-            load_sample(&path, output_sample_rate).map_err(|e| format!("Failed to load: {}", e))?;
-
-        let name = sample.name().unwrap_or("unknown").to_string();
-        let chip_render = ChipRenderData::from_sample(&sample);
-
-        let idx = if let Ok(mut mixer) = self.mixer.lock() {
-            mixer.add_sample(Arc::new(sample))
-        } else {
-            return Err("Failed to lock mixer".to_string());
-        };
-
-        use riffl_core::song::Instrument;
-        let mut instrument = Instrument::new(&name);
-        instrument.sample_index = Some(idx);
-        instrument.sample_path = Some(path.display().to_string());
-        instrument.chip_render = Some(chip_render);
-        self.song.instruments.push(instrument);
-        self.sync_mixer_instruments();
-
-        self.instrument_names.push(name);
-        Ok(idx)
+        self.load_sample_from_path(&path)
     }
 
     /// Load the currently selected file from the dedicated sample browser view.

@@ -189,6 +189,11 @@ pub struct App {
     /// Whether a quit confirmation is pending (user pressed q with unsaved changes)
     pub pending_quit: bool,
 
+    /// Set to true after returning from an external process that suspended the
+    /// terminal (e.g. yazi). The main loop will call terminal.clear() on the
+    /// next iteration to force a full redraw of all widgets.
+    pub needs_full_redraw: bool,
+
     /// Path of a sample the user selected in the browser but hasn't confirmed an action for yet.
     pub pending_sample_path: Option<PathBuf>,
 
@@ -399,6 +404,7 @@ impl App {
             follow_mode: initial_follow_mode,
             is_dirty: false,
             pending_quit: false,
+            needs_full_redraw: false,
             pending_sample_path: None,
             command_mode: false,
             command_input: String::new(),
