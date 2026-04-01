@@ -8,6 +8,7 @@ homepage = "https://github.com/larpios/riffl"
 license-file = "../../LICENSE"
 keywords = ["tui", "music", "tracker", "sequencer", "ratatui"]
 categories = ["multimedia::audio", "command-line-utilities"]
+default-run = "riffl"
 
 [[bin]]
 name = "riffl"

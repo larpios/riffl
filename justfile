@@ -1,29 +1,30 @@
-# Justfile for Riffl - https://just.systems
+# Riffl Automation - https://just.systems
+# All commands are implemented in Rust within the 'xtask' crate.
 
-# Default: List available recipes
+# List all available commands (Default)
 default:
-    @just --list
+    @cargo xtask --help
 
-# Format all crates in the workspace
-fmt:
-    cargo fmt --all
-
-# Run full CI-style checks (formatting, clippy, tests)
-check:
-    cargo fmt --all -- --check
-    cargo clippy --workspace --all-features -- -D warnings
-    cargo test --workspace --all-features
-
-# Run the 'riffl' TUI application
+# Launch the Riffl TUI music tracker
 run *args:
-    cargo run --bin riffl {{args}}
+    @cargo xtask run -- {{args}}
 
-# Run all tests in the workspace
+# Format the entire codebase
+fmt:
+    @cargo xtask fmt
+
+# Run all CI checks (formatting, clippy, tests)
+check:
+    @cargo xtask check
+
+# Run the test suite
 test *args:
-    cargo test --workspace {{args}}
+    @cargo xtask test -- {{args}}
 
-# Standard git workflow (use with caution if using jj)
-fmt-and-commit:
-    cargo fmt --all 
-    git add .
-    git commit -m "chore(fmt): format code"
+# Increment version: patch, minor, or major (e.g. just bump patch)
+bump part:
+    @cargo xtask bump {{part}}
+
+# Set a specific version (e.g. just bump-to 0.2.0)
+bump-to version:
+    @cargo xtask bump-to {{version}}
