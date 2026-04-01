@@ -103,6 +103,9 @@ impl App {
             self.flush_editor_pattern(current);
             self.transport.jump_to_arrangement_position(next);
             self.load_arrangement_pattern(next);
+            if self.transport.is_playing() {
+                self.chase_notes();
+            }
         }
     }
 
@@ -116,6 +119,9 @@ impl App {
             self.flush_editor_pattern(current);
             self.transport.jump_to_arrangement_position(prev);
             self.load_arrangement_pattern(prev);
+            if self.transport.is_playing() {
+                self.chase_notes();
+            }
         }
     }
 
@@ -126,6 +132,9 @@ impl App {
         self.transport.jump_to_arrangement_position(0);
         self.load_arrangement_pattern(0);
         self.editor.go_to_row(0);
+        if self.transport.is_playing() {
+            self.chase_notes();
+        }
     }
 
     /// Jump to the very end of the song (Last pattern in arrangement, last row).
@@ -136,6 +145,9 @@ impl App {
         self.transport.jump_to_arrangement_position(last_pos);
         self.load_arrangement_pattern(last_pos);
         self.editor.go_to_row(usize::MAX);
+        if self.transport.is_playing() {
+            self.chase_notes();
+        }
     }
 }
 

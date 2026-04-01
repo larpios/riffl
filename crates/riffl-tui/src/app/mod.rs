@@ -480,7 +480,6 @@ impl App {
 
         let was_playing = self.transport.is_playing();
         let old_arrangement_pos = self.transport.arrangement_position();
-
         let advance_result = self.transport.advance(delta);
 
         match advance_result {
@@ -519,6 +518,18 @@ impl App {
                 arrangement_pos,
                 row,
             } => {
+                // Reset BPM and TPL to initial values if we are looping back to the very start of the song
+                if arrangement_pos == 0 && row == 0 && old_arrangement_pos >= self.song.arrangement.len().saturating_sub(1) {
+                    self.transport.set_bpm(self.initial_bpm);
+                    self.transport.set_tpl(self.initial_tpl);
+                    self.song.bpm = self.initial_bpm;
+                    self.song.tpl = self.initial_tpl;
+                    if let Ok(mut mixer) = self.mixer.lock() {
+                        mixer.update_tempo(self.initial_bpm);
+                        mixer.set_tpl(self.initial_tpl);
+                    }
+                }
+
                 let saved_cursor_row = self.editor.cursor_row();
                 let saved_cursor_channel = self.editor.cursor_channel();
                 self.flush_editor_pattern(old_arrangement_pos);

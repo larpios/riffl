@@ -135,27 +135,26 @@ impl Transport {
         }
 
         self.tick_accumulator += delta_time;
+
+        // If a jump was just applied (e.g. from an effect in the previous tick),
+        // return the jumped-to row immediately. This ensures that the first row
+        // of a jump is triggered without waiting for another row duration.
+        if self.just_jumped {
+            self.just_jumped = false;
+            return AdvanceResult::Row(self.current_row);
+        }
+
         let seconds_per_row = self.seconds_per_row();
 
         if self.tick_accumulator >= seconds_per_row {
-            self.tick_accumulator -= seconds_per_row;
-
-            // Prevent accumulator from building up too much
-            if self.tick_accumulator > seconds_per_row {
-                self.tick_accumulator = 0.0;
-            }
-
-            // If a jump was just applied, we stay on the current row for this tick
-            if self.just_jumped {
-                self.just_jumped = false;
-                return AdvanceResult::Row(self.current_row);
-            }
-
             // Handle Pattern Delay (EEx)
             if self.pattern_delay > 0 {
                 self.pattern_delay -= 1;
+                self.tick_accumulator -= seconds_per_row;
                 return AdvanceResult::None;
             }
+
+            self.tick_accumulator -= seconds_per_row;
 
             let next_row = self.current_row + 1;
 
@@ -243,6 +242,7 @@ impl Transport {
                 self.pattern_loop_row = None;
                 self.pattern_loop_count = 0;
                 self.pattern_delay = 0;
+                self.just_jumped = false;
                 self.state = TransportState::Playing;
             }
             TransportState::Paused => {
@@ -267,6 +267,7 @@ impl Transport {
         self.pattern_loop_row = None;
         self.pattern_loop_count = 0;
         self.pattern_delay = 0;
+        self.just_jumped = false;
         self.state = TransportState::Playing;
     }
 
