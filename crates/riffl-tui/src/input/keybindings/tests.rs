@@ -451,8 +451,7 @@ fn test_normal_mode_transpose_octave_up() {
 
 #[test]
 fn test_normal_mode_transpose_octave_down() {
-    let ctrl_shift_down =
-        KeyEvent::new(KeyCode::Down, KeyModifiers::CONTROL | KeyModifiers::SHIFT);
+    let ctrl_shift_down = KeyEvent::new(KeyCode::Down, KeyModifiers::CONTROL | KeyModifiers::SHIFT);
     assert_eq!(
         map_key_to_action(ctrl_shift_down, EditorMode::Normal),
         Action::TransposeOctaveDown

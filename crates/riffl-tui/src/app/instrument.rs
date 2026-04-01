@@ -360,11 +360,7 @@ impl App {
         if let Some(idx) = self.instrument_selection {
             if let Some(kz_idx) = self.inst_editor.selected_keyzone_index() {
                 if idx < self.song.instruments.len() {
-                    let sample_count = self
-                        .mixer
-                        .lock()
-                        .map(|m| m.sample_count())
-                        .unwrap_or(0);
+                    let sample_count = self.mixer.lock().map(|m| m.sample_count()).unwrap_or(0);
                     let max_sample = sample_count.saturating_sub(1) as i32;
                     let inst = &mut self.song.instruments[idx];
                     if kz_idx < inst.keyzones.len() {
@@ -415,9 +411,9 @@ impl App {
     }
 }
 
+use riffl_core::audio::{load_sample, ChipRenderData, Sample};
 use std::path::Path;
 use std::sync::Arc;
-use riffl_core::audio::{ChipRenderData, Sample, load_sample};
 
 impl App {
     /// Loads the audio from `path` into the mixer and updates the instrument's

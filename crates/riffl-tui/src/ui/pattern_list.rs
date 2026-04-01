@@ -46,7 +46,11 @@ pub fn render_pattern_list(
 
         let marker = if is_current { "*" } else { " " };
         let name = if pattern.name.is_empty() {
-            if is_current { "Currently editing".to_string() } else { String::new() }
+            if is_current {
+                "Currently editing".to_string()
+            } else {
+                String::new()
+            }
         } else {
             pattern.name.clone()
         };

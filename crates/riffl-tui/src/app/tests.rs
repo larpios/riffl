@@ -1,6 +1,5 @@
 use super::*;
 
-
 #[test]
 fn test_app_view_default_is_pattern_editor() {
     let app = App::new();
@@ -1265,7 +1264,9 @@ fn test_import_mod_file_syncs_bpm_to_transport() {
 fn test_command_transpose() {
     let mut app = App::new();
     use riffl_core::pattern::note::{Note, Pitch};
-    app.editor.pattern_mut().set_note(0, 0, Note::simple(Pitch::C, 4)); // C-4 = midi 48
+    app.editor
+        .pattern_mut()
+        .set_note(0, 0, Note::simple(Pitch::C, 4)); // C-4 = midi 48
     app.command_input = "transpose 12".to_string();
     app.execute_command();
     let cell = app.editor.pattern().get_cell(0, 0).unwrap();
@@ -1281,7 +1282,9 @@ fn test_command_transpose() {
 fn test_command_transpose_down() {
     let mut app = App::new();
     use riffl_core::pattern::note::{Note, Pitch};
-    app.editor.pattern_mut().set_note(0, 0, Note::simple(Pitch::C, 4)); // C-4 = midi 48
+    app.editor
+        .pattern_mut()
+        .set_note(0, 0, Note::simple(Pitch::C, 4)); // C-4 = midi 48
     app.command_input = "tr -12".to_string();
     app.execute_command();
     let cell = app.editor.pattern().get_cell(0, 0).unwrap();
@@ -1313,8 +1316,14 @@ fn test_command_len_clamps_to_minimum() {
 fn test_command_clear_empties_pattern() {
     let mut app = App::new();
     use riffl_core::pattern::note::{Note, Pitch};
-    app.editor.pattern_mut().set_note(0, 0, Note::simple(Pitch::C, 4));
-    assert!(app.editor.pattern().get_cell(0, 0).is_some_and(|c| !c.is_empty()));
+    app.editor
+        .pattern_mut()
+        .set_note(0, 0, Note::simple(Pitch::C, 4));
+    assert!(app
+        .editor
+        .pattern()
+        .get_cell(0, 0)
+        .is_some_and(|c| !c.is_empty()));
     app.command_input = "clear".to_string();
     app.execute_command();
     let cell = app.editor.pattern().get_cell(0, 0);
@@ -1388,16 +1397,22 @@ fn test_arrangement_clone_pattern_preserves_content() {
 
     let mut app = App::new();
     // Put a note in pattern 0
-    app.editor
-        .pattern_mut()
-        .set_cell(0, 0, Cell::with_note(NoteEvent::On(Note::new(Pitch::C, 4, 100, 0))));
+    app.editor.pattern_mut().set_cell(
+        0,
+        0,
+        Cell::with_note(NoteEvent::On(Note::new(Pitch::C, 4, 100, 0))),
+    );
     // Flush so pattern 0 in song matches
     app.flush_editor_pattern(0);
 
     app.arrangement_clone_pattern();
 
     // The clone (pattern index == initial_patterns) should have the same note
-    let clone_idx = *app.song.arrangement.get(app.arrangement_view.cursor()).unwrap();
+    let clone_idx = *app
+        .song
+        .arrangement
+        .get(app.arrangement_view.cursor())
+        .unwrap();
     let clone_pattern = &app.song.patterns[clone_idx];
     assert!(clone_pattern.get_cell(0, 0).is_some());
     assert!(clone_pattern.get_cell(0, 0).unwrap().note.is_some());
@@ -1422,7 +1437,11 @@ fn test_adjust_track_volume_decreases() {
     }
     app.adjust_track_volume(-0.1);
     let new_vol = app.song.tracks.first().map(|t| t.volume).unwrap_or(0.0);
-    assert!((new_vol - 0.4).abs() < 1e-4, "Expected ~0.4, got {}", new_vol);
+    assert!(
+        (new_vol - 0.4).abs() < 1e-4,
+        "Expected ~0.4, got {}",
+        new_vol
+    );
 }
 
 #[test]
@@ -1495,7 +1514,12 @@ fn test_command_rename_sets_track_name() {
     app.execute_command();
     assert!(!app.has_modal());
     let ch = app.editor.cursor_channel();
-    let name = app.song.tracks.get(ch).map(|t| t.name.as_str()).unwrap_or("");
+    let name = app
+        .song
+        .tracks
+        .get(ch)
+        .map(|t| t.name.as_str())
+        .unwrap_or("");
     assert_eq!(name, "Kick Drum");
 }
 
@@ -1513,7 +1537,8 @@ fn test_command_fill_whole_channel() {
         let cell = app.editor.pattern().get_cell(r, ch).unwrap();
         assert!(
             matches!(cell.note, Some(NoteEvent::On(_))),
-            "Row {} should have a note after :fill C-4", r
+            "Row {} should have a note after :fill C-4",
+            r
         );
     }
 }
@@ -1528,11 +1553,17 @@ fn test_command_fill_with_step() {
     let ch = app.editor.cursor_channel();
     // Rows 0, 4, 8, ... should have notes; rows 1, 2, 3, 5 ... should be empty
     let cell_0 = app.editor.pattern().get_cell(0, ch).unwrap();
-    assert!(matches!(cell_0.note, Some(NoteEvent::On(_))), "Row 0 should have note");
+    assert!(
+        matches!(cell_0.note, Some(NoteEvent::On(_))),
+        "Row 0 should have note"
+    );
     let cell_1 = app.editor.pattern().get_cell(1, ch).unwrap();
     assert!(cell_1.note.is_none(), "Row 1 should be empty");
     let cell_4 = app.editor.pattern().get_cell(4, ch).unwrap();
-    assert!(matches!(cell_4.note, Some(NoteEvent::On(_))), "Row 4 should have note");
+    assert!(
+        matches!(cell_4.note, Some(NoteEvent::On(_))),
+        "Row 4 should have note"
+    );
 }
 
 #[test]

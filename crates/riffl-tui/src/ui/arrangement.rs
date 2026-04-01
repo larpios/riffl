@@ -217,7 +217,13 @@ pub fn render_arrangement(
         let pattern = song.patterns.get(pattern_index);
         let num_rows = pattern.map_or(0, |p| p.num_rows());
         let pat_name = pattern
-            .and_then(|p| if p.name.is_empty() { None } else { Some(p.name.as_str()) })
+            .and_then(|p| {
+                if p.name.is_empty() {
+                    None
+                } else {
+                    Some(p.name.as_str())
+                }
+            })
             .unwrap_or("");
         let preview = if pat_name.is_empty() {
             pattern.map_or_else(|| "???".to_string(), pattern_preview)
@@ -235,15 +241,15 @@ pub fn render_arrangement(
 
         let style = if is_cursor && is_playback {
             Style::default()
-                .fg(Color::Black)
-                .bg(Color::LightGreen)
+                .fg(theme.cursor_fg)
+                .bg(theme.status_info)
                 .add_modifier(Modifier::BOLD)
         } else if is_cursor {
             theme.highlight_style()
         } else if is_playback {
             Style::default()
-                .fg(Color::Black)
-                .bg(Color::Green)
+                .fg(theme.cursor_fg)
+                .bg(theme.status_success)
                 .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(theme.text)

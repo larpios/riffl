@@ -1,10 +1,10 @@
+use super::export::hex_char_to_digit;
 use crate::app::{App, AppView};
 use crate::editor::{Editor, EditorMode, SubColumn};
 use crate::input::keybindings::Action;
 use crate::ui;
 use crate::ui::code_editor::ModeKind;
 use crossterm::event::{KeyCode, KeyEvent};
-use super::export::hex_char_to_digit;
 
 pub(super) fn handle_action(app: &mut App, action: Action, key: KeyEvent) {
     // Grab terminal width once for horizontal tracking
@@ -13,7 +13,10 @@ pub(super) fn handle_action(app: &mut App, action: Action, key: KeyEvent) {
     match action {
         // Navigation — delegate to editor (or instrument/pattern list)
         Action::MoveLeft => {
-            if app.follow_mode && app.transport.is_playing() && app.current_view == AppView::PatternEditor {
+            if app.follow_mode
+                && app.transport.is_playing()
+                && app.current_view == AppView::PatternEditor
+            {
                 // Follow mode: h pans the view left, doesn't move cursor channel
                 app.scroll_view_left();
             } else {
@@ -27,7 +30,10 @@ pub(super) fn handle_action(app: &mut App, action: Action, key: KeyEvent) {
                 app.instrument_selection_down();
             } else if app.current_view == AppView::PatternList {
                 app.pattern_selection_down();
-            } else if app.follow_mode && app.transport.is_playing() && app.current_view == AppView::PatternEditor {
+            } else if app.follow_mode
+                && app.transport.is_playing()
+                && app.current_view == AppView::PatternEditor
+            {
                 // Follow mode: j/k are blocked — the playhead owns vertical position
             } else if app.current_view == AppView::Arrangement {
                 app.arrangement_selection_down();
@@ -44,7 +50,10 @@ pub(super) fn handle_action(app: &mut App, action: Action, key: KeyEvent) {
                 app.instrument_selection_up();
             } else if app.current_view == AppView::PatternList {
                 app.pattern_selection_up();
-            } else if app.follow_mode && app.transport.is_playing() && app.current_view == AppView::PatternEditor {
+            } else if app.follow_mode
+                && app.transport.is_playing()
+                && app.current_view == AppView::PatternEditor
+            {
                 // Follow mode: j/k are blocked — the playhead owns vertical position
             } else if app.current_view == AppView::Arrangement {
                 app.arrangement_selection_up();
@@ -53,7 +62,10 @@ pub(super) fn handle_action(app: &mut App, action: Action, key: KeyEvent) {
             }
         }
         Action::MoveRight => {
-            if app.follow_mode && app.transport.is_playing() && app.current_view == AppView::PatternEditor {
+            if app.follow_mode
+                && app.transport.is_playing()
+                && app.current_view == AppView::PatternEditor
+            {
                 // Follow mode: l pans the view right, doesn't move cursor channel
                 app.scroll_view_right(term_width);
             } else {

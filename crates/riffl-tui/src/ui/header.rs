@@ -44,14 +44,24 @@ pub(super) fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app:
     let song_label = if app.song.name.is_empty() {
         "riffl".to_string()
     } else if app.song.artist.is_empty() {
-        format!("{}{}", app.song.name, if dirty_marker.is_empty() { "" } else { " *" })
+        format!(
+            "{}{}",
+            app.song.name,
+            if dirty_marker.is_empty() { "" } else { " *" }
+        )
     } else {
-        format!("{} — {}{}", app.song.artist, app.song.name, if dirty_marker.is_empty() { "" } else { " *" })
+        format!(
+            "{} — {}{}",
+            app.song.artist,
+            app.song.name,
+            if dirty_marker.is_empty() { "" } else { " *" }
+        )
     };
     let title = format!(
-        " {} | BPM: {:.0} | {} {}{} [{}] ",
+        " {} | BPM: {:.0} | TPL: {} | {} {}{} [{}] ",
         song_label,
         app.transport.bpm(),
+        app.transport.tpl(),
         play_icon,
         play_status,
         loop_indicator,
@@ -79,6 +89,11 @@ pub(super) fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app:
         Span::raw("  "),
         Span::styled(
             format!("BPM: {:.0}", app.transport.bpm()),
+            Style::default().fg(theme.text),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            format!("TPL: {}", app.transport.tpl()),
             Style::default().fg(theme.text),
         ),
         Span::raw("  "),

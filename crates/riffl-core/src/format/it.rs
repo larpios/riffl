@@ -1247,7 +1247,7 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
 
             // IT c5_speed is for C-5 (MIDI 60)
             sample = sample.with_base_note(60);
-            
+
             // Consolidate sample volume factors
             sample.volume = (sh.default_volume as f32 / 64.0) * (sh.global_volume as f32 / 64.0);
 
@@ -1266,7 +1266,7 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
             let mut inst = Instrument::new(it_inst.name.clone());
             inst.volume = it_inst.global_volume as f32 / 128.0;
             inst.fadeout = it_inst.fadeout;
-            
+
             if it_inst.default_pan & 0x80 != 0 {
                 let pan_val = it_inst.default_pan & 0x7F; // 0..64, 32 = centre
                 inst.panning = Some((pan_val as f32 - 32.0) / 32.0);
@@ -1276,7 +1276,9 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
             inst.panning_envelope = it_inst.panning_envelope.clone();
 
             // Build Keyzones from IT keyboard table
-            for (note_idx, &(target_note, sample_num)) in it_inst.note_sample_table.iter().enumerate() {
+            for (note_idx, &(target_note, sample_num)) in
+                it_inst.note_sample_table.iter().enumerate()
+            {
                 if sample_num > 0 {
                     let s_idx = (sample_num as usize).saturating_sub(1);
                     if s_idx < out_samples.len() {
@@ -1299,7 +1301,7 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
                 sh.name.clone()
             });
             inst.sample_index = Some(s_idx);
-            
+
             if sh.default_pan & 0x80 != 0 {
                 let pan_val = sh.default_pan & 0x7F;
                 inst.panning = Some((pan_val as f32 - 32.0) / 32.0);
@@ -1312,7 +1314,6 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
     let mut song = Song::new(header.name.clone(), header.initial_bpm as f64);
     song.tpl = header.initial_speed as u32;
     song.instruments = out_instruments;
-
 
     // ── Determine active channels ──
     let _num_channels = {
@@ -1414,16 +1415,21 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
 
                 // ── Finalize note event with transposition ──
                 if let Some(NoteEvent::On(mut n)) = note_event {
-                    let inst_idx = cell.instrument.map(|i| i as usize).or(last_instrument[c_idx]);
+                    let inst_idx = cell
+                        .instrument
+                        .map(|i| i as usize)
+                        .or(last_instrument[c_idx]);
                     if let Some(i) = inst_idx {
                         n.instrument = i as u8;
-                        
+
                         // Apply IT keyboard table transposition if using instruments
                         if header.use_instruments && i < it_instruments.len() {
                             let lookup_note = slot.note as usize;
                             if lookup_note <= 119 {
-                                let (target_note, _) = it_instruments[i].note_sample_table[lookup_note];
-                                n.pitch = Pitch::from_semitone(target_note % 12).unwrap_or(Pitch::C);
+                                let (target_note, _) =
+                                    it_instruments[i].note_sample_table[lookup_note];
+                                n.pitch =
+                                    Pitch::from_semitone(target_note % 12).unwrap_or(Pitch::C);
                                 n.octave = target_note / 12;
                             }
                         }
@@ -1470,7 +1476,6 @@ pub fn import_it(data: &[u8]) -> Result<FormatData, String> {
         }
         song.add_pattern(pat);
     }
-
 
     // ── Arrangement ──
     song.arrangement.clear();

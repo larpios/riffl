@@ -165,7 +165,6 @@ pub struct Editor {
     step_size: usize,
 }
 
-
 pub mod clipboard;
 pub mod editing;
 pub mod navigation;
@@ -315,5 +314,4 @@ impl Editor {
         self.save_history();
         self.pattern.clone_track(self.cursor_channel)
     }
-
 }

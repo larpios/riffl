@@ -202,7 +202,10 @@ impl Envelope {
                 // Find loop start point
                 if let Some(p_start) = self.points.iter().find(|p| p.frame == loop_start_frame) {
                     // Interpolate from end to start over the duration of this tick
-                    return (p_end.value + (p_start.value - p_end.value) * fraction, next_tick);
+                    return (
+                        p_end.value + (p_start.value - p_end.value) * fraction,
+                        next_tick,
+                    );
                 }
             }
         }
@@ -339,10 +342,6 @@ pub struct Instrument {
     /// matching instead of `sample_index`. Sorted by `note_min` for lookup.
     #[serde(default)]
     pub keyzones: Vec<Keyzone>,
-    /// NSF-specific data for NSF-loaded instruments.
-    #[serde(default, skip)]
-    #[doc(hidden)]
-    pub nsf_data: Option<crate::format::nsf::NsfInstrumentData>,
 }
 
 impl Instrument {
@@ -368,7 +367,6 @@ impl Instrument {
             pitch_lfo: None,
             fadeout: 0,
             keyzones: Vec::new(),
-            nsf_data: None,
         }
     }
 

@@ -232,7 +232,7 @@ fn render_view_tabs(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             spans.push(Span::styled(
                 format!(" {} ", label),
                 Style::default()
-                    .fg(ratatui::style::Color::Black)
+                    .fg(theme.cursor_fg)
                     .bg(theme.primary)
                     .add_modifier(Modifier::BOLD),
             ));
@@ -260,10 +260,7 @@ fn render_view_tabs(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         ));
     }
 
-    frame.render_widget(
-        Paragraph::new(Line::from(spans)),
-        area,
-    );
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
 /// Render the two-column instrument view when no instrument is selected.
@@ -310,12 +307,7 @@ fn render_instrument_view_empty(frame: &mut Frame, area: ratatui::layout::Rect, 
 /// Render the two-column instrument view:
 ///   left  (~38%): instrument list
 ///   right (~62%): instrument editor (top) / envelope editor (middle) / waveform editor (bottom)
-fn render_instrument_view(
-    frame: &mut Frame,
-    area: ratatui::layout::Rect,
-    app: &App,
-    idx: usize,
-) {
+fn render_instrument_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App, idx: usize) {
     use ratatui::layout::{Constraint, Direction, Layout};
 
     let cols = Layout::default()

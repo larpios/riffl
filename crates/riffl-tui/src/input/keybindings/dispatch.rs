@@ -1,7 +1,7 @@
+use super::action::Action;
 use crate::app::AppView;
 use crate::editor::EditorMode;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use super::action::Action;
 
 /// Map a keyboard event to an action, aware of the current editor mode
 pub fn map_key_to_action(key: KeyEvent, mode: EditorMode) -> Action {
@@ -376,4 +376,3 @@ pub fn is_modal_dismiss_action(action: Action) -> bool {
         Action::Cancel | Action::Confirm | Action::EnterNormalMode
     )
 }
-

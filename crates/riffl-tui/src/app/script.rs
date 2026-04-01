@@ -27,10 +27,13 @@ impl App {
             return;
         }
 
-        match self
-            .script_engine
-            .eval_with_pattern_triggers(&code, self.editor.pattern(), triggers, self.song.bpm, self.song.tpl)
-        {
+        match self.script_engine.eval_with_pattern_triggers(
+            &code,
+            self.editor.pattern(),
+            triggers,
+            self.song.bpm,
+            self.song.tpl,
+        ) {
             Ok((result, commands)) => {
                 // Apply pattern commands to the editor's pattern
                 use riffl_core::dsl::engine::{apply_commands, ScriptResult};
@@ -93,10 +96,13 @@ impl App {
 
         let pat_sel = PatternSelection::new(r0, r1, c0, c1);
 
-        match self
-            .script_engine
-            .eval_with_selection(&code, self.editor.pattern(), &pat_sel, self.song.bpm, self.song.tpl)
-        {
+        match self.script_engine.eval_with_selection(
+            &code,
+            self.editor.pattern(),
+            &pat_sel,
+            self.song.bpm,
+            self.song.tpl,
+        ) {
             Ok((result, commands)) => {
                 use riffl_core::dsl::engine::{apply_commands, ScriptResult};
                 let cmd_count = commands.len();

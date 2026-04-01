@@ -1,10 +1,10 @@
 // Full feature demonstration for the audio engine
 // This example demonstrates all major features of the audio engine
 
+use riffl_core::audio::AudioEngine;
 use std::f32::consts::PI;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use riffl_core::audio::AudioEngine;
 
 fn main() {
     println!("===========================================");

@@ -399,7 +399,9 @@ pub fn render_waveform_editor(
 
     let help_text = if state.focused {
         match state.edit_mode {
-            WaveformEditMode::Navigate => "h/←→: cursor  [/]: loop pts  l: cycle loop  p: pencil  Esc: exit",
+            WaveformEditMode::Navigate => {
+                "h/←→: cursor  [/]: loop pts  l: cycle loop  p: pencil  Esc: exit"
+            }
             WaveformEditMode::Pencil => "↑↓: draw value  h/←→: move  Enter: draw  p: exit",
         }
     } else {

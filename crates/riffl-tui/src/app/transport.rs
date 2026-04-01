@@ -1,8 +1,8 @@
 use super::App;
-use std::time::Instant;
 use riffl_core::transport::{PlaybackMode, TransportState};
+use std::time::Instant;
 
-use riffl_core::pattern::{Pattern, note::NoteEvent};
+use riffl_core::pattern::{note::NoteEvent, Pattern};
 
 impl App {
     /// Toggle audio playback between play and pause.
@@ -29,12 +29,12 @@ impl App {
                 if self.transport.playback_mode() == PlaybackMode::Song {
                     self.load_arrangement_pattern(self.transport.arrangement_position());
                 }
-                
+
                 // When starting from stopped, we perform a chase if the starting row is not 0
                 if self.transport.current_row() > 0 {
                     self.chase_notes();
                 }
-                
+
                 self.transport.play();
                 // Trigger first row
                 if let Ok(mut mixer) = self.mixer.lock() {
@@ -86,7 +86,7 @@ impl App {
             self.load_arrangement_pattern(self.transport.arrangement_position());
         }
         self.transport.play_from(start_row);
-        
+
         // When playing from cursor, chase notes from previous rows so it sounds correct
         if start_row > 0 {
             self.chase_notes();
@@ -107,20 +107,20 @@ impl App {
         let current_row = self.transport.current_row();
         let pattern = self.editor.pattern();
         let num_channels = pattern.num_channels();
-        
+
         if let Ok(mut mixer) = self.mixer.lock() {
             // First, clear everything so we have a clean slate for the chase
             mixer.stop_all();
-            
+
             // Prepare a single row that contains the "last known state" for each channel
             let mut chase_row_cells = vec![riffl_core::pattern::row::Cell::default(); num_channels];
-            
-            for ch in 0..num_channels {
+
+            for (ch, ch_cell) in chase_row_cells.iter_mut().enumerate() {
                 for r in (0..current_row).rev() {
                     if let Some(row) = pattern.get_row(r) {
                         if let Some(cell) = row.get(ch) {
                             if let Some(NoteEvent::On(_)) = &cell.note {
-                                chase_row_cells[ch] = cell.clone();
+                                *ch_cell = cell.clone();
                                 break;
                             } else if let Some(NoteEvent::Off) | Some(NoteEvent::Cut) = &cell.note {
                                 // Channel was explicitly stopped/cut
@@ -130,19 +130,19 @@ impl App {
                     }
                 }
             }
-            
+
             // Create a temporary pattern with this single chase row
             let mut chase_pattern = Pattern::new(1, num_channels);
             chase_pattern.set_row(0, chase_row_cells);
-            
-            // CRITICAL: Copy track state (volume, pan, mute) so the chase row 
+
+            // CRITICAL: Copy track state (volume, pan, mute) so the chase row
             // is rendered with the correct channel settings.
             for (i, track) in pattern.tracks().iter().enumerate() {
                 if i < num_channels {
                     chase_pattern.tracks_mut()[i] = track.clone();
                 }
             }
-            
+
             // Tick the chase row to trigger the voices
             mixer.tick(0, &chase_pattern);
         }
@@ -354,6 +354,7 @@ impl App {
                 }
                 TransportCommand::SetTpl(tpl) => {
                     self.transport.set_tpl(tpl);
+                    self.song.tpl = tpl;
                     if let Ok(mut mixer) = self.mixer.lock() {
                         mixer.set_tpl(tpl);
                     }

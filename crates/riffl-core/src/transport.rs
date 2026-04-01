@@ -122,6 +122,42 @@ impl Transport {
         }
     }
 
+    /// Advance the transport by the given delta time, returning all row changes that occurred.
+    ///
+    /// This is a wrapper around `advance()` that handles multiple row increments
+    /// if the delta time is large enough to span more than one row. This ensures
+    /// that effects (like BPM changes) on intermediate rows are not skipped.
+    pub fn advance_iter(&mut self, delta_time: f64) -> Vec<AdvanceResult> {
+        let mut results = Vec::new();
+
+        // Use a small safety limit to prevent infinite loops if seconds_per_row is zero
+        let mut iterations = 0;
+        let max_iterations = 1000;
+
+        loop {
+            // Only add the full delta to the accumulator on the first iteration
+            let delta = if iterations == 0 { delta_time } else { 0.0 };
+            let res = self.advance(delta);
+
+            if res == AdvanceResult::None {
+                break;
+            }
+
+            results.push(res);
+
+            if res == AdvanceResult::Stopped {
+                break;
+            }
+
+            iterations += 1;
+            if iterations >= max_iterations {
+                break;
+            }
+        }
+
+        results
+    }
+
     /// Advance the transport by the given delta time in seconds.
     ///
     /// Returns an `AdvanceResult` describing what happened:
@@ -135,27 +171,26 @@ impl Transport {
         }
 
         self.tick_accumulator += delta_time;
+
+        // If a jump was just applied (e.g. from an effect in the previous tick),
+        // return the jumped-to row immediately. This ensures that the first row
+        // of a jump is triggered without waiting for another row duration.
+        if self.just_jumped {
+            self.just_jumped = false;
+            return AdvanceResult::Row(self.current_row);
+        }
+
         let seconds_per_row = self.seconds_per_row();
 
         if self.tick_accumulator >= seconds_per_row {
-            self.tick_accumulator -= seconds_per_row;
-
-            // Prevent accumulator from building up too much
-            if self.tick_accumulator > seconds_per_row {
-                self.tick_accumulator = 0.0;
-            }
-
-            // If a jump was just applied, we stay on the current row for this tick
-            if self.just_jumped {
-                self.just_jumped = false;
-                return AdvanceResult::Row(self.current_row);
-            }
-
             // Handle Pattern Delay (EEx)
             if self.pattern_delay > 0 {
                 self.pattern_delay -= 1;
+                self.tick_accumulator -= seconds_per_row;
                 return AdvanceResult::None;
             }
+
+            self.tick_accumulator -= seconds_per_row;
 
             let next_row = self.current_row + 1;
 
@@ -243,6 +278,7 @@ impl Transport {
                 self.pattern_loop_row = None;
                 self.pattern_loop_count = 0;
                 self.pattern_delay = 0;
+                self.just_jumped = false;
                 self.state = TransportState::Playing;
             }
             TransportState::Paused => {
@@ -267,6 +303,7 @@ impl Transport {
         self.pattern_loop_row = None;
         self.pattern_loop_count = 0;
         self.pattern_delay = 0;
+        self.just_jumped = false;
         self.state = TransportState::Playing;
     }
 

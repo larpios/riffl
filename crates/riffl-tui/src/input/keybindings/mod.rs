@@ -9,7 +9,6 @@ use crate::app::AppView;
 use crate::editor::EditorMode;
 use crate::registry::{ActionCategory, ActionMetadata, Keybinding};
 
-
 mod action;
 mod dispatch;
 mod mappings;
@@ -63,4 +62,3 @@ impl KeybindingRegistry {
             .collect()
     }
 }
-

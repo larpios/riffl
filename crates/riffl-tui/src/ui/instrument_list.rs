@@ -12,8 +12,8 @@ use ratatui::{
 use crate::ui::theme::Theme;
 use riffl_core::song::Song;
 
-use std::sync::Arc;
 use riffl_core::audio::{LoopMode, Sample};
+use std::sync::Arc;
 
 /// Render the instrument list view.
 pub fn render_instrument_list(

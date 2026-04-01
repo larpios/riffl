@@ -234,7 +234,7 @@ pub fn render_export_dialog(
 fn render_configure_phase(lines: &mut Vec<Line>, dialog: &ExportDialog, theme: &Theme) {
     let key_style = Style::default().fg(theme.success_color());
     let focused_style = Style::default()
-        .fg(Color::Black)
+        .fg(theme.cursor_fg)
         .bg(theme.info_color())
         .add_modifier(Modifier::BOLD);
     let normal_style = Style::default().fg(theme.text);
@@ -284,7 +284,7 @@ fn render_configure_phase(lines: &mut Vec<Line>, dialog: &ExportDialog, theme: &
     // Confirm button
     let confirm_style = if dialog.focused_field == ExportField::Confirm {
         Style::default()
-            .fg(Color::Black)
+            .fg(theme.cursor_fg)
             .bg(theme.success_color())
             .add_modifier(Modifier::BOLD)
     } else {

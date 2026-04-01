@@ -402,23 +402,75 @@ fn tutor_content(theme: &Theme) -> Vec<Line<'static>> {
     lines.push(key(":t <n>  / :tempo <n>", "Alias for :bpm", theme));
     lines.push(key(":step <n>", "Set cursor step size (0–8)", theme));
     lines.push(key(":volume <n>", "Set global volume 0–100", theme));
-    lines.push(key(":speed <n>  / :tpl <n>", "Set ticks per line (1–31)", theme));
-    lines.push(key(":len <n>  / :length <n>", "Resize current pattern (16–512 rows)", theme));
-    lines.push(key(":transpose <n>  / :tr <n>", "Transpose selection by n semitones", theme));
+    lines.push(key(
+        ":speed <n>  / :tpl <n>",
+        "Set ticks per line (1–31)",
+        theme,
+    ));
+    lines.push(key(
+        ":len <n>  / :length <n>",
+        "Resize current pattern (16–512 rows)",
+        theme,
+    ));
+    lines.push(key(
+        ":transpose <n>  / :tr <n>",
+        "Transpose selection by n semitones",
+        theme,
+    ));
     lines.push(key(":quantize", "Quantize selection to step grid", theme));
-    lines.push(key(":interpolate  / :interp", "Interpolate volume across visual selection", theme));
+    lines.push(key(
+        ":interpolate  / :interp",
+        "Interpolate volume across visual selection",
+        theme,
+    ));
     lines.push(key(":clear", "Clear all cells in current pattern", theme));
-    lines.push(key(":fill <note> [<step>]", "Fill current channel with note every step rows", theme));
-    lines.push(key(":loop <start> <end>", "Set loop region rows and activate", theme));
-    lines.push(key(":adsr <A> <D> <S%> <R>", "Set ADSR volume envelope on current instrument", theme));
+    lines.push(key(
+        ":fill <note> [<step>]",
+        "Fill current channel with note every step rows",
+        theme,
+    ));
+    lines.push(key(
+        ":loop <start> <end>",
+        "Set loop region rows and activate",
+        theme,
+    ));
+    lines.push(key(
+        ":adsr <A> <D> <S%> <R>",
+        "Set ADSR volume envelope on current instrument",
+        theme,
+    ));
     lines.push(key(":rename <name>", "Rename current track/channel", theme));
-    lines.push(key(":pname <name>", "Rename current/selected pattern", theme));
-    lines.push(key(":dup", "Duplicate current/selected pattern to a new slot", theme));
-    lines.push(key(":track <add|del>", "Add/remove channel in current pattern", theme));
-    lines.push(key(":title <name>", "Set song title (shown in header)", theme));
+    lines.push(key(
+        ":pname <name>",
+        "Rename current/selected pattern",
+        theme,
+    ));
+    lines.push(key(
+        ":dup",
+        "Duplicate current/selected pattern to a new slot",
+        theme,
+    ));
+    lines.push(key(
+        ":track <add|del>",
+        "Add/remove channel in current pattern",
+        theme,
+    ));
+    lines.push(key(
+        ":title <name>",
+        "Set song title (shown in header)",
+        theme,
+    ));
     lines.push(key(":artist <name>", "Set song artist name", theme));
-    lines.push(key(":mode <native|compat|amiga>", "Switch effect interpretation mode", theme));
-    lines.push(key(":goto <n>  / :<n>", "Jump to row n (1-based; also m key)", theme));
+    lines.push(key(
+        ":mode <native|compat|amiga>",
+        "Switch effect interpretation mode",
+        theme,
+    ));
+    lines.push(key(
+        ":goto <n>  / :<n>",
+        "Jump to row n (1-based; also m key)",
+        theme,
+    ));
     lines.push(key(":tutor", "Open this help view", theme));
     lines.push(blank());
 
@@ -473,14 +525,22 @@ fn tutor_content(theme: &Theme) -> Vec<Line<'static>> {
     lines.push(key("M", "Mute / unmute track", theme));
     lines.push(key("S", "Solo / unsolo track", theme));
     lines.push(key("Alt+Up  /  Alt+Down", "Track volume +5% / -5%", theme));
-    lines.push(key("Alt+Left  /  Alt+Right", "Track pan left / right 10%", theme));
+    lines.push(key(
+        "Alt+Left  /  Alt+Right",
+        "Track pan left / right 10%",
+        theme,
+    ));
     lines.push(key("Q", "Quantize selection", theme));
     lines.push(blank());
 
     // ── Transport ────────────────────────────────────────────────────────────
     lines.push(section("TRANSPORT", theme));
     lines.push(blank());
-    lines.push(key("Space", "Play / Pause  (Instrument list: preview note)", theme));
+    lines.push(key(
+        "Space",
+        "Play / Pause  (Instrument list: preview note)",
+        theme,
+    ));
     lines.push(key("Enter  (when stopped)", "Play from cursor row", theme));
     lines.push(key("=  /  -", "BPM +1 / -1", theme));
     lines.push(key("Ctrl+B", "BPM inline prompt", theme));
@@ -520,8 +580,16 @@ fn tutor_content(theme: &Theme) -> Vec<Line<'static>> {
     lines.push(key("Insert  /  o", "Insert pattern at cursor", theme));
     lines.push(key("x  /  Del", "Delete entry at cursor", theme));
     lines.push(key("n", "Create new pattern and append", theme));
-    lines.push(key("c", "Clone pattern at cursor (deep copy, insert after)", theme));
-    lines.push(key("Ctrl+K  /  Ctrl+J", "Move entry up / down (reorder)", theme));
+    lines.push(key(
+        "c",
+        "Clone pattern at cursor (deep copy, insert after)",
+        theme,
+    ));
+    lines.push(key(
+        "Ctrl+K  /  Ctrl+J",
+        "Move entry up / down (reorder)",
+        theme,
+    ));
     lines.push(key("Enter", "Jump to selected pattern in editor", theme));
     lines.push(blank());
 
@@ -559,8 +627,16 @@ fn tutor_content(theme: &Theme) -> Vec<Line<'static>> {
         "Toggle live mode (scripts re-run each loop)",
         theme,
     ));
-    lines.push(key("Ctrl+Enter", "Execute current script (full pattern)", theme));
-    lines.push(key("Ctrl+Enter  (Visual mode)", "Execute script on visual selection", theme));
+    lines.push(key(
+        "Ctrl+Enter",
+        "Execute current script (full pattern)",
+        theme,
+    ));
+    lines.push(key(
+        "Ctrl+Enter  (Visual mode)",
+        "Execute script on visual selection",
+        theme,
+    ));
     lines.push(key("Ctrl+T", "Open script templates", theme));
     lines.push(blank());
     lines.push(text(

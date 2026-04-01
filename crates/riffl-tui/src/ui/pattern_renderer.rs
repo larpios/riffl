@@ -167,9 +167,7 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
             "   "
         };
 
-        let (vol, pan) = track
-            .map(|t| (t.volume, t.pan))
-            .unwrap_or((1.0, 0.0));
+        let (vol, pan) = track.map(|t| (t.volume, t.pan)).unwrap_or((1.0, 0.0));
 
         let vol_str = format!("{:3}", (vol * 100.0).round() as i32);
         let pan_pct = (pan * 100.0).round() as i32;
@@ -188,7 +186,7 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
 
         let header_style = if is_soloed {
             Style::default()
-                .fg(Color::Black)
+                .fg(theme.cursor_fg)
                 .bg(theme.warning_color())
                 .add_modifier(Modifier::BOLD)
         } else if is_muted {
@@ -225,7 +223,7 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
             (
                 "▶ ",
                 Style::default()
-                    .fg(Color::Black)
+                    .fg(theme.cursor_fg)
                     .bg(theme.success_color())
                     .add_modifier(Modifier::BOLD),
             )
@@ -505,7 +503,11 @@ pub(super) fn format_cell_display(cell: &riffl_core::pattern::row::Cell) -> Stri
 }
 
 /// Calculate scroll offset to keep a target row visible
-pub(super) fn calculate_scroll_offset(cursor_row: usize, visible_rows: usize, total_rows: usize) -> usize {
+pub(super) fn calculate_scroll_offset(
+    cursor_row: usize,
+    visible_rows: usize,
+    total_rows: usize,
+) -> usize {
     if visible_rows >= total_rows {
         return 0;
     }

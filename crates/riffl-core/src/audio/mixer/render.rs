@@ -90,11 +90,13 @@ impl super::Mixer {
                     }
 
                     // High-precision timing constants
-                    let frames_per_tick_f32 = ch_state.frames_per_row as f32 / ch_state.ticks_per_row as f32;
+                    let frames_per_tick_f32 =
+                        ch_state.frames_per_row as f32 / ch_state.ticks_per_row as f32;
 
                     // Note Cut (ECx)
                     if let Some(cut_tick) = ch_state.note_cut_tick {
-                        let current_tick = (ch_state.row_frame_counter as f32 / frames_per_tick_f32) as u32;
+                        let frames_per_tick = frames_per_tick_f32 as u32;
+                        let current_tick = ch_state.row_frame_counter / frames_per_tick.max(1);
                         if current_tick >= cut_tick as u32 {
                             voice.active = false;
                         }
@@ -105,7 +107,7 @@ impl super::Mixer {
                         if let Some(retrigger_interval) = ch_state.retrigger_interval {
                             let frames_per_tick = frames_per_tick_f32 as u32;
                             let tick_frame = ch_state.row_frame_counter % frames_per_tick.max(1);
-                            let current_tick = (ch_state.row_frame_counter as f32 / frames_per_tick_f32) as u32;
+                            let current_tick = ch_state.row_frame_counter / frames_per_tick.max(1);
                             if retrigger_interval > 0
                                 && current_tick > 0
                                 && tick_frame == 0
@@ -189,7 +191,8 @@ impl super::Mixer {
                             if inst.fadeout > 0 {
                                 if voice.volume_envelope_tick != voice.last_fadeout_tick {
                                     let delta = inst.fadeout as f32 / 65536.0;
-                                    voice.fadeout_multiplier = (voice.fadeout_multiplier - delta).max(0.0);
+                                    voice.fadeout_multiplier =
+                                        (voice.fadeout_multiplier - delta).max(0.0);
                                     voice.last_fadeout_tick = voice.volume_envelope_tick;
                                 }
                                 if voice.fadeout_multiplier <= 0.0001 {
@@ -213,9 +216,13 @@ impl super::Mixer {
                         }
                         if let Some(vol_env) = &inst.volume_envelope {
                             if vol_env.enabled {
-                                let tick_fraction = voice.volume_envelope_frame / frames_per_tick_f32;
-                                let (val, next_tick) =
-                                    vol_env.evaluate(voice.volume_envelope_tick, tick_fraction, voice.key_on);
+                                let tick_fraction =
+                                    voice.volume_envelope_frame / frames_per_tick_f32;
+                                let (val, next_tick) = vol_env.evaluate(
+                                    voice.volume_envelope_tick,
+                                    tick_fraction,
+                                    voice.key_on,
+                                );
                                 env_vol *= val;
 
                                 voice.volume_envelope_frame += 1.0;
@@ -249,9 +256,13 @@ impl super::Mixer {
                         }
                         if let Some(pan_env) = &inst.panning_envelope {
                             if pan_env.enabled {
-                                let tick_fraction = voice.panning_envelope_frame / frames_per_tick_f32;
-                                let (val, next_tick) =
-                                    pan_env.evaluate(voice.panning_envelope_tick, tick_fraction, voice.key_on);
+                                let tick_fraction =
+                                    voice.panning_envelope_frame / frames_per_tick_f32;
+                                let (val, next_tick) = pan_env.evaluate(
+                                    voice.panning_envelope_tick,
+                                    tick_fraction,
+                                    voice.key_on,
+                                );
                                 env_pan += val;
 
                                 voice.panning_envelope_frame += 1.0;
@@ -277,9 +288,13 @@ impl super::Mixer {
                         }
                         if let Some(pitch_env) = &inst.pitch_envelope {
                             if pitch_env.enabled {
-                                let tick_fraction = voice.pitch_envelope_frame / frames_per_tick_f32;
-                                let (val, next_tick) =
-                                    pitch_env.evaluate(voice.pitch_envelope_tick, tick_fraction, voice.key_on);
+                                let tick_fraction =
+                                    voice.pitch_envelope_frame / frames_per_tick_f32;
+                                let (val, next_tick) = pitch_env.evaluate(
+                                    voice.pitch_envelope_tick,
+                                    tick_fraction,
+                                    voice.key_on,
+                                );
                                 env_pitch += val * 12.0;
 
                                 voice.pitch_envelope_frame += 1.0;
@@ -550,7 +565,7 @@ impl super::Mixer {
             false
         };
         if preview_done {
-            self.preview_sample = None;
+            self.stop_preview();
         }
 
         // Write mono mix to FFT capture buffer

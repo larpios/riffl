@@ -344,5 +344,4 @@ impl Editor {
         self.cursor_row = row.min(self.pattern.num_rows().saturating_sub(1));
         self.cursor_channel = channel.min(self.pattern.num_channels().saturating_sub(1));
     }
-
 }

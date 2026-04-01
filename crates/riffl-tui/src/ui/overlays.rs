@@ -32,7 +32,7 @@ pub(super) fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect
         .border_style(Style::default().fg(theme.info_color()))
         .title(title)
         .title_alignment(Alignment::Left)
-        .style(Style::default().bg(Color::Black));
+        .style(Style::default().bg(theme.bg_surface));
 
     let inner_area = block.inner(browser_area);
     frame.render_widget(block, browser_area);
@@ -92,7 +92,7 @@ pub(super) fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect
 
             let style = if is_selected {
                 Style::default()
-                    .fg(Color::Black)
+                    .fg(theme.cursor_fg)
                     .bg(theme.info_color())
                     .add_modifier(Modifier::BOLD)
             } else {
@@ -126,7 +126,11 @@ pub(super) fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect
 
     frame.render_widget(paragraph, inner_area);
 }
-pub(super) fn render_command_completions(frame: &mut Frame, footer_area: ratatui::layout::Rect, app: &App) {
+pub(super) fn render_command_completions(
+    frame: &mut Frame,
+    footer_area: ratatui::layout::Rect,
+    app: &App,
+) {
     let input = app.command_input.trim();
     let input_word = input.split_whitespace().next().unwrap_or(input);
 
@@ -177,7 +181,7 @@ pub(super) fn render_command_completions(frame: &mut Frame, footer_area: ratatui
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.text_dimmed))
-        .style(Style::default().bg(Color::Black));
+        .style(Style::default().bg(theme.bg_surface));
 
     let para = Paragraph::new(lines).block(block);
     frame.render_widget(para, area);
@@ -234,7 +238,7 @@ pub(super) fn render_which_key(frame: &mut Frame, area: ratatui::layout::Rect, a
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.primary))
         .title(title)
-        .style(Style::default().bg(Color::Black));
+        .style(Style::default().bg(theme.bg_surface));
 
     let para = Paragraph::new(lines).block(block);
     frame.render_widget(para, popup_area);
@@ -273,7 +277,7 @@ pub(super) fn render_which_key_menu(frame: &mut Frame, area: ratatui::layout::Re
         .border_style(Style::default().fg(theme.primary))
         .title(" KEYBINDINGS  (Esc close) ")
         .title_alignment(Alignment::Center)
-        .style(Style::default().bg(Color::Black));
+        .style(Style::default().bg(theme.bg_surface));
 
     let para = Paragraph::new(lines)
         .block(block)

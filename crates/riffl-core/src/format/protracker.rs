@@ -90,41 +90,26 @@ fn extract_tempo_from_patterns(patterns: &[Pattern], arrangement: &[usize]) -> (
     let mut out_speed = 6u8;
     let mut out_bpm = 125.0;
 
-    // We just want to find the first occurrence of each to set the initial Song tempo.
-    let mut found_speed = false;
-    let mut found_bpm = false;
-
-    // Iterate in arrangement order to match actual playback sequence.
-    // Fall back to array order if arrangement is empty (e.g., unit tests).
-    let order: Box<dyn Iterator<Item = &Pattern>> = if arrangement.is_empty() {
-        Box::new(patterns.iter())
+    // Standard tracker behavior: initial tempo is defined by the default (125/6)
+    // or by Fxx effects on the very first row of the song.
+    let first_pattern_idx = if arrangement.is_empty() {
+        0
     } else {
-        Box::new(
-            arrangement
-                .iter()
-                .filter_map(|&idx| patterns.get(idx)),
-        )
+        arrangement[0]
     };
 
-    for pattern in order {
-        for row_idx in 0..pattern.num_rows() {
-            if let Some(row) = pattern.get_row(row_idx) {
-                for cell in row.iter() {
-                    if let Some(effect) = cell.effects.first() {
-                        if effect.effect_type() == Some(EffectType::SetSpeed) {
-                            if !found_bpm && effect.param >= 32 {
-                                out_bpm = effect.param as f64;
-                                found_bpm = true;
-                            } else if !found_speed && effect.param > 0 && effect.param < 32 {
-                                out_speed = effect.param;
-                                found_speed = true;
-                            }
+    if let Some(pattern) = patterns.get(first_pattern_idx) {
+        if let Some(row) = pattern.get_row(0) {
+            for cell in row.iter() {
+                for effect in &cell.effects {
+                    if effect.effect_type() == Some(EffectType::SetSpeed) {
+                        if effect.param >= 32 {
+                            out_bpm = effect.param as f64;
+                        } else if effect.param > 0 {
+                            out_speed = effect.param;
                         }
                     }
                 }
-            }
-            if found_speed && found_bpm {
-                return (out_speed, out_bpm);
             }
         }
     }
@@ -566,7 +551,7 @@ fn detect_channels(tag: &[u8; 4]) -> usize {
         b"M.K." | b"M!K!" | b"FLT4" | b"4CHN" | b"4FLT" => 4,
         b"2CHN" => 2,
         b"6CHN" | b"6FLT" => 6,
-        b"8CHN" | b"8FLT" | b"OCTA" | b"CD81" => 8,
+        b"8CHN" | b"8FLT" | b"FLT8" | b"OCTA" | b"CD81" => 8,
         _ => {
             // Try "NNch" style tag (e.g. b"10ch", b"16ch")
             if tag[2] == b'c' && tag[3] == b'h' && tag[0].is_ascii_digit() {
@@ -761,19 +746,27 @@ mod tests {
         // Pattern 1: has F=180 (BPM 180)
         // Arrangement starts with pattern 1 — should pick up BPM 180, not 150.
         let mut pat0 = Pattern::new(64, 4);
-        pat0.set_cell(0, 0, Cell {
-            note: None,
-            instrument: None,
-            volume: None,
-            effects: vec![Effect::new(0xF, 150)], // F96 = BPM 150
-        });
+        pat0.set_cell(
+            0,
+            0,
+            Cell {
+                note: None,
+                instrument: None,
+                volume: None,
+                effects: vec![Effect::new(0xF, 150)], // F96 = BPM 150
+            },
+        );
         let mut pat1 = Pattern::new(64, 4);
-        pat1.set_cell(0, 0, Cell {
-            note: None,
-            instrument: None,
-            volume: None,
-            effects: vec![Effect::new(0xF, 180)], // FB4 = BPM 180
-        });
+        pat1.set_cell(
+            0,
+            0,
+            Cell {
+                note: None,
+                instrument: None,
+                volume: None,
+                effects: vec![Effect::new(0xF, 180)], // FB4 = BPM 180
+            },
+        );
         let patterns = vec![pat0, pat1];
         // Arrangement: pattern 1 first, then pattern 0
         let (speed, bpm) = extract_tempo_from_patterns(&patterns, &[1, 0]);
