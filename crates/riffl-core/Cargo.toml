@@ -24,7 +24,6 @@ rand = "0.8"
 thiserror = "1.0"
 glicol_synth = "0.13.5"
 petgraph = "0.6"
-game-music-emu = { version = "0.3", default-features = false, features = ["nsf"] }
 opl = { package = "opl-emu", version = "0.4", default-features = true, features = ["chip"], optional = true }
 libm = "0.2.15"
 dasp_sample = "0.11.0"

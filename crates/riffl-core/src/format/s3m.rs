@@ -652,6 +652,7 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
             // If we skip, we break references.
             let name = s3m_inst.name.clone();
             let mut inst = Instrument::new(name.clone());
+            #[allow(unused_variables)]
             let sample = if let Some(adlib) = s3m_inst.adlib_data {
                 #[cfg(feature = "adlib")]
                 {

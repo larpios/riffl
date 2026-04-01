@@ -23,7 +23,18 @@ Riffl is an ambitious Rust-based music tracker designed for precision and perfor
   - **Linux (Debian/Ubuntu):** `sudo apt-get install libasound2-dev`
   - **Linux (Fedora):** `sudo dnf install alsa-lib-devel`
 
+### Install
+
+The project is still in development, but if you want to try it out, you can install it like so:
+
+```bash
+cargo install --git https://github.com/larpios/riffl riffl-tui
+```
+
 ### Build & Run
+
+You can also just clone the repository and build and run the project like so:
+
 ```bash
 cargo run -p riffl-tui
 ```
