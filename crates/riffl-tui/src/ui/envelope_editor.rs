@@ -621,7 +621,7 @@ pub fn render_envelope_editor(
             EnvelopeType::Panning => instrument.panning_envelope.as_ref(),
             EnvelopeType::Pitch => instrument.pitch_envelope.as_ref(),
         };
-        let enabled = tab_env.map_or(false, |e| e.enabled);
+        let enabled = tab_env.is_some_and(|e| e.enabled);
         let label = if is_active {
             format!("[{}{}] ", tab.short_label(), if enabled { "·" } else { "" })
         } else {

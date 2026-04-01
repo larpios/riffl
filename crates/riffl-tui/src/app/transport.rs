@@ -115,12 +115,12 @@ impl App {
             // Prepare a single row that contains the "last known state" for each channel
             let mut chase_row_cells = vec![riffl_core::pattern::row::Cell::default(); num_channels];
 
-            for ch in 0..num_channels {
+            for (ch, ch_cell) in chase_row_cells.iter_mut().enumerate() {
                 for r in (0..current_row).rev() {
                     if let Some(row) = pattern.get_row(r) {
                         if let Some(cell) = row.get(ch) {
                             if let Some(NoteEvent::On(_)) = &cell.note {
-                                chase_row_cells[ch] = cell.clone();
+                                *ch_cell = cell.clone();
                                 break;
                             } else if let Some(NoteEvent::Off) | Some(NoteEvent::Cut) = &cell.note {
                                 // Channel was explicitly stopped/cut

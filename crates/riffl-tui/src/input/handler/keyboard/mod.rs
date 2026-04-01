@@ -381,7 +381,7 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
     if app.current_view == AppView::InstrumentList
         && app
             .instrument_selection()
-            .map_or(false, |i| i < app.song.instruments.len())
+            .is_some_and(|i| i < app.song.instruments.len())
         && (is_tab || is_backtab)
     {
         if app.inst_editor.focused {
