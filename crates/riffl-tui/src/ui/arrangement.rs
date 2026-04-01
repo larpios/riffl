@@ -237,7 +237,12 @@ pub fn render_arrangement(
         let pos_str = format!("  {:3}", arr_idx);
         let pat_str = format!("  {:02X}", pattern_index);
         let rows_str = format!("  {:4}", num_rows);
-        let preview_str = format!("  {}", preview);
+        let marker = song.section_marker_at(arr_idx);
+        let preview_str = if let Some(m) = marker {
+            format!("  \u{25C6} {} \u{2014} {}", m.label, preview)
+        } else {
+            format!("  {}", preview)
+        };
 
         let style = if is_cursor && is_playback {
             Style::default()

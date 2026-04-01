@@ -546,6 +546,37 @@ impl super::App {
             return;
         }
 
+        // :marker <label> — add/update a section marker at the current arrangement cursor
+        // :marker — without label, removes the marker at current arrangement cursor
+        if parts[0] == "marker" || parts[0] == "mark" {
+            if let Some(label) = parts.get(1).map(|s| s.trim().to_string()) {
+                if label.is_empty() {
+                    self.arrangement_remove_marker();
+                    self.open_modal(Modal::info(
+                        "Marker Removed".to_string(),
+                        format!("Removed marker at position {}", self.arrangement_view.cursor()),
+                    ));
+                } else {
+                    let pos = self.arrangement_view.cursor();
+                    self.arrangement_add_marker(label.clone());
+                    self.open_modal(Modal::info(
+                        "Marker Added".to_string(),
+                        format!("Added marker \"{}\" at position {}", label, pos),
+                    ));
+                }
+            } else {
+                // No arg: show current marker or usage
+                let pos = self.arrangement_view.cursor();
+                let info = if let Some(m) = self.song.section_marker_at(pos) {
+                    format!("Current marker: \"{}\"\nUse :marker <label> to rename, :marker (empty) to remove.", m.label)
+                } else {
+                    format!("No marker at position {}.\nUsage: :marker <label>", pos)
+                };
+                self.open_modal(Modal::info("Section Marker".to_string(), info));
+            }
+            return;
+        }
+
         // :<number> — jump to specific row
         if let Ok(row) = cmd.parse::<usize>() {
             self.editor.go_to_row(row.saturating_sub(1));

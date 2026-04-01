@@ -48,7 +48,35 @@ pub struct Config {
     /// Status bar configuration - controls what information is displayed in the footer.
     #[serde(default)]
     pub status_bar: StatusBarConfig,
+
+    /// Default follow mode for new sessions: cursor chases playhead during playback
+    #[serde(default)]
+    pub default_follow_mode: bool,
+
+    /// Default row advance step size for note entry (0 = no advance, 1-8 typical)
+    #[serde(default = "default_step_size")]
+    pub default_step_size: usize,
+
+    /// Default octave for note entry (0-9, default 4)
+    #[serde(default = "default_octave")]
+    pub default_octave: u8,
+
+    /// Number of rows per beat for row highlight intervals.
+    /// Rows at multiples of this value are highlighted (dimly).
+    /// Rows at multiples of 4× this value are highlighted more strongly.
+    /// Default is 4 (quarter-note beats at 4/4 time).
+    #[serde(default = "default_beat_rows")]
+    pub beat_rows: u8,
+
+    /// Autosave interval in seconds. Set to 0 to disable autosave.
+    /// When > 0, the project is silently saved every N seconds if there are unsaved changes.
+    #[serde(default)]
+    pub autosave_interval_secs: u64,
 }
+
+fn default_step_size() -> usize { 1 }
+fn default_octave() -> u8 { 4 }
+fn default_beat_rows() -> u8 { 4 }
 
 impl Default for Config {
     fn default() -> Self {
@@ -63,6 +91,11 @@ impl Default for Config {
             module_dirs: Vec::new(),
             bookmarked_dirs: Vec::new(),
             status_bar: StatusBarConfig::default(),
+            default_follow_mode: false,
+            default_step_size: default_step_size(),
+            default_octave: default_octave(),
+            beat_rows: default_beat_rows(),
+            autosave_interval_secs: 0,
         }
     }
 }
@@ -285,6 +318,16 @@ mod tests {
     }
 
     #[test]
+    fn test_config_new_fields_defaults() {
+        let c = Config::default();
+        assert!(!c.default_follow_mode);
+        assert_eq!(c.default_step_size, 1);
+        assert_eq!(c.default_octave, 4);
+        assert_eq!(c.beat_rows, 4);
+        assert_eq!(c.autosave_interval_secs, 0);
+    }
+
+    #[test]
     fn test_config_roundtrip_toml() {
         let cfg = Config {
             theme: "nord".to_string(),
@@ -297,6 +340,11 @@ mod tests {
             module_dirs: vec!["/tmp/modules".to_string()],
             bookmarked_dirs: vec![],
             status_bar: StatusBarConfig::default(),
+            default_follow_mode: false,
+            default_step_size: 1,
+            default_octave: 4,
+            beat_rows: 4,
+            autosave_interval_secs: 0,
         };
         let s = toml::to_string_pretty(&cfg).unwrap();
         let restored: Config = toml::from_str(&s).unwrap();

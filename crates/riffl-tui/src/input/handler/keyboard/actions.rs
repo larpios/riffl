@@ -203,6 +203,29 @@ pub(super) fn handle_action(app: &mut App, action: Action, key: KeyEvent) {
             app.mark_dirty();
         }
 
+        Action::FillSelection => {
+            use riffl_core::pattern::note::{NoteEvent, Note, Pitch};
+            // Fill with the last draw_note if available, otherwise C-4 as default
+            let note = app.draw_note.clone().unwrap_or_else(|| {
+                NoteEvent::On(Note::new(Pitch::C, 4, 100, app.editor.current_instrument() as u8))
+            });
+            app.editor.fill_selection_with_note(note);
+            app.mark_dirty();
+        }
+        Action::RandomizeNotes => {
+            app.editor.randomize_notes();
+            app.mark_dirty();
+        }
+        Action::AddBookmark => {
+            app.editor.add_bookmark(None);
+        }
+        Action::NextBookmark => {
+            app.editor.goto_next_bookmark();
+        }
+        Action::PrevBookmark => {
+            app.editor.goto_prev_bookmark();
+        }
+
         // Editing
         Action::DeleteCell => {
             if app.current_view == AppView::Arrangement {

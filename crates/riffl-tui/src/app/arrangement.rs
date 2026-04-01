@@ -154,6 +154,22 @@ impl App {
 use crate::editor::Editor;
 
 impl App {
+    /// Add or update a section marker at the current arrangement cursor.
+    pub fn arrangement_add_marker(&mut self, label: String) {
+        let pos = self.arrangement_view.cursor();
+        self.song.add_section_marker(pos, label);
+        self.mark_dirty();
+    }
+
+    /// Remove the section marker at the current arrangement cursor.
+    pub fn arrangement_remove_marker(&mut self) {
+        let pos = self.arrangement_view.cursor();
+        self.song.remove_section_marker(pos);
+        self.mark_dirty();
+    }
+}
+
+impl App {
     pub fn flush_editor_pattern(&mut self, arrangement_pos: usize) {
         if let Some(&pattern_idx) = self.song.arrangement.get(arrangement_pos) {
             if let Some(pattern) = self.song.patterns.get_mut(pattern_idx) {

@@ -450,6 +450,37 @@ pub struct Song {
     pub global_volume: f32,
     /// Instrument definitions linking to samples.
     pub instruments: Vec<Instrument>,
+    /// Section markers for labeling arrangement positions.
+    #[serde(default)]
+    pub section_markers: Vec<SectionMarker>,
+    /// Project file format version. Incremented when incompatible changes are made.
+    #[serde(default = "default_format_version")]
+    pub format_version: u32,
+}
+
+/// A named marker at a position in the arrangement (for section labels like "Intro", "Verse").
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SectionMarker {
+    /// Position in the arrangement (index into Song::arrangement).
+    pub position: usize,
+    /// User-defined label (e.g. "Intro", "Chorus").
+    pub label: String,
+}
+
+impl SectionMarker {
+    pub fn new(position: usize, label: impl Into<String>) -> Self {
+        Self {
+            position,
+            label: label.into(),
+        }
+    }
+}
+
+/// Current project file format version.
+pub const FORMAT_VERSION: u32 = 2;
+
+fn default_format_version() -> u32 {
+    FORMAT_VERSION
 }
 
 /// Maximum number of patterns in the pool.
@@ -479,6 +510,8 @@ impl Song {
             pan_separation: 128,
             panning_law: PanningLaw::EqualPower,
             instruments: Vec::new(),
+            section_markers: Vec::new(),
+            format_version: FORMAT_VERSION,
         }
     }
 
@@ -565,6 +598,31 @@ impl Song {
             return None;
         }
         Some(self.arrangement.remove(position))
+    }
+
+    /// Add a section marker at the given arrangement position.
+    /// If a marker already exists at that position, updates its label.
+    pub fn add_section_marker(&mut self, position: usize, label: impl Into<String>) {
+        let label = label.into();
+        if let Some(existing) = self.section_markers.iter_mut().find(|m| m.position == position) {
+            existing.label = label;
+        } else {
+            self.section_markers.push(SectionMarker::new(position, label));
+            self.section_markers.sort_by_key(|m| m.position);
+        }
+    }
+
+    /// Remove a section marker at the given arrangement position.
+    /// Returns true if a marker was removed.
+    pub fn remove_section_marker(&mut self, position: usize) -> bool {
+        let before = self.section_markers.len();
+        self.section_markers.retain(|m| m.position != position);
+        self.section_markers.len() < before
+    }
+
+    /// Get the section marker at the given arrangement position, if any.
+    pub fn section_marker_at(&self, position: usize) -> Option<&SectionMarker> {
+        self.section_markers.iter().find(|m| m.position == position)
     }
 }
 

@@ -109,6 +109,86 @@ impl Editor {
         }
     }
 
+    /// Fill the visual selection (or current channel if no selection) with the given note.
+    ///
+    /// Fills every row in the selection range for each selected channel with `note`.
+    /// Pushes an undo snapshot before making changes.
+    pub fn fill_selection_with_note(&mut self, note: riffl_core::pattern::note::NoteEvent) {
+        let ((r0, c0), (r1, c1)) = if self.mode == EditorMode::Visual {
+            match self.visual_selection() {
+                Some(s) => s,
+                None => return,
+            }
+        } else {
+            let c = self.cursor_channel;
+            let max_r = self.pattern.num_rows().saturating_sub(1);
+            ((0, c), (max_r, c))
+        };
+
+        self.save_history();
+        for row in r0..=r1 {
+            for ch in c0..=c1 {
+                self.pattern.set_cell(
+                    row,
+                    ch,
+                    riffl_core::pattern::row::Cell::with_note(note.clone()),
+                );
+            }
+        }
+    }
+
+    /// Randomize the pitch of all notes in the visual selection (or current cell).
+    ///
+    /// Each cell that contains a NoteEvent::On has its pitch replaced with a randomly
+    /// chosen pitch from the chromatic scale. Octave and other note properties are
+    /// preserved. Uses a simple LCG seeded from the current row position for
+    /// reproducibility within a session.
+    pub fn randomize_notes(&mut self) {
+        let ((r0, c0), (r1, c1)) = if self.mode == EditorMode::Visual {
+            match self.visual_selection() {
+                Some(s) => s,
+                None => return,
+            }
+        } else {
+            let r = self.cursor_row;
+            let c = self.cursor_channel;
+            ((r, c), (r, c))
+        };
+
+        self.save_history();
+
+        // Simple LCG pseudo-random seeded from cursor position to avoid rand dependency
+        let mut state: u64 = (r0 as u64).wrapping_mul(6364136223846793005)
+            .wrapping_add((c0 as u64).wrapping_mul(1442695040888963407))
+            .wrapping_add(1);
+        let mut next_pitch = || -> riffl_core::pattern::note::Pitch {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let idx = ((state >> 33) as usize) % 12;
+            riffl_core::pattern::note::Pitch::ALL[idx]
+        };
+
+        for row in r0..=r1 {
+            for ch in c0..=c1 {
+                if let Some(cell) = self.pattern.get_cell(row, ch).cloned() {
+                    if let Some(riffl_core::pattern::note::NoteEvent::On(note)) = cell.note {
+                        let new_pitch = next_pitch();
+                        let new_note = riffl_core::pattern::note::Note::new(
+                            new_pitch,
+                            note.octave,
+                            note.velocity,
+                            note.instrument,
+                        );
+                        let new_cell = riffl_core::pattern::row::Cell {
+                            note: Some(riffl_core::pattern::note::NoteEvent::On(new_note)),
+                            ..cell
+                        };
+                        self.pattern.set_cell(row, ch, new_cell);
+                    }
+                }
+            }
+        }
+    }
+
     /// Interpolate volume values in the visual selection.
     ///
     /// For each channel column in the selection, finds the first and last cells

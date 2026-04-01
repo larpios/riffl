@@ -34,6 +34,13 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             KeyCode::Down => Action::TrackVolumeDown,
             KeyCode::Left => Action::TrackPanLeft,
             KeyCode::Right => Action::TrackPanRight,
+            // Block transforms
+            KeyCode::Char('f') => Action::FillSelection,
+            KeyCode::Char('z') => Action::RandomizeNotes,
+            // Bookmarks
+            KeyCode::Char('m') => Action::AddBookmark,
+            KeyCode::Char('n') => Action::NextBookmark,
+            KeyCode::Char('p') => Action::PrevBookmark,
             _ => Action::None,
         };
     }
@@ -311,6 +318,18 @@ fn map_visual_mode(key: KeyEvent) -> Action {
         };
     }
 
+    // Handle Alt-modified bindings in visual mode
+    if key.modifiers == KeyModifiers::ALT {
+        return match key.code {
+            KeyCode::Char('f') => Action::FillSelection,
+            KeyCode::Char('z') => Action::RandomizeNotes,
+            KeyCode::Char('m') => Action::AddBookmark,
+            KeyCode::Char('n') => Action::NextBookmark,
+            KeyCode::Char('p') => Action::PrevBookmark,
+            _ => Action::None,
+        };
+    }
+
     // Handle Shift-modified bindings (transpose by semitone)
     if key.modifiers == KeyModifiers::SHIFT {
         return match key.code {
@@ -355,6 +374,7 @@ fn map_visual_mode(key: KeyEvent) -> Action {
         _ => Action::None,
     }
 }
+
 
 /// Check if an action represents a navigation movement
 pub fn is_navigation_action(action: Action) -> bool {

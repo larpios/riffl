@@ -66,6 +66,15 @@ pub enum Action {
     // Interpolation
     Interpolate,
 
+    // Block transforms
+    FillSelection,
+    RandomizeNotes,
+
+    // Bookmarks
+    AddBookmark,
+    NextBookmark,
+    PrevBookmark,
+
     // Editing (Normal mode)
     DeleteCell,
     InsertRow,
@@ -230,6 +239,11 @@ impl ActionMetadata for Action {
             Action::TransposeOctaveUp => "Transpose Octave Up",
             Action::TransposeOctaveDown => "Transpose Octave Down",
             Action::Interpolate => "Interpolate",
+            Action::FillSelection => "Fill Selection",
+            Action::RandomizeNotes => "Randomize Notes",
+            Action::AddBookmark => "Add Bookmark",
+            Action::NextBookmark => "Next Bookmark",
+            Action::PrevBookmark => "Prev Bookmark",
             Action::DeleteCell => "Delete Cell",
             Action::InsertRow => "Insert Row",
             Action::InsertRowBelow => "Insert Row Below",
@@ -359,6 +373,11 @@ impl ActionMetadata for Action {
             Action::TransposeOctaveUp => "Transpose octave up",
             Action::TransposeOctaveDown => "Transpose octave down",
             Action::Interpolate => "Interpolate selection between values",
+            Action::FillSelection => "Fill selection with last entered note",
+            Action::RandomizeNotes => "Randomize pitches of notes in selection",
+            Action::AddBookmark => "Add/remove bookmark at cursor (toggle)",
+            Action::NextBookmark => "Jump to next bookmark",
+            Action::PrevBookmark => "Jump to previous bookmark",
             Action::DeleteCell => "Delete cell content at cursor",
             Action::InsertRow => "Insert a blank row",
             Action::InsertRowBelow => "Insert a blank row below",
@@ -484,6 +503,11 @@ impl ActionMetadata for Action {
             | Action::TransposeOctaveUp
             | Action::TransposeOctaveDown
             | Action::Interpolate
+            | Action::FillSelection
+            | Action::RandomizeNotes
+            | Action::AddBookmark
+            | Action::NextBookmark
+            | Action::PrevBookmark
             | Action::DeleteCell
             | Action::InsertRow
             | Action::InsertRowBelow

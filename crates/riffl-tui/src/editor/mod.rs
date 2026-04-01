@@ -163,6 +163,10 @@ pub struct Editor {
     volume_digit_pos: u8,
     /// Number of rows to advance after entering a note/event (step size, default 1).
     step_size: usize,
+    /// Named cursor bookmarks: (row, channel, label) tuples for quick navigation.
+    bookmarks: Vec<(usize, usize, String)>,
+    /// Index of the last-visited bookmark (for cycling through bookmarks).
+    bookmark_cursor: usize,
 }
 
 pub mod clipboard;
@@ -195,6 +199,8 @@ impl Editor {
             instrument_digit_pos: 0,
             volume_digit_pos: 0,
             step_size: 1,
+            bookmarks: Vec::new(),
+            bookmark_cursor: 0,
         }
     }
 
@@ -313,5 +319,60 @@ impl Editor {
     pub fn clone_track(&mut self) -> bool {
         self.save_history();
         self.pattern.clone_track(self.cursor_channel)
+    }
+
+    /// Add a bookmark at the current cursor position with an optional label.
+    /// If a bookmark at the same (row, channel) already exists, removes it (toggle).
+    pub fn add_bookmark(&mut self, label: Option<String>) {
+        let row = self.cursor_row;
+        let ch = self.cursor_channel;
+        if let Some(idx) = self.bookmarks.iter().position(|(r, c, _)| *r == row && *c == ch) {
+            self.bookmarks.remove(idx);
+            if self.bookmark_cursor > 0 && self.bookmark_cursor >= self.bookmarks.len() {
+                self.bookmark_cursor = self.bookmarks.len().saturating_sub(1);
+            }
+        } else {
+            let label = label.unwrap_or_else(|| format!("B{}", self.bookmarks.len() + 1));
+            self.bookmarks.push((row, ch, label));
+            self.bookmarks.sort_by_key(|(r, c, _)| (*r, *c));
+            self.bookmark_cursor = self.bookmarks.iter().position(|(r, c, _)| *r == row && *c == ch).unwrap_or(0);
+        }
+    }
+
+    /// Move to the next bookmark (wraps around).
+    pub fn goto_next_bookmark(&mut self) {
+        if self.bookmarks.is_empty() {
+            return;
+        }
+        self.bookmark_cursor = (self.bookmark_cursor + 1) % self.bookmarks.len();
+        let (row, ch, _) = self.bookmarks[self.bookmark_cursor].clone();
+        self.cursor_row = row;
+        self.cursor_channel = ch;
+    }
+
+    /// Move to the previous bookmark (wraps around).
+    pub fn goto_prev_bookmark(&mut self) {
+        if self.bookmarks.is_empty() {
+            return;
+        }
+        self.bookmark_cursor = if self.bookmark_cursor == 0 {
+            self.bookmarks.len() - 1
+        } else {
+            self.bookmark_cursor - 1
+        };
+        let (row, ch, _) = self.bookmarks[self.bookmark_cursor].clone();
+        self.cursor_row = row;
+        self.cursor_channel = ch;
+    }
+
+    /// Get all current bookmarks as (row, channel, label) slices.
+    pub fn bookmarks(&self) -> &[(usize, usize, String)] {
+        &self.bookmarks
+    }
+
+    /// Clear all bookmarks.
+    pub fn clear_bookmarks(&mut self) {
+        self.bookmarks.clear();
+        self.bookmark_cursor = 0;
     }
 }

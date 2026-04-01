@@ -221,6 +221,31 @@ pub(super) const KEY_MAPPINGS: &[KeyMapping] = &[
         action: Action::TrackPanRight,
         mode: EditorMode::Normal,
     },
+    KeyMapping {
+        key: "Alt+F",
+        action: Action::FillSelection,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Alt+Z",
+        action: Action::RandomizeNotes,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Alt+M",
+        action: Action::AddBookmark,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Alt+N",
+        action: Action::NextBookmark,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Alt+P",
+        action: Action::PrevBookmark,
+        mode: EditorMode::Normal,
+    },
     // Insert Mode
     KeyMapping {
         key: "Esc",

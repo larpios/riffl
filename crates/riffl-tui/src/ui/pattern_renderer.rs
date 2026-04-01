@@ -251,14 +251,14 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
             ("] ", Style::default().fg(c).add_modifier(Modifier::BOLD))
         } else if is_in_loop {
             ("¦ ", Style::default().fg(theme.warning_color()))
-        } else if row_idx.is_multiple_of(16) {
+        } else if row_idx > 0 && row_idx.is_multiple_of((app.config.beat_rows as usize) * 4) {
             (
                 "│ ",
                 Style::default()
                     .fg(theme.primary)
                     .add_modifier(Modifier::BOLD),
             )
-        } else if row_idx.is_multiple_of(4) {
+        } else if row_idx > 0 && row_idx.is_multiple_of(app.config.beat_rows as usize) {
             ("· ", Style::default().fg(theme.primary))
         } else {
             ("  ", Style::default().fg(theme.text_secondary))

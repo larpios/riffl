@@ -255,6 +255,9 @@ pub struct App {
     /// Last time system stats were refreshed.
     sys_info_last_update: Instant,
 
+    /// Timestamp of the last autosave (used to check autosave interval).
+    last_autosave: Instant,
+
     /// Horizontal channel scroll offset (reset to 0 with Home/Ctrl+L)
     pub channel_scroll: usize,
 
@@ -309,6 +312,7 @@ impl App {
         // Capture initial tempo values before `config` is moved into the struct.
         let initial_bpm = config.default_bpm;
         let initial_tpl: u32 = 6;
+        let initial_follow_mode = config.default_follow_mode;
 
         // Create a song with the demo pattern in its pool
         let mut song = Song::new("Untitled", config.default_bpm);
@@ -328,7 +332,9 @@ impl App {
             m.set_slide_mode(song.slide_mode);
         }
 
-        let editor = Editor::new(pattern.clone());
+        let mut editor = Editor::new(pattern.clone());
+        editor.set_step_size(config.default_step_size);
+        editor.set_octave(config.default_octave);
 
         let glicol_mixer = Arc::new(Mutex::new(
             riffl_core::audio::glicol_mixer::GlicolMixer::new(
@@ -389,7 +395,7 @@ impl App {
             pending_replace: false,
             show_tutor: false,
             tutor_scroll: 0,
-            follow_mode: false,
+            follow_mode: initial_follow_mode,
             is_dirty: false,
             pending_quit: false,
             pending_sample_path: None,
@@ -415,6 +421,7 @@ impl App {
             cached_cpu_percent: 0.0,
             cached_mem_percent: 0.0,
             sys_info_last_update: Instant::now(),
+            last_autosave: Instant::now(),
             channel_scroll: 0,
             command_history: Vec::new(),
             command_history_index: None,
@@ -615,6 +622,19 @@ impl App {
                 0.70
             };
             mixer.decay_channel_levels(decay);
+        }
+
+        // Autosave: if enabled and there are dirty changes, save periodically
+        let autosave_interval = self.config.autosave_interval_secs;
+        if autosave_interval > 0 && self.is_dirty {
+            if now.duration_since(self.last_autosave).as_secs() >= autosave_interval {
+                self.last_autosave = now;
+                if let Some(path) = self.project_path.clone() {
+                    let current_pos = self.transport.arrangement_position();
+                    self.flush_editor_pattern(current_pos);
+                    let _ = riffl_core::project::save_project(&path, &self.song);
+                }
+            }
         }
 
         Ok(())
