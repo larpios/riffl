@@ -326,7 +326,11 @@ impl Editor {
     pub fn add_bookmark(&mut self, label: Option<String>) {
         let row = self.cursor_row;
         let ch = self.cursor_channel;
-        if let Some(idx) = self.bookmarks.iter().position(|(r, c, _)| *r == row && *c == ch) {
+        if let Some(idx) = self
+            .bookmarks
+            .iter()
+            .position(|(r, c, _)| *r == row && *c == ch)
+        {
             self.bookmarks.remove(idx);
             if self.bookmark_cursor > 0 && self.bookmark_cursor >= self.bookmarks.len() {
                 self.bookmark_cursor = self.bookmarks.len().saturating_sub(1);
@@ -335,7 +339,11 @@ impl Editor {
             let label = label.unwrap_or_else(|| format!("B{}", self.bookmarks.len() + 1));
             self.bookmarks.push((row, ch, label));
             self.bookmarks.sort_by_key(|(r, c, _)| (*r, *c));
-            self.bookmark_cursor = self.bookmarks.iter().position(|(r, c, _)| *r == row && *c == ch).unwrap_or(0);
+            self.bookmark_cursor = self
+                .bookmarks
+                .iter()
+                .position(|(r, c, _)| *r == row && *c == ch)
+                .unwrap_or(0);
         }
     }
 

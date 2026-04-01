@@ -104,22 +104,31 @@ where
         config.sample_rate,
     );
     mixer.update_tempo(song.bpm);
+    mixer.set_tpl(song.tpl);
+    mixer.set_effect_mode(song.effect_mode);
+    mixer.set_format_is_s3m(song.format_is_s3m);
+    mixer.set_slide_mode(song.slide_mode);
 
-    let mut current_bpm = song.bpm;
-    let mut current_tpl = song.tpl;
+    use crate::transport::{AdvanceResult, PlaybackMode, Transport};
 
-    // Calculate frames per row based on BPM and TPL (tick-based timing)
-    let get_frames_per_row = |bpm: f64, tpl: u32| -> usize {
-        let seconds_per_row = (2.5 / bpm) * tpl as f64;
-        (seconds_per_row * config.sample_rate as f64).round() as usize
-    };
+    let mut transport = Transport::new();
+    transport.set_bpm(song.bpm);
+    transport.set_tpl(song.tpl);
+    transport.set_lpb(song.lpb);
+    transport.set_arrangement_length(song.arrangement.len());
+    transport.set_playback_mode(PlaybackMode::Song);
+    transport.set_loop_enabled(false);
 
-    let mut frames_per_row = get_frames_per_row(current_bpm, current_tpl);
+    let first_pat_idx = song.arrangement.first().copied().unwrap_or(0);
+    let first_pattern_rows = song
+        .patterns
+        .get(first_pat_idx)
+        .map(|p| p.num_rows())
+        .unwrap_or(64);
+    transport.set_num_rows(first_pattern_rows);
+    transport.play();
 
-    // Stereo interleaved buffer for one row of audio
-    let mut row_buffer = vec![0.0f32; frames_per_row * 2];
-
-    // Calculate total rows for progress reporting
+    // Calculate total rows for progress reporting (estimate)
     let total_rows: usize = song
         .arrangement
         .iter()
@@ -134,80 +143,138 @@ where
         return Ok(());
     }
 
-    // Create WAV writer
     let spec = wav_spec(config);
     let mut writer = WavWriter::create(path, spec).context("Failed to create WAV file")?;
 
     let mut rows_rendered: usize = 0;
     let mut dither_state: u64 = 0xdeadbeefcafe1234;
-    let dither_scale_16 = 1.0 / i16::MAX as f32;   // 1 LSB at 16-bit
-    let dither_scale_24 = 1.0 / 8_388_607.0_f32;   // 1 LSB at 24-bit
+    let dither_scale_16 = 1.0 / i16::MAX as f32; // 1 LSB at 16-bit
+    let dither_scale_24 = 1.0 / 8_388_607.0_f32; // 1 LSB at 24-bit
 
-    // Process each pattern in the arrangement
-    for &pattern_idx in &song.arrangement {
-        let pattern = match song.patterns.get(pattern_idx) {
-            Some(p) => p,
-            None => continue,
-        };
+    let empty_pattern = crate::pattern::Pattern::new(64, num_channels);
 
-        let num_rows = pattern.num_rows();
+    // Tick the very first row to initialize the mixer state
+    let mut current_row = transport.current_row();
+    let mut arr_pos = transport.arrangement_position();
+    let mut pat_idx = song.arrangement.get(arr_pos).copied().unwrap_or(0);
+    let mut pattern = song.patterns.get(pat_idx).unwrap_or(&empty_pattern);
 
-        for row in 0..num_rows {
-            // Process the row (trigger notes, apply effects)
-            let transport_cmds = mixer.tick(row, pattern);
-            for cmd in transport_cmds {
-                match cmd {
-                    TransportCommand::SetBpm(bpm) => {
-                        current_bpm = bpm;
-                        mixer.update_tempo(bpm);
-                        frames_per_row = get_frames_per_row(current_bpm, current_tpl);
-                        row_buffer = vec![0.0f32; frames_per_row * 2];
+    let process_cmds = |cmds: Vec<TransportCommand>, t: &mut Transport, m: &mut Mixer| {
+        for cmd in cmds {
+            match cmd {
+                TransportCommand::SetBpm(bpm) => {
+                    t.set_bpm(bpm);
+                    m.update_tempo(bpm);
+                }
+                TransportCommand::SetTpl(tpl) => {
+                    t.set_tpl(tpl);
+                    m.set_tpl(tpl);
+                }
+                TransportCommand::PositionJump(pos) => {
+                    t.jump_to_arrangement_position(pos);
+                }
+                TransportCommand::PatternBreak(row) => {
+                    t.pattern_break(row);
+                }
+                TransportCommand::PatternLoop(sub_param) => {
+                    if sub_param == 0 {
+                        t.set_pattern_loop_row(Some(t.current_row()));
+                    } else {
+                        t.handle_pattern_loop(sub_param);
                     }
-                    TransportCommand::SetTpl(tpl) => {
-                        current_tpl = tpl;
-                        mixer.set_tpl(tpl);
-                        frames_per_row = get_frames_per_row(current_bpm, current_tpl);
-                        row_buffer = vec![0.0f32; frames_per_row * 2];
-                    }
-                    _ => {} // Other commands not yet supported in offline export
+                }
+                TransportCommand::PatternDelay(delay) => {
+                    t.set_pattern_delay(delay);
+                }
+                _ => {} // ScriptTrigger, etc. not handled in offline export
+            }
+        }
+    };
+
+    let initial_cmds = mixer.tick(current_row, pattern);
+    process_cmds(initial_cmds, &mut transport, &mut mixer);
+
+    loop {
+        if transport.is_stopped() {
+            break;
+        }
+
+        // Render audio for the current row state
+        let seconds_per_row = transport.seconds_per_row();
+        let frames_per_row = (seconds_per_row * config.sample_rate as f64).round() as usize;
+
+        let mut row_buffer = vec![0.0f32; frames_per_row * 2];
+        mixer.render(&mut row_buffer);
+
+        // Write samples to WAV
+        match config.bit_depth {
+            BitDepth::Bits16 => {
+                for &sample in &row_buffer {
+                    let dithered =
+                        sample + dither_sample(config.dither, &mut dither_state, dither_scale_16);
+                    let scaled = (dithered.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
+                    writer
+                        .write_sample(scaled)
+                        .context("Failed to write 16-bit sample")?;
                 }
             }
-
-            // Render audio for this row
-            row_buffer.iter_mut().for_each(|s| *s = 0.0);
-            mixer.render(&mut row_buffer);
-
-            // Write samples to WAV
-            match config.bit_depth {
-                BitDepth::Bits16 => {
-                    for &sample in &row_buffer {
-                        let dithered = sample + dither_sample(config.dither, &mut dither_state, dither_scale_16);
-                        let scaled = (dithered.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
-                        writer
-                            .write_sample(scaled)
-                            .context("Failed to write 16-bit sample")?;
-                    }
-                }
-                BitDepth::Bits24 => {
-                    for &sample in &row_buffer {
-                        let dithered = sample + dither_sample(config.dither, &mut dither_state, dither_scale_24);
-                        let scaled = (dithered.clamp(-1.0, 1.0) * 8_388_607.0) as i32;
-                        writer
-                            .write_sample(scaled)
-                            .context("Failed to write 24-bit sample")?;
-                    }
-                }
-                BitDepth::Bits32Float => {
-                    for &sample in &row_buffer {
-                        writer
-                            .write_sample(sample)
-                            .context("Failed to write 32-bit float sample")?;
-                    }
+            BitDepth::Bits24 => {
+                for &sample in &row_buffer {
+                    let dithered =
+                        sample + dither_sample(config.dither, &mut dither_state, dither_scale_24);
+                    let scaled = (dithered.clamp(-1.0, 1.0) * 8_388_607.0) as i32;
+                    writer
+                        .write_sample(scaled)
+                        .context("Failed to write 24-bit sample")?;
                 }
             }
+            BitDepth::Bits32Float => {
+                for &sample in &row_buffer {
+                    writer
+                        .write_sample(sample)
+                        .context("Failed to write 32-bit float sample")?;
+                }
+            }
+        }
 
-            rows_rendered += 1;
-            progress(rows_rendered as f32 / total_rows as f32);
+        rows_rendered += 1;
+        progress(rows_rendered as f32 / total_rows.max(1) as f32); // avoid div by 0
+
+        // Advance transport
+        let res = transport.advance(seconds_per_row);
+        let mut do_tick = false;
+
+        match res {
+            AdvanceResult::Row(_) => {
+                do_tick = true;
+            }
+            AdvanceResult::PatternChange {
+                arrangement_pos, ..
+            } => {
+                let next_pat_idx = song.arrangement.get(arrangement_pos).copied().unwrap_or(0);
+                if next_pat_idx < song.patterns.len() {
+                    transport.set_num_rows(song.patterns[next_pat_idx].num_rows());
+                } else {
+                    transport.set_num_rows(64);
+                }
+                do_tick = true;
+            }
+            AdvanceResult::None => {
+                // e.g. Pattern delay. Keep rendering the same row without ticking again.
+            }
+            AdvanceResult::Stopped => {
+                break; // End of song
+            }
+        }
+
+        if do_tick {
+            current_row = transport.current_row();
+            arr_pos = transport.arrangement_position();
+            pat_idx = song.arrangement.get(arr_pos).copied().unwrap_or(0);
+            pattern = song.patterns.get(pat_idx).unwrap_or(&empty_pattern);
+
+            let cmds = mixer.tick(current_row, pattern);
+            process_cmds(cmds, &mut transport, &mut mixer);
         }
     }
 
@@ -238,19 +305,68 @@ fn dither_sample(mode: DitherMode, state: &mut u64, scale: f32) -> f32 {
     match mode {
         DitherMode::None => 0.0,
         DitherMode::Rectangular => {
-            *state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            *state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let r = (*state >> 33) as f32 / u32::MAX as f32; // 0..1
             (r - 0.5) * scale
         }
         DitherMode::Triangular => {
             // TPDF: sum of two independent rectangular sources
-            *state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            *state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let r1 = (*state >> 33) as f32 / u32::MAX as f32;
-            *state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            *state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let r2 = (*state >> 33) as f32 / u32::MAX as f32;
             (r1 + r2 - 1.0) * scale
         }
     }
+}
+
+/// Export a single in-memory sample to a WAV file.
+///
+/// The sample is written as-is (mono or stereo, same sample rate).
+/// If `bit_depth` is `None`, uses 16-bit integer. Channels and sample rate
+/// are taken directly from the `Sample` struct.
+pub fn export_sample_wav(path: &Path, sample: &Sample, bit_depth: Option<BitDepth>) -> Result<()> {
+    let depth = bit_depth.unwrap_or(BitDepth::Bits16);
+    let (bits, fmt) = match depth {
+        BitDepth::Bits16 => (16u16, SampleFormat::Int),
+        BitDepth::Bits24 => (24u16, SampleFormat::Int),
+        BitDepth::Bits32Float => (32u16, SampleFormat::Float),
+    };
+    let spec = WavSpec {
+        channels: sample.channels(),
+        sample_rate: sample.sample_rate(),
+        bits_per_sample: bits,
+        sample_format: fmt,
+    };
+    let mut writer = WavWriter::create(path, spec).context("Failed to create sample WAV")?;
+    let frames = sample.data();
+    match depth {
+        BitDepth::Bits16 => {
+            for &s in frames {
+                let v = (s.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
+                writer.write_sample(v).context("write 16-bit")?;
+            }
+        }
+        BitDepth::Bits24 => {
+            for &s in frames {
+                let v = (s.clamp(-1.0, 1.0) * 8_388_607.0) as i32;
+                writer.write_sample(v).context("write 24-bit")?;
+            }
+        }
+        BitDepth::Bits32Float => {
+            for &s in frames {
+                writer.write_sample(s).context("write 32-bit float")?;
+            }
+        }
+    }
+    writer.finalize().context("Failed to finalize sample WAV")?;
+    Ok(())
 }
 
 /// Calculate the expected duration of a song in seconds.

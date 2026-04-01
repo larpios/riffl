@@ -75,12 +75,28 @@ impl App {
 
     /// Open the export dialog.
     pub fn open_export_dialog(&mut self) {
-        let name = self
-            .project_path
-            .as_ref()
-            .and_then(|p| p.file_stem())
-            .and_then(|s| s.to_str())
-            .unwrap_or("untitled");
+        // Prefer song title, then project file stem, then "untitled"
+        let name = if !self.song.name.is_empty() && !self.song.name.eq_ignore_ascii_case("untitled")
+        {
+            self.song
+                .name
+                .chars()
+                .map(|c| {
+                    if c.is_alphanumeric() || c == '-' || c == '_' {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
+                .collect::<String>()
+        } else {
+            self.project_path
+                .as_ref()
+                .and_then(|p| p.file_stem())
+                .and_then(|s| s.to_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "untitled".to_string())
+        };
         let default_path = format!("{}.wav", name);
         self.export_dialog.open(&default_path);
     }
@@ -200,6 +216,12 @@ impl App {
                 }
 
                 self.song = song;
+                if self.song.name.trim().is_empty() || self.song.name.to_lowercase() == "untitled" {
+                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                        self.song.name = stem.to_string();
+                    }
+                }
+
                 self.initial_bpm = self.song.bpm;
                 self.initial_tpl = self.song.tpl;
                 self.transport.set_bpm(self.song.bpm);
@@ -253,5 +275,27 @@ impl App {
         } else {
             Vec::new()
         }
+    }
+
+    /// Export a single loaded sample to a WAV file by its index in the mixer's sample pool.
+    pub fn export_sample_to_wav(
+        &mut self,
+        sample_idx: usize,
+        path: &Path,
+        bit_depth: Option<riffl_core::export::BitDepth>,
+    ) -> Result<(), String> {
+        let sample = {
+            let mixer = self
+                .mixer
+                .lock()
+                .map_err(|_| "Failed to lock mixer".to_string())?;
+            mixer
+                .samples()
+                .get(sample_idx)
+                .cloned()
+                .ok_or_else(|| format!("Sample index {:02X} out of range", sample_idx))?
+        };
+        export::export_sample_wav(path, &sample, bit_depth)
+            .map_err(|e| format!("Export failed: {e}"))
     }
 }

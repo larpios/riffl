@@ -19,8 +19,6 @@ use riffl_core::export::{BitDepth, DitherMode, ExportConfig};
 /// Which field the user is currently editing in the export dialog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportField {
-    /// Output filename (editable text field)
-    OutputPath,
     /// Sample rate selection (22050 / 44100 / 48000 / 96000)
     SampleRate,
     /// Bit depth selection (16-bit / 24-bit / 32-bit float)
@@ -61,8 +59,6 @@ pub struct ExportDialog {
     pub dither: DitherMode,
     /// Output file path.
     pub output_path: String,
-    /// Whether the filename field is in text-editing mode.
-    pub editing_path: bool,
     /// Export progress (0-100).
     pub progress: u8,
     /// Result message after export completes.
@@ -75,12 +71,11 @@ impl ExportDialog {
         Self {
             active: false,
             phase: ExportPhase::Configure,
-            focused_field: ExportField::OutputPath,
+            focused_field: ExportField::SampleRate,
             sample_rate: 44100,
             bit_depth: BitDepth::Bits16,
             dither: DitherMode::None,
             output_path: String::new(),
-            editing_path: false,
             progress: 0,
             result_message: String::new(),
         }
@@ -90,12 +85,11 @@ impl ExportDialog {
     pub fn open(&mut self, default_path: &str) {
         self.active = true;
         self.phase = ExportPhase::Configure;
-        self.focused_field = ExportField::OutputPath;
+        self.focused_field = ExportField::SampleRate;
         self.sample_rate = 44100;
         self.bit_depth = BitDepth::Bits16;
         self.dither = DitherMode::None;
         self.output_path = default_path.to_string();
-        self.editing_path = false;
         self.progress = 0;
         self.result_message.clear();
     }
@@ -107,60 +101,22 @@ impl ExportDialog {
 
     /// Move focus to the next field.
     pub fn next_field(&mut self) {
-        if self.editing_path {
-            return; // don't navigate while editing
-        }
         self.focused_field = match self.focused_field {
-            ExportField::OutputPath => ExportField::SampleRate,
             ExportField::SampleRate => ExportField::BitDepth,
             ExportField::BitDepth => ExportField::Dither,
             ExportField::Dither => ExportField::Confirm,
-            ExportField::Confirm => ExportField::OutputPath,
+            ExportField::Confirm => ExportField::SampleRate,
         };
     }
 
     /// Move focus to the previous field.
     pub fn prev_field(&mut self) {
-        if self.editing_path {
-            return;
-        }
         self.focused_field = match self.focused_field {
-            ExportField::OutputPath => ExportField::Confirm,
-            ExportField::SampleRate => ExportField::OutputPath,
+            ExportField::SampleRate => ExportField::Confirm,
             ExportField::BitDepth => ExportField::SampleRate,
             ExportField::Dither => ExportField::BitDepth,
             ExportField::Confirm => ExportField::Dither,
         };
-    }
-
-    /// Begin editing the output path (text input mode).
-    pub fn start_editing_path(&mut self) {
-        self.focused_field = ExportField::OutputPath;
-        self.editing_path = true;
-    }
-
-    /// Commit the path edit and exit text input mode.
-    pub fn commit_path_edit(&mut self) {
-        self.editing_path = false;
-    }
-
-    /// Cancel the path edit (restore is handled by caller if needed).
-    pub fn cancel_path_edit(&mut self) {
-        self.editing_path = false;
-    }
-
-    /// Push a character to the output path while editing.
-    pub fn path_push_char(&mut self, c: char) {
-        if self.editing_path {
-            self.output_path.push(c);
-        }
-    }
-
-    /// Delete the last character from the output path while editing.
-    pub fn path_backspace(&mut self) {
-        if self.editing_path {
-            self.output_path.pop();
-        }
     }
 
     /// Toggle the current field's value.
@@ -305,38 +261,16 @@ fn render_configure_phase(lines: &mut Vec<Line>, dialog: &ExportDialog, theme: &
 
     lines.push(Line::from(""));
 
-    // Output path (editable)
-    let path_display = if dialog.editing_path {
-        format!("{}_", dialog.output_path)
-    } else {
-        dialog.output_path.clone()
-    };
-    let path_style = if dialog.focused_field == ExportField::OutputPath {
-        if dialog.editing_path {
-            Style::default()
-                .fg(theme.cursor_fg)
-                .bg(theme.warning_color())
-                .add_modifier(Modifier::BOLD)
-        } else {
-            focused_style
-        }
-    } else {
-        Style::default()
-            .fg(theme.primary)
-            .add_modifier(Modifier::BOLD)
-    };
+    // Output path
     lines.push(Line::from(vec![
-        Span::styled("  Output:      ", label_style),
-        Span::styled(path_display, path_style),
+        Span::styled("  Output: ", label_style),
+        Span::styled(
+            dialog.output_path.clone(),
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD),
+        ),
     ]));
-    if dialog.focused_field == ExportField::OutputPath && !dialog.editing_path {
-        lines.push(Line::from(vec![
-            Span::raw("               "),
-            Span::styled("Enter/e to edit", Style::default().fg(theme.text_dimmed)),
-        ]));
-    } else {
-        lines.push(Line::from(""));
-    }
 
     lines.push(Line::from(""));
 
@@ -522,7 +456,7 @@ mod tests {
         let dialog = ExportDialog::new();
         assert!(!dialog.active);
         assert_eq!(dialog.phase, ExportPhase::Configure);
-        assert_eq!(dialog.focused_field, ExportField::OutputPath);
+        assert_eq!(dialog.focused_field, ExportField::SampleRate);
         assert_eq!(dialog.sample_rate, 44100);
         assert_eq!(dialog.bit_depth, BitDepth::Bits16);
         assert_eq!(dialog.progress, 0);
@@ -549,8 +483,6 @@ mod tests {
     #[test]
     fn test_next_field_cycles() {
         let mut dialog = ExportDialog::new();
-        assert_eq!(dialog.focused_field, ExportField::OutputPath);
-        dialog.next_field();
         assert_eq!(dialog.focused_field, ExportField::SampleRate);
         dialog.next_field();
         assert_eq!(dialog.focused_field, ExportField::BitDepth);
@@ -559,13 +491,13 @@ mod tests {
         dialog.next_field();
         assert_eq!(dialog.focused_field, ExportField::Confirm);
         dialog.next_field();
-        assert_eq!(dialog.focused_field, ExportField::OutputPath);
+        assert_eq!(dialog.focused_field, ExportField::SampleRate);
     }
 
     #[test]
     fn test_prev_field_cycles() {
         let mut dialog = ExportDialog::new();
-        assert_eq!(dialog.focused_field, ExportField::OutputPath);
+        assert_eq!(dialog.focused_field, ExportField::SampleRate);
         dialog.prev_field();
         assert_eq!(dialog.focused_field, ExportField::Confirm);
         dialog.prev_field();
@@ -574,8 +506,6 @@ mod tests {
         assert_eq!(dialog.focused_field, ExportField::BitDepth);
         dialog.prev_field();
         assert_eq!(dialog.focused_field, ExportField::SampleRate);
-        dialog.prev_field();
-        assert_eq!(dialog.focused_field, ExportField::OutputPath);
     }
 
     #[test]
@@ -691,7 +621,7 @@ mod tests {
         // Re-opening should reset everything
         dialog.open("second.wav");
         assert_eq!(dialog.output_path, "second.wav");
-        assert_eq!(dialog.focused_field, ExportField::OutputPath);
+        assert_eq!(dialog.focused_field, ExportField::SampleRate);
         assert_eq!(dialog.sample_rate, 44100);
         assert_eq!(dialog.bit_depth, BitDepth::Bits16);
         assert_eq!(dialog.dither, DitherMode::None);

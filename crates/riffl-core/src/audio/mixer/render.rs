@@ -542,13 +542,8 @@ impl super::Mixer {
                     for bus_idx in 0..num_buses {
                         let send_level = strip.next_send_level(bus_idx);
                         if send_level > 0.0001 {
-                            bus_system.accumulate(
-                                bus_idx,
-                                frame,
-                                filtered_l,
-                                filtered_r,
-                                send_level,
-                            );
+                            bus_system
+                                .accumulate(bus_idx, frame, filtered_l, filtered_r, send_level);
                         }
                     }
 
@@ -582,8 +577,7 @@ impl super::Mixer {
                 let elapsed = total - self.metronome_click_frames as f32;
                 // Exponential decay envelope
                 let envelope = (-elapsed / (total * 0.3)).exp();
-                let sample =
-                    (self.metronome_phase * std::f32::consts::TAU).sin() * envelope * vol;
+                let sample = (self.metronome_phase * std::f32::consts::TAU).sin() * envelope * vol;
                 output[frame * 2] += sample;
                 output[frame * 2 + 1] += sample;
                 self.metronome_phase += freq / sr;

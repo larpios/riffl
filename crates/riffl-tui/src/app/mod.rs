@@ -444,6 +444,75 @@ impl App {
         // A-4 = MIDI 57 (440Hz)
     }
 
+    /// Generate a built-in waveform sample.
+    /// `wave_type`: "sine" | "square" | "saw" | "triangle" | "noise" | "pulse"
+    /// `freq`: fundamental frequency in Hz (used to set base_note)
+    /// `duration_ms`: length in milliseconds
+    pub fn generate_wave_sample(
+        wave_type: &str,
+        freq: f32,
+        duration_ms: u32,
+        sample_rate: u32,
+    ) -> Result<Sample, String> {
+        let duration_secs = duration_ms as f32 / 1000.0;
+        let num_samples = (sample_rate as f32 * duration_secs) as usize;
+        if num_samples == 0 {
+            return Err("Duration too short".to_string());
+        }
+        let twopi = 2.0 * std::f32::consts::PI;
+        // Simple LCG for noise
+        let mut rng_state: u32 = 12345;
+        let mut lcg_next = move || -> f32 {
+            rng_state = rng_state.wrapping_mul(1664525).wrapping_add(1013904223);
+            // map to -1..1
+            (rng_state as f32 / u32::MAX as f32) * 2.0 - 1.0
+        };
+        let mut data = Vec::with_capacity(num_samples);
+        for i in 0..num_samples {
+            let t = i as f32 / sample_rate as f32;
+            let phase = (freq * t).fract(); // 0..1
+            let sample = match wave_type {
+                "sine" => (twopi * phase).sin(),
+                "square" => {
+                    if phase < 0.5 {
+                        1.0
+                    } else {
+                        -1.0
+                    }
+                }
+                "saw" | "sawtooth" => 2.0 * phase - 1.0,
+                "triangle" => {
+                    if phase < 0.5 {
+                        4.0 * phase - 1.0
+                    } else {
+                        3.0 - 4.0 * phase
+                    }
+                }
+                "noise" => lcg_next(),
+                "pulse" => {
+                    if phase < 0.25 {
+                        1.0
+                    } else {
+                        -1.0
+                    }
+                } // 25% duty
+                _ => {
+                    return Err(format!(
+                        "Unknown wave type '{}'. Use: sine square saw triangle noise pulse",
+                        wave_type
+                    ))
+                }
+            };
+            data.push(sample);
+        }
+        // Derive MIDI base note from frequency: MIDI 69 = 440Hz
+        let base_note_midi = (69.0 + 12.0 * (freq / 440.0_f32).log2())
+            .round()
+            .clamp(0.0, 127.0) as u8;
+        let name = format!("{}_{:.0}hz", wave_type, freq);
+        Ok(Sample::new(data, sample_rate, 1, Some(name)).with_base_note(base_note_midi))
+    }
+
     /// Initialize the application and set up the audio callback
     pub fn init(&mut self) -> Result<()> {
         self.running = true;
@@ -637,14 +706,15 @@ impl App {
 
         // Autosave: if enabled and there are dirty changes, save periodically
         let autosave_interval = self.config.autosave_interval_secs;
-        if autosave_interval > 0 && self.is_dirty {
-            if now.duration_since(self.last_autosave).as_secs() >= autosave_interval {
-                self.last_autosave = now;
-                if let Some(path) = self.project_path.clone() {
-                    let current_pos = self.transport.arrangement_position();
-                    self.flush_editor_pattern(current_pos);
-                    let _ = riffl_core::project::save_project(&path, &self.song);
-                }
+        if autosave_interval > 0
+            && self.is_dirty
+            && now.duration_since(self.last_autosave).as_secs() >= autosave_interval
+        {
+            self.last_autosave = now;
+            if let Some(path) = self.project_path.clone() {
+                let current_pos = self.transport.arrangement_position();
+                self.flush_editor_pattern(current_pos);
+                let _ = riffl_core::project::save_project(&path, &self.song);
             }
         }
 
@@ -697,7 +767,10 @@ impl App {
 
     /// Returns whether the metronome is currently enabled.
     pub fn metronome_enabled(&self) -> bool {
-        self.mixer.lock().map(|m| m.metronome_enabled).unwrap_or(false)
+        self.mixer
+            .lock()
+            .map(|m| m.metronome_enabled)
+            .unwrap_or(false)
     }
 
     /// Toggle the metronome on/off.

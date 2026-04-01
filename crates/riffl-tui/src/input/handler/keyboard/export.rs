@@ -24,6 +24,27 @@ pub fn handle_export_dialog_key(app: &mut App, key: KeyEvent) {
         ExportPhase::Configure => {}
     }
 
+    if app.export_dialog.editing_path {
+        if key.modifiers == KeyModifiers::NONE || key.modifiers == KeyModifiers::SHIFT {
+            match key.code {
+                KeyCode::Esc => {
+                    app.export_dialog.cancel_path_edit();
+                }
+                KeyCode::Enter => {
+                    app.export_dialog.commit_path_edit();
+                }
+                KeyCode::Backspace => {
+                    app.export_dialog.path_backspace();
+                }
+                KeyCode::Char(c) => {
+                    app.export_dialog.path_push_char(c);
+                }
+                _ => {}
+            }
+        }
+        return;
+    }
+
     if key.modifiers != KeyModifiers::NONE {
         return;
     }
@@ -45,16 +66,23 @@ pub fn handle_export_dialog_key(app: &mut App, key: KeyEvent) {
         | KeyCode::Char(' ') => {
             app.export_dialog.toggle_value();
         }
-        KeyCode::Enter => {
+        KeyCode::Char('e') | KeyCode::Enter => {
             use crate::ui::export_dialog::ExportField;
             match app.export_dialog.focused_field {
                 ExportField::Confirm => {
-                    app.execute_export();
+                    if key.code == KeyCode::Enter {
+                        app.execute_export();
+                    }
+                }
+                ExportField::OutputPath => {
+                    app.export_dialog.start_editing_path();
                 }
                 _ => {
-                    // Enter on a field toggles it, then moves to next
-                    app.export_dialog.toggle_value();
-                    app.export_dialog.next_field();
+                    if key.code == KeyCode::Enter {
+                        // Enter on a field toggles it, then moves to next
+                        app.export_dialog.toggle_value();
+                        app.export_dialog.next_field();
+                    }
                 }
             }
         }

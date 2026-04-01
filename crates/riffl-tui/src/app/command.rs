@@ -554,7 +554,10 @@ impl super::App {
                     self.arrangement_remove_marker();
                     self.open_modal(Modal::info(
                         "Marker Removed".to_string(),
-                        format!("Removed marker at position {}", self.arrangement_view.cursor()),
+                        format!(
+                            "Removed marker at position {}",
+                            self.arrangement_view.cursor()
+                        ),
                     ));
                 } else {
                     let pos = self.arrangement_view.cursor();
@@ -598,9 +601,22 @@ impl super::App {
                                 format!("No keyzones (using sample_index: {:?})\nAdd with: :keyzone add <note_min> <note_max> <vel_min> <vel_max> <sample_idx>", inst.sample_index),
                             ));
                         } else {
-                            let lines: Vec<String> = inst.keyzones.iter().enumerate().map(|(i, kz)| {
-                                format!("  [{}] notes {:3}-{:3}  vel {:3}-{:3}  → sample {}", i, kz.note_min, kz.note_max, kz.velocity_min, kz.velocity_max, kz.sample_index)
-                            }).collect();
+                            let lines: Vec<String> = inst
+                                .keyzones
+                                .iter()
+                                .enumerate()
+                                .map(|(i, kz)| {
+                                    format!(
+                                        "  [{}] notes {:3}-{:3}  vel {:3}-{:3}  → sample {}",
+                                        i,
+                                        kz.note_min,
+                                        kz.note_max,
+                                        kz.velocity_min,
+                                        kz.velocity_max,
+                                        kz.sample_index
+                                    )
+                                })
+                                .collect();
                             self.open_modal(Modal::info(
                                 format!("Keyzones: {} ({} zones)", inst.name, inst.keyzones.len()),
                                 lines.join("\n"),
@@ -611,7 +627,7 @@ impl super::App {
                 "add" => {
                     let rest = parts.get(1).map(|s| s.trim()).unwrap_or("");
                     // Skip the "add" subcommand word to get the numeric arguments
-                    let rest_after_add = rest.splitn(2, ' ').nth(1).unwrap_or("").trim();
+                    let rest_after_add = rest.split_once(' ').map(|x| x.1).unwrap_or("").trim();
                     let nums: Vec<u64> = rest_after_add
                         .split_whitespace()
                         .filter_map(|t| t.parse::<u64>().ok())
@@ -633,7 +649,10 @@ impl super::App {
                             self.mark_dirty();
                             self.open_modal(Modal::info(
                                 "Keyzone Added".to_string(),
-                                format!("notes {}-{}  vel {}-{}  → sample {}", nums[0], nums[1], nums[2], nums[3], nums[4]),
+                                format!(
+                                    "notes {}-{}  vel {}-{}  → sample {}",
+                                    nums[0], nums[1], nums[2], nums[3], nums[4]
+                                ),
                             ));
                         }
                     } else {
@@ -644,7 +663,8 @@ impl super::App {
                     }
                 }
                 "del" | "delete" | "remove" | "rm" => {
-                    let zone_idx: Option<usize> = sub_parts.get(1).and_then(|s| s.trim().parse().ok());
+                    let zone_idx: Option<usize> =
+                        sub_parts.get(1).and_then(|s| s.trim().parse().ok());
                     if let Some(zi) = zone_idx {
                         if let Some(inst) = self.song.instruments.get_mut(idx) {
                             if zi < inst.keyzones.len() {
@@ -656,7 +676,8 @@ impl super::App {
                     } else {
                         self.open_modal(Modal::error(
                             "Invalid index".to_string(),
-                            "Usage: :keyzone del <index>  (use :keyzone list to see indices)".to_string(),
+                            "Usage: :keyzone del <index>  (use :keyzone list to see indices)"
+                                .to_string(),
                         ));
                     }
                 }
@@ -691,12 +712,13 @@ impl super::App {
                     let start = sub_parts.get(1).and_then(|s| s.parse::<f64>().ok());
                     let end = sub_parts.get(2).and_then(|s| s.parse::<f64>().ok());
                     if let (Some(sv), Some(ev)) = (start, end) {
-                        use riffl_core::pattern::effect::Effect;
                         use crate::editor::EditorMode;
+                        use riffl_core::pattern::effect::Effect;
                         let ch = self.editor.cursor_channel();
                         let num_rows = self.editor.pattern().num_rows();
                         let (r0, r1) = if self.editor.mode() == EditorMode::Visual {
-                            self.editor.visual_selection()
+                            self.editor
+                                .visual_selection()
                                 .map(|((r0, _), (r1, _))| (r0, r1))
                                 .unwrap_or((0, num_rows.saturating_sub(1)))
                         } else {
@@ -704,7 +726,11 @@ impl super::App {
                         };
                         let span = (r1 - r0) as f64;
                         for row in r0..=r1 {
-                            let t = if span > 0.0 { (row - r0) as f64 / span } else { 0.0 };
+                            let t = if span > 0.0 {
+                                (row - r0) as f64 / span
+                            } else {
+                                0.0
+                            };
                             let vol = (sv + t * (ev - sv)).clamp(0.0, 255.0).round() as u8;
                             if let Some(cell) = self.editor.pattern_mut().get_cell_mut(row, ch) {
                                 cell.set_effect(Effect::new(0xC, vol));
@@ -713,7 +739,14 @@ impl super::App {
                         self.mark_dirty();
                         self.open_modal(Modal::info(
                             "Volume Automation".to_string(),
-                            format!("Applied vol ramp {:.0}→{:.0} over rows {}-{} on channel {}", sv, ev, r0, r1, ch + 1),
+                            format!(
+                                "Applied vol ramp {:.0}→{:.0} over rows {}-{} on channel {}",
+                                sv,
+                                ev,
+                                r0,
+                                r1,
+                                ch + 1
+                            ),
                         ));
                     } else {
                         self.open_modal(Modal::error(
@@ -726,12 +759,13 @@ impl super::App {
                     let start = sub_parts.get(1).and_then(|s| s.parse::<f64>().ok());
                     let end = sub_parts.get(2).and_then(|s| s.parse::<f64>().ok());
                     if let (Some(sp), Some(ep)) = (start, end) {
-                        use riffl_core::pattern::effect::Effect;
                         use crate::editor::EditorMode;
+                        use riffl_core::pattern::effect::Effect;
                         let ch = self.editor.cursor_channel();
                         let num_rows = self.editor.pattern().num_rows();
                         let (r0, r1) = if self.editor.mode() == EditorMode::Visual {
-                            self.editor.visual_selection()
+                            self.editor
+                                .visual_selection()
                                 .map(|((r0, _), (r1, _))| (r0, r1))
                                 .unwrap_or((0, num_rows.saturating_sub(1)))
                         } else {
@@ -739,7 +773,11 @@ impl super::App {
                         };
                         let span = (r1 - r0) as f64;
                         for row in r0..=r1 {
-                            let t = if span > 0.0 { (row - r0) as f64 / span } else { 0.0 };
+                            let t = if span > 0.0 {
+                                (row - r0) as f64 / span
+                            } else {
+                                0.0
+                            };
                             let pan = (sp + t * (ep - sp)).clamp(0.0, 255.0).round() as u8;
                             if let Some(cell) = self.editor.pattern_mut().get_cell_mut(row, ch) {
                                 cell.set_effect(Effect::new(0x8, pan));
@@ -748,7 +786,14 @@ impl super::App {
                         self.mark_dirty();
                         self.open_modal(Modal::info(
                             "Pan Automation".to_string(),
-                            format!("Applied pan ramp {:.0}→{:.0} over rows {}-{} on channel {}", sp, ep, r0, r1, ch + 1),
+                            format!(
+                                "Applied pan ramp {:.0}→{:.0} over rows {}-{} on channel {}",
+                                sp,
+                                ep,
+                                r0,
+                                r1,
+                                ch + 1
+                            ),
                         ));
                     } else {
                         self.open_modal(Modal::error(
@@ -770,22 +815,35 @@ impl super::App {
         // :instruments / :insts — list all instruments with their sample assignments
         if parts[0] == "instruments" || parts[0] == "insts" || parts[0] == "inst" {
             if self.song.instruments.is_empty() {
-                self.open_modal(Modal::info("Instruments".to_string(), "(none loaded)".to_string()));
+                self.open_modal(Modal::info(
+                    "Instruments".to_string(),
+                    "(none loaded)".to_string(),
+                ));
             } else {
-                let lines: Vec<String> = self.song.instruments.iter().enumerate().map(|(i, inst)| {
-                    let sample_info = if inst.keyzones.is_empty() {
-                        inst.sample_index.map(|si| format!("→ sample {}", si))
-                            .unwrap_or_else(|| "(no sample)".to_string())
-                    } else {
-                        format!("{} keyzones", inst.keyzones.len())
-                    };
-                    let vol_info = if (inst.volume - 1.0).abs() > 0.01 {
-                        format!(" vol:{:.0}%", inst.volume * 100.0)
-                    } else {
-                        String::new()
-                    };
-                    format!("  [{:02X}] {:<20} {}{}", i, inst.name, sample_info, vol_info)
-                }).collect();
+                let lines: Vec<String> = self
+                    .song
+                    .instruments
+                    .iter()
+                    .enumerate()
+                    .map(|(i, inst)| {
+                        let sample_info = if inst.keyzones.is_empty() {
+                            inst.sample_index
+                                .map(|si| format!("→ sample {}", si))
+                                .unwrap_or_else(|| "(no sample)".to_string())
+                        } else {
+                            format!("{} keyzones", inst.keyzones.len())
+                        };
+                        let vol_info = if (inst.volume - 1.0).abs() > 0.01 {
+                            format!(" vol:{:.0}%", inst.volume * 100.0)
+                        } else {
+                            String::new()
+                        };
+                        format!(
+                            "  [{:02X}] {:<20} {}{}",
+                            i, inst.name, sample_info, vol_info
+                        )
+                    })
+                    .collect();
                 self.open_modal(Modal::info(
                     format!("Instruments ({} total)", self.song.instruments.len()),
                     lines.join("\n"),
@@ -835,10 +893,13 @@ impl super::App {
                 "off" => self.set_metronome_enabled(false),
                 "toggle" => self.toggle_metronome(),
                 s if s.starts_with("vol")
-                    || s.chars().next().map_or(false, |c| c.is_ascii_digit()) =>
+                    || s.chars().next().is_some_and(|c| c.is_ascii_digit()) =>
                 {
                     let vol_str = if s.starts_with("vol") {
-                        parts.get(1).and_then(|t| t.split_whitespace().nth(1)).unwrap_or("")
+                        parts
+                            .get(1)
+                            .and_then(|t| t.split_whitespace().nth(1))
+                            .unwrap_or("")
                     } else {
                         s
                     };
@@ -869,21 +930,32 @@ impl super::App {
             let tokens: Vec<&str> = rest.split_whitespace().collect();
 
             // Parse optional channel number (1-based), filter type, cutoff
-            let (ch, type_token, cutoff_token) =
-                if tokens.first().and_then(|t| t.parse::<usize>().ok()).is_some() {
-                    let ch = tokens[0].parse::<usize>().unwrap_or(1).saturating_sub(1);
-                    (ch, tokens.get(1).copied().unwrap_or("off"), tokens.get(2).copied())
-                } else {
-                    (
-                        self.editor.cursor_channel(),
-                        tokens.first().copied().unwrap_or("off"),
-                        tokens.get(1).copied(),
-                    )
-                };
+            let (ch, type_token, cutoff_token) = if tokens
+                .first()
+                .and_then(|t| t.parse::<usize>().ok())
+                .is_some()
+            {
+                let ch = tokens[0].parse::<usize>().unwrap_or(1).saturating_sub(1);
+                (
+                    ch,
+                    tokens.get(1).copied().unwrap_or("off"),
+                    tokens.get(2).copied(),
+                )
+            } else {
+                (
+                    self.editor.cursor_channel(),
+                    tokens.first().copied().unwrap_or("off"),
+                    tokens.get(1).copied(),
+                )
+            };
 
             match type_token {
                 "off" | "bypass" | "none" => {
-                    self.set_channel_filter(ch, None, riffl_core::pattern::track::FilterType::LowPass);
+                    self.set_channel_filter(
+                        ch,
+                        None,
+                        riffl_core::pattern::track::FilterType::LowPass,
+                    );
                     self.open_modal(Modal::info(
                         "Filter".to_string(),
                         format!("Channel {} filter disabled.", ch + 1),
@@ -948,21 +1020,35 @@ impl super::App {
                 "list" | "ls" => {
                     let loaded = self.loaded_samples();
                     if loaded.is_empty() {
-                        self.open_modal(Modal::info("Samples".to_string(), "(no samples loaded)".to_string()));
+                        self.open_modal(Modal::info(
+                            "Samples".to_string(),
+                            "(no samples loaded)".to_string(),
+                        ));
                     } else {
-                        let lines: Vec<String> = loaded.iter().enumerate().map(|(i, s)| {
-                            let name = s.name().unwrap_or("(unnamed)");
-                            let frames = s.frame_count();
-                            let sr = s.sample_rate();
-                            let channels = s.channels();
-                            let duration_ms = if sr > 0 { frames * 1000 / sr as usize } else { 0 };
-                            let loop_info = match s.loop_mode {
-                                riffl_core::audio::sample::LoopMode::NoLoop => "",
-                                riffl_core::audio::sample::LoopMode::Forward => " [loop]",
-                                riffl_core::audio::sample::LoopMode::PingPong => " [ping-pong]",
-                            };
-                            format!("  [{:02X}] {:<22} {:5}ms  {:2}ch  {}Hz{}", i, name, duration_ms, channels, sr, loop_info)
-                        }).collect();
+                        let lines: Vec<String> = loaded
+                            .iter()
+                            .enumerate()
+                            .map(|(i, s)| {
+                                let name = s.name().unwrap_or("(unnamed)");
+                                let frames = s.frame_count();
+                                let sr = s.sample_rate();
+                                let channels = s.channels();
+                                let duration_ms = if sr > 0 {
+                                    frames * 1000 / sr as usize
+                                } else {
+                                    0
+                                };
+                                let loop_info = match s.loop_mode {
+                                    riffl_core::audio::sample::LoopMode::NoLoop => "",
+                                    riffl_core::audio::sample::LoopMode::Forward => " [loop]",
+                                    riffl_core::audio::sample::LoopMode::PingPong => " [ping-pong]",
+                                };
+                                format!(
+                                    "  [{:02X}] {:<22} {:5}ms  {:2}ch  {}Hz{}",
+                                    i, name, duration_ms, channels, sr, loop_info
+                                )
+                            })
+                            .collect();
                         self.open_modal(Modal::info(
                             format!("Samples ({} loaded)", loaded.len()),
                             lines.join("\n"),
@@ -972,20 +1058,29 @@ impl super::App {
                 "dedup" => {
                     // Report duplicate samples (same name)
                     let loaded = self.loaded_samples();
-                    let mut seen: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
+                    let mut seen: std::collections::HashMap<String, Vec<usize>> =
+                        std::collections::HashMap::new();
                     for (i, s) in loaded.iter().enumerate() {
-                        let name = s.name().map(|n| n.to_string()).unwrap_or_else(|| format!("sample_{}", i));
+                        let name = s
+                            .name()
+                            .map(|n| n.to_string())
+                            .unwrap_or_else(|| format!("sample_{}", i));
                         seen.entry(name).or_default().push(i);
                     }
-                    let dups: Vec<String> = seen.into_iter()
+                    let dups: Vec<String> = seen
+                        .into_iter()
                         .filter(|(_, indices)| indices.len() > 1)
                         .map(|(name, indices)| {
-                            let idxs: Vec<String> = indices.iter().map(|i| format!("{:02X}", i)).collect();
+                            let idxs: Vec<String> =
+                                indices.iter().map(|i| format!("{:02X}", i)).collect();
                             format!("  {} → [{}]", name, idxs.join(", "))
                         })
                         .collect();
                     if dups.is_empty() {
-                        self.open_modal(Modal::info("Sample Dedup".to_string(), "No duplicate samples found.".to_string()));
+                        self.open_modal(Modal::info(
+                            "Sample Dedup".to_string(),
+                            "No duplicate samples found.".to_string(),
+                        ));
                     } else {
                         self.open_modal(Modal::info(
                             format!("Duplicate Samples ({} groups)", dups.len()),
@@ -1009,12 +1104,21 @@ impl super::App {
         if parts[0] == "effects" || parts[0] == "fx" || parts[0] == "efx" {
             let specific = parts.get(1).map(|s| s.trim().to_uppercase());
             let reference = vec![
-                ("0xx", "Arpeggio: cycle between base, +x, +y semitones per tick"),
+                (
+                    "0xx",
+                    "Arpeggio: cycle between base, +x, +y semitones per tick",
+                ),
                 ("1xx", "Portamento up: slide pitch up by xx units per tick"),
-                ("2xx", "Portamento down: slide pitch down by xx units per tick"),
+                (
+                    "2xx",
+                    "Portamento down: slide pitch down by xx units per tick",
+                ),
                 ("3xx", "Tone portamento: slide to target note, speed xx"),
                 ("4xy", "Vibrato: x=speed, y=depth (sine LFO on pitch)"),
-                ("5xy", "Tone portamento + volume slide (x=vol up, y=vol down)"),
+                (
+                    "5xy",
+                    "Tone portamento + volume slide (x=vol up, y=vol down)",
+                ),
                 ("6xy", "Vibrato + volume slide"),
                 ("7xy", "Tremolo: x=speed, y=depth (sine LFO on volume)"),
                 ("8xx", "Set panning: 00=left, 80=center, FF=right"),
@@ -1052,7 +1156,8 @@ impl super::App {
             ];
 
             if let Some(search) = specific {
-                let matches: Vec<&(&str, &str)> = reference.iter()
+                let matches: Vec<&(&str, &str)> = reference
+                    .iter()
                     .filter(|(cmd, _)| cmd.to_uppercase().starts_with(&search))
                     .collect();
                 if matches.is_empty() {
@@ -1061,11 +1166,15 @@ impl super::App {
                         format!("No effect matching '{}'. Use :effects to list all.", search),
                     ));
                 } else {
-                    let lines: Vec<String> = matches.iter().map(|(cmd, desc)| format!("  {:4} — {}", cmd, desc)).collect();
+                    let lines: Vec<String> = matches
+                        .iter()
+                        .map(|(cmd, desc)| format!("  {:4} — {}", cmd, desc))
+                        .collect();
                     self.open_modal(Modal::info(format!("Effect: {}", search), lines.join("\n")));
                 }
             } else {
-                let lines: Vec<String> = reference.iter()
+                let lines: Vec<String> = reference
+                    .iter()
                     .map(|(cmd, desc)| format!("  {:4} — {}", cmd, desc))
                     .collect();
                 self.open_modal(Modal::info(
@@ -1102,7 +1211,8 @@ impl super::App {
             let ch = self.editor.cursor_channel();
             let num_rows = self.editor.pattern().num_rows();
             let ((r0, c0), (r1, c1)) = if self.editor.mode() == EditorMode::Visual {
-                self.editor.visual_selection()
+                self.editor
+                    .visual_selection()
                     .unwrap_or(((0, ch), (num_rows.saturating_sub(1), ch)))
             } else {
                 ((0, ch), (num_rows.saturating_sub(1), ch))
@@ -1115,9 +1225,13 @@ impl super::App {
 
             let pat = self.editor.pattern_mut();
             for col in c0..=c1 {
-                let mut cells: Vec<_> = (r0..=r1).map(|r| {
-                    pat.get_cell(r, col).cloned().unwrap_or_else(riffl_core::pattern::row::Cell::empty)
-                }).collect();
+                let mut cells: Vec<_> = (r0..=r1)
+                    .map(|r| {
+                        pat.get_cell(r, col)
+                            .cloned()
+                            .unwrap_or_else(riffl_core::pattern::row::Cell::empty)
+                    })
+                    .collect();
                 cells.reverse();
                 for (i, row) in (r0..=r1).enumerate() {
                     pat.set_cell(row, col, cells[i].clone());
@@ -1137,12 +1251,19 @@ impl super::App {
                 let channels = self.editor.pattern().num_channels();
 
                 // Collect existing cells
-                let old_cells: Vec<Vec<riffl_core::pattern::row::Cell>> = (0..cur_rows).map(|r| {
-                    (0..channels).map(|c| {
-                        self.editor.pattern().get_cell(r, c).cloned()
-                            .unwrap_or_else(riffl_core::pattern::row::Cell::empty)
-                    }).collect()
-                }).collect();
+                let old_cells: Vec<Vec<riffl_core::pattern::row::Cell>> = (0..cur_rows)
+                    .map(|r| {
+                        (0..channels)
+                            .map(|c| {
+                                self.editor
+                                    .pattern()
+                                    .get_cell(r, c)
+                                    .cloned()
+                                    .unwrap_or_else(riffl_core::pattern::row::Cell::empty)
+                            })
+                            .collect()
+                    })
+                    .collect();
 
                 // Resize pattern
                 self.editor.pattern_mut().set_row_count(new_rows);
@@ -1158,7 +1279,9 @@ impl super::App {
                 // Write original cells at expanded positions
                 for (orig_r, row_cells) in old_cells.iter().enumerate() {
                     let new_r = orig_r * n;
-                    if new_r >= new_rows { break; }
+                    if new_r >= new_rows {
+                        break;
+                    }
                     for (c, cell) in row_cells.iter().enumerate() {
                         self.editor.pattern_mut().set_cell(new_r, c, cell.clone());
                     }
@@ -1173,7 +1296,8 @@ impl super::App {
             } else {
                 self.open_modal(Modal::error(
                     "Expand".to_string(),
-                    "Usage: :expand <2-8>  (multiplies pattern length by N, spacing notes out)".to_string(),
+                    "Usage: :expand <2-8>  (multiplies pattern length by N, spacing notes out)"
+                        .to_string(),
                 ));
             }
             return;
@@ -1189,13 +1313,20 @@ impl super::App {
                 let channels = self.editor.pattern().num_channels();
 
                 // Collect every nth row
-                let kept_cells: Vec<Vec<riffl_core::pattern::row::Cell>> = (0..new_rows).map(|i| {
-                    let src_r = i * n;
-                    (0..channels).map(|c| {
-                        self.editor.pattern().get_cell(src_r, c).cloned()
-                            .unwrap_or_else(riffl_core::pattern::row::Cell::empty)
-                    }).collect()
-                }).collect();
+                let kept_cells: Vec<Vec<riffl_core::pattern::row::Cell>> = (0..new_rows)
+                    .map(|i| {
+                        let src_r = i * n;
+                        (0..channels)
+                            .map(|c| {
+                                self.editor
+                                    .pattern()
+                                    .get_cell(src_r, c)
+                                    .cloned()
+                                    .unwrap_or_else(riffl_core::pattern::row::Cell::empty)
+                            })
+                            .collect()
+                    })
+                    .collect();
 
                 self.editor.pattern_mut().set_row_count(new_rows);
                 self.transport.set_num_rows(new_rows);
@@ -1211,12 +1342,16 @@ impl super::App {
                 self.mark_dirty();
                 self.open_modal(Modal::info(
                     "Compress Pattern".to_string(),
-                    format!("Compressed {}→{} rows (kept every {}th row)", cur_rows, new_rows, n),
+                    format!(
+                        "Compressed {}→{} rows (kept every {}th row)",
+                        cur_rows, new_rows, n
+                    ),
                 ));
             } else {
                 self.open_modal(Modal::error(
                     "Compress".to_string(),
-                    "Usage: :compress <2-8>  (keeps every Nth row, reduces pattern length)".to_string(),
+                    "Usage: :compress <2-8>  (keeps every Nth row, reduces pattern length)"
+                        .to_string(),
                 ));
             }
             return;
@@ -1224,7 +1359,8 @@ impl super::App {
 
         // :instcopy <src_idx> <dst_idx> — copy all settings from one instrument to another
         if parts[0] == "instcopy" || parts[0] == "icopy" {
-            let nums: Vec<usize> = parts.get(1..)
+            let nums: Vec<usize> = parts
+                .get(1..)
                 .map(|s| s.join(" "))
                 .unwrap_or_default()
                 .split_whitespace()
@@ -1232,7 +1368,10 @@ impl super::App {
                 .collect();
             if nums.len() >= 2 {
                 let (src, dst) = (nums[0], nums[1]);
-                if src < self.song.instruments.len() && dst < self.song.instruments.len() && src != dst {
+                if src < self.song.instruments.len()
+                    && dst < self.song.instruments.len()
+                    && src != dst
+                {
                     let cloned = self.song.instruments[src].clone();
                     let dst_name = self.song.instruments[dst].name.clone();
                     // Copy all fields except name
@@ -1250,7 +1389,10 @@ impl super::App {
                 } else {
                     self.open_modal(Modal::error(
                         "Invalid indices".to_string(),
-                        format!("Usage: :instcopy <src> <dst>  (have {} instruments)", self.song.instruments.len()),
+                        format!(
+                            "Usage: :instcopy <src> <dst>  (have {} instruments)",
+                            self.song.instruments.len()
+                        ),
                     ));
                 }
             } else {
@@ -1258,6 +1400,134 @@ impl super::App {
                     "Instrument Copy".to_string(),
                     "Usage: :instcopy <src_index> <dst_index>".to_string(),
                 ));
+            }
+            return;
+        }
+
+        // :loadsample <path> — load audio file and assign it to the selected instrument
+        if parts[0] == "loadsample" || parts[0] == "ls" && parts.len() > 1 {
+            if parts.len() < 2 {
+                self.open_modal(Modal::error(
+                    "Load Sample".to_string(),
+                    "Usage: :loadsample <path>".to_string(),
+                ));
+                return;
+            }
+            let path_str = parts[1..].join(" ");
+            let path = std::path::PathBuf::from(&path_str);
+            match self.instrument_selection {
+                None => {
+                    self.open_modal(Modal::error(
+                        "Load Sample".to_string(),
+                        "No instrument selected. Select an instrument first.".to_string(),
+                    ));
+                }
+                Some(inst_idx) => match self.assign_sample_to_instrument(&path, inst_idx) {
+                    Ok(()) => {
+                        let name = self
+                            .song
+                            .instruments
+                            .get(inst_idx)
+                            .map(|i| i.name.clone())
+                            .unwrap_or_default();
+                        self.open_modal(Modal::info(
+                            "Sample Loaded".to_string(),
+                            format!(
+                                "Assigned '{}' to instrument {:02X} ({})",
+                                path_str, inst_idx, name
+                            ),
+                        ));
+                    }
+                    Err(e) => {
+                        self.open_modal(Modal::error("Load Sample".to_string(), e));
+                    }
+                },
+            }
+            return;
+        }
+
+        // :wave <type> [length_ms] [freq_hz] — generate a built-in waveform for the selected instrument
+        // types: sine square saw triangle noise pulse
+        // defaults: 500ms, 440Hz
+        if parts[0] == "wave" {
+            if parts.len() < 2 {
+                self.open_modal(Modal::error(
+                    "Wave Generator".to_string(),
+                    "Usage: :wave <sine|square|saw|triangle|noise|pulse> [length_ms] [freq_hz]"
+                        .to_string(),
+                ));
+                return;
+            }
+            let wave_type = parts[1].trim().to_lowercase();
+            let length_ms: u32 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(500);
+            let freq: f32 = parts.get(3).and_then(|s| s.parse().ok()).unwrap_or(440.0);
+            let sample_rate = self
+                .audio_engine
+                .as_ref()
+                .map(|e| e.sample_rate())
+                .unwrap_or(44100);
+
+            match Self::generate_wave_sample(&wave_type, freq, length_ms, sample_rate) {
+                Err(e) => {
+                    self.open_modal(Modal::error("Wave Generator".to_string(), e));
+                }
+                Ok(sample) => {
+                    let sample_name = sample.name().map(|n| n.to_string()).unwrap_or_default();
+                    let add_result = self
+                        .mixer
+                        .lock()
+                        .ok()
+                        .map(|mut m| m.add_sample(std::sync::Arc::new(sample)));
+                    let sample_idx = match add_result {
+                        Some(idx) => idx,
+                        None => {
+                            self.open_modal(Modal::error(
+                                "Wave Generator".to_string(),
+                                "Failed to lock mixer".to_string(),
+                            ));
+                            return;
+                        }
+                    };
+
+                    match self.instrument_selection {
+                        None => {
+                            // No instrument selected: create a new one
+                            let idx = self.song.instruments.len();
+                            let name = format!("{:02X}:{}", idx, sample_name);
+                            let mut inst = riffl_core::song::Instrument::new(&name);
+                            inst.sample_index = Some(sample_idx);
+                            self.song.instruments.push(inst);
+                            self.sync_mixer_instruments();
+                            self.instrument_names.push(name.clone());
+                            self.instrument_selection = Some(idx);
+                            self.mark_dirty();
+                            self.open_modal(Modal::info(
+                                "Wave Generated".to_string(),
+                                format!(
+                                    "Created instrument {:02X} with {} ({:.0}Hz, {}ms)",
+                                    idx, wave_type, freq, length_ms
+                                ),
+                            ));
+                        }
+                        Some(inst_idx) => {
+                            if inst_idx < self.song.instruments.len() {
+                                let inst = &mut self.song.instruments[inst_idx];
+                                inst.sample_index = Some(sample_idx);
+                                inst.sample_path = None; // generated, not from file
+                                self.sync_mixer_instruments();
+                                self.mark_dirty();
+                                let inst_name = self.song.instruments[inst_idx].name.clone();
+                                self.open_modal(Modal::info(
+                                    "Wave Generated".to_string(),
+                                    format!(
+                                        "Assigned {} ({:.0}Hz, {}ms) to instrument {:02X} ({})",
+                                        wave_type, freq, length_ms, inst_idx, inst_name
+                                    ),
+                                ));
+                            }
+                        }
+                    }
+                }
             }
             return;
         }

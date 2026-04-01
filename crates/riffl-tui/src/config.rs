@@ -74,9 +74,15 @@ pub struct Config {
     pub autosave_interval_secs: u64,
 }
 
-fn default_step_size() -> usize { 1 }
-fn default_octave() -> u8 { 4 }
-fn default_beat_rows() -> u8 { 4 }
+fn default_step_size() -> usize {
+    1
+}
+fn default_octave() -> u8 {
+    4
+}
+fn default_beat_rows() -> u8 {
+    4
+}
 
 impl Default for Config {
     fn default() -> Self {

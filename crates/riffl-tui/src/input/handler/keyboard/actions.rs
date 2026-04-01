@@ -204,10 +204,10 @@ pub(super) fn handle_action(app: &mut App, action: Action, key: KeyEvent) {
         }
 
         Action::FillSelection => {
-            use riffl_core::pattern::note::{NoteEvent, Note, Pitch};
+            use riffl_core::pattern::note::{Note, NoteEvent, Pitch};
             // Fill with the last draw_note if available, otherwise C-4 as default
-            let note = app.draw_note.clone().unwrap_or_else(|| {
-                NoteEvent::On(Note::new(Pitch::C, 4, 100, app.editor.current_instrument() as u8))
+            let note = app.draw_note.unwrap_or_else(|| {
+                NoteEvent::On(Note::new(Pitch::C, 4, 100, app.editor.current_instrument()))
             });
             app.editor.fill_selection_with_note(note);
             app.mark_dirty();

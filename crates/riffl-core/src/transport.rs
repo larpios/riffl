@@ -671,7 +671,7 @@ impl Transport {
     /// Calculate seconds per row using tick-based timing (standard for MOD/FT2/Furnace).
     /// Formula: seconds per row = (2.5 / BPM) * TPL
     /// At 120 BPM, TPL 6: (2.5 / 120) * 6 = 0.125s (125ms)
-    fn seconds_per_row(&self) -> f64 {
+    pub fn seconds_per_row(&self) -> f64 {
         (2.5 / self.bpm) * self.tpl as f64
     }
 }

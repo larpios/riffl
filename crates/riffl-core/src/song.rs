@@ -604,10 +604,15 @@ impl Song {
     /// If a marker already exists at that position, updates its label.
     pub fn add_section_marker(&mut self, position: usize, label: impl Into<String>) {
         let label = label.into();
-        if let Some(existing) = self.section_markers.iter_mut().find(|m| m.position == position) {
+        if let Some(existing) = self
+            .section_markers
+            .iter_mut()
+            .find(|m| m.position == position)
+        {
             existing.label = label;
         } else {
-            self.section_markers.push(SectionMarker::new(position, label));
+            self.section_markers
+                .push(SectionMarker::new(position, label));
             self.section_markers.sort_by_key(|m| m.position);
         }
     }

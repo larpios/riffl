@@ -128,11 +128,8 @@ impl Editor {
         self.save_history();
         for row in r0..=r1 {
             for ch in c0..=c1 {
-                self.pattern.set_cell(
-                    row,
-                    ch,
-                    riffl_core::pattern::row::Cell::with_note(note.clone()),
-                );
+                self.pattern
+                    .set_cell(row, ch, riffl_core::pattern::row::Cell::with_note(note));
             }
         }
     }
@@ -158,11 +155,14 @@ impl Editor {
         self.save_history();
 
         // Simple LCG pseudo-random seeded from cursor position to avoid rand dependency
-        let mut state: u64 = (r0 as u64).wrapping_mul(6364136223846793005)
+        let mut state: u64 = (r0 as u64)
+            .wrapping_mul(6364136223846793005)
             .wrapping_add((c0 as u64).wrapping_mul(1442695040888963407))
             .wrapping_add(1);
         let mut next_pitch = || -> riffl_core::pattern::note::Pitch {
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let idx = ((state >> 33) as usize) % 12;
             riffl_core::pattern::note::Pitch::ALL[idx]
         };

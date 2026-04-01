@@ -447,7 +447,7 @@ impl super::Mixer {
         // Metronome click: fire on beat boundaries
         if self.metronome_enabled {
             let lpb = self.metronome_lpb.max(1) as usize;
-            if row_index % lpb == 0 {
+            if row_index.is_multiple_of(lpb) {
                 let is_downbeat = row_index == 0;
                 self.trigger_metronome_click(is_downbeat);
             }

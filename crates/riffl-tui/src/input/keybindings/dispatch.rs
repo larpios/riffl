@@ -376,7 +376,6 @@ fn map_visual_mode(key: KeyEvent) -> Action {
     }
 }
 
-
 /// Check if an action represents a navigation movement
 pub fn is_navigation_action(action: Action) -> bool {
     matches!(

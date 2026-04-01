@@ -1,0 +1,117 @@
+@@ -59,69 +61,112 @@
+     pub dither: DitherMode,
+     /// Output file path.
+     pub output_path: String,
++    /// Whether the filename field is in text-editing mode.
++    pub editing_path: bool,
+     /// Export progress (0-100).
+     pub progress: u8,
+     /// Result message after export completes.
+     pub result_message: String,
+ }
+ 
+ impl ExportDialog {
+     /// Create a new export dialog with default settings.
+     pub fn new() -> Self {
+         Self {
+             active: false,
+             phase: ExportPhase::Configure,
+-            focused_field: ExportField::SampleRate,
++            focused_field: ExportField::OutputPath,
+             sample_rate: 44100,
+             bit_depth: BitDepth::Bits16,
+             dither: DitherMode::None,
+             output_path: String::new(),
++            editing_path: false,
+             progress: 0,
+             result_message: String::new(),
+         }
+     }
+ 
+     /// Open the dialog with the given default output path.
+     pub fn open(&mut self, default_path: &str) {
+         self.active = true;
+         self.phase = ExportPhase::Configure;
+-        self.focused_field = ExportField::SampleRate;
++        self.focused_field = ExportField::OutputPath,
+         self.sample_rate = 44100;
+         self.bit_depth = BitDepth::Bits16;
+         self.dither = DitherMode::None;
+         self.output_path = default_path.to_string();
++        self.editing_path = false;
+         self.progress = 0;
+         self.result_message.clear();
+     }
+ 
+     /// Close the dialog.
+     pub fn close(&mut self) {
+         self.active = false;
+     }
+ 
+     /// Move focus to the next field.
+     pub fn next_field(&mut self) {
++        if self.editing_path {
++            return; // don't navigate while editing
++        }
+         self.focused_field = match self.focused_field {
++            ExportField::OutputPath => ExportField::SampleRate,
+             ExportField::SampleRate => ExportField::BitDepth,
+             ExportField::BitDepth => ExportField::Dither,
+             ExportField::Dither => ExportField::Confirm,
+-            ExportField::Confirm => ExportField::SampleRate,
++            ExportField::Confirm => ExportField::OutputPath,
+         };
+     }
+ 
+     /// Move focus to the previous field.
+     pub fn prev_field(&mut self) {
++        if self.editing_path {
++            return;
++        }
+         self.focused_field = match self.focused_field {
+-            ExportField::SampleRate => ExportField::Confirm,
++            ExportField::OutputPath => ExportField::Confirm,
++            ExportField::SampleRate => ExportField::OutputPath,
+             ExportField::BitDepth => ExportField::SampleRate,
+             ExportField::Dither => ExportField::BitDepth,
+             ExportField::Confirm => ExportField::Dither,
+         };
+     }
+ 
++    /// Begin editing the output path (text input mode).
++    pub fn start_editing_path(&mut self) {
++        self.focused_field = ExportField::OutputPath;
++        self.editing_path = true;
++    }
++
++    /// Commit the path edit and exit text input mode.
++    pub fn commit_path_edit(&mut self) {
++        self.editing_path = false;
++    }
++
++    /// Cancel the path edit (restore is handled by caller if needed).
++    pub fn cancel_path_edit(&mut self) {
++        self.editing_path = false;
++    }
++
++    /// Push a character to the output path while editing.
++    pub fn path_push_char(&mut self, c: char) {
++        if self.editing_path {
++            self.output_path.push(c);
++        }
++    }
++
++    /// Delete the last character from the output path while editing.
++    pub fn path_backspace(&mut self) {
++        if self.editing_path {
++            self.output_path.pop();
++        }
++    }
++
+     /// Toggle the current field's value.
+     pub fn toggle_value(&mut self) {
+         match self.focused_field {
++            ExportField::OutputPath => {}
+             ExportField::SampleRate => {
+                 self.sample_rate = match self.sample_rate {
+                     22050 => 44100,
