@@ -98,7 +98,7 @@ impl AdsrState {
 }
 
 /// Helper function to evaluate LFO waveforms based on current phase.
-fn evaluate_lfo_waveform(waveform: LfoWaveform, phase: f32) -> f32 {
+pub(crate) fn evaluate_lfo_waveform(waveform: LfoWaveform, phase: f32) -> f32 {
     match waveform {
         LfoWaveform::Sine => (phase * 2.0 * std::f32::consts::PI).sin(),
         LfoWaveform::Square => {

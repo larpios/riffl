@@ -10,6 +10,7 @@ name = "riffl_core"
 [features]
 default = []
 adlib = ["opl"]
+test-modules = []
 
 [dependencies]
 anyhow = "1.0"

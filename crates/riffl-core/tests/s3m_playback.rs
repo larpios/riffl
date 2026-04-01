@@ -1,3 +1,4 @@
+#![cfg(feature = "test-modules")]
 //! Integration test for S3M playback (PCM samples and Adlib instruments).
 //! Loads a known S3M file, creates a mixer, ticks pattern rows, and verifies
 //! that audio output is non-zero.
