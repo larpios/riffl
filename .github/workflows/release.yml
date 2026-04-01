@@ -35,16 +35,12 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            artifact_name: riffl-linux-x86_64
           - target: x86_64-apple-darwin
             os: macos-latest
-            artifact_name: riffl-macos-x86_64
           - target: aarch64-apple-darwin
             os: macos-latest
-            artifact_name: riffl-macos-arm64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            artifact_name: riffl-windows-x86_64.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -60,16 +56,16 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
-          tar -czf ../../../${{ matrix.artifact_name }}.tar.gz riffl
+          tar -czf ../../../riffl-${{ matrix.target }}.tar.gz riffl
       - name: Package (Windows)
         if: runner.os == 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
-          7z a ../../../${{ matrix.artifact_name }}.zip riffl.exe
+          7z a ../../../riffl-${{ matrix.target }}.zip riffl.exe
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
+          name: riffl-${{ matrix.target }}
           path: |
             *.tar.gz
             *.zip
