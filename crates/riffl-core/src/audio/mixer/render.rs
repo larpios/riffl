@@ -94,7 +94,8 @@ impl super::Mixer {
 
                     // Note Cut (ECx)
                     if let Some(cut_tick) = ch_state.note_cut_tick {
-                        let current_tick = (ch_state.row_frame_counter as f32 / frames_per_tick_f32) as u32;
+                        let frames_per_tick = frames_per_tick_f32 as u32;
+                        let current_tick = ch_state.row_frame_counter / frames_per_tick.max(1);
                         if current_tick >= cut_tick as u32 {
                             voice.active = false;
                         }
@@ -105,7 +106,7 @@ impl super::Mixer {
                         if let Some(retrigger_interval) = ch_state.retrigger_interval {
                             let frames_per_tick = frames_per_tick_f32 as u32;
                             let tick_frame = ch_state.row_frame_counter % frames_per_tick.max(1);
-                            let current_tick = (ch_state.row_frame_counter as f32 / frames_per_tick_f32) as u32;
+                            let current_tick = ch_state.row_frame_counter / frames_per_tick.max(1);
                             if retrigger_interval > 0
                                 && current_tick > 0
                                 && tick_frame == 0
@@ -550,7 +551,7 @@ impl super::Mixer {
             false
         };
         if preview_done {
-            self.preview_sample = None;
+            self.stop_preview();
         }
 
         // Write mono mix to FFT capture buffer

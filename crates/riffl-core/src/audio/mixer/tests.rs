@@ -2048,6 +2048,7 @@ fn test_volume_envelope_applied() {
         loop_start_point: 0,
         loop_end_point: 0,
     });
+    inst.sample_index = Some(0);
 
     let mut mixer = Mixer::new(vec![Arc::new(sample)], vec![inst], 1, 44100);
     mixer.update_tempo(120.0);

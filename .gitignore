@@ -46,3 +46,5 @@ test-opl/target
 
 # Nix build result
 result
+
+log.txt

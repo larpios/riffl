@@ -32,11 +32,11 @@
           buildInputs = commonInputs ++ devTools;
 
           shellHook = ''
-                          echo "Entering riffl development environment!"
+            echo "Entering riffl development environment!"
             # Ensure the toolchain is ready
-                          rustup override set stable 2>/dev/null || true
-                          rustup default stable
-                          rustup component add rustfmt
+            rustup override set stable 2>/dev/null || true
+            rustup default stable
+            rustup component add rustfmt
           '';
         };
 
@@ -53,7 +53,7 @@
           nativeBuildInputs = with pkgs; [pkg-config];
 
           meta = with lib; {
-            description = "Tracker: Renoise-inspired music app with TUI.";
+            description = "A terminal-based music tracker built in Rust.";
             platforms = platforms.linux ++ platforms.darwin;
           };
         };
