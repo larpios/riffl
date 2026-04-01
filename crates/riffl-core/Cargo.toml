@@ -2,7 +2,12 @@
 name = "riffl-core"
 version = "0.1.0"
 edition = "2021"
+description = "Core audio engine and pattern sequencer for Riffl, a modern terminal-based music tracker."
+repository = "https://github.com/larpios/riffl"
+homepage = "https://github.com/larpios/riffl"
 license-file = "../../LICENSE"
+keywords = ["audio", "music", "tracker", "sequencer", "mod"]
+categories = ["multimedia::audio"]
 
 [lib]
 name = "riffl_core"

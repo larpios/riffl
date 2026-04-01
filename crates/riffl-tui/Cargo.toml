@@ -2,7 +2,12 @@
 name = "riffl-tui"
 version = "0.1.0"
 edition = "2021"
+description = "Modern terminal-based music tracker and pattern editor for Riffl."
+repository = "https://github.com/larpios/riffl"
+homepage = "https://github.com/larpios/riffl"
 license-file = "../../LICENSE"
+keywords = ["tui", "music", "tracker", "sequencer", "ratatui"]
+categories = ["multimedia::audio", "command-line-utilities"]
 
 [dependencies]
 riffl_core = { package = "riffl-core", path = "../riffl-core", version ="0.1.0", features = ["adlib"] }
