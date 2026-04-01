@@ -25,14 +25,13 @@ The project is in early development. It currently includes:
 
 ## 🎯 Project Identity
 
-
-
 - **Tracker Workflow:** Precise, hex-friendly, and highly ergonomic TUI interface.
 - **Rust Powered:** Built for performance, safety, and low-latency audio.
 
 ## ⚡ Quick Start
 
 ### Prerequisites
+
 - **Rust:** Install via [rustup.rs](https://rustup.rs/)
 - **Audio Libraries:**
   - **macOS/Windows:** No additional dependencies.
@@ -41,10 +40,18 @@ The project is in early development. It currently includes:
 
 ### Install
 
-The project is still in development, but if you want to try it out, you can install it like so:
+**cargo binstall**
 
 ```bash
-cargo install --git https://github.com/larpios/riffl riffl-tui
+cargo binstall riffl-tui
+```
+
+**cargo install**
+
+```bash
+cargo install riffl-tui
+# or if you want to use the latest version from GitHub
+# cargo install --git https://github.com/larpios/riffl riffl-tui
 ```
 
 ### Build & Run
