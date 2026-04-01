@@ -13,6 +13,9 @@ categories = ["multimedia::audio", "command-line-utilities"]
 name = "riffl"
 path = "src/main.rs"
 
+[package.metadata.dist]
+dist = true
+
 [dependencies]
 riffl_core = { package = "riffl-core", path = "../riffl-core", version ="0.1.1", features = ["adlib"] }
 ratatui = "0.30"
