@@ -1,6 +1,10 @@
 # Riffl
 
+![Screenshot](assets/screenshot.png)
+
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/larpios)
+
+> [!CAUTION] This project is still in development.
 
 Riffl is an ambitious Rust-based music tracker designed for precision and performance.
 
@@ -20,7 +24,7 @@ Riffl is an ambitious Rust-based music tracker designed for precision and perfor
 
 ### Build & Run
 ```bash
-cargo run -p tracker-tui
+cargo run -p riffl-tui
 ```
 
 ## ☕ Support the Project
