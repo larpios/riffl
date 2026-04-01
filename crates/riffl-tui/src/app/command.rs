@@ -941,6 +941,327 @@ impl super::App {
             return;
         }
 
+        // :samples list — list all loaded samples with their sizes and properties
+        if parts[0] == "samples" || parts[0] == "samps" {
+            let sub = parts.get(1).map(|s| s.trim()).unwrap_or("list");
+            match sub {
+                "list" | "ls" => {
+                    let loaded = self.loaded_samples();
+                    if loaded.is_empty() {
+                        self.open_modal(Modal::info("Samples".to_string(), "(no samples loaded)".to_string()));
+                    } else {
+                        let lines: Vec<String> = loaded.iter().enumerate().map(|(i, s)| {
+                            let name = s.name().unwrap_or("(unnamed)");
+                            let frames = s.frame_count();
+                            let sr = s.sample_rate();
+                            let channels = s.channels();
+                            let duration_ms = if sr > 0 { frames * 1000 / sr as usize } else { 0 };
+                            let loop_info = match s.loop_mode {
+                                riffl_core::audio::sample::LoopMode::NoLoop => "",
+                                riffl_core::audio::sample::LoopMode::Forward => " [loop]",
+                                riffl_core::audio::sample::LoopMode::PingPong => " [ping-pong]",
+                            };
+                            format!("  [{:02X}] {:<22} {:5}ms  {:2}ch  {}Hz{}", i, name, duration_ms, channels, sr, loop_info)
+                        }).collect();
+                        self.open_modal(Modal::info(
+                            format!("Samples ({} loaded)", loaded.len()),
+                            lines.join("\n"),
+                        ));
+                    }
+                }
+                "dedup" => {
+                    // Report duplicate samples (same name)
+                    let loaded = self.loaded_samples();
+                    let mut seen: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
+                    for (i, s) in loaded.iter().enumerate() {
+                        let name = s.name().map(|n| n.to_string()).unwrap_or_else(|| format!("sample_{}", i));
+                        seen.entry(name).or_default().push(i);
+                    }
+                    let dups: Vec<String> = seen.into_iter()
+                        .filter(|(_, indices)| indices.len() > 1)
+                        .map(|(name, indices)| {
+                            let idxs: Vec<String> = indices.iter().map(|i| format!("{:02X}", i)).collect();
+                            format!("  {} → [{}]", name, idxs.join(", "))
+                        })
+                        .collect();
+                    if dups.is_empty() {
+                        self.open_modal(Modal::info("Sample Dedup".to_string(), "No duplicate samples found.".to_string()));
+                    } else {
+                        self.open_modal(Modal::info(
+                            format!("Duplicate Samples ({} groups)", dups.len()),
+                            dups.join("\n"),
+                        ));
+                    }
+                }
+                _ => {
+                    self.open_modal(Modal::error(
+                        "Samples".to_string(),
+                        "Usage: :samples <list|dedup>".to_string(),
+                    ));
+                }
+            }
+            return;
+        }
+
+        // :effects [command] — show effect command reference
+        // :effects — list all effects
+        // :effects <cmd> — show details for a specific effect command (e.g. :effects 0xx)
+        if parts[0] == "effects" || parts[0] == "fx" || parts[0] == "efx" {
+            let specific = parts.get(1).map(|s| s.trim().to_uppercase());
+            let reference = vec![
+                ("0xx", "Arpeggio: cycle between base, +x, +y semitones per tick"),
+                ("1xx", "Portamento up: slide pitch up by xx units per tick"),
+                ("2xx", "Portamento down: slide pitch down by xx units per tick"),
+                ("3xx", "Tone portamento: slide to target note, speed xx"),
+                ("4xy", "Vibrato: x=speed, y=depth (sine LFO on pitch)"),
+                ("5xy", "Tone portamento + volume slide (x=vol up, y=vol down)"),
+                ("6xy", "Vibrato + volume slide"),
+                ("7xy", "Tremolo: x=speed, y=depth (sine LFO on volume)"),
+                ("8xx", "Set panning: 00=left, 80=center, FF=right"),
+                ("9xx", "Sample offset: start playback at frame xx*256"),
+                ("Axy", "Volume slide: x=up, y=down (per tick)"),
+                ("Bxx", "Position jump: jump to arrangement position xx"),
+                ("Cxx", "Set volume: 00-40 (raw) or 00-FF (native mode)"),
+                ("Dxx", "Pattern break: end pattern, start next at row xx"),
+                ("E0x", "Set filter (Amiga mode)"),
+                ("E1x", "Fine portamento up by x units"),
+                ("E2x", "Fine portamento down by x units"),
+                ("E3x", "Glissando: round portamento to semitones (on/off)"),
+                ("E4x", "Set vibrato waveform: 0=sine, 1=ramp, 2=square"),
+                ("E5x", "Set finetune: -8 to +7 semitone units"),
+                ("E6x", "Pattern loop: E60=set start, E6x=loop x times"),
+                ("E7x", "Set tremolo waveform: 0=sine, 1=ramp, 2=square"),
+                ("E8x", "Set panning (coarse): 0=left, 8=center, F=right"),
+                ("E9x", "Retrigger: retrigger note every x ticks"),
+                ("EAx", "Fine volume slide up by x"),
+                ("EBx", "Fine volume slide down by x"),
+                ("ECx", "Note cut after x ticks"),
+                ("EDx", "Note delay: trigger note x ticks late"),
+                ("EEx", "Pattern delay: pause pattern for x rows"),
+                ("Fxx", "Set speed: F01-F1F sets TPL, F20+ sets BPM"),
+                ("Gxx", "Set global volume: 00-40"),
+                ("Hxy", "Global volume slide: x=up, y=down"),
+                ("Kxx", "Key off after xx ticks"),
+                ("Lxx", "Set envelope position to tick xx"),
+                ("Pxy", "Panning slide: x=right, y=left"),
+                ("Rxy", "Multi-retrigger with volume action y every x ticks"),
+                ("Txx", "Set BPM (20-FF)"),
+                ("Xxx", "Extra fine portamento up"),
+                ("Yxx", "Extra fine portamento down"),
+                ("Zxx", "Script trigger: run Rhai script with param xx"),
+            ];
+
+            if let Some(search) = specific {
+                let matches: Vec<&(&str, &str)> = reference.iter()
+                    .filter(|(cmd, _)| cmd.to_uppercase().starts_with(&search))
+                    .collect();
+                if matches.is_empty() {
+                    self.open_modal(Modal::error(
+                        "Effect Not Found".to_string(),
+                        format!("No effect matching '{}'. Use :effects to list all.", search),
+                    ));
+                } else {
+                    let lines: Vec<String> = matches.iter().map(|(cmd, desc)| format!("  {:4} — {}", cmd, desc)).collect();
+                    self.open_modal(Modal::info(format!("Effect: {}", search), lines.join("\n")));
+                }
+            } else {
+                let lines: Vec<String> = reference.iter()
+                    .map(|(cmd, desc)| format!("  {:4} — {}", cmd, desc))
+                    .collect();
+                self.open_modal(Modal::info(
+                    "Effect Command Reference".to_string(),
+                    lines.join("\n"),
+                ));
+            }
+            return;
+        }
+
+        // :lpb N — set lines per beat (affects beat-based timing, LFO sync, metronome)
+        if parts[0] == "lpb" {
+            if let Some(val) = parts.get(1).and_then(|s| s.trim().parse::<u32>().ok()) {
+                let clamped = val.clamp(1, 255);
+                self.transport.set_lpb(clamped);
+                self.song.lpb = clamped;
+                if let Ok(mut mixer) = self.mixer.lock() {
+                    mixer.set_metronome_lpb(clamped);
+                }
+                self.mark_dirty();
+            } else {
+                let current = self.song.lpb;
+                self.open_modal(Modal::info(
+                    "Lines Per Beat".to_string(),
+                    format!("Current LPB: {}\nUsage: :lpb <1-255>", current),
+                ));
+            }
+            return;
+        }
+
+        // :reverse — reverse the order of notes in the visual selection (or whole channel)
+        if parts[0] == "reverse" || parts[0] == "rev" {
+            use crate::editor::EditorMode;
+            let ch = self.editor.cursor_channel();
+            let num_rows = self.editor.pattern().num_rows();
+            let ((r0, c0), (r1, c1)) = if self.editor.mode() == EditorMode::Visual {
+                self.editor.visual_selection()
+                    .unwrap_or(((0, ch), (num_rows.saturating_sub(1), ch)))
+            } else {
+                ((0, ch), (num_rows.saturating_sub(1), ch))
+            };
+
+            let num = r1.saturating_sub(r0) + 1;
+            if num < 2 {
+                return;
+            }
+
+            let pat = self.editor.pattern_mut();
+            for col in c0..=c1 {
+                let mut cells: Vec<_> = (r0..=r1).map(|r| {
+                    pat.get_cell(r, col).cloned().unwrap_or_else(riffl_core::pattern::row::Cell::empty)
+                }).collect();
+                cells.reverse();
+                for (i, row) in (r0..=r1).enumerate() {
+                    pat.set_cell(row, col, cells[i].clone());
+                }
+            }
+            self.mark_dirty();
+            return;
+        }
+
+        // :expand N — expand pattern by inserting N-1 empty rows between each existing row
+        if parts[0] == "expand" {
+            if let Some(n) = parts.get(1).and_then(|s| s.trim().parse::<usize>().ok()) {
+                let n = n.clamp(2, 8);
+                use riffl_core::pattern::pattern::MAX_ROW_COUNT;
+                let cur_rows = self.editor.pattern().num_rows();
+                let new_rows = (cur_rows * n).min(MAX_ROW_COUNT);
+                let channels = self.editor.pattern().num_channels();
+
+                // Collect existing cells
+                let old_cells: Vec<Vec<riffl_core::pattern::row::Cell>> = (0..cur_rows).map(|r| {
+                    (0..channels).map(|c| {
+                        self.editor.pattern().get_cell(r, c).cloned()
+                            .unwrap_or_else(riffl_core::pattern::row::Cell::empty)
+                    }).collect()
+                }).collect();
+
+                // Resize pattern
+                self.editor.pattern_mut().set_row_count(new_rows);
+                self.transport.set_num_rows(new_rows);
+
+                // Clear all cells
+                for r in 0..new_rows {
+                    for c in 0..channels {
+                        self.editor.pattern_mut().clear_cell(r, c);
+                    }
+                }
+
+                // Write original cells at expanded positions
+                for (orig_r, row_cells) in old_cells.iter().enumerate() {
+                    let new_r = orig_r * n;
+                    if new_r >= new_rows { break; }
+                    for (c, cell) in row_cells.iter().enumerate() {
+                        self.editor.pattern_mut().set_cell(new_r, c, cell.clone());
+                    }
+                }
+                let pos = self.transport.arrangement_position();
+                self.flush_editor_pattern(pos);
+                self.mark_dirty();
+                self.open_modal(Modal::info(
+                    "Expand Pattern".to_string(),
+                    format!("Expanded {}→{} rows (factor {})", cur_rows, new_rows, n),
+                ));
+            } else {
+                self.open_modal(Modal::error(
+                    "Expand".to_string(),
+                    "Usage: :expand <2-8>  (multiplies pattern length by N, spacing notes out)".to_string(),
+                ));
+            }
+            return;
+        }
+
+        // :compress N — keep every Nth row, delete others (halve/quarter pattern)
+        if parts[0] == "compress" || parts[0] == "shrink" {
+            if let Some(n) = parts.get(1).and_then(|s| s.trim().parse::<usize>().ok()) {
+                let n = n.clamp(2, 8);
+                use riffl_core::pattern::pattern::MIN_ROW_COUNT;
+                let cur_rows = self.editor.pattern().num_rows();
+                let new_rows = (cur_rows / n).max(MIN_ROW_COUNT);
+                let channels = self.editor.pattern().num_channels();
+
+                // Collect every nth row
+                let kept_cells: Vec<Vec<riffl_core::pattern::row::Cell>> = (0..new_rows).map(|i| {
+                    let src_r = i * n;
+                    (0..channels).map(|c| {
+                        self.editor.pattern().get_cell(src_r, c).cloned()
+                            .unwrap_or_else(riffl_core::pattern::row::Cell::empty)
+                    }).collect()
+                }).collect();
+
+                self.editor.pattern_mut().set_row_count(new_rows);
+                self.transport.set_num_rows(new_rows);
+                self.editor.clamp_cursor();
+
+                for (r, row_cells) in kept_cells.iter().enumerate() {
+                    for (c, cell) in row_cells.iter().enumerate() {
+                        self.editor.pattern_mut().set_cell(r, c, cell.clone());
+                    }
+                }
+                let pos = self.transport.arrangement_position();
+                self.flush_editor_pattern(pos);
+                self.mark_dirty();
+                self.open_modal(Modal::info(
+                    "Compress Pattern".to_string(),
+                    format!("Compressed {}→{} rows (kept every {}th row)", cur_rows, new_rows, n),
+                ));
+            } else {
+                self.open_modal(Modal::error(
+                    "Compress".to_string(),
+                    "Usage: :compress <2-8>  (keeps every Nth row, reduces pattern length)".to_string(),
+                ));
+            }
+            return;
+        }
+
+        // :instcopy <src_idx> <dst_idx> — copy all settings from one instrument to another
+        if parts[0] == "instcopy" || parts[0] == "icopy" {
+            let nums: Vec<usize> = parts.get(1..)
+                .map(|s| s.join(" "))
+                .unwrap_or_default()
+                .split_whitespace()
+                .filter_map(|t| t.parse::<usize>().ok())
+                .collect();
+            if nums.len() >= 2 {
+                let (src, dst) = (nums[0], nums[1]);
+                if src < self.song.instruments.len() && dst < self.song.instruments.len() && src != dst {
+                    let cloned = self.song.instruments[src].clone();
+                    let dst_name = self.song.instruments[dst].name.clone();
+                    // Copy all fields except name
+                    let new_inst = riffl_core::song::Instrument {
+                        name: dst_name,
+                        ..cloned
+                    };
+                    self.song.instruments[dst] = new_inst;
+                    self.sync_mixer_instruments();
+                    self.mark_dirty();
+                    self.open_modal(Modal::info(
+                        "Instrument Copied".to_string(),
+                        format!("Copied settings from instrument {:02X} to {:02X}", src, dst),
+                    ));
+                } else {
+                    self.open_modal(Modal::error(
+                        "Invalid indices".to_string(),
+                        format!("Usage: :instcopy <src> <dst>  (have {} instruments)", self.song.instruments.len()),
+                    ));
+                }
+            } else {
+                self.open_modal(Modal::error(
+                    "Instrument Copy".to_string(),
+                    "Usage: :instcopy <src_index> <dst_index>".to_string(),
+                ));
+            }
+            return;
+        }
+
         match cmd.as_str() {
             "w" => self.save_project(),
             "wq" | "x" => {
