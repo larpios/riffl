@@ -48,3 +48,5 @@ test-opl/target
 result
 
 log.txt
+
+*.wav

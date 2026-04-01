@@ -5,6 +5,7 @@ use crate::audio::pitch::{PitchCalculator, SlideMode};
 /// ProTracker/Furnace-compatible 64-entry vibrato sine table.
 /// Values normalized to [-1.0, 1.0]. Computed as sin(i / 64 * 2π).
 /// Phase position (0..63) indexes directly; negative values give downward pitch modulation.
+#[allow(clippy::approx_constant)]
 static VIBRATO_TABLE: [f64; 64] = [
     0.0,
     0.09801714,
