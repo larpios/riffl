@@ -229,7 +229,10 @@ impl ScriptEngine {
                     sv,
                     ev,
                 );
-                cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).extend(new_cmds);
+                cmds_clone
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .extend(new_cmds);
             },
         );
 
@@ -380,13 +383,19 @@ impl ScriptEngine {
             if channel < 0 || channel >= sel_channels {
                 return;
             }
-            let parsed: Vec<_> = notes.iter().filter_map(|d| {
-                use super::engine::dynamic_to_note;
-                dynamic_to_note(d)
-            }).collect();
+            let parsed: Vec<_> = notes
+                .iter()
+                .filter_map(|d| {
+                    use super::engine::dynamic_to_note;
+                    dynamic_to_note(d)
+                })
+                .collect();
             let cmds = pattern_api::fill_column(&sub_pat, channel as usize, &parsed);
             let abs = offset_commands(cmds, row_offset, ch_offset);
-            cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).extend(abs);
+            cmds_clone
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .extend(abs);
         });
 
         // generate_beat(channel, rhythm, note) — within selection bounds
@@ -403,8 +412,7 @@ impl ScriptEngine {
                     .map(|d| d.as_bool().unwrap_or(false))
                     .collect();
                 if let Some(n) = map_to_note(&note) {
-                    let cmds =
-                        pattern_api::generate_beat(&sub_pat, channel as usize, &bools, n);
+                    let cmds = pattern_api::generate_beat(&sub_pat, channel as usize, &bools, n);
                     let abs = offset_commands(cmds, row_offset, ch_offset);
                     cmds_clone.lock().unwrap().extend(abs);
                 }
@@ -417,7 +425,10 @@ impl ScriptEngine {
         engine.register_fn("transpose", move |semitones: INT| {
             let cmds = pattern_api::transpose(&sub_pat, semitones as i32);
             let abs = offset_commands(cmds, row_offset, ch_offset);
-            cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).extend(abs);
+            cmds_clone
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .extend(abs);
         });
 
         // reverse() — selection rows only
@@ -426,7 +437,10 @@ impl ScriptEngine {
         engine.register_fn("reverse", move || {
             let cmds = pattern_api::reverse(&sub_pat);
             let abs = offset_commands(cmds, row_offset, ch_offset);
-            cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).extend(abs);
+            cmds_clone
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .extend(abs);
         });
 
         // rotate(offset) — selection rows only
@@ -435,7 +449,10 @@ impl ScriptEngine {
         engine.register_fn("rotate", move |offset: INT| {
             let cmds = pattern_api::rotate(&sub_pat, offset as i32);
             let abs = offset_commands(cmds, row_offset, ch_offset);
-            cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).extend(abs);
+            cmds_clone
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .extend(abs);
         });
 
         // humanize(velocity_variance) — selection notes only
@@ -445,7 +462,10 @@ impl ScriptEngine {
             let variance = velocity_variance.clamp(0, 127) as u8;
             let cmds = pattern_api::humanize(&sub_pat, variance);
             let abs = offset_commands(cmds, row_offset, ch_offset);
-            cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).extend(abs);
+            cmds_clone
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .extend(abs);
         });
 
         // shuffle() — selection notes only
@@ -454,7 +474,10 @@ impl ScriptEngine {
         engine.register_fn("shuffle", move || {
             let cmds = pattern_api::shuffle(&sub_pat);
             let abs = offset_commands(cmds, row_offset, ch_offset);
-            cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).extend(abs);
+            cmds_clone
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .extend(abs);
         });
 
         // interpolate_vol(channel, start_row, end_row, start_vol, end_vol) — selection-relative
@@ -477,7 +500,10 @@ impl ScriptEngine {
                     ev,
                 );
                 let abs = offset_commands(cmds, row_offset, ch_offset);
-                cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).extend(abs);
+                cmds_clone
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .extend(abs);
             },
         );
 
@@ -564,7 +590,9 @@ fn extract_subpattern(pattern: &Pattern, selection: &PatternSelection) -> Patter
     let mut sub = Pattern::new(rows, channels);
     for r in 0..rows {
         for c in 0..channels {
-            if let Some(cell) = pattern.get_cell(r + selection.row_start, c + selection.channel_start) {
+            if let Some(cell) =
+                pattern.get_cell(r + selection.row_start, c + selection.channel_start)
+            {
                 sub.set_cell(r, c, cell.clone());
             }
         }
@@ -586,7 +614,11 @@ fn offset_commands(
                 channel: channel + ch_offset,
                 note,
             },
-            PatternCommand::SetVolume { row, channel, volume } => PatternCommand::SetVolume {
+            PatternCommand::SetVolume {
+                row,
+                channel,
+                volume,
+            } => PatternCommand::SetVolume {
                 row: row + row_offset,
                 channel: channel + ch_offset,
                 volume,
@@ -617,10 +649,21 @@ pub fn apply_commands(pattern: &mut Pattern, commands: &[PatternCommand]) {
                     }
                 }
             }
-            PatternCommand::SetVolume { row, channel, volume } => {
+            PatternCommand::SetVolume {
+                row,
+                channel,
+                volume,
+            } => {
                 if let Some(cell) = pattern.get_cell(*row, *channel).cloned() {
                     use crate::pattern::row::Cell;
-                    pattern.set_cell(*row, *channel, Cell { volume: Some(*volume), ..cell });
+                    pattern.set_cell(
+                        *row,
+                        *channel,
+                        Cell {
+                            volume: Some(*volume),
+                            ..cell
+                        },
+                    );
                 }
             }
         }
@@ -2069,7 +2112,9 @@ mod tests {
             let n = note("C", 4);
             set_note(0, 0, n);
         "#;
-        let (_, commands) = engine.eval_with_selection(code, &pattern, &sel, 120.0, 4).unwrap();
+        let (_, commands) = engine
+            .eval_with_selection(code, &pattern, &sel, 120.0, 4)
+            .unwrap();
         assert_eq!(commands.len(), 1);
 
         // Row 0 in selection = row 4 in pattern, channel 0 = channel 1
@@ -2096,7 +2141,9 @@ mod tests {
             let n = note("C", 4);
             set_note(5, 0, n);
         "#;
-        let (_, commands) = engine.eval_with_selection(code, &pattern, &sel, 120.0, 4).unwrap();
+        let (_, commands) = engine
+            .eval_with_selection(code, &pattern, &sel, 120.0, 4)
+            .unwrap();
         assert!(
             commands.is_empty(),
             "Out-of-selection writes should be ignored"
@@ -2113,7 +2160,9 @@ mod tests {
 
         let sel = PatternSelection::new(2, 3, 0, 0);
         let code = r#"clear_selection();"#;
-        let (_, commands) = engine.eval_with_selection(code, &pattern, &sel, 120.0, 4).unwrap();
+        let (_, commands) = engine
+            .eval_with_selection(code, &pattern, &sel, 120.0, 4)
+            .unwrap();
         apply_commands(&mut pattern, &commands);
 
         assert!(pattern.get_cell(2, 0).unwrap().note.is_none());
@@ -2133,7 +2182,9 @@ mod tests {
             let n = get_note(0, 0);
             n.pitch
         "#;
-        let (result, _) = engine.eval_with_selection(code, &pattern, &sel, 120.0, 4).unwrap();
+        let (result, _) = engine
+            .eval_with_selection(code, &pattern, &sel, 120.0, 4)
+            .unwrap();
         match result {
             ScriptResult::Value(v) => assert_eq!(v, "A"),
             _ => panic!("Expected Value result"),
@@ -2147,7 +2198,9 @@ mod tests {
         let sel = PatternSelection::new(2, 5, 1, 3);
 
         let code = r#"[sel_rows, sel_channels]"#;
-        let (result, _) = engine.eval_with_selection(code, &pattern, &sel, 120.0, 4).unwrap();
+        let (result, _) = engine
+            .eval_with_selection(code, &pattern, &sel, 120.0, 4)
+            .unwrap();
         match result {
             ScriptResult::Value(v) => {
                 assert!(v.contains("4"), "Expected 4 rows in selection, got: {}", v);
@@ -2181,7 +2234,11 @@ mod tests {
         let mut pat_copy = pattern.clone();
         apply_commands(&mut pat_copy, &cmds);
         if let Some(NoteEvent::On(n)) = &pat_copy.get_cell(2, 0).unwrap().note {
-            assert_ne!(n.pitch as u8, Pitch::C as u8, "Pitch should have been transposed");
+            assert_ne!(
+                n.pitch as u8,
+                Pitch::C as u8,
+                "Pitch should have been transposed"
+            );
         }
     }
 
@@ -2217,9 +2274,21 @@ mod tests {
         use crate::pattern::{note::NoteEvent, row::Cell};
         let engine = ScriptEngine::new();
         let mut pattern = Pattern::new(8, 1);
-        pattern.set_cell(0, 0, Cell::with_note(NoteEvent::On(Note::new(Pitch::C, 4, 100, 0))));
-        pattern.set_cell(2, 0, Cell::with_note(NoteEvent::On(Note::new(Pitch::E, 4, 100, 0))));
-        pattern.set_cell(4, 0, Cell::with_note(NoteEvent::On(Note::new(Pitch::G, 4, 100, 0))));
+        pattern.set_cell(
+            0,
+            0,
+            Cell::with_note(NoteEvent::On(Note::new(Pitch::C, 4, 100, 0))),
+        );
+        pattern.set_cell(
+            2,
+            0,
+            Cell::with_note(NoteEvent::On(Note::new(Pitch::E, 4, 100, 0))),
+        );
+        pattern.set_cell(
+            4,
+            0,
+            Cell::with_note(NoteEvent::On(Note::new(Pitch::G, 4, 100, 0))),
+        );
 
         let sel = PatternSelection::new(0, 7, 0, 0);
         let (_, cmds) = engine
@@ -2287,7 +2356,9 @@ mod tests {
             let n = get_note(0, 0);
             n.pitch
         "#;
-        let (result, _) = engine.eval_with_pattern_triggers(code, &pattern, &[], 120.0, 4).unwrap();
+        let (result, _) = engine
+            .eval_with_pattern_triggers(code, &pattern, &[], 120.0, 4)
+            .unwrap();
         match result {
             ScriptResult::Value(v) => {
                 assert!(v.contains('C'), "Expected pitch C, got: {}", v);
@@ -2304,7 +2375,9 @@ mod tests {
             let n = get_note(0, 0);
             if n == () { "empty" } else { "has_note" }
         "#;
-        let (result, _) = engine.eval_with_pattern_triggers(code, &pattern, &[], 120.0, 4).unwrap();
+        let (result, _) = engine
+            .eval_with_pattern_triggers(code, &pattern, &[], 120.0, 4)
+            .unwrap();
         match result {
             ScriptResult::Value(v) => {
                 assert_eq!(v.trim(), "empty", "Empty cell should return ()");

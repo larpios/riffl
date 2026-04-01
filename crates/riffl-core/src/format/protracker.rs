@@ -746,19 +746,27 @@ mod tests {
         // Pattern 1: has F=180 (BPM 180)
         // Arrangement starts with pattern 1 — should pick up BPM 180, not 150.
         let mut pat0 = Pattern::new(64, 4);
-        pat0.set_cell(0, 0, Cell {
-            note: None,
-            instrument: None,
-            volume: None,
-            effects: vec![Effect::new(0xF, 150)], // F96 = BPM 150
-        });
+        pat0.set_cell(
+            0,
+            0,
+            Cell {
+                note: None,
+                instrument: None,
+                volume: None,
+                effects: vec![Effect::new(0xF, 150)], // F96 = BPM 150
+            },
+        );
         let mut pat1 = Pattern::new(64, 4);
-        pat1.set_cell(0, 0, Cell {
-            note: None,
-            instrument: None,
-            volume: None,
-            effects: vec![Effect::new(0xF, 180)], // FB4 = BPM 180
-        });
+        pat1.set_cell(
+            0,
+            0,
+            Cell {
+                note: None,
+                instrument: None,
+                volume: None,
+                effects: vec![Effect::new(0xF, 180)], // FB4 = BPM 180
+            },
+        );
         let patterns = vec![pat0, pat1];
         // Arrangement: pattern 1 first, then pattern 0
         let (speed, bpm) = extract_tempo_from_patterns(&patterns, &[1, 0]);

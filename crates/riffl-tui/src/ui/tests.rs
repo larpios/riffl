@@ -1,5 +1,7 @@
 use super::*;
-use crate::ui::pattern_renderer::{calculate_scroll_offset, format_cell_display, format_cell_parts};
+use crate::ui::pattern_renderer::{
+    calculate_scroll_offset, format_cell_display, format_cell_parts,
+};
 
 #[test]
 fn test_scroll_offset_small_pattern() {
@@ -33,8 +35,7 @@ fn test_format_cell_empty() {
 #[test]
 fn test_format_cell_with_note() {
     use riffl_core::pattern::note::{Note, Pitch};
-    let cell =
-        riffl_core::pattern::row::Cell::with_note(NoteEvent::On(Note::simple(Pitch::C, 4)));
+    let cell = riffl_core::pattern::row::Cell::with_note(NoteEvent::On(Note::simple(Pitch::C, 4)));
     assert_eq!(format_cell_display(&cell), "C-4 .. .. ....");
 }
 
@@ -87,8 +88,7 @@ fn test_format_cell_parts_empty() {
 #[test]
 fn test_format_cell_parts_with_note() {
     use riffl_core::pattern::note::{Note, Pitch};
-    let cell =
-        riffl_core::pattern::row::Cell::with_note(NoteEvent::On(Note::simple(Pitch::C, 4)));
+    let cell = riffl_core::pattern::row::Cell::with_note(NoteEvent::On(Note::simple(Pitch::C, 4)));
     let (n, i, v, e) = format_cell_parts(Some(&cell));
     assert_eq!(n, "C-4");
     assert_eq!(i, "..");

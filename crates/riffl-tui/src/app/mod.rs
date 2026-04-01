@@ -32,7 +32,6 @@ use riffl_core::pattern::{Note, Pattern};
 use riffl_core::song::{Instrument, Song};
 use riffl_core::transport::{AdvanceResult, PlaybackMode, Transport, TransportState};
 
-
 pub mod arrangement;
 pub mod browser;
 pub mod command;
@@ -42,11 +41,10 @@ pub mod pattern;
 pub mod project;
 pub mod sample;
 pub mod script;
-pub mod transport;
-pub mod view;
 #[cfg(test)]
 mod tests;
-
+pub mod transport;
+pub mod view;
 
 /// Which top-level view is currently active.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -484,106 +482,109 @@ impl App {
 
         for res in advance_results {
             match res {
-            AdvanceResult::Row(row) => {
-                if self.follow_mode {
-                    self.editor.go_to_row(row);
-                }
-                if row == 0 && self.live_mode {
-                    self.execute_script(&[]);
-                }
-                let transport_cmds = if let Ok(mut mixer) = self.mixer.lock() {
-                    mixer.tick(row, self.editor.pattern())
-                } else {
-                    Vec::new()
-                };
-                if let Ok(mut gm) = self.glicol_mixer.lock() {
-                    // Primitive Glicol trigger: if there's a note on channel 0, play it
-                    if let Some(r) = self.editor.pattern().get_row(row) {
-                        if let Some(cell) = r.first() {
-                            use riffl_core::pattern::note::NoteEvent;
-                            match &cell.note {
-                                Some(NoteEvent::On(note)) => {
-                                    gm.note_on(0, note.frequency() as f32);
+                AdvanceResult::Row(row) => {
+                    if self.follow_mode {
+                        self.editor.go_to_row(row);
+                    }
+                    if row == 0 && self.live_mode {
+                        self.execute_script(&[]);
+                    }
+                    let transport_cmds = if let Ok(mut mixer) = self.mixer.lock() {
+                        mixer.tick(row, self.editor.pattern())
+                    } else {
+                        Vec::new()
+                    };
+                    if let Ok(mut gm) = self.glicol_mixer.lock() {
+                        // Primitive Glicol trigger: if there's a note on channel 0, play it
+                        if let Some(r) = self.editor.pattern().get_row(row) {
+                            if let Some(cell) = r.first() {
+                                use riffl_core::pattern::note::NoteEvent;
+                                match &cell.note {
+                                    Some(NoteEvent::On(note)) => {
+                                        gm.note_on(0, note.frequency() as f32);
+                                    }
+                                    Some(NoteEvent::Off) => {
+                                        gm.note_off(0);
+                                    }
+                                    _ => {}
                                 }
-                                Some(NoteEvent::Off) => {
-                                    gm.note_off(0);
-                                }
-                                _ => {}
                             }
                         }
                     }
+                    self.apply_effect_transport_commands(transport_cmds);
                 }
-                self.apply_effect_transport_commands(transport_cmds);
-            }
-            AdvanceResult::PatternChange {
-                arrangement_pos,
-                row,
-            } => {
-                // Reset BPM and TPL to initial values if we are looping back to the very start of the song
-                if arrangement_pos == 0 && row == 0 && current_arrangement_pos >= self.song.arrangement.len().saturating_sub(1) {
-                    self.transport.set_bpm(self.initial_bpm);
-                    self.transport.set_tpl(self.initial_tpl);
-                    self.song.bpm = self.initial_bpm;
-                    self.song.tpl = self.initial_tpl;
-                    if let Ok(mut mixer) = self.mixer.lock() {
-                        mixer.update_tempo(self.initial_bpm);
-                        mixer.set_tpl(self.initial_tpl);
+                AdvanceResult::PatternChange {
+                    arrangement_pos,
+                    row,
+                } => {
+                    // Reset BPM and TPL to initial values if we are looping back to the very start of the song
+                    if arrangement_pos == 0
+                        && row == 0
+                        && current_arrangement_pos >= self.song.arrangement.len().saturating_sub(1)
+                    {
+                        self.transport.set_bpm(self.initial_bpm);
+                        self.transport.set_tpl(self.initial_tpl);
+                        self.song.bpm = self.initial_bpm;
+                        self.song.tpl = self.initial_tpl;
+                        if let Ok(mut mixer) = self.mixer.lock() {
+                            mixer.update_tempo(self.initial_bpm);
+                            mixer.set_tpl(self.initial_tpl);
+                        }
                     }
-                }
 
-                let saved_cursor_row = self.editor.cursor_row();
-                let saved_cursor_channel = self.editor.cursor_channel();
-                self.flush_editor_pattern(current_arrangement_pos);
-                self.load_arrangement_pattern(arrangement_pos);
-                current_arrangement_pos = arrangement_pos;
-                if self.follow_mode {
-                    self.editor.go_to_row(row);
-                } else {
-                    // Preserve cursor position when not following playhead
-                    self.editor.go_to_row(saved_cursor_row);
-                    self.editor.set_cursor_channel(saved_cursor_channel);
-                }
-                if self.live_mode {
-                    self.execute_script(&[]);
-                }
-                let transport_cmds = if let Ok(mut mixer) = self.mixer.lock() {
-                    mixer.tick(row, self.editor.pattern())
-                } else {
-                    Vec::new()
-                };
-                if let Ok(mut gm) = self.glicol_mixer.lock() {
-                    // Primitive Glicol trigger: if there's a note on channel 0, play it
-                    if let Some(r) = self.editor.pattern().get_row(row) {
-                        if let Some(cell) = r.first() {
-                            use riffl_core::pattern::note::NoteEvent;
-                            match &cell.note {
-                                Some(NoteEvent::On(note)) => {
-                                    gm.note_on(0, note.frequency() as f32);
+                    let saved_cursor_row = self.editor.cursor_row();
+                    let saved_cursor_channel = self.editor.cursor_channel();
+                    self.flush_editor_pattern(current_arrangement_pos);
+                    self.load_arrangement_pattern(arrangement_pos);
+                    current_arrangement_pos = arrangement_pos;
+                    if self.follow_mode {
+                        self.editor.go_to_row(row);
+                    } else {
+                        // Preserve cursor position when not following playhead
+                        self.editor.go_to_row(saved_cursor_row);
+                        self.editor.set_cursor_channel(saved_cursor_channel);
+                    }
+                    if self.live_mode {
+                        self.execute_script(&[]);
+                    }
+                    let transport_cmds = if let Ok(mut mixer) = self.mixer.lock() {
+                        mixer.tick(row, self.editor.pattern())
+                    } else {
+                        Vec::new()
+                    };
+                    if let Ok(mut gm) = self.glicol_mixer.lock() {
+                        // Primitive Glicol trigger: if there's a note on channel 0, play it
+                        if let Some(r) = self.editor.pattern().get_row(row) {
+                            if let Some(cell) = r.first() {
+                                use riffl_core::pattern::note::NoteEvent;
+                                match &cell.note {
+                                    Some(NoteEvent::On(note)) => {
+                                        gm.note_on(0, note.frequency() as f32);
+                                    }
+                                    Some(NoteEvent::Off) => {
+                                        gm.note_off(0);
+                                    }
+                                    _ => {}
                                 }
-                                Some(NoteEvent::Off) => {
-                                    gm.note_off(0);
-                                }
-                                _ => {}
                             }
                         }
                     }
+                    self.apply_effect_transport_commands(transport_cmds);
                 }
-                self.apply_effect_transport_commands(transport_cmds);
-            }
-            AdvanceResult::Stopped => {
-                // Handled below in was_playing check
-            }
-            AdvanceResult::None => {
-                // Even when no row advances, sync track state for real-time
-                // mute/solo/volume/pan changes to take effect immediately
-                if self.transport.is_playing() {
-                    if let Ok(mut mixer) = self.mixer.lock() {
-                        mixer.update_tracks(self.editor.pattern().tracks());
+                AdvanceResult::Stopped => {
+                    // Handled below in was_playing check
+                }
+                AdvanceResult::None => {
+                    // Even when no row advances, sync track state for real-time
+                    // mute/solo/volume/pan changes to take effect immediately
+                    if self.transport.is_playing() {
+                        if let Ok(mut mixer) = self.mixer.lock() {
+                            mixer.update_tracks(self.editor.pattern().tracks());
+                        }
                     }
                 }
             }
         }
-    }
 
         // Handle auto-stop (loop disabled, reached end)
         if was_playing && self.transport.is_stopped() {
@@ -694,4 +695,3 @@ impl Default for App {
         Self::new()
     }
 }
-

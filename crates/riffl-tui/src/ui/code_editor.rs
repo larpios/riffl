@@ -625,7 +625,9 @@ fn render_editor_panel(frame: &mut Frame, area: Rect, editor: &CodeEditor, theme
             if editor.cursor_col >= source_line.len() {
                 spans.push(Span::styled(
                     " ",
-                    Style::default().fg(theme.cursor_fg).bg(theme.cursor_normal_bg),
+                    Style::default()
+                        .fg(theme.cursor_fg)
+                        .bg(theme.cursor_normal_bg),
                 ));
             }
         } else {

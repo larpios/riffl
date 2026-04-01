@@ -61,10 +61,10 @@ impl App {
         if let Some(new_idx) = self.song.duplicate_pattern(pattern_idx) {
             let insert_pos = (cursor + 1).min(self.song.arrangement.len());
             self.song.insert_in_arrangement(insert_pos, new_idx);
-            self.arrangement_view.clamp_cursor(self.song.arrangement.len());
-            // Advance cursor to the new entry
             self.arrangement_view
-                .move_down(self.song.arrangement.len());
+                .clamp_cursor(self.song.arrangement.len());
+            // Advance cursor to the new entry
+            self.arrangement_view.move_down(self.song.arrangement.len());
             self.pattern_selection = Some(new_idx);
             self.mark_dirty();
         }

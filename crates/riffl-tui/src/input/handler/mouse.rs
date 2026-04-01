@@ -180,7 +180,11 @@ pub fn handle_mouse_event(app: &mut App, mouse: MouseEvent) {
     }
 }
 
-pub fn handle_instrument_editor_mouse(app: &mut App, mouse: MouseEvent, area: ratatui::layout::Rect) {
+pub fn handle_instrument_editor_mouse(
+    app: &mut App,
+    mouse: MouseEvent,
+    area: ratatui::layout::Rect,
+) {
     use crate::ui::instrument_editor::{field_at_row, InstrumentField};
 
     let inner = ratatui::widgets::Block::default()
@@ -373,7 +377,11 @@ pub fn handle_instrument_view_mouse(
     }
 }
 
-pub fn handle_waveform_mouse(app: &mut App, mouse: MouseEvent, waveform_area: ratatui::layout::Rect) {
+pub fn handle_waveform_mouse(
+    app: &mut App,
+    mouse: MouseEvent,
+    waveform_area: ratatui::layout::Rect,
+) {
     // Check if click is within waveform area
     if mouse.column < waveform_area.x
         || mouse.column >= waveform_area.x + waveform_area.width

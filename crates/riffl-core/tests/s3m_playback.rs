@@ -3,10 +3,10 @@
 //! Loads a known S3M file, creates a mixer, ticks pattern rows, and verifies
 //! that audio output is non-zero.
 
-use std::fs;
-use std::sync::Arc;
 use riffl_core::audio::mixer::Mixer;
 use riffl_core::format::s3m::import_s3m;
+use std::fs;
+use std::sync::Arc;
 
 #[test]
 fn test_s3m_pcm_playback() {

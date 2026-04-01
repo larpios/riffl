@@ -447,13 +447,23 @@ pub fn render_instrument_editor(
     let title_spans = if state.focused {
         vec![
             Span::raw(" "),
-            Span::styled(&instrument.name, Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                &instrument.name,
+                Style::default()
+                    .fg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw(" "),
         ]
     } else {
         vec![
             Span::raw(" "),
-            Span::styled(&instrument.name, Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                &instrument.name,
+                Style::default()
+                    .fg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled("  Enter: edit ", Style::default().fg(theme.text_dimmed)),
         ]
     };
@@ -478,14 +488,19 @@ pub fn render_instrument_editor(
     let active = |field: InstrumentField| state.focused && state.field == field;
     let field_style = |field: InstrumentField| {
         if active(field) {
-            Style::default().fg(theme.cursor_fg).bg(theme.cursor_normal_bg).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(theme.cursor_fg)
+                .bg(theme.cursor_normal_bg)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(theme.text)
         }
     };
     let label_style = |field: InstrumentField| {
         if active(field) {
-            Style::default().fg(theme.cursor_fg).bg(theme.cursor_normal_bg)
+            Style::default()
+                .fg(theme.cursor_fg)
+                .bg(theme.cursor_normal_bg)
         } else {
             Style::default().fg(theme.text_secondary)
         }
@@ -513,15 +528,26 @@ pub fn render_instrument_editor(
         instrument.name.clone()
     };
     let name_w = half.saturating_sub(14);
-    let sample_str = instrument.sample_path.as_deref()
-        .map(|p| std::path::Path::new(p).file_name().and_then(|n| n.to_str()).unwrap_or(p).to_string())
+    let sample_str = instrument
+        .sample_path
+        .as_deref()
+        .map(|p| {
+            std::path::Path::new(p)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(p)
+                .to_string()
+        })
         .unwrap_or_else(|| "— none —".to_string());
     let sample_w = half.saturating_sub(14);
     let row1 = make_row(
         vec![
             Span::styled(format!("{:<9}", "Name"), label_style(InstrumentField::Name)),
             Span::raw(" "),
-            Span::styled(format!("{:<w$}", name_value, w = name_w.max(1)), field_style(InstrumentField::Name)),
+            Span::styled(
+                format!("{:<w$}", name_value, w = name_w.max(1)),
+                field_style(InstrumentField::Name),
+            ),
         ],
         vec![
             Span::styled("Sample   ", dim),
@@ -537,15 +563,27 @@ pub fn render_instrument_editor(
     let vol_bar = format!("{}{}", "█".repeat(filled), "░".repeat(bar_w - filled));
     let row2 = make_row(
         vec![
-            Span::styled(format!("{:<9}", "Base Note"), label_style(InstrumentField::BaseNote)),
+            Span::styled(
+                format!("{:<9}", "Base Note"),
+                label_style(InstrumentField::BaseNote),
+            ),
             Span::raw(" "),
-            Span::styled(format!("{:<5}", base_note_str), field_style(InstrumentField::BaseNote)),
+            Span::styled(
+                format!("{:<5}", base_note_str),
+                field_style(InstrumentField::BaseNote),
+            ),
             Span::styled(format!(" MIDI {:3}", instrument.base_note.midi_note()), dim),
         ],
         vec![
-            Span::styled(format!("{:<9}", "Volume"), label_style(InstrumentField::Volume)),
+            Span::styled(
+                format!("{:<9}", "Volume"),
+                label_style(InstrumentField::Volume),
+            ),
             Span::raw(" "),
-            Span::styled(format!("{:3}%", vol_pct), field_style(InstrumentField::Volume)),
+            Span::styled(
+                format!("{:3}%", vol_pct),
+                field_style(InstrumentField::Volume),
+            ),
             Span::raw(" "),
             Span::styled(vol_bar, Style::default().fg(theme.primary)),
         ],
@@ -554,28 +592,45 @@ pub fn render_instrument_editor(
     // ── Row 3: Finetune (left) | Loop mode + points (right) ──────────
     let ft = instrument.finetune;
     let cents = ft as f32 * 12.5;
-    let loop_mode_str = sample.map(|s| match s.loop_mode {
-        riffl_core::audio::sample::LoopMode::NoLoop => "Off",
-        riffl_core::audio::sample::LoopMode::Forward => "Fwd",
-        riffl_core::audio::sample::LoopMode::PingPong => "P-P",
-    }).unwrap_or("Off");
+    let loop_mode_str = sample
+        .map(|s| match s.loop_mode {
+            riffl_core::audio::sample::LoopMode::NoLoop => "Off",
+            riffl_core::audio::sample::LoopMode::Forward => "Fwd",
+            riffl_core::audio::sample::LoopMode::PingPong => "P-P",
+        })
+        .unwrap_or("Off");
     let loop_start_val = sample.map(|s| s.loop_start).unwrap_or(0);
     let loop_end_val = sample.map(|s| s.loop_end).unwrap_or(0);
     let row3 = make_row(
         vec![
-            Span::styled(format!("{:<9}", "Finetune"), label_style(InstrumentField::Finetune)),
+            Span::styled(
+                format!("{:<9}", "Finetune"),
+                label_style(InstrumentField::Finetune),
+            ),
             Span::raw(" "),
             Span::styled(format!("{:+3}", ft), field_style(InstrumentField::Finetune)),
             Span::styled(format!(" ({:+.0}c)", cents), dim),
         ],
         vec![
-            Span::styled(format!("{:<9}", "Loop"), label_style(InstrumentField::LoopMode)),
+            Span::styled(
+                format!("{:<9}", "Loop"),
+                label_style(InstrumentField::LoopMode),
+            ),
             Span::raw(" "),
-            Span::styled(format!("{:<3}", loop_mode_str), field_style(InstrumentField::LoopMode)),
+            Span::styled(
+                format!("{:<3}", loop_mode_str),
+                field_style(InstrumentField::LoopMode),
+            ),
             Span::styled("  Srt:", dim),
-            Span::styled(format!("{}", loop_start_val), field_style(InstrumentField::LoopStart)),
+            Span::styled(
+                format!("{}", loop_start_val),
+                field_style(InstrumentField::LoopStart),
+            ),
             Span::styled("  End:", dim),
-            Span::styled(format!("{}", loop_end_val), field_style(InstrumentField::LoopEnd)),
+            Span::styled(
+                format!("{}", loop_end_val),
+                field_style(InstrumentField::LoopEnd),
+            ),
         ],
     );
 
@@ -589,17 +644,25 @@ pub fn render_instrument_editor(
         let note_min_str = (|| {
             let pitch = Pitch::from_semitone(kz.note_min % 12)?;
             Some(Note::simple(pitch, kz.note_min / 12).display_str())
-        })().unwrap_or_else(|| "---".to_string());
+        })()
+        .unwrap_or_else(|| "---".to_string());
         let note_max_str = (|| {
             let pitch = Pitch::from_semitone(kz.note_max % 12)?;
             Some(Note::simple(pitch, kz.note_max / 12).display_str())
-        })().unwrap_or_else(|| "---".to_string());
-        format!("[{}] {}-{} vel:{}-{} smp:{}", kz_idx, note_min_str, note_max_str, kz.velocity_min, kz.velocity_max, kz.sample_index)
+        })()
+        .unwrap_or_else(|| "---".to_string());
+        format!(
+            "[{}] {}-{} vel:{}-{} smp:{}",
+            kz_idx, note_min_str, note_max_str, kz.velocity_min, kz.velocity_max, kz.sample_index
+        )
     } else {
         format!("{} zone(s)  +/-: select", keyzone_count)
     };
     let row4 = Line::from(vec![
-        Span::styled(format!("{:<9}", "Keyzones"), label_style(InstrumentField::KeyzoneList)),
+        Span::styled(
+            format!("{:<9}", "Keyzones"),
+            label_style(InstrumentField::KeyzoneList),
+        ),
         Span::raw(" "),
         Span::styled(kz_summary, field_style(InstrumentField::KeyzoneList)),
     ]);
@@ -624,12 +687,16 @@ pub fn render_instrument_editor(
 
     // ── Loop start/end detail rows if those fields are active ─────────
     if active(InstrumentField::LoopStart) || active(InstrumentField::LoopEnd) {
-        lines.push(Line::from(vec![
-            Span::styled(format!("  Srt: {:>6} ({:.2}s)   End: {:>6} ({:.2}s)",
-                loop_start_val, loop_start_val as f32 / sample_rate as f32,
-                loop_end_val, loop_end_val as f32 / sample_rate as f32,
-            ), dim),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            format!(
+                "  Srt: {:>6} ({:.2}s)   End: {:>6} ({:.2}s)",
+                loop_start_val,
+                loop_start_val as f32 / sample_rate as f32,
+                loop_end_val,
+                loop_end_val as f32 / sample_rate as f32,
+            ),
+            dim,
+        )]));
     }
 
     // ── Hint bar ─────────────────────────────────────────────────────

@@ -2038,8 +2038,14 @@ fn test_volume_envelope_applied() {
     inst.volume_envelope = Some(Envelope {
         enabled: true,
         points: vec![
-            EnvelopePoint { frame: 0, value: 0.0 },
-            EnvelopePoint { frame: 32, value: 1.0 },
+            EnvelopePoint {
+                frame: 0,
+                value: 0.0,
+            },
+            EnvelopePoint {
+                frame: 32,
+                value: 1.0,
+            },
         ],
         sustain_enabled: true,
         sustain_start_point: 1,

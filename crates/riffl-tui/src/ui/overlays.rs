@@ -126,7 +126,11 @@ pub(super) fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect
 
     frame.render_widget(paragraph, inner_area);
 }
-pub(super) fn render_command_completions(frame: &mut Frame, footer_area: ratatui::layout::Rect, app: &App) {
+pub(super) fn render_command_completions(
+    frame: &mut Frame,
+    footer_area: ratatui::layout::Rect,
+    app: &App,
+) {
     let input = app.command_input.trim();
     let input_word = input.split_whitespace().next().unwrap_or(input);
 

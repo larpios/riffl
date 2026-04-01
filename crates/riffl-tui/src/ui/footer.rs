@@ -237,10 +237,7 @@ pub(super) fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app:
                 EffectMode::Amiga => ("FX:A", theme.warning_color()),
             };
             left_spans.push(Span::raw(" "));
-            left_spans.push(Span::styled(
-                fx_label,
-                Style::default().fg(fx_color),
-            ));
+            left_spans.push(Span::styled(fx_label, Style::default().fg(fx_color)));
         }
 
         // Effect Description
@@ -459,10 +456,7 @@ pub(super) fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app:
     ]);
 
     // ? help — always rightmost
-    right_spans.extend([
-        Span::styled("?", key_style),
-        Span::raw(" help "),
-    ]);
+    right_spans.extend([Span::styled("?", key_style), Span::raw(" help ")]);
 
     // ── COMPOSE: pad between left and right ─────────────────────────────────
     let left_width: usize = left_spans.iter().map(|s| s.content.len()).sum();

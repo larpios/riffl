@@ -570,9 +570,9 @@ impl ActionMetadata for Action {
                 ActionCategory::Project
             }
 
-            Action::ExecuteScript
-            | Action::ExecuteScriptOnSelection
-            | Action::OpenTemplates => ActionCategory::Editing,
+            Action::ExecuteScript | Action::ExecuteScriptOnSelection | Action::OpenTemplates => {
+                ActionCategory::Editing
+            }
 
             Action::EnterCommandMode
             | Action::Quit

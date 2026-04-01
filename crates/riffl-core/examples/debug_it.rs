@@ -1,5 +1,5 @@
-use std::fs;
 use riffl_core::format::it::import_it;
+use std::fs;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

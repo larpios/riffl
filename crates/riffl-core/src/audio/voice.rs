@@ -76,8 +76,8 @@ impl AdsrState {
             AdsrPhase::Release => {
                 let release_secs = adsr.release / 1000.0;
                 if release_secs > 0.0 {
-                    self.value =
-                        self.release_start_value * (1.0 - (self.phase_time / release_secs).min(1.0));
+                    self.value = self.release_start_value
+                        * (1.0 - (self.phase_time / release_secs).min(1.0));
                     self.phase_time += dt;
                     if self.phase_time >= release_secs {
                         self.phase = AdsrPhase::Done;
@@ -134,9 +134,15 @@ pub struct VoiceLfoState {
 impl VoiceLfoState {
     pub fn new(instrument: Option<&Instrument>) -> Self {
         Self {
-            volume: instrument.and_then(|i| i.volume_lfo.as_ref()).map_or(0.0, |l| l.phase),
-            panning: instrument.and_then(|i| i.panning_lfo.as_ref()).map_or(0.0, |l| l.phase),
-            pitch: instrument.and_then(|i| i.pitch_lfo.as_ref()).map_or(0.0, |l| l.phase),
+            volume: instrument
+                .and_then(|i| i.volume_lfo.as_ref())
+                .map_or(0.0, |l| l.phase),
+            panning: instrument
+                .and_then(|i| i.panning_lfo.as_ref())
+                .map_or(0.0, |l| l.phase),
+            pitch: instrument
+                .and_then(|i| i.pitch_lfo.as_ref())
+                .map_or(0.0, |l| l.phase),
         }
     }
 

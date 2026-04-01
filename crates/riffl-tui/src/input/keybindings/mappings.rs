@@ -1,6 +1,6 @@
+use super::action::Action;
 use crate::app::AppView;
 use crate::editor::EditorMode;
-use super::action::Action;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct KeyMapping {

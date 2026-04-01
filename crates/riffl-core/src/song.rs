@@ -202,7 +202,10 @@ impl Envelope {
                 // Find loop start point
                 if let Some(p_start) = self.points.iter().find(|p| p.frame == loop_start_frame) {
                     // Interpolate from end to start over the duration of this tick
-                    return (p_end.value + (p_start.value - p_end.value) * fraction, next_tick);
+                    return (
+                        p_end.value + (p_start.value - p_end.value) * fraction,
+                        next_tick,
+                    );
                 }
             }
         }

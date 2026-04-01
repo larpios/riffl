@@ -218,7 +218,11 @@ pub fn interpolate_vol(
         .map(|r| {
             let t = (r - start_row) as f64 / span;
             let vol = (start_vol as f64 + t * (end_vol as f64 - start_vol as f64)).round() as u8;
-            PatternCommand::SetVolume { row: r, channel, volume: vol }
+            PatternCommand::SetVolume {
+                row: r,
+                channel,
+                volume: vol,
+            }
         })
         .collect()
 }
@@ -449,7 +453,10 @@ mod tests {
         pattern.set_note(1, 0, Note::simple(Pitch::D, 4));
         // Only 1 note — no shuffle possible, no commands produced
         let cmds = shuffle(&pattern);
-        assert!(cmds.is_empty(), "Single-note channel should produce no commands");
+        assert!(
+            cmds.is_empty(),
+            "Single-note channel should produce no commands"
+        );
     }
 
     #[test]

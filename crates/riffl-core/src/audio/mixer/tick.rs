@@ -93,7 +93,11 @@ impl super::Mixer {
                 Some(NoteEvent::On(note)) => {
                     if !audible {
                         // Muted channel: stop any playing voice, don't start new one
-                        crate::log_debug!("mixer", "Clearing voice {} in tick because channel is not audible", ch);
+                        crate::log_debug!(
+                            "mixer",
+                            "Clearing voice {} in tick because channel is not audible",
+                            ch
+                        );
                         self.voices[ch] = None;
                         continue;
                     }
@@ -298,17 +302,18 @@ impl super::Mixer {
                             // Release the key: envelope continues past sustain,
                             // and sustain loop releases so the sample plays through.
                             voice.key_on = false;
-                            } else {
+                        } else {
                             crate::log_debug!("mixer", "Clearing voice {} in tick because of NoteOff with no envelope/sustain", ch);
                             self.voices[ch] = None;
-                            }
-                            }
-                            }
-                            Some(NoteEvent::Cut) => {
-                            // Hard-silence: kill voice immediately with no envelope release.
-                            crate::log_debug!("mixer", "Clearing voice {} in tick because of NoteCut", ch);
-                            self.voices[ch] = None;
-                            if let Some(s) = self.effect_processor.channel_state_mut(ch) {                        s.reset();
+                        }
+                    }
+                }
+                Some(NoteEvent::Cut) => {
+                    // Hard-silence: kill voice immediately with no envelope release.
+                    crate::log_debug!("mixer", "Clearing voice {} in tick because of NoteCut", ch);
+                    self.voices[ch] = None;
+                    if let Some(s) = self.effect_processor.channel_state_mut(ch) {
+                        s.reset();
                     }
                 }
                 None => {

@@ -129,32 +129,32 @@ impl Transport {
     /// that effects (like BPM changes) on intermediate rows are not skipped.
     pub fn advance_iter(&mut self, delta_time: f64) -> Vec<AdvanceResult> {
         let mut results = Vec::new();
-        
+
         // Use a small safety limit to prevent infinite loops if seconds_per_row is zero
         let mut iterations = 0;
         let max_iterations = 1000;
-        
+
         loop {
             // Only add the full delta to the accumulator on the first iteration
             let delta = if iterations == 0 { delta_time } else { 0.0 };
             let res = self.advance(delta);
-            
+
             if res == AdvanceResult::None {
                 break;
             }
-            
+
             results.push(res);
-            
+
             if res == AdvanceResult::Stopped {
                 break;
             }
-            
+
             iterations += 1;
             if iterations >= max_iterations {
                 break;
             }
         }
-        
+
         results
     }
 

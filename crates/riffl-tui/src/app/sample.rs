@@ -1,7 +1,7 @@
+use riffl_core::audio::{load_sample, ChipRenderData};
+use riffl_core::pattern::note::Pitch;
 use std::path::Path;
 use std::sync::Arc;
-use riffl_core::audio::{ChipRenderData, load_sample};
-use riffl_core::pattern::note::Pitch;
 
 impl super::App {
     pub fn load_selected_sample(&mut self) -> Result<usize, String> {
@@ -191,5 +191,4 @@ impl super::App {
 
         Ok(())
     }
-
 }

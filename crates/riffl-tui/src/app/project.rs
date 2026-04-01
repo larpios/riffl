@@ -2,13 +2,13 @@ use super::App;
 use crate::editor::Editor;
 use crate::ui::arrangement::ArrangementView;
 use crate::ui::modal::Modal;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use riffl_core::audio::load_sample;
 use riffl_core::audio::ChipRenderData;
 use riffl_core::audio::Sample;
-use riffl_core::audio::load_sample;
 use riffl_core::pattern::Pattern;
 use riffl_core::{export, project};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 impl App {
     /// Import a module file (.mod, .xm, .it), replacing the current song.

@@ -217,7 +217,13 @@ pub fn render_arrangement(
         let pattern = song.patterns.get(pattern_index);
         let num_rows = pattern.map_or(0, |p| p.num_rows());
         let pat_name = pattern
-            .and_then(|p| if p.name.is_empty() { None } else { Some(p.name.as_str()) })
+            .and_then(|p| {
+                if p.name.is_empty() {
+                    None
+                } else {
+                    Some(p.name.as_str())
+                }
+            })
             .unwrap_or("");
         let preview = if pat_name.is_empty() {
             pattern.map_or_else(|| "???".to_string(), pattern_preview)

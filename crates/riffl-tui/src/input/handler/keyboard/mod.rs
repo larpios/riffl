@@ -14,7 +14,9 @@ mod panels;
 use browsers::{handle_file_browser_key, handle_sample_browser_key};
 use code_editor::handle_code_editor_key;
 use export::{handle_export_dialog_key, hex_char_to_digit};
-use panels::{handle_envelope_editor_key, handle_instrument_editor_key, handle_waveform_editor_key};
+use panels::{
+    handle_envelope_editor_key, handle_instrument_editor_key, handle_waveform_editor_key,
+};
 
 pub fn handle_key_event(app: &mut App, key: KeyEvent) {
     // ':' always opens command mode — intercept before any panel/view handler.
@@ -111,10 +113,41 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
             KeyCode::Tab => {
                 let input = app.command_input.trim();
                 let candidates = [
-                    "adsr", "artist", "bpm", "clear", "dup", "e", "fill", "g", "goto", "interp",
-                    "interpolate", "len", "length", "load", "loop", "mode", "pname", "q", "q!",
-                    "quantize", "rename", "save", "speed", "step", "t", "tempo", "title", "tpl",
-                    "tr", "track", "transpose", "tutor", "volume", "w", "wq",
+                    "adsr",
+                    "artist",
+                    "bpm",
+                    "clear",
+                    "dup",
+                    "e",
+                    "fill",
+                    "g",
+                    "goto",
+                    "interp",
+                    "interpolate",
+                    "len",
+                    "length",
+                    "load",
+                    "loop",
+                    "mode",
+                    "pname",
+                    "q",
+                    "q!",
+                    "quantize",
+                    "rename",
+                    "save",
+                    "speed",
+                    "step",
+                    "t",
+                    "tempo",
+                    "title",
+                    "tpl",
+                    "tr",
+                    "track",
+                    "transpose",
+                    "tutor",
+                    "volume",
+                    "w",
+                    "wq",
                 ];
                 if let Some(match_idx) = candidates.iter().position(|c| c.starts_with(input)) {
                     app.command_input = candidates[match_idx].to_string();
@@ -346,7 +379,9 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
     let is_tab = key.code == crossterm::event::KeyCode::Tab;
     let is_backtab = key.code == crossterm::event::KeyCode::BackTab;
     if app.current_view == AppView::InstrumentList
-        && app.instrument_selection().map_or(false, |i| i < app.song.instruments.len())
+        && app
+            .instrument_selection()
+            .map_or(false, |i| i < app.song.instruments.len())
         && (is_tab || is_backtab)
     {
         if app.inst_editor.focused {

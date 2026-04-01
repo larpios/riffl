@@ -637,7 +637,10 @@ pub fn render_envelope_editor(
         title_spans.push(Span::styled(label, style));
     }
     if !state.focused {
-        title_spans.push(Span::styled(" Tab ", Style::default().fg(theme.text_dimmed)));
+        title_spans.push(Span::styled(
+            " Tab ",
+            Style::default().fg(theme.text_dimmed),
+        ));
     }
 
     let title_line = Line::from(title_spans);

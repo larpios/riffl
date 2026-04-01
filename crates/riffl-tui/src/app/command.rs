@@ -289,7 +289,12 @@ impl super::App {
                     parse(adsr_args[3]),
                 ) {
                     use riffl_core::song::Adsr;
-                    let adsr = Adsr::new(a.max(0.0), d.max(0.0), (s_pct / 100.0).clamp(0.0, 1.0), r.max(0.0));
+                    let adsr = Adsr::new(
+                        a.max(0.0),
+                        d.max(0.0),
+                        (s_pct / 100.0).clamp(0.0, 1.0),
+                        r.max(0.0),
+                    );
                     let idx = self.instrument_selection().unwrap_or(0);
                     if let Some(inst) = self.song.instruments.get_mut(idx) {
                         inst.volume_adsr = Some(adsr);
@@ -307,7 +312,13 @@ impl super::App {
                 let idx = self.instrument_selection().unwrap_or(0);
                 let info = if let Some(inst) = self.song.instruments.get(idx) {
                     if let Some(ref a) = inst.volume_adsr {
-                        format!("A:{} D:{} S:{:.0}% R:{}", a.attack as i32, a.decay as i32, a.sustain * 100.0, a.release as i32)
+                        format!(
+                            "A:{} D:{} S:{:.0}% R:{}",
+                            a.attack as i32,
+                            a.decay as i32,
+                            a.sustain * 100.0,
+                            a.release as i32
+                        )
                     } else {
                         "(none — using point envelope)".to_string()
                     }
@@ -316,7 +327,10 @@ impl super::App {
                 };
                 self.open_modal(Modal::info(
                     "ADSR Envelope".to_string(),
-                    format!("{}\nUsage: :adsr <attack_ms> <decay_ms> <sustain%> <release_ms>", info),
+                    format!(
+                        "{}\nUsage: :adsr <attack_ms> <decay_ms> <sustain%> <release_ms>",
+                        info
+                    ),
                 ));
             }
             return;
@@ -355,10 +369,7 @@ impl super::App {
                     };
                     self.open_modal(Modal::info(
                         "Effect Mode".to_string(),
-                        format!(
-                            "Current: {}\nUsage: :mode <native|compat|amiga>",
-                            current
-                        ),
+                        format!("Current: {}\nUsage: :mode <native|compat|amiga>", current),
                     ));
                 }
             }
@@ -382,10 +393,7 @@ impl super::App {
                     let channels = self.editor.pattern().num_channels();
                     self.open_modal(Modal::info(
                         "Track".to_string(),
-                        format!(
-                            "Channels: {}\nUsage: :track <add|del>",
-                            channels
-                        ),
+                        format!("Channels: {}\nUsage: :track <add|del>", channels),
                     ));
                 }
             }
@@ -395,13 +403,25 @@ impl super::App {
         // :pname <name> — rename the selected or currently-edited pattern
         if parts[0] == "pname" {
             let arr_pos = self.transport.arrangement_position();
-            let pat_idx = self.pattern_selection().unwrap_or_else(|| {
-                self.song.arrangement.get(arr_pos).copied().unwrap_or(0)
-            });
-            let name = parts.get(1).map(|s| s.trim().to_string()).unwrap_or_default();
+            let pat_idx = self
+                .pattern_selection()
+                .unwrap_or_else(|| self.song.arrangement.get(arr_pos).copied().unwrap_or(0));
+            let name = parts
+                .get(1)
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default();
             if name.is_empty() {
-                let current = self.song.patterns.get(pat_idx)
-                    .map(|p| if p.name.is_empty() { "(unnamed)".to_string() } else { p.name.clone() })
+                let current = self
+                    .song
+                    .patterns
+                    .get(pat_idx)
+                    .map(|p| {
+                        if p.name.is_empty() {
+                            "(unnamed)".to_string()
+                        } else {
+                            p.name.clone()
+                        }
+                    })
                     .unwrap_or_else(|| "(none)".to_string());
                 self.open_modal(Modal::info(
                     "Pattern Name".to_string(),
@@ -423,10 +443,20 @@ impl super::App {
 
         // :title <name> — set song title
         if parts[0] == "title" {
-            let name = parts.get(1).map(|s| s.trim().to_string()).unwrap_or_default();
+            let name = parts
+                .get(1)
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default();
             if name.is_empty() {
-                let current = if self.song.name.is_empty() { "(untitled)".to_string() } else { self.song.name.clone() };
-                self.open_modal(Modal::info("Song Title".to_string(), format!("Current: {}\nUsage: :title <name>", current)));
+                let current = if self.song.name.is_empty() {
+                    "(untitled)".to_string()
+                } else {
+                    self.song.name.clone()
+                };
+                self.open_modal(Modal::info(
+                    "Song Title".to_string(),
+                    format!("Current: {}\nUsage: :title <name>", current),
+                ));
             } else {
                 self.song.name = name;
                 self.mark_dirty();
@@ -436,10 +466,20 @@ impl super::App {
 
         // :artist <name> — set song artist
         if parts[0] == "artist" {
-            let name = parts.get(1).map(|s| s.trim().to_string()).unwrap_or_default();
+            let name = parts
+                .get(1)
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default();
             if name.is_empty() {
-                let current = if self.song.artist.is_empty() { "(none)".to_string() } else { self.song.artist.clone() };
-                self.open_modal(Modal::info("Artist".to_string(), format!("Current: {}\nUsage: :artist <name>", current)));
+                let current = if self.song.artist.is_empty() {
+                    "(none)".to_string()
+                } else {
+                    self.song.artist.clone()
+                };
+                self.open_modal(Modal::info(
+                    "Artist".to_string(),
+                    format!("Current: {}\nUsage: :artist <name>", current),
+                ));
             } else {
                 self.song.artist = name;
                 self.mark_dirty();
@@ -450,14 +490,17 @@ impl super::App {
         // :dup — duplicate current/selected pattern into a new pattern slot
         if parts[0] == "dup" {
             let arr_pos = self.transport.arrangement_position();
-            let pat_idx = self.pattern_selection().unwrap_or_else(|| {
-                self.song.arrangement.get(arr_pos).copied().unwrap_or(0)
-            });
+            let pat_idx = self
+                .pattern_selection()
+                .unwrap_or_else(|| self.song.arrangement.get(arr_pos).copied().unwrap_or(0));
             // Flush editor changes back to song before cloning
             self.flush_editor_pattern(arr_pos);
             if let Some(new_idx) = self.song.duplicate_pattern(pat_idx) {
                 // Name the clone after the original
-                let src_name = self.song.patterns.get(pat_idx)
+                let src_name = self
+                    .song
+                    .patterns
+                    .get(pat_idx)
                     .map(|p| p.name.clone())
                     .unwrap_or_default();
                 let clone_name = if src_name.is_empty() {
