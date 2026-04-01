@@ -235,15 +235,15 @@ pub fn render_arrangement(
 
         let style = if is_cursor && is_playback {
             Style::default()
-                .fg(Color::Black)
-                .bg(Color::LightGreen)
+                .fg(theme.cursor_fg)
+                .bg(theme.status_info)
                 .add_modifier(Modifier::BOLD)
         } else if is_cursor {
             theme.highlight_style()
         } else if is_playback {
             Style::default()
-                .fg(Color::Black)
-                .bg(Color::Green)
+                .fg(theme.cursor_fg)
+                .bg(theme.status_success)
                 .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(theme.text)

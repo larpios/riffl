@@ -354,6 +354,7 @@ impl App {
                 }
                 TransportCommand::SetTpl(tpl) => {
                     self.transport.set_tpl(tpl);
+                    self.song.tpl = tpl;
                     if let Ok(mut mixer) = self.mixer.lock() {
                         mixer.set_tpl(tpl);
                     }

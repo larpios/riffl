@@ -5,7 +5,7 @@ edition = "2021"
 license-file = "../../LICENSE"
 
 [dependencies]
-riffl_core = { package = "riffl-core", path = "../riffl-core", features = ["adlib"] }
+riffl_core = { package = "riffl-core", path = "../riffl-core", version ="0.1.0", features = ["adlib"] }
 ratatui = "0.30"
 crossterm = "0.28"
 anyhow = "1.0"

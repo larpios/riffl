@@ -122,6 +122,42 @@ impl Transport {
         }
     }
 
+    /// Advance the transport by the given delta time, returning all row changes that occurred.
+    ///
+    /// This is a wrapper around `advance()` that handles multiple row increments
+    /// if the delta time is large enough to span more than one row. This ensures
+    /// that effects (like BPM changes) on intermediate rows are not skipped.
+    pub fn advance_iter(&mut self, delta_time: f64) -> Vec<AdvanceResult> {
+        let mut results = Vec::new();
+        
+        // Use a small safety limit to prevent infinite loops if seconds_per_row is zero
+        let mut iterations = 0;
+        let max_iterations = 1000;
+        
+        loop {
+            // Only add the full delta to the accumulator on the first iteration
+            let delta = if iterations == 0 { delta_time } else { 0.0 };
+            let res = self.advance(delta);
+            
+            if res == AdvanceResult::None {
+                break;
+            }
+            
+            results.push(res);
+            
+            if res == AdvanceResult::Stopped {
+                break;
+            }
+            
+            iterations += 1;
+            if iterations >= max_iterations {
+                break;
+            }
+        }
+        
+        results
+    }
+
     /// Advance the transport by the given delta time in seconds.
     ///
     /// Returns an `AdvanceResult` describing what happened:

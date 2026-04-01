@@ -456,10 +456,10 @@ fn highlight_line(line: &str) -> Vec<HighlightSpan> {
 fn token_style(kind: TokenKind, theme: &Theme) -> Style {
     match kind {
         TokenKind::Keyword => Style::default()
-            .fg(Color::Magenta)
+            .fg(theme.vol_color)
             .add_modifier(Modifier::BOLD),
-        TokenKind::String => Style::default().fg(Color::Green),
-        TokenKind::Number => Style::default().fg(Color::LightYellow),
+        TokenKind::String => Style::default().fg(theme.status_success),
+        TokenKind::Number => Style::default().fg(theme.inst_color),
         TokenKind::Comment => Style::default()
             .fg(theme.text_dimmed)
             .add_modifier(Modifier::ITALIC),
@@ -513,21 +513,21 @@ fn render_editor_panel(frame: &mut Frame, area: Rect, editor: &CodeEditor, theme
         ModeKind::Normal => (
             " NORMAL ",
             Style::default()
-                .fg(Color::Black)
+                .fg(theme.cursor_fg)
                 .bg(theme.primary)
                 .add_modifier(Modifier::BOLD),
         ),
         ModeKind::Insert => (
             " INSERT ",
             Style::default()
-                .fg(Color::Black)
+                .fg(theme.cursor_fg)
                 .bg(theme.warning_color())
                 .add_modifier(Modifier::BOLD),
         ),
         ModeKind::Visual => (
             " VISUAL ",
             Style::default()
-                .fg(Color::Black)
+                .fg(theme.cursor_fg)
                 .bg(theme.secondary)
                 .add_modifier(Modifier::BOLD),
         ),
@@ -611,8 +611,8 @@ fn render_editor_panel(frame: &mut Frame, area: Rect, editor: &CodeEditor, theme
                         spans.push(Span::styled(
                             ch.to_string(),
                             Style::default()
-                                .fg(Color::Black)
-                                .bg(Color::LightYellow)
+                                .fg(theme.cursor_fg)
+                                .bg(theme.cursor_normal_bg)
                                 .add_modifier(Modifier::BOLD),
                         ));
                     } else {
@@ -625,7 +625,7 @@ fn render_editor_panel(frame: &mut Frame, area: Rect, editor: &CodeEditor, theme
             if editor.cursor_col >= source_line.len() {
                 spans.push(Span::styled(
                     " ",
-                    Style::default().fg(Color::Black).bg(Color::LightYellow),
+                    Style::default().fg(theme.cursor_fg).bg(theme.cursor_normal_bg),
                 ));
             }
         } else {
@@ -699,7 +699,7 @@ fn render_template_menu(frame: &mut Frame, area: Rect, editor: &CodeEditor, them
     // Clear background
     let clear = Paragraph::new("")
         .block(Block::default().borders(Borders::NONE))
-        .style(Style::default().bg(Color::Black));
+        .style(Style::default().bg(theme.bg_surface));
     frame.render_widget(clear, menu_area);
 
     let block = Block::default()
@@ -717,14 +717,14 @@ fn render_template_menu(frame: &mut Frame, area: Rect, editor: &CodeEditor, them
         let is_selected = i == editor.template_cursor;
         let name_style = if is_selected {
             Style::default()
-                .fg(Color::Black)
+                .fg(theme.cursor_fg)
                 .bg(theme.primary)
                 .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(theme.text).add_modifier(Modifier::BOLD)
         };
         let desc_style = if is_selected {
-            Style::default().fg(Color::Black).bg(theme.primary)
+            Style::default().fg(theme.cursor_fg).bg(theme.primary)
         } else {
             Style::default().fg(theme.text_dimmed)
         };

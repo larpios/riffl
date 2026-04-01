@@ -49,9 +49,10 @@ pub(super) fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app:
         format!("{} — {}{}", app.song.artist, app.song.name, if dirty_marker.is_empty() { "" } else { " *" })
     };
     let title = format!(
-        " {} | BPM: {:.0} | {} {}{} [{}] ",
+        " {} | BPM: {:.0} | TPL: {} | {} {}{} [{}] ",
         song_label,
         app.transport.bpm(),
+        app.transport.tpl(),
         play_icon,
         play_status,
         loop_indicator,
@@ -79,6 +80,11 @@ pub(super) fn render_header(frame: &mut Frame, area: ratatui::layout::Rect, app:
         Span::raw("  "),
         Span::styled(
             format!("BPM: {:.0}", app.transport.bpm()),
+            Style::default().fg(theme.text),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            format!("TPL: {}", app.transport.tpl()),
             Style::default().fg(theme.text),
         ),
         Span::raw("  "),

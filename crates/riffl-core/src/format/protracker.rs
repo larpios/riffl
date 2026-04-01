@@ -566,7 +566,7 @@ fn detect_channels(tag: &[u8; 4]) -> usize {
         b"M.K." | b"M!K!" | b"FLT4" | b"4CHN" | b"4FLT" => 4,
         b"2CHN" => 2,
         b"6CHN" | b"6FLT" => 6,
-        b"8CHN" | b"8FLT" | b"OCTA" | b"CD81" => 8,
+        b"8CHN" | b"8FLT" | b"FLT8" | b"OCTA" | b"CD81" => 8,
         _ => {
             // Try "NNch" style tag (e.g. b"10ch", b"16ch")
             if tag[2] == b'c' && tag[3] == b'h' && tag[0].is_ascii_digit() {

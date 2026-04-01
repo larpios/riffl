@@ -70,8 +70,10 @@ impl super::Mixer {
             }
 
             for cmd in &cmds {
-                if let TransportCommand::SetTpl(tpl) = cmd {
-                    self.set_tpl(*tpl);
+                match cmd {
+                    TransportCommand::SetTpl(tpl) => self.set_tpl(*tpl),
+                    TransportCommand::SetBpm(bpm) => self.update_tempo(*bpm),
+                    _ => {}
                 }
             }
 

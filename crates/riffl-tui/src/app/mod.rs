@@ -479,10 +479,11 @@ impl App {
             .set_arrangement_length(self.song.arrangement.len());
 
         let was_playing = self.transport.is_playing();
-        let old_arrangement_pos = self.transport.arrangement_position();
-        let advance_result = self.transport.advance(delta);
+        let mut current_arrangement_pos = self.transport.arrangement_position();
+        let advance_results = self.transport.advance_iter(delta);
 
-        match advance_result {
+        for res in advance_results {
+            match res {
             AdvanceResult::Row(row) => {
                 if self.follow_mode {
                     self.editor.go_to_row(row);
@@ -519,7 +520,7 @@ impl App {
                 row,
             } => {
                 // Reset BPM and TPL to initial values if we are looping back to the very start of the song
-                if arrangement_pos == 0 && row == 0 && old_arrangement_pos >= self.song.arrangement.len().saturating_sub(1) {
+                if arrangement_pos == 0 && row == 0 && current_arrangement_pos >= self.song.arrangement.len().saturating_sub(1) {
                     self.transport.set_bpm(self.initial_bpm);
                     self.transport.set_tpl(self.initial_tpl);
                     self.song.bpm = self.initial_bpm;
@@ -532,8 +533,9 @@ impl App {
 
                 let saved_cursor_row = self.editor.cursor_row();
                 let saved_cursor_channel = self.editor.cursor_channel();
-                self.flush_editor_pattern(old_arrangement_pos);
+                self.flush_editor_pattern(current_arrangement_pos);
                 self.load_arrangement_pattern(arrangement_pos);
+                current_arrangement_pos = arrangement_pos;
                 if self.follow_mode {
                     self.editor.go_to_row(row);
                 } else {
@@ -581,6 +583,7 @@ impl App {
                 }
             }
         }
+    }
 
         // Handle auto-stop (loop disabled, reached end)
         if was_playing && self.transport.is_stopped() {

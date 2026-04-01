@@ -232,7 +232,7 @@ fn render_view_tabs(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
             spans.push(Span::styled(
                 format!(" {} ", label),
                 Style::default()
-                    .fg(ratatui::style::Color::Black)
+                    .fg(theme.cursor_fg)
                     .bg(theme.primary)
                     .add_modifier(Modifier::BOLD),
             ));

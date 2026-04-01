@@ -188,7 +188,7 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
 
         let header_style = if is_soloed {
             Style::default()
-                .fg(Color::Black)
+                .fg(theme.cursor_fg)
                 .bg(theme.warning_color())
                 .add_modifier(Modifier::BOLD)
         } else if is_muted {
@@ -225,7 +225,7 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
             (
                 "▶ ",
                 Style::default()
-                    .fg(Color::Black)
+                    .fg(theme.cursor_fg)
                     .bg(theme.success_color())
                     .add_modifier(Modifier::BOLD),
             )

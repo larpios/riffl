@@ -24,7 +24,7 @@ pub(super) fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app:
     if app.len_prompt_mode {
         let input_style = Style::default().fg(theme.text);
         let label_style = Style::default()
-            .fg(Color::Black)
+            .fg(theme.cursor_fg)
             .bg(theme.info_color())
             .add_modifier(Modifier::BOLD);
         let line = Line::from(vec![
@@ -45,7 +45,7 @@ pub(super) fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app:
     if app.bpm_prompt_mode {
         let bpm_style = Style::default().fg(theme.text);
         let label_style = Style::default()
-            .fg(Color::Black)
+            .fg(theme.cursor_fg)
             .bg(theme.warning_color())
             .add_modifier(Modifier::BOLD);
         let line = Line::from(vec![
@@ -93,7 +93,7 @@ pub(super) fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app:
         (mode.label(), theme.primary)
     };
     let mode_style = Style::default()
-        .fg(Color::Black)
+        .fg(theme.cursor_fg)
         .bg(mode_bg)
         .add_modifier(Modifier::BOLD);
 
@@ -300,7 +300,7 @@ pub(super) fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app:
             Span::styled(
                 " FOL ",
                 Style::default()
-                    .fg(Color::Black)
+                    .fg(theme.cursor_fg)
                     .bg(theme.success_color())
                     .add_modifier(Modifier::BOLD),
             ),
@@ -314,7 +314,7 @@ pub(super) fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app:
             Span::styled(
                 " DRW ",
                 Style::default()
-                    .fg(Color::Black)
+                    .fg(theme.cursor_fg)
                     .bg(theme.success_color())
                     .add_modifier(Modifier::BOLD),
             ),
@@ -339,7 +339,7 @@ pub(super) fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app:
             Span::styled(
                 label,
                 Style::default()
-                    .fg(Color::Black)
+                    .fg(theme.cursor_fg)
                     .bg(bg)
                     .add_modifier(Modifier::BOLD),
             ),
