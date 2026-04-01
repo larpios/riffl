@@ -63,6 +63,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             KeyCode::Char('l') => Action::ToggleLiveMode,
             KeyCode::Char('b') => Action::OpenBpmPrompt,
             KeyCode::Char('p') => Action::OpenLenPrompt,
+            KeyCode::Char('m') => Action::ToggleMetronome,
             KeyCode::Enter => Action::ExecuteScript,
             KeyCode::Delete => Action::DeleteRow,
             KeyCode::Left => Action::ResetHorizontalView,

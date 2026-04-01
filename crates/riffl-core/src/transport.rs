@@ -86,6 +86,13 @@ pub struct Transport {
 
     /// Whether a jump was just applied, so the next advance should not increment.
     just_jumped: bool,
+
+    /// Number of count-in bars (0 = disabled).
+    pub count_in_bars: u8,
+    /// Remaining count-in rows (counts down during count-in).
+    pub count_in_remaining: u32,
+    /// Whether count-in is currently active (counting in before playback).
+    pub count_in_active: bool,
 }
 
 /// Minimum allowed BPM
@@ -119,6 +126,9 @@ impl Transport {
             pattern_loop_count: 0,
             pattern_delay: 0,
             just_jumped: false,
+            count_in_bars: 0,
+            count_in_remaining: 0,
+            count_in_active: false,
         }
     }
 
@@ -191,6 +201,24 @@ impl Transport {
             }
 
             self.tick_accumulator -= seconds_per_row;
+
+            // Handle count-in: advance count-in rows, resetting real row when done
+            if self.count_in_active {
+                if self.count_in_remaining > 0 {
+                    self.count_in_remaining -= 1;
+                }
+                if self.count_in_remaining == 0 {
+                    self.count_in_active = false;
+                    self.current_row = 0;
+                    return AdvanceResult::Row(0);
+                } else {
+                    // Still counting in — advance but return a synthetic row 0 for metronome
+                    // We use current_row to track the count-in beat position (cycles mod lpb)
+                    let lpb = self.lpb as usize;
+                    let beat_row = (self.count_in_remaining as usize) % lpb;
+                    return AdvanceResult::Row(beat_row);
+                }
+            }
 
             let next_row = self.current_row + 1;
 
@@ -267,6 +295,31 @@ impl Transport {
         }
 
         AdvanceResult::None
+    }
+
+    /// Start playback with a count-in. The metronome will click for `count_in_bars` bars
+    /// before playback begins.
+    pub fn play_with_count_in(&mut self, bars: u8) {
+        if bars == 0 {
+            self.play();
+            return;
+        }
+        self.count_in_bars = bars;
+        let rows_per_bar = self.lpb;
+        self.count_in_remaining = (bars as u32) * rows_per_bar;
+        self.count_in_active = true;
+        self.current_row = 0;
+        self.tick_accumulator = 0.0;
+        self.pattern_loop_row = None;
+        self.pattern_loop_count = 0;
+        self.pattern_delay = 0;
+        self.just_jumped = false;
+        self.state = TransportState::Playing;
+    }
+
+    /// Returns true if count-in is currently running (notes should be suppressed).
+    pub fn is_counting_in(&self) -> bool {
+        self.count_in_active
     }
 
     /// Start playback from the current position (or from the beginning if stopped)

@@ -35,10 +35,20 @@ impl App {
                     self.chase_notes();
                 }
 
-                self.transport.play();
-                // Trigger first row
-                if let Ok(mut mixer) = self.mixer.lock() {
-                    mixer.tick(self.transport.current_row(), self.editor.pattern());
+                if self.transport.count_in_bars > 0 {
+                    let bars = self.transport.count_in_bars;
+                    self.transport.play_with_count_in(bars);
+                    // Enable metronome during count-in
+                    if let Ok(mut mixer) = self.mixer.lock() {
+                        mixer.metronome_enabled = true;
+                        mixer.trigger_metronome_click(true); // first click is downbeat
+                    }
+                } else {
+                    self.transport.play();
+                    // Trigger first row
+                    if let Ok(mut mixer) = self.mixer.lock() {
+                        mixer.tick(self.transport.current_row(), self.editor.pattern());
+                    }
                 }
                 if let Some(ref mut engine) = self.audio_engine {
                     let _ = engine.start();

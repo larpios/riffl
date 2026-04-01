@@ -330,6 +330,7 @@ impl App {
             m.set_effect_mode(song.effect_mode);
             m.set_format_is_s3m(song.format_is_s3m);
             m.set_slide_mode(song.slide_mode);
+            m.set_metronome_lpb(song.lpb);
         }
 
         let mut editor = Editor::new(pattern.clone());
@@ -490,35 +491,45 @@ impl App {
         for res in advance_results {
             match res {
                 AdvanceResult::Row(row) => {
-                    if self.follow_mode {
-                        self.editor.go_to_row(row);
-                    }
-                    if row == 0 && self.live_mode {
-                        self.execute_script(&[]);
-                    }
-                    let transport_cmds = if let Ok(mut mixer) = self.mixer.lock() {
-                        mixer.tick(row, self.editor.pattern())
+                    if self.transport.is_counting_in() {
+                        // Count-in: trigger metronome click on beat boundaries but skip note playback
+                        if let Ok(mut mixer) = self.mixer.lock() {
+                            let lpb = self.song.lpb as usize;
+                            if row % lpb == 0 {
+                                mixer.trigger_metronome_click(row == 0);
+                            }
+                        }
                     } else {
-                        Vec::new()
-                    };
-                    if let Ok(mut gm) = self.glicol_mixer.lock() {
-                        // Primitive Glicol trigger: if there's a note on channel 0, play it
-                        if let Some(r) = self.editor.pattern().get_row(row) {
-                            if let Some(cell) = r.first() {
-                                use riffl_core::pattern::note::NoteEvent;
-                                match &cell.note {
-                                    Some(NoteEvent::On(note)) => {
-                                        gm.note_on(0, note.frequency() as f32);
+                        if self.follow_mode {
+                            self.editor.go_to_row(row);
+                        }
+                        if row == 0 && self.live_mode {
+                            self.execute_script(&[]);
+                        }
+                        let transport_cmds = if let Ok(mut mixer) = self.mixer.lock() {
+                            mixer.tick(row, self.editor.pattern())
+                        } else {
+                            Vec::new()
+                        };
+                        if let Ok(mut gm) = self.glicol_mixer.lock() {
+                            // Primitive Glicol trigger: if there's a note on channel 0, play it
+                            if let Some(r) = self.editor.pattern().get_row(row) {
+                                if let Some(cell) = r.first() {
+                                    use riffl_core::pattern::note::NoteEvent;
+                                    match &cell.note {
+                                        Some(NoteEvent::On(note)) => {
+                                            gm.note_on(0, note.frequency() as f32);
+                                        }
+                                        Some(NoteEvent::Off) => {
+                                            gm.note_off(0);
+                                        }
+                                        _ => {}
                                     }
-                                    Some(NoteEvent::Off) => {
-                                        gm.note_off(0);
-                                    }
-                                    _ => {}
                                 }
                             }
                         }
+                        self.apply_effect_transport_commands(transport_cmds);
                     }
-                    self.apply_effect_transport_commands(transport_cmds);
                 }
                 AdvanceResult::PatternChange {
                     arrangement_pos,
@@ -682,6 +693,49 @@ impl App {
     /// Get system CPU and memory usage as (cpu_percent, memory_percent).
     pub fn system_stats(&self) -> Option<(f32, f32)> {
         Some((self.cached_cpu_percent, self.cached_mem_percent))
+    }
+
+    /// Returns whether the metronome is currently enabled.
+    pub fn metronome_enabled(&self) -> bool {
+        self.mixer.lock().map(|m| m.metronome_enabled).unwrap_or(false)
+    }
+
+    /// Toggle the metronome on/off.
+    pub fn toggle_metronome(&mut self) {
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.metronome_enabled = !mixer.metronome_enabled;
+        }
+    }
+
+    /// Set the metronome enabled state.
+    pub fn set_metronome_enabled(&mut self, enabled: bool) {
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.metronome_enabled = enabled;
+        }
+    }
+
+    /// Get the metronome volume (0.0 to 1.0).
+    pub fn metronome_volume(&self) -> f32 {
+        self.mixer.lock().map(|m| m.metronome_volume).unwrap_or(0.5)
+    }
+
+    /// Set the metronome volume (0.0 to 1.0).
+    pub fn set_metronome_volume(&mut self, volume: f32) {
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.metronome_volume = volume.clamp(0.0, 1.0);
+        }
+    }
+
+    /// Set a per-channel filter.
+    pub fn set_channel_filter(
+        &mut self,
+        channel: usize,
+        cutoff_hz: Option<f32>,
+        filter_type: riffl_core::pattern::track::FilterType,
+    ) {
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.set_channel_filter(channel, cutoff_hz, filter_type);
+        }
     }
 
     /// Refresh system stats (called periodically from the update loop).

@@ -278,6 +278,7 @@ pub(super) fn handle_action(app: &mut App, action: Action, key: KeyEvent) {
         Action::BpmUpLarge => app.adjust_bpm(10.0),
         Action::BpmDownLarge => app.adjust_bpm(-10.0),
         Action::ToggleLoop => app.toggle_loop(),
+        Action::ToggleMetronome => app.toggle_metronome(),
         Action::TogglePlaybackMode => app.toggle_playback_mode(),
         Action::JumpNextPattern => app.jump_next_pattern(),
         Action::JumpPrevPattern => app.jump_prev_pattern(),

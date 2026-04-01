@@ -21,6 +21,8 @@ impl super::Mixer {
             let effect_processor = &mut self.effect_processor;
             let voices = &mut self.voices;
             let samples = &self.samples;
+            let channel_filter_state = &mut self.channel_filter_state;
+            let channel_filter_params = &self.channel_filter_params;
 
             // Clear the buffer first
             for sample in output.iter_mut() {
@@ -499,20 +501,54 @@ impl super::Mixer {
                         * global_vol_mult
                         * voice.fadeout_multiplier;
 
-                    output[out_idx] += post_l;
-                    output[out_idx + 1] += post_r;
+                    // Per-channel 1-pole IIR filter
+                    let (filtered_l, filtered_r) = if let Some((cutoff_hz, filter_type)) =
+                        channel_filter_params.get(ch).and_then(|p| *p)
+                    {
+                        if ch < channel_filter_state.len() {
+                            let sr = output_sample_rate as f32;
+                            let (state_l, state_r) = &mut channel_filter_state[ch];
+                            let omega = (std::f32::consts::TAU * cutoff_hz / sr).min(1.0);
+                            use crate::pattern::track::FilterType;
+                            match filter_type {
+                                FilterType::LowPass => {
+                                    *state_l = *state_l + omega * (post_l - *state_l);
+                                    *state_r = *state_r + omega * (post_r - *state_r);
+                                    (*state_l, *state_r)
+                                }
+                                FilterType::HighPass => {
+                                    *state_l = *state_l + omega * (post_l - *state_l);
+                                    *state_r = *state_r + omega * (post_r - *state_r);
+                                    (post_l - *state_l, post_r - *state_r)
+                                }
+                            }
+                        } else {
+                            (post_l, post_r)
+                        }
+                    } else {
+                        (post_l, post_r)
+                    };
+
+                    output[out_idx] += filtered_l;
+                    output[out_idx + 1] += filtered_r;
 
                     self.visualizer
-                        .update_channel_levels(ch, post_l.abs(), post_r.abs());
+                        .update_channel_levels(ch, filtered_l.abs(), filtered_r.abs());
 
                     // Write mono mix to oscilloscope ring buffer
                     self.visualizer
-                        .record_oscilloscope_sample(ch, (post_l + post_r) * 0.5);
+                        .record_oscilloscope_sample(ch, (filtered_l + filtered_r) * 0.5);
 
                     for bus_idx in 0..num_buses {
                         let send_level = strip.next_send_level(bus_idx);
                         if send_level > 0.0001 {
-                            bus_system.accumulate(bus_idx, frame, post_l, post_r, send_level);
+                            bus_system.accumulate(
+                                bus_idx,
+                                frame,
+                                filtered_l,
+                                filtered_r,
+                                send_level,
+                            );
                         }
                     }
 
@@ -526,6 +562,37 @@ impl super::Mixer {
             effect_processor.advance_global_frame();
             bus_system.process_and_mix(output, num_frames);
         } // end main voice block — field borrows released
+
+        // Metronome click: synthesize a short exponential-decay sine click
+        if self.metronome_enabled && self.metronome_click_frames > 0 {
+            let total = self.metronome_click_total as f32;
+            // Downbeat: 1200Hz; regular beat: 800Hz
+            let freq = if self.metronome_is_downbeat {
+                1200.0_f32
+            } else {
+                800.0_f32
+            };
+            let sr = self.output_sample_rate as f32;
+            let vol = self.metronome_volume;
+
+            for frame in 0..num_frames {
+                if self.metronome_click_frames == 0 {
+                    break;
+                }
+                let elapsed = total - self.metronome_click_frames as f32;
+                // Exponential decay envelope
+                let envelope = (-elapsed / (total * 0.3)).exp();
+                let sample =
+                    (self.metronome_phase * std::f32::consts::TAU).sin() * envelope * vol;
+                output[frame * 2] += sample;
+                output[frame * 2 + 1] += sample;
+                self.metronome_phase += freq / sr;
+                if self.metronome_phase >= 1.0 {
+                    self.metronome_phase -= 1.0;
+                }
+                self.metronome_click_frames -= 1;
+            }
+        }
 
         // Preview voice: renders a one-shot sample directly into output,
         // bypassing channel strips (no mute/solo/pan, preview volume = 0.7).

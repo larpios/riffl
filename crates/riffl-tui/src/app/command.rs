@@ -794,6 +794,133 @@ impl super::App {
             return;
         }
 
+        // :countin N — set count-in bars (0 to disable, N bars before playback)
+        if parts[0] == "countin" || parts[0] == "count-in" {
+            if let Some(bars) = parts.get(1).and_then(|s| s.trim().parse::<u8>().ok()) {
+                self.transport.count_in_bars = bars;
+                if bars == 0 {
+                    self.open_modal(Modal::info(
+                        "Count-in".to_string(),
+                        "Count-in disabled.".to_string(),
+                    ));
+                } else {
+                    self.open_modal(Modal::info(
+                        "Count-in".to_string(),
+                        format!(
+                            "Count-in set to {} bar{}. Start playback to activate.",
+                            bars,
+                            if bars == 1 { "" } else { "s" }
+                        ),
+                    ));
+                }
+            } else {
+                let current = self.transport.count_in_bars;
+                self.open_modal(Modal::info(
+                    "Count-in".to_string(),
+                    format!(
+                        "Current: {} bar{}\nUsage: :countin <0-8>",
+                        current,
+                        if current == 1 { "" } else { "s" }
+                    ),
+                ));
+            }
+            return;
+        }
+
+        // :metronome on|off|toggle|vol <n> — control metronome
+        if parts[0] == "metronome" || parts[0] == "metro" {
+            let sub = parts.get(1).map(|s| s.trim()).unwrap_or("toggle");
+            match sub {
+                "on" => self.set_metronome_enabled(true),
+                "off" => self.set_metronome_enabled(false),
+                "toggle" => self.toggle_metronome(),
+                s if s.starts_with("vol")
+                    || s.chars().next().map_or(false, |c| c.is_ascii_digit()) =>
+                {
+                    let vol_str = if s.starts_with("vol") {
+                        parts.get(1).and_then(|t| t.split_whitespace().nth(1)).unwrap_or("")
+                    } else {
+                        s
+                    };
+                    if let Ok(vol) = vol_str.trim().parse::<f32>() {
+                        let clamped = (vol / 100.0).clamp(0.0, 1.0);
+                        self.set_metronome_volume(clamped);
+                    }
+                }
+                _ => {
+                    let enabled = self.metronome_enabled();
+                    let vol = self.metronome_volume();
+                    self.open_modal(Modal::info(
+                        "Metronome".to_string(),
+                        format!(
+                            "Status: {}\nVolume: {:.0}%\nUsage: :metronome <on|off|toggle|vol <0-100>>",
+                            if enabled { "ON" } else { "OFF" },
+                            vol * 100.0,
+                        ),
+                    ));
+                }
+            }
+            return;
+        }
+
+        // :filter [ch] <lpf|hpf|off> [cutoff_hz] — apply per-channel filter
+        if parts[0] == "filter" || parts[0] == "flt" {
+            let rest = parts.get(1).map(|s| s.trim()).unwrap_or("").to_string();
+            let tokens: Vec<&str> = rest.split_whitespace().collect();
+
+            // Parse optional channel number (1-based), filter type, cutoff
+            let (ch, type_token, cutoff_token) =
+                if tokens.first().and_then(|t| t.parse::<usize>().ok()).is_some() {
+                    let ch = tokens[0].parse::<usize>().unwrap_or(1).saturating_sub(1);
+                    (ch, tokens.get(1).copied().unwrap_or("off"), tokens.get(2).copied())
+                } else {
+                    (
+                        self.editor.cursor_channel(),
+                        tokens.first().copied().unwrap_or("off"),
+                        tokens.get(1).copied(),
+                    )
+                };
+
+            match type_token {
+                "off" | "bypass" | "none" => {
+                    self.set_channel_filter(ch, None, riffl_core::pattern::track::FilterType::LowPass);
+                    self.open_modal(Modal::info(
+                        "Filter".to_string(),
+                        format!("Channel {} filter disabled.", ch + 1),
+                    ));
+                }
+                t @ ("lpf" | "lowpass" | "hpf" | "highpass") => {
+                    let is_hpf = matches!(t, "hpf" | "highpass");
+                    let cutoff = cutoff_token
+                        .and_then(|s| s.parse::<f32>().ok())
+                        .unwrap_or(1000.0)
+                        .clamp(20.0, 20000.0);
+                    let ftype = if is_hpf {
+                        riffl_core::pattern::track::FilterType::HighPass
+                    } else {
+                        riffl_core::pattern::track::FilterType::LowPass
+                    };
+                    self.set_channel_filter(ch, Some(cutoff), ftype);
+                    self.open_modal(Modal::info(
+                        "Filter".to_string(),
+                        format!(
+                            "Channel {} {} @ {:.0}Hz",
+                            ch + 1,
+                            if is_hpf { "HPF" } else { "LPF" },
+                            cutoff
+                        ),
+                    ));
+                }
+                _ => {
+                    self.open_modal(Modal::error(
+                        "Filter".to_string(),
+                        "Usage: :filter [channel] <lpf|hpf|off> [cutoff_hz]\nExample: :filter lpf 800  :filter 3 hpf 200  :filter off".to_string(),
+                    ));
+                }
+            }
+            return;
+        }
+
         // :<number> — jump to specific row
         if let Ok(row) = cmd.parse::<usize>() {
             self.editor.go_to_row(row.saturating_sub(1));

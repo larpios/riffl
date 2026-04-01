@@ -291,6 +291,20 @@ pub(super) fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app:
     // ── RIGHT SECTION ───────────────────────────────────────────────────────
     let mut right_spans: Vec<Span> = Vec::new();
 
+    // Metronome indicator
+    if app.metronome_enabled() {
+        right_spans.extend([
+            Span::styled(
+                " METRO ",
+                Style::default()
+                    .fg(theme.cursor_fg)
+                    .bg(theme.info_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" "),
+        ]);
+    }
+
     // Follow mode indicator
     if app.follow_mode {
         right_spans.extend([

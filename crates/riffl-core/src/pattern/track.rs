@@ -5,6 +5,14 @@
 /// an optional instrument assignment.
 use serde::{Deserialize, Serialize};
 
+/// Filter type for per-channel IIR filtering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+pub enum FilterType {
+    #[default]
+    LowPass,
+    HighPass,
+}
+
 /// Default track volume (full volume).
 pub const DEFAULT_VOLUME: f32 = 1.0;
 

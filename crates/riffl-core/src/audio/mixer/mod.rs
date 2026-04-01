@@ -67,6 +67,24 @@ pub struct Mixer {
     pan_separation: u8,
     /// Panning law to use for rendering.
     panning_law: crate::song::PanningLaw,
+    /// Whether the metronome click is enabled.
+    pub metronome_enabled: bool,
+    /// Metronome volume multiplier (0.0 to 1.0).
+    pub metronome_volume: f32,
+    /// Current phase of the metronome click oscillator (0.0 to 1.0).
+    metronome_phase: f32,
+    /// Remaining frames for the current metronome click envelope.
+    metronome_click_frames: u32,
+    /// Total frames for the full click envelope.
+    metronome_click_total: u32,
+    /// Whether the current beat is a downbeat (beat 1) or a regular beat.
+    metronome_is_downbeat: bool,
+    /// Lines per beat (synced from transport).
+    pub metronome_lpb: u32,
+    /// Per-channel 1-pole IIR filter state (one value per channel for the filter memory).
+    channel_filter_state: Vec<(f32, f32)>, // (state_l, state_r)
+    /// Per-channel filter parameters: (cutoff_hz, filter_type, enabled).
+    channel_filter_params: Vec<Option<(f32, crate::pattern::track::FilterType)>>,
 }
 
 impl Mixer {
@@ -117,6 +135,15 @@ impl Mixer {
             bpm: 120.0,
             pan_separation: 128,
             panning_law: crate::song::PanningLaw::EqualPower,
+            metronome_enabled: false,
+            metronome_volume: 0.5,
+            metronome_phase: 0.0,
+            metronome_click_frames: 0,
+            metronome_click_total: 0,
+            metronome_is_downbeat: false,
+            metronome_lpb: 4,
+            channel_filter_state: vec![(0.0, 0.0); num_channels],
+            channel_filter_params: vec![None; num_channels],
         }
     }
 
@@ -145,6 +172,10 @@ impl Mixer {
 
         // Push the changes down to the effect processor as well
         self.effect_processor.resize_channels(num_channels);
+
+        // Resize filter state and params
+        self.channel_filter_state.resize(num_channels, (0.0, 0.0));
+        self.channel_filter_params.resize(num_channels, None);
     }
 
     /// Snap all channel strip pans to match the provided tracks immediately (no ramp).
@@ -188,5 +219,37 @@ impl Mixer {
     /// Set the global volume multiplier for the song.
     pub fn set_global_volume(&mut self, volume: f32) {
         self.effect_processor.global_volume = volume;
+    }
+
+    /// Trigger a metronome click at the start of the current row.
+    /// `is_downbeat` is true if this row is beat 1 (row 0 within the beat cycle).
+    pub fn trigger_metronome_click(&mut self, is_downbeat: bool) {
+        if !self.metronome_enabled {
+            return;
+        }
+        let click_duration_ms = 20.0_f32; // 20ms click
+        self.metronome_click_total =
+            (click_duration_ms / 1000.0 * self.output_sample_rate as f32) as u32;
+        self.metronome_click_frames = self.metronome_click_total;
+        self.metronome_phase = 0.0;
+        self.metronome_is_downbeat = is_downbeat;
+    }
+
+    /// Set the lines per beat for metronome beat detection.
+    pub fn set_metronome_lpb(&mut self, lpb: u32) {
+        self.metronome_lpb = lpb.max(1);
+    }
+
+    /// Set per-channel filter parameters. `cutoff_hz` of None disables the filter.
+    pub fn set_channel_filter(
+        &mut self,
+        channel: usize,
+        cutoff_hz: Option<f32>,
+        filter_type: crate::pattern::track::FilterType,
+    ) {
+        if channel >= self.channel_filter_params.len() {
+            return;
+        }
+        self.channel_filter_params[channel] = cutoff_hz.map(|hz| (hz, filter_type));
     }
 }

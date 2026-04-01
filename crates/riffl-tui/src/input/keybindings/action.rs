@@ -92,6 +92,7 @@ pub enum Action {
     BpmUpLarge,
     BpmDownLarge,
     ToggleLoop,
+    ToggleMetronome,
     TogglePlaybackMode,
     JumpNextPattern,
     JumpPrevPattern,
@@ -258,6 +259,7 @@ impl ActionMetadata for Action {
             Action::BpmUpLarge => "BPM Up Large",
             Action::BpmDownLarge => "BPM Down Large",
             Action::ToggleLoop => "Toggle Loop",
+            Action::ToggleMetronome => "Toggle Metronome",
             Action::TogglePlaybackMode => "Playback Mode",
             Action::JumpNextPattern => "Next Pattern",
             Action::JumpPrevPattern => "Prev Pattern",
@@ -392,6 +394,7 @@ impl ActionMetadata for Action {
             Action::BpmUpLarge => "Increase BPM by 10",
             Action::BpmDownLarge => "Decrease BPM by 10",
             Action::ToggleLoop => "Toggle playback looping",
+            Action::ToggleMetronome => "Toggle metronome click during playback",
             Action::TogglePlaybackMode => "Toggle song/pattern mode",
             Action::JumpNextPattern => "Jump to next pattern",
             Action::JumpPrevPattern => "Jump to previous pattern",
@@ -575,6 +578,7 @@ impl ActionMetadata for Action {
             | Action::BpmUpLarge
             | Action::BpmDownLarge
             | Action::ToggleLoop
+            | Action::ToggleMetronome
             | Action::TogglePlaybackMode
             | Action::JumpNextPattern
             | Action::JumpPrevPattern

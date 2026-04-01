@@ -46,6 +46,7 @@ impl App {
             mixer.set_slide_mode(self.song.slide_mode);
             mixer.set_pan_separation(self.song.pan_separation);
             mixer.set_panning_law(self.song.panning_law);
+            mixer.set_metronome_lpb(self.song.lpb);
         }
         self.sync_mixer_instruments();
         self.sync_mixer_tracks();
@@ -213,6 +214,7 @@ impl App {
                     mixer.set_slide_mode(self.song.slide_mode);
                     mixer.set_pan_separation(self.song.pan_separation);
                     mixer.set_panning_law(self.song.panning_law);
+                    mixer.set_metronome_lpb(self.song.lpb);
                 }
                 self.sync_mixer_instruments();
                 self.project_path = Some(path.to_path_buf());
