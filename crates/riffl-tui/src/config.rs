@@ -158,14 +158,9 @@ impl Config {
         ThemeKind::from_str(&self.theme).unwrap_or_default()
     }
 
-    /// Return the riffl config directory (`$XDG_CONFIG_HOME/riffl` or `~/.config/riffl`).
+    /// Return the application config directory (platform-aware).
     pub fn config_dir() -> std::path::PathBuf {
-        let base = if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-            std::path::PathBuf::from(xdg)
-        } else {
-            dirs_next().join(".config")
-        };
-        base.join("riffl")
+        get_config_dir()
     }
 
     /// Return the default samples directory (`~/.config/riffl/samples/`).
@@ -244,13 +239,7 @@ impl Config {
         if let Ok(p) = std::env::var("TRACKER_RS_CONFIG") {
             return Some(std::path::PathBuf::from(p));
         }
-        // 2. XDG_CONFIG_HOME / ~/.config
-        let base = if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-            std::path::PathBuf::from(xdg)
-        } else {
-            dirs_next().join(".config")
-        };
-        Some(base.join("riffl").join("config.toml"))
+        Some(get_config_dir().join("config.toml"))
     }
 }
 
@@ -285,12 +274,78 @@ impl Default for StatusBarConfig {
     }
 }
 
+/// Application name, sourced from Cargo.toml at compile time.
+pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
+
+/// Return the platform-specific config directory for this application.
+///
+/// - Linux/BSD: `$XDG_CONFIG_HOME/<app>` or `~/.config/<app>`
+/// - macOS:     `~/Library/Application Support/<app>`
+/// - Windows:   `%APPDATA%\<app>`
+pub fn get_config_dir() -> std::path::PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        std::env::var("APPDATA")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+            .join(APP_NAME)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        home_dir()
+            .join("Library")
+            .join("Application Support")
+            .join(APP_NAME)
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+            std::path::PathBuf::from(xdg)
+        } else {
+            home_dir().join(".config")
+        }
+        .join(APP_NAME)
+    }
+}
+
+/// Return the platform-specific data directory for this application.
+///
+/// - Linux/BSD: `$XDG_DATA_HOME/<app>` or `~/.local/share/<app>`
+/// - macOS:     `~/Library/Application Support/<app>`
+/// - Windows:   `%APPDATA%\<app>`
+pub fn get_data_dir() -> std::path::PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        std::env::var("APPDATA")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+            .join(APP_NAME)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        home_dir()
+            .join("Library")
+            .join("Application Support")
+            .join(APP_NAME)
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
+            std::path::PathBuf::from(xdg)
+        } else {
+            home_dir().join(".local").join("share")
+        }
+        .join(APP_NAME)
+    }
+}
+
 /// Return the user's home directory.
-fn dirs_next() -> std::path::PathBuf {
+fn home_dir() -> std::path::PathBuf {
     std::env::var("HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::path::PathBuf::from("."))
 }
+
 
 #[cfg(test)]
 mod tests {
