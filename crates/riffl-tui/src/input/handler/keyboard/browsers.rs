@@ -247,9 +247,10 @@ pub fn handle_file_browser_key(app: &mut App, key: KeyEvent) {
                 match app.load_selected_sample() {
                     Ok(idx) => {
                         let name = app
-                            .instrument_names()
+                            .song
+                            .instruments
                             .get(idx)
-                            .cloned()
+                            .map(|i| i.name.clone())
                             .unwrap_or_else(|| "unknown".to_string());
                         app.close_file_browser();
                         app.open_modal(ui::modal::Modal::info(

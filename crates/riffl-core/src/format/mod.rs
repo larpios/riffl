@@ -3,6 +3,7 @@ use crate::audio::sample::Sample;
 pub mod error;
 pub mod it;
 pub mod protracker;
+pub mod reader;
 pub mod s3m;
 pub mod xm;
 

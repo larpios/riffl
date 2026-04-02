@@ -48,7 +48,6 @@ impl App {
         let inst = Instrument::new(&name);
         self.song.instruments.push(inst);
         self.sync_mixer_instruments();
-        self.instrument_names.push(name);
         self.instrument_selection = Some(idx);
     }
 
@@ -58,7 +57,6 @@ impl App {
             if idx < self.song.instruments.len() {
                 self.song.instruments.remove(idx);
                 self.sync_mixer_instruments();
-                self.instrument_names.remove(idx);
                 // Adjust selection
                 if self.song.instruments.is_empty() {
                     self.instrument_selection = None;
@@ -75,8 +73,7 @@ impl App {
     pub fn rename_instrument(&mut self, new_name: String) -> bool {
         if let Some(idx) = self.instrument_selection {
             if idx < self.song.instruments.len() {
-                self.song.instruments[idx].name = new_name.clone();
-                self.instrument_names[idx] = new_name;
+                self.song.instruments[idx].name = new_name;
                 return true;
             }
         }
@@ -104,10 +101,7 @@ impl App {
     pub fn set_instrument_name(&mut self, name: String) {
         if let Some(idx) = self.instrument_selection {
             if idx < self.song.instruments.len() && !name.is_empty() {
-                self.song.instruments[idx].name = name.clone();
-                if idx < self.instrument_names.len() {
-                    self.instrument_names[idx] = name;
-                }
+                self.song.instruments[idx].name = name;
                 self.mark_dirty();
             }
         }
@@ -400,14 +394,9 @@ impl App {
         }
     }
 
-    /// Get the list of loaded instrument names.
-    pub fn instrument_names(&self) -> &[String] {
-        &self.instrument_names
-    }
-
     /// Get loaded instrument count.
     pub fn instrument_count(&self) -> usize {
-        self.instrument_names.len()
+        self.song.instruments.len()
     }
 }
 

@@ -91,7 +91,7 @@ impl ScriptEngine {
             "set_note",
             move |row: INT, channel: INT, note: rhai::Map| {
                 if let Some(cmd) = map_to_set_note_command(row, channel, &note) {
-                    cmds_clone.lock().unwrap().push(cmd);
+                    cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).push(cmd);
                 }
             },
         );
@@ -114,7 +114,7 @@ impl ScriptEngine {
         engine.register_fn("clear_pattern", move || {
             cmds_clone
                 .lock()
-                .unwrap()
+                .unwrap_or_else(|e| e.into_inner())
                 .push(PatternCommand::ClearPattern);
         });
 
@@ -414,7 +414,7 @@ impl ScriptEngine {
                 if let Some(n) = map_to_note(&note) {
                     let cmds = pattern_api::generate_beat(&sub_pat, channel as usize, &bools, n);
                     let abs = offset_commands(cmds, row_offset, ch_offset);
-                    cmds_clone.lock().unwrap().extend(abs);
+                    cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).extend(abs);
                 }
             },
         );
@@ -927,8 +927,11 @@ fn generate_euclidean(pulses: usize, steps: usize) -> Vec<bool> {
         let mut remainder_iter = remainder_groups.into_iter();
 
         for _ in 0..distribute_count {
-            let mut combined = front_iter.next().unwrap();
-            combined.extend(remainder_iter.next().unwrap());
+            let (Some(mut combined), Some(rest)) = (front_iter.next(), remainder_iter.next())
+            else {
+                break;
+            };
+            combined.extend(rest);
             new_groups.push(combined);
         }
 

@@ -92,9 +92,6 @@ pub struct App {
     /// Export dialog for rendering to WAV
     pub export_dialog: ExportDialog,
 
-    /// Names of loaded instruments (indexed by instrument number)
-    instrument_names: Vec<String>,
-
     /// Currently selected instrument index in the instrument list (None if none selected)
     instrument_selection: Option<usize>,
 
@@ -372,7 +369,6 @@ impl App {
             file_browser,
             sample_browser,
             export_dialog: ExportDialog::new(),
-            instrument_names: vec!["sine440".to_string()],
             instrument_selection: None,
             pattern_selection: None,
             project_path: None,

@@ -1383,7 +1383,6 @@ impl super::App {
                                 inst.sample_index = Some(sample_idx);
                                 self.song.instruments.push(inst);
                                 self.sync_mixer_instruments();
-                                self.instrument_names.push(name.clone());
                                 self.instrument_selection = Some(idx);
                                 self.mark_dirty();
                                 self.open_modal(Modal::info(

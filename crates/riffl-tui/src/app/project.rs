@@ -20,10 +20,8 @@ impl App {
 
         if let Ok(mut mixer) = self.mixer.lock() {
             mixer.clear_samples();
-            self.instrument_names.clear();
-            for (sample, inst) in result.samples.iter().zip(result.song.instruments.iter()) {
+            for sample in result.samples.iter() {
                 mixer.add_sample(Arc::new(sample.clone()));
-                self.instrument_names.push(inst.name.clone());
             }
         } else {
             return Err("Failed to lock mixer".to_string());
@@ -185,33 +183,28 @@ impl App {
                 let mut missing_samples = Vec::new();
                 if let Ok(mut mixer) = self.mixer.lock() {
                     mixer.clear_samples();
-                    self.instrument_names.clear();
 
                     for (idx, inst) in song.instruments.iter_mut().enumerate() {
-                        let sample_name = if let Some(sample_path) = &inst.sample_path {
+                        if let Some(sample_path) = &inst.sample_path {
                             let sp_path = PathBuf::from(sample_path);
                             match load_sample(&sp_path, output_sample_rate) {
                                 Ok(sample) => {
                                     inst.sample_index = Some(idx);
                                     inst.chip_render = Some(ChipRenderData::from_sample(&sample));
                                     mixer.add_sample(Arc::new(sample));
-                                    inst.name.clone()
                                 }
                                 Err(_) => {
                                     inst.sample_index = Some(idx);
                                     inst.chip_render = None;
                                     mixer.add_sample(Arc::new(Sample::default()));
                                     missing_samples.push(sample_path.clone());
-                                    format!("{} (MISSING)", inst.name)
                                 }
                             }
                         } else {
                             inst.sample_index = Some(idx);
                             inst.chip_render = None;
                             mixer.add_sample(Arc::new(Sample::default()));
-                            inst.name.clone()
-                        };
-                        self.instrument_names.push(sample_name);
+                        }
                     }
                 }
 

@@ -10,6 +10,7 @@ use crate::pattern::note::{Note, Pitch};
 use crate::pattern::{Cell, NoteEvent, Pattern, Track};
 use crate::song::{Envelope, EnvelopePoint, Instrument, Keyzone, PanningLaw, Song};
 
+use super::reader::BinaryReader;
 use super::{FormatData, FormatError, FormatResult, ModuleLoader};
 
 pub struct ItLoader;
@@ -33,44 +34,42 @@ impl ModuleLoader for ItLoader {
 }
 
 // ─── Binary Helpers ──────────────────────────────────────────────────────────
+// Thin wrappers that delegate to BinaryReader for bounds-safe reading.
+// Returns 0 / empty string on out-of-bounds rather than panicking.
 
 fn read_u8(data: &[u8], offset: &mut usize) -> u8 {
-    let v = data[*offset];
-    *offset += 1;
+    let mut r = BinaryReader::at(data, *offset);
+    let v = r.read_u8().unwrap_or(0);
+    *offset = r.pos();
     v
 }
 
 fn read_i8(data: &[u8], offset: &mut usize) -> i8 {
-    let v = data[*offset] as i8;
-    *offset += 1;
+    let mut r = BinaryReader::at(data, *offset);
+    let v = r.read_i8().unwrap_or(0);
+    *offset = r.pos();
     v
 }
 
 fn read_u16_le(data: &[u8], offset: &mut usize) -> u16 {
-    let v = u16::from_le_bytes([data[*offset], data[*offset + 1]]);
-    *offset += 2;
+    let mut r = BinaryReader::at(data, *offset);
+    let v = r.read_u16_le().unwrap_or(0);
+    *offset = r.pos();
     v
 }
 
 fn read_u32_le(data: &[u8], offset: &mut usize) -> u32 {
-    let v = u32::from_le_bytes([
-        data[*offset],
-        data[*offset + 1],
-        data[*offset + 2],
-        data[*offset + 3],
-    ]);
-    *offset += 4;
+    let mut r = BinaryReader::at(data, *offset);
+    let v = r.read_u32_le().unwrap_or(0);
+    *offset = r.pos();
     v
 }
 
 fn read_string(data: &[u8], offset: &mut usize, len: usize) -> String {
-    let end = (*offset + len).min(data.len());
-    let s = String::from_utf8_lossy(&data[*offset..end])
-        .trim_end_matches('\0')
-        .trim()
-        .to_string();
-    *offset += len;
-    s
+    let mut r = BinaryReader::at(data, *offset);
+    let v = r.read_string(len).unwrap_or_default();
+    *offset = r.pos();
+    v
 }
 
 // ─── BitReader for IT compression ───────────────────────────────────────────

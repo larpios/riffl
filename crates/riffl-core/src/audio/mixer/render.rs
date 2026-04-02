@@ -38,10 +38,14 @@ impl super::Mixer {
                 for frame in 0..num_frames {
                     // Check for pending note trigger for this channel at this frame
                     let mut triggered_now = false;
-                    let current_row_frame = effect_processor
+                    // SAFETY: voices and effect_processor.channels are co-resized in
+                    // set_num_channels(), so ch is always a valid index.
+                    let Some(current_row_frame) = effect_processor
                         .channel_state(ch)
-                        .unwrap()
-                        .row_frame_counter;
+                        .map(|s| s.row_frame_counter)
+                    else {
+                        continue;
+                    };
 
                     if let Some(pos) = self
                         .pending_notes
@@ -64,8 +68,7 @@ impl super::Mixer {
                         }
                         if let Some(env_override) = effect_processor
                             .channel_state(ch)
-                            .unwrap()
-                            .envelope_position_override
+                            .and_then(|s| s.envelope_position_override)
                         {
                             voice.volume_envelope_tick = env_override;
                         }
@@ -82,7 +85,9 @@ impl super::Mixer {
                     };
 
                     let render_state = effect_processor.voice_render_state(ch);
-                    let ch_state = effect_processor.channel_state(ch).unwrap();
+                    let Some(ch_state) = effect_processor.channel_state(ch) else {
+                        continue;
+                    };
 
                     // Apply any envelope position overrides (Lxx) from the effect processor at row start
                     if ch_state.row_frame_counter == 0 {

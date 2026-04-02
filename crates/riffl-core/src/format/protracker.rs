@@ -4,6 +4,7 @@
 //! 2, 6, 8 or more channels. Converts MOD patterns, instruments, and
 //! sample data into riffl-core's native types.
 
+use super::reader::BinaryReader;
 use super::{FormatData, FormatError, FormatResult, ModuleLoader};
 use crate::audio::pitch::SlideMode;
 use crate::audio::sample::{LoopMode, Sample, C4_MIDI};
@@ -698,16 +699,9 @@ fn decode_sample_data(raw: &[u8], hdr: &SampleHeader) -> Sample {
 
 /// Read a null-terminated ASCII string from `data[pos..pos+len]`.
 fn read_string(data: &[u8], pos: usize, len: usize) -> String {
-    let end = (pos + len).min(data.len());
-    let bytes = &data[pos..end];
-    let trimmed: String = bytes
-        .iter()
-        .copied()
-        .take_while(|&b| b != 0)
-        .filter(|b| b.is_ascii_graphic() || *b == b' ')
-        .map(|b| b as char)
-        .collect();
-    trimmed.trim().to_string()
+    // Delegate to BinaryReader for bounds-safe access.
+    let mut r = BinaryReader::at(data, pos);
+    r.read_string(len).unwrap_or_default()
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────

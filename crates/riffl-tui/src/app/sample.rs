@@ -49,8 +49,6 @@ impl super::App {
         instrument.chip_render = Some(chip_render);
         self.song.instruments.push(instrument);
         self.sync_mixer_instruments();
-
-        self.instrument_names.push(name);
         self.mark_dirty();
         Ok(idx)
     }
@@ -84,7 +82,6 @@ impl super::App {
         instrument.chip_render = Some(chip_render);
         self.song.instruments.push(instrument);
         self.sync_mixer_instruments();
-        self.instrument_names.push(name);
         self.mark_dirty();
         Ok(idx)
     }

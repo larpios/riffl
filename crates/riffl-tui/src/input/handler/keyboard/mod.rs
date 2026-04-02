@@ -1,6 +1,7 @@
 use crate::app::{App, AppView};
 use crate::editor::{Editor, EditorMode, SubColumn};
 use crate::input::keybindings::{map_key_to_action, Action};
+use crate::registry::{CommandMetadata, CommandRegistry};
 use crate::ui;
 use crate::ui::code_editor::ModeKind;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -111,46 +112,14 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                 }
             }
             KeyCode::Tab => {
-                let input = app.command_input.trim();
-                let candidates = [
-                    "adsr",
-                    "artist",
-                    "bpm",
-                    "clear",
-                    "dup",
-                    "e",
-                    "fill",
-                    "g",
-                    "goto",
-                    "interp",
-                    "interpolate",
-                    "len",
-                    "length",
-                    "load",
-                    "loop",
-                    "mode",
-                    "pname",
-                    "q",
-                    "q!",
-                    "quantize",
-                    "rename",
-                    "save",
-                    "speed",
-                    "step",
-                    "t",
-                    "tempo",
-                    "title",
-                    "tpl",
-                    "tr",
-                    "track",
-                    "transpose",
-                    "tutor",
-                    "volume",
-                    "w",
-                    "wq",
-                ];
-                if let Some(match_idx) = candidates.iter().position(|c| c.starts_with(input)) {
-                    app.command_input = candidates[match_idx].to_string();
+                let input = app.command_input.trim().to_string();
+                let all_commands = CommandRegistry::all_commands();
+                let candidates: Vec<&str> = all_commands
+                    .iter()
+                    .flat_map(|c| std::iter::once(c.name()).chain(c.aliases()))
+                    .collect();
+                if let Some(candidate) = candidates.iter().find(|c| c.starts_with(input.as_str())) {
+                    app.command_input = candidate.to_string();
                 }
             }
             KeyCode::Char(c)
@@ -184,9 +153,10 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                 match app.load_sample_from_path(&path) {
                     Ok(idx) => {
                         let name = app
-                            .instrument_names()
+                            .song
+                            .instruments
                             .get(idx)
-                            .cloned()
+                            .map(|i| i.name.clone())
                             .unwrap_or_else(|| "sample".to_string());
                         app.open_modal(ui::modal::Modal::info(
                             "Sample Loaded".to_string(),
