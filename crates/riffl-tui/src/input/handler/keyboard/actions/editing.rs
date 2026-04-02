@@ -1,7 +1,7 @@
 use crate::app::{App, AppView};
 use crate::editor::Editor;
-use crate::input::keybindings::Action;
 use crate::input::handler::keyboard::export::hex_char_to_digit;
+use crate::input::keybindings::Action;
 
 pub(super) fn handle(app: &mut App, action: &Action) -> bool {
     match action {

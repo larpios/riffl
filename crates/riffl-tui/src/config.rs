@@ -346,7 +346,6 @@ fn home_dir() -> std::path::PathBuf {
         .unwrap_or_else(|_| std::path::PathBuf::from("."))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

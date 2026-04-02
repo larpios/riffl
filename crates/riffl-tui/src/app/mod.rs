@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 
 use crate::config::Config;
-use crate::input::handler::keyboard::prompts::TextPrompt;
 use crate::editor::{Editor, EditorMode};
+use crate::input::handler::keyboard::prompts::TextPrompt;
 use crate::ui::arrangement::ArrangementView;
 use crate::ui::code_editor::{self, CodeEditor};
 use crate::ui::envelope_editor::EnvelopeEditorState;

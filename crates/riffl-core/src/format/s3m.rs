@@ -3,6 +3,7 @@
 //! Parses S3M files from raw bytes, supporting PCM samples and standard effects.
 //! Maps S3M-specific features to the riffl-core internal format.
 
+use super::reader::BinaryReader;
 #[cfg(feature = "adlib")]
 use crate::audio::adlib::AdlibSynthesizer;
 use crate::audio::pitch::SlideMode;
@@ -11,7 +12,6 @@ use crate::pattern::effect::{Effect, EffectMode};
 use crate::pattern::note::{Note, Pitch};
 use crate::pattern::{Cell, NoteEvent, Pattern, Track};
 use crate::song::{Instrument, Song};
-use super::reader::BinaryReader;
 
 use super::{FormatData, FormatError, FormatResult, ModuleLoader};
 

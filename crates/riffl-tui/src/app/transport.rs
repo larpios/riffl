@@ -221,7 +221,8 @@ impl App {
 
     /// Open the inline pattern length prompt, pre-populated with current row count.
     pub fn open_len_prompt(&mut self) {
-        self.len_prompt.open(format!("{}", self.editor.pattern().row_count()));
+        self.len_prompt
+            .open(format!("{}", self.editor.pattern().row_count()));
     }
 
     /// Execute the pattern length prompt: parse input and resize pattern if valid.

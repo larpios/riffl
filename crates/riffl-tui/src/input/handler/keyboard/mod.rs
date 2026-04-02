@@ -221,10 +221,7 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                             ));
                         }
                         Err(e) => {
-                            app.open_modal(ui::modal::Modal::error(
-                                "Assign Failed".to_string(),
-                                e,
-                            ));
+                            app.open_modal(ui::modal::Modal::error("Assign Failed".to_string(), e));
                         }
                     }
                 }

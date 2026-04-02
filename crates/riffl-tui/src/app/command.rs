@@ -464,27 +464,25 @@ impl super::App {
                 }
             }
 
-            Some(Command::Track) => {
-                match args {
-                    "add" | "new" => {
-                        self.editor.add_track();
-                        self.sync_mixer_channels();
-                        self.mark_dirty();
-                    }
-                    "del" | "delete" | "remove" | "rm" => {
-                        self.editor.delete_track();
-                        self.sync_mixer_channels();
-                        self.mark_dirty();
-                    }
-                    _ => {
-                        let channels = self.editor.pattern().num_channels();
-                        self.open_modal(Modal::info(
-                            "Track".to_string(),
-                            format!("Channels: {}\nUsage: :track <add|del>", channels),
-                        ));
-                    }
+            Some(Command::Track) => match args {
+                "add" | "new" => {
+                    self.editor.add_track();
+                    self.sync_mixer_channels();
+                    self.mark_dirty();
                 }
-            }
+                "del" | "delete" | "remove" | "rm" => {
+                    self.editor.delete_track();
+                    self.sync_mixer_channels();
+                    self.mark_dirty();
+                }
+                _ => {
+                    let channels = self.editor.pattern().num_channels();
+                    self.open_modal(Modal::info(
+                        "Track".to_string(),
+                        format!("Channels: {}\nUsage: :track <add|del>", channels),
+                    ));
+                }
+            },
 
             Some(Command::Pname) => {
                 let arr_pos = self.transport.arrangement_position();
@@ -512,8 +510,7 @@ impl super::App {
                     if let Some(pat) = self.song.patterns.get_mut(pat_idx) {
                         pat.name = args.to_string();
                     }
-                    let editor_pat_idx =
-                        self.song.arrangement.get(arr_pos).copied().unwrap_or(0);
+                    let editor_pat_idx = self.song.arrangement.get(arr_pos).copied().unwrap_or(0);
                     if editor_pat_idx == pat_idx {
                         self.editor.pattern_mut().name = args.to_string();
                     }
@@ -746,8 +743,7 @@ impl super::App {
                                     0.0
                                 };
                                 let vol = (sv + t * (ev - sv)).clamp(0.0, 255.0).round() as u8;
-                                if let Some(cell) =
-                                    self.editor.pattern_mut().get_cell_mut(row, ch)
+                                if let Some(cell) = self.editor.pattern_mut().get_cell_mut(row, ch)
                                 {
                                     cell.set_effect(Effect::new(0xC, vol));
                                 }
@@ -795,8 +791,7 @@ impl super::App {
                                     0.0
                                 };
                                 let pan = (sp + t * (ep - sp)).clamp(0.0, 255.0).round() as u8;
-                                if let Some(cell) =
-                                    self.editor.pattern_mut().get_cell_mut(row, ch)
+                                if let Some(cell) = self.editor.pattern_mut().get_cell_mut(row, ch)
                                 {
                                     cell.set_effect(Effect::new(0x8, pan));
                                 }
@@ -1034,12 +1029,21 @@ impl super::App {
                     Some(args.to_uppercase())
                 };
                 let reference = vec![
-                    ("0xx", "Arpeggio: cycle between base, +x, +y semitones per tick"),
+                    (
+                        "0xx",
+                        "Arpeggio: cycle between base, +x, +y semitones per tick",
+                    ),
                     ("1xx", "Portamento up: slide pitch up by xx units per tick"),
-                    ("2xx", "Portamento down: slide pitch down by xx units per tick"),
+                    (
+                        "2xx",
+                        "Portamento down: slide pitch down by xx units per tick",
+                    ),
                     ("3xx", "Tone portamento: slide to target note, speed xx"),
                     ("4xy", "Vibrato: x=speed, y=depth (sine LFO on pitch)"),
-                    ("5xy", "Tone portamento + volume slide (x=vol up, y=vol down)"),
+                    (
+                        "5xy",
+                        "Tone portamento + volume slide (x=vol up, y=vol down)",
+                    ),
                     ("6xy", "Vibrato + volume slide"),
                     ("7xy", "Tremolo: x=speed, y=depth (sine LFO on volume)"),
                     ("8xx", "Set panning: 00=left, 80=center, FF=right"),
@@ -1083,10 +1087,7 @@ impl super::App {
                     if matches.is_empty() {
                         self.open_modal(Modal::error(
                             "Effect Not Found".to_string(),
-                            format!(
-                                "No effect matching '{}'. Use :effects to list all.",
-                                search
-                            ),
+                            format!("No effect matching '{}'. Use :effects to list all.", search),
                         ));
                     } else {
                         let lines: Vec<String> = matches
@@ -1264,10 +1265,7 @@ impl super::App {
                         self.mark_dirty();
                         self.open_modal(Modal::info(
                             "Instrument Copied".to_string(),
-                            format!(
-                                "Copied settings from instrument {:02X} to {:02X}",
-                                src, dst
-                            ),
+                            format!("Copied settings from instrument {:02X} to {:02X}", src, dst),
                         ));
                     } else {
                         self.open_modal(Modal::error(
@@ -1301,31 +1299,26 @@ impl super::App {
                                 "No instrument selected. Select an instrument first.".to_string(),
                             ));
                         }
-                        Some(inst_idx) => {
-                            match self.assign_sample_to_instrument(&path, inst_idx) {
-                                Ok(()) => {
-                                    let name = self
-                                        .song
-                                        .instruments
-                                        .get(inst_idx)
-                                        .map(|i| i.name.clone())
-                                        .unwrap_or_default();
-                                    self.open_modal(Modal::info(
-                                        "Sample Loaded".to_string(),
-                                        format!(
-                                            "Assigned '{}' to instrument {:02X} ({})",
-                                            args, inst_idx, name
-                                        ),
-                                    ));
-                                }
-                                Err(e) => {
-                                    self.open_modal(Modal::error(
-                                        "Load Sample".to_string(),
-                                        e,
-                                    ));
-                                }
+                        Some(inst_idx) => match self.assign_sample_to_instrument(&path, inst_idx) {
+                            Ok(()) => {
+                                let name = self
+                                    .song
+                                    .instruments
+                                    .get(inst_idx)
+                                    .map(|i| i.name.clone())
+                                    .unwrap_or_default();
+                                self.open_modal(Modal::info(
+                                    "Sample Loaded".to_string(),
+                                    format!(
+                                        "Assigned '{}' to instrument {:02X} ({})",
+                                        args, inst_idx, name
+                                    ),
+                                ));
                             }
-                        }
+                            Err(e) => {
+                                self.open_modal(Modal::error("Load Sample".to_string(), e));
+                            }
+                        },
                     }
                 }
             }
@@ -1341,8 +1334,14 @@ impl super::App {
                 }
                 let wave_parts: Vec<&str> = args.split_whitespace().collect();
                 let wave_type = wave_parts[0].to_lowercase();
-                let length_ms: u32 = wave_parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(500);
-                let freq: f32 = wave_parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(440.0);
+                let length_ms: u32 = wave_parts
+                    .get(1)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(500);
+                let freq: f32 = wave_parts
+                    .get(2)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(440.0);
                 let sample_rate = self
                     .audio_engine
                     .as_ref()
@@ -1353,8 +1352,7 @@ impl super::App {
                         self.open_modal(Modal::error("Wave Generator".to_string(), e));
                     }
                     Ok(sample) => {
-                        let sample_name =
-                            sample.name().map(|n| n.to_string()).unwrap_or_default();
+                        let sample_name = sample.name().map(|n| n.to_string()).unwrap_or_default();
                         let add_result = self
                             .mixer
                             .lock()
@@ -1395,8 +1393,7 @@ impl super::App {
                                     inst.sample_path = None;
                                     self.sync_mixer_instruments();
                                     self.mark_dirty();
-                                    let inst_name =
-                                        self.song.instruments[inst_idx].name.clone();
+                                    let inst_name = self.song.instruments[inst_idx].name.clone();
                                     self.open_modal(Modal::info(
                                         "Wave Generated".to_string(),
                                         format!(

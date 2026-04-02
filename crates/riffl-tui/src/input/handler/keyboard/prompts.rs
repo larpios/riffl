@@ -53,9 +53,7 @@ impl TextPrompt {
                 self.input.pop();
                 Some(PromptAction::Consumed)
             }
-            KeyCode::Char(c)
-                if key.modifiers == KeyModifiers::NONE && (self.filter)(c) =>
-            {
+            KeyCode::Char(c) if key.modifiers == KeyModifiers::NONE && (self.filter)(c) => {
                 self.input.push(c);
                 Some(PromptAction::Consumed)
             }

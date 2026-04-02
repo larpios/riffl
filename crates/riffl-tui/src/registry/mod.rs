@@ -282,21 +282,39 @@ impl CommandMetadata for Command {
 
     fn category(&self) -> CommandCategory {
         match self {
-            Self::Bpm | Self::Step | Self::Write | Self::Edit | Self::Load | Self::Save
-            | Self::Quit | Self::ForceQuit | Self::SaveAndQuit | Self::Tutor
-            | Self::Title | Self::Artist => CommandCategory::Project,
+            Self::Bpm
+            | Self::Step
+            | Self::Write
+            | Self::Edit
+            | Self::Load
+            | Self::Save
+            | Self::Quit
+            | Self::ForceQuit
+            | Self::SaveAndQuit
+            | Self::Tutor
+            | Self::Title
+            | Self::Artist => CommandCategory::Project,
             Self::Len | Self::Clear | Self::Dup | Self::Pname => CommandCategory::Pattern,
             Self::Speed | Self::Lpb | Self::Loop | Self::CountIn | Self::Metronome => {
                 CommandCategory::Transport
             }
-            Self::Transpose | Self::Quantize | Self::Interpolate | Self::Fill
-            | Self::Reverse | Self::Expand | Self::Compress => CommandCategory::Editing,
+            Self::Transpose
+            | Self::Quantize
+            | Self::Interpolate
+            | Self::Fill
+            | Self::Reverse
+            | Self::Expand
+            | Self::Compress => CommandCategory::Editing,
             Self::Track | Self::Rename | Self::Volume | Self::Filter | Self::Automate => {
                 CommandCategory::Track
             }
             Self::Goto => CommandCategory::Navigation,
-            Self::Adsr | Self::Instruments | Self::InstCopy | Self::LoadSample
-            | Self::Keyzone | Self::Wave => CommandCategory::Instrument,
+            Self::Adsr
+            | Self::Instruments
+            | Self::InstCopy
+            | Self::LoadSample
+            | Self::Keyzone
+            | Self::Wave => CommandCategory::Instrument,
             Self::Mode | Self::Marker | Self::Samples | Self::Effects => CommandCategory::Misc,
         }
     }

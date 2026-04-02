@@ -74,7 +74,9 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
                 app.env_editor.focus();
                 if let Some(idx) = app.instrument_selection() {
                     let env_type = app.env_editor.envelope_type;
-                    let envelope = app.env_editor.get_envelope_mut(&mut app.song.instruments[idx]);
+                    let envelope = app
+                        .env_editor
+                        .get_envelope_mut(&mut app.song.instruments[idx]);
                     app.env_editor.move_point_up(envelope, env_type);
                 }
             }
@@ -84,7 +86,9 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
                 app.env_editor.focus();
                 if let Some(idx) = app.instrument_selection() {
                     let env_type = app.env_editor.envelope_type;
-                    let envelope = app.env_editor.get_envelope_mut(&mut app.song.instruments[idx]);
+                    let envelope = app
+                        .env_editor
+                        .get_envelope_mut(&mut app.song.instruments[idx]);
                     app.env_editor.move_point_down(envelope, env_type);
                 }
             }
@@ -93,7 +97,9 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
             if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
                 app.env_editor.focus();
                 if let Some(idx) = app.instrument_selection() {
-                    let envelope = app.env_editor.get_envelope_mut(&mut app.song.instruments[idx]);
+                    let envelope = app
+                        .env_editor
+                        .get_envelope_mut(&mut app.song.instruments[idx]);
                     app.env_editor.move_point_left(envelope);
                 }
             }
@@ -102,7 +108,9 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
             if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
                 app.env_editor.focus();
                 if let Some(idx) = app.instrument_selection() {
-                    let envelope = app.env_editor.get_envelope_mut(&mut app.song.instruments[idx]);
+                    let envelope = app
+                        .env_editor
+                        .get_envelope_mut(&mut app.song.instruments[idx]);
                     app.env_editor.move_point_right(envelope);
                 }
             }
@@ -111,13 +119,16 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
             if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
                 app.env_editor.focus();
                 if let Some(idx) = app.instrument_selection() {
-                    let envelope = app.env_editor.get_envelope_mut(&mut app.song.instruments[idx]);
+                    let envelope = app
+                        .env_editor
+                        .get_envelope_mut(&mut app.song.instruments[idx]);
                     let frame = app
                         .env_editor
                         .selected_point
                         .and_then(|i| envelope.points.get(i).map(|p| p.frame))
                         .unwrap_or(0);
-                    app.env_editor.add_point_at(envelope, frame.saturating_add(32), 0.5);
+                    app.env_editor
+                        .add_point_at(envelope, frame.saturating_add(32), 0.5);
                 }
             }
         }
@@ -125,7 +136,9 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
             if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
                 app.env_editor.focus();
                 if let Some(idx) = app.instrument_selection() {
-                    let envelope = app.env_editor.get_envelope_mut(&mut app.song.instruments[idx]);
+                    let envelope = app
+                        .env_editor
+                        .get_envelope_mut(&mut app.song.instruments[idx]);
                     app.env_editor.delete_selected_point(envelope);
                 }
             }
@@ -152,7 +165,9 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
             if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
                 app.env_editor.focus();
                 if let Some(idx) = app.instrument_selection() {
-                    let envelope = app.env_editor.get_envelope_mut(&mut app.song.instruments[idx]);
+                    let envelope = app
+                        .env_editor
+                        .get_envelope_mut(&mut app.song.instruments[idx]);
                     let delta = if key.code == KeyCode::Char('+') || key.code == KeyCode::Char('=')
                     {
                         0.05
@@ -167,7 +182,8 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
             if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
                 app.env_editor.focus();
                 if let Some(idx) = app.instrument_selection() {
-                    app.env_editor.toggle_envelope_enabled(&mut app.song.instruments[idx]);
+                    app.env_editor
+                        .toggle_envelope_enabled(&mut app.song.instruments[idx]);
                 }
             }
         }
@@ -195,7 +211,13 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
                         } else {
                             s.loop_mode = riffl_core::audio::sample::LoopMode::NoLoop;
                         }
-                        app.set_sample_loop_settings(idx, si, s.loop_mode, s.loop_start, s.loop_end);
+                        app.set_sample_loop_settings(
+                            idx,
+                            si,
+                            s.loop_mode,
+                            s.loop_start,
+                            s.loop_end,
+                        );
                     }
                 }
             }

@@ -91,7 +91,10 @@ impl ScriptEngine {
             "set_note",
             move |row: INT, channel: INT, note: rhai::Map| {
                 if let Some(cmd) = map_to_set_note_command(row, channel, &note) {
-                    cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).push(cmd);
+                    cmds_clone
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .push(cmd);
                 }
             },
         );
@@ -414,7 +417,10 @@ impl ScriptEngine {
                 if let Some(n) = map_to_note(&note) {
                     let cmds = pattern_api::generate_beat(&sub_pat, channel as usize, &bools, n);
                     let abs = offset_commands(cmds, row_offset, ch_offset);
-                    cmds_clone.lock().unwrap_or_else(|e| e.into_inner()).extend(abs);
+                    cmds_clone
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .extend(abs);
                 }
             },
         );

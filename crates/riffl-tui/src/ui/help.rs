@@ -9,7 +9,9 @@ use ratatui::{
 use super::theme::Theme;
 use crate::editor::EditorMode;
 use crate::input::keybindings::KeybindingRegistry;
-use crate::registry::{ActionCategory, CommandCategory, CommandMetadata, CommandRegistry, Keybinding};
+use crate::registry::{
+    ActionCategory, CommandCategory, CommandMetadata, CommandRegistry, Keybinding,
+};
 use riffl_core::pattern::effect::{EffectMode, EffectType};
 
 /// Total line count of the taller help column. Used to cap scroll offset.
@@ -203,10 +205,7 @@ fn mode_section(
     title: &str,
     theme: &Theme,
 ) -> Vec<Line<'static>> {
-    let entries: Vec<_> = bindings
-        .iter()
-        .filter(|(m, _)| *m == mode)
-        .collect();
+    let entries: Vec<_> = bindings.iter().filter(|(m, _)| *m == mode).collect();
     if entries.is_empty() {
         return vec![];
     }
@@ -219,10 +218,7 @@ fn mode_section(
 }
 
 /// Generate lines for commands in a given category.
-fn command_category_section(
-    category: CommandCategory,
-    theme: &Theme,
-) -> Vec<Line<'static>> {
+fn command_category_section(category: CommandCategory, theme: &Theme) -> Vec<Line<'static>> {
     let cmds: Vec<_> = CommandRegistry::all_commands()
         .into_iter()
         .filter(|c| c.category() == category)
@@ -263,8 +259,18 @@ fn right_column(theme: &Theme) -> Vec<Line<'static>> {
     ] {
         lines.extend(category_section(&bindings, EditorMode::Normal, cat, theme));
     }
-    lines.extend(mode_section(&bindings, EditorMode::Insert, "Insert Mode", theme));
-    lines.extend(mode_section(&bindings, EditorMode::Visual, "Visual Mode", theme));
+    lines.extend(mode_section(
+        &bindings,
+        EditorMode::Insert,
+        "Insert Mode",
+        theme,
+    ));
+    lines.extend(mode_section(
+        &bindings,
+        EditorMode::Visual,
+        "Visual Mode",
+        theme,
+    ));
     for cat in [
         CommandCategory::Project,
         CommandCategory::Pattern,
