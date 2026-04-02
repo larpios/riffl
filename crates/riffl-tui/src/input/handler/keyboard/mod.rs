@@ -19,6 +19,79 @@ use panels::{
     handle_envelope_editor_key, handle_instrument_editor_key, handle_waveform_editor_key,
 };
 
+/// The active input context, used to route key events to the right handler.
+/// Variants are ordered by priority — higher-priority contexts are checked first
+/// in `current_input_context()`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InputContext {
+    BpmPrompt,
+    LenPrompt,
+    CommandMode,
+    Modal,
+    TutorOverlay,
+    EffectHelpOverlay,
+    HelpOverlay,
+    ExportDialog,
+    FileBrowser,
+    SampleBrowser,
+    InstrumentEditorPanel,
+    EnvelopeEditorPanel,
+    WaveformEditorPanel,
+    CodeEditor,
+    /// Default — pattern editor, arrangement, instrument list (non-panel), etc.
+    Normal,
+}
+
+/// Determine which input context is active based on the current app state.
+/// This is the single authoritative place that encodes dispatch priority.
+fn current_input_context(app: &App) -> InputContext {
+    if app.bpm_prompt_mode {
+        return InputContext::BpmPrompt;
+    }
+    if app.len_prompt_mode {
+        return InputContext::LenPrompt;
+    }
+    if app.command_mode {
+        return InputContext::CommandMode;
+    }
+    if app.has_modal() {
+        return InputContext::Modal;
+    }
+    if app.show_tutor {
+        return InputContext::TutorOverlay;
+    }
+    if app.show_effect_help {
+        return InputContext::EffectHelpOverlay;
+    }
+    if app.show_help {
+        return InputContext::HelpOverlay;
+    }
+    if app.has_export_dialog() {
+        return InputContext::ExportDialog;
+    }
+    if app.has_file_browser() {
+        return InputContext::FileBrowser;
+    }
+    if app.current_view == AppView::SampleBrowser {
+        return InputContext::SampleBrowser;
+    }
+    if app.current_view == AppView::InstrumentList {
+        if app.inst_editor.focused {
+            return InputContext::InstrumentEditorPanel;
+        }
+        if app.env_editor.focused {
+            return InputContext::EnvelopeEditorPanel;
+        }
+        if app.waveform_editor.focused {
+            return InputContext::WaveformEditorPanel;
+        }
+    }
+    if app.is_code_editor_active() {
+        return InputContext::CodeEditor;
+    }
+    InputContext::Normal
+}
+
 pub fn handle_key_event(app: &mut App, key: KeyEvent) {
     // ':' always opens command mode — intercept before any panel/view handler.
     // This ensures command mode is reachable from every view, even when a panel is focused.
@@ -37,9 +110,8 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
         return;
     }
 
-    // BPM prompt mode: handle inline BPM input
-    if app.bpm_prompt_mode {
-        match key.code {
+    match current_input_context(app) {
+        InputContext::BpmPrompt => match key.code {
             KeyCode::Enter => app.execute_bpm_prompt(),
             KeyCode::Esc => {
                 app.bpm_prompt_mode = false;
@@ -52,13 +124,9 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                 app.bpm_prompt_input.push(c);
             }
             _ => {}
-        }
-        return;
-    }
+        },
 
-    // Pattern length prompt mode: handle inline length input
-    if app.len_prompt_mode {
-        match key.code {
+        InputContext::LenPrompt => match key.code {
             KeyCode::Enter => app.execute_len_prompt(),
             KeyCode::Esc => {
                 app.len_prompt_mode = false;
@@ -71,13 +139,9 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                 app.len_prompt_input.push(c);
             }
             _ => {}
-        }
-        return;
-    }
+        },
 
-    // Command mode: handle line input
-    if app.command_mode {
-        match key.code {
+        InputContext::CommandMode => match key.code {
             KeyCode::Enter => app.execute_command(),
             KeyCode::Esc => {
                 app.command_mode = false;
@@ -129,14 +193,9 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                 app.command_history_index = None;
             }
             _ => {}
-        }
-        return;
-    }
+        },
 
-    // If a modal is open, handle modal-specific input first
-    if app.has_modal() {
-        match key.code {
-            // Quit confirmation: Enter = quit, Esc = cancel
+        InputContext::Modal => match key.code {
             KeyCode::Enter if app.pending_quit => {
                 app.close_modal();
                 app.force_quit();
@@ -145,8 +204,6 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                 app.pending_quit = false;
                 app.close_modal();
             }
-
-            // Sample action menu: load as new instrument
             KeyCode::Char('l') if app.pending_sample_path.is_some() => {
                 let path = app.pending_sample_path.take().unwrap();
                 app.close_modal();
@@ -168,8 +225,6 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                     }
                 }
             }
-
-            // Sample action menu: assign to currently selected instrument
             KeyCode::Char('a') if app.pending_sample_path.is_some() => {
                 if let Some(inst_idx) = app.instrument_selection() {
                     let path = app.pending_sample_path.take().unwrap();
@@ -182,167 +237,154 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                             ));
                         }
                         Err(e) => {
-                            app.open_modal(ui::modal::Modal::error("Assign Failed".to_string(), e));
+                            app.open_modal(ui::modal::Modal::error(
+                                "Assign Failed".to_string(),
+                                e,
+                            ));
                         }
                     }
                 }
-                // If no instrument selected, do nothing (stay in menu)
             }
-
-            // Sample action menu: cancel
             KeyCode::Esc if app.pending_sample_path.is_some() => {
                 app.pending_sample_path = None;
                 app.close_modal();
             }
-
-            // Dismiss any other modal
             KeyCode::Enter | KeyCode::Esc | KeyCode::Char(' ') => {
                 app.close_modal();
             }
             _ => {}
+        },
+
+        InputContext::TutorOverlay => {
+            let max_scroll = {
+                let content = ui::tutor::content_line_count();
+                let term_rows = crossterm::terminal::size().map(|(_, h)| h).unwrap_or(24);
+                let visible = ((term_rows as u32 * 92 / 100) as u16).saturating_sub(2);
+                content.saturating_sub(visible)
+            };
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('q') => {
+                    app.show_tutor = false;
+                    app.tutor_scroll = 0;
+                }
+                KeyCode::Char('j') | KeyCode::Down => {
+                    app.tutor_scroll = app.tutor_scroll.saturating_add(1).min(max_scroll);
+                }
+                KeyCode::Char('k') | KeyCode::Up => {
+                    app.tutor_scroll = app.tutor_scroll.saturating_sub(1);
+                }
+                KeyCode::PageDown => {
+                    app.tutor_scroll = app.tutor_scroll.saturating_add(10).min(max_scroll);
+                }
+                KeyCode::PageUp => {
+                    app.tutor_scroll = app.tutor_scroll.saturating_sub(10);
+                }
+                KeyCode::Home | KeyCode::Char('g') => {
+                    app.tutor_scroll = 0;
+                }
+                _ => {}
+            }
         }
-        return;
-    }
 
-    // If tutor view is open, handle navigation and close
-    if app.show_tutor {
-        let max_scroll = {
-            let content = ui::tutor::content_line_count();
-            let term_rows = crossterm::terminal::size().map(|(_, h)| h).unwrap_or(24);
-            let visible = ((term_rows as u32 * 92 / 100) as u16).saturating_sub(2);
-            content.saturating_sub(visible)
-        };
-        match key.code {
-            KeyCode::Esc | KeyCode::Char('q') => {
-                app.show_tutor = false;
-                app.tutor_scroll = 0;
+        InputContext::EffectHelpOverlay => {
+            let max_scroll = 100u16.saturating_sub(20);
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('K') | KeyCode::Char('q') => {
+                    app.show_effect_help = false;
+                    app.effect_help_scroll = 0;
+                }
+                KeyCode::Char('j') | KeyCode::Down => {
+                    app.effect_help_scroll =
+                        app.effect_help_scroll.saturating_add(1).min(max_scroll);
+                }
+                KeyCode::Char('k') | KeyCode::Up => {
+                    app.effect_help_scroll = app.effect_help_scroll.saturating_sub(1);
+                }
+                KeyCode::PageDown => {
+                    app.effect_help_scroll =
+                        app.effect_help_scroll.saturating_add(10).min(max_scroll);
+                }
+                KeyCode::PageUp => {
+                    app.effect_help_scroll = app.effect_help_scroll.saturating_sub(10);
+                }
+                KeyCode::Home | KeyCode::Char('g') => {
+                    app.effect_help_scroll = 0;
+                }
+                _ => {}
             }
-            KeyCode::Char('j') | KeyCode::Down => {
-                app.tutor_scroll = app.tutor_scroll.saturating_add(1).min(max_scroll);
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                app.tutor_scroll = app.tutor_scroll.saturating_sub(1);
-            }
-            KeyCode::PageDown => {
-                app.tutor_scroll = app.tutor_scroll.saturating_add(10).min(max_scroll);
-            }
-            KeyCode::PageUp => {
-                app.tutor_scroll = app.tutor_scroll.saturating_sub(10);
-            }
-            KeyCode::Home | KeyCode::Char('g') => {
-                app.tutor_scroll = 0;
-            }
-            _ => {}
         }
-        return;
-    }
 
-    // If effect help overlay is open, handle navigation and close
-    if app.show_effect_help {
-        // Compute max scroll: estimate 25 effects * 4 lines each = 100 lines
-        let max_scroll = 100u16.saturating_sub(20);
-        match key.code {
-            KeyCode::Esc | KeyCode::Char('K') | KeyCode::Char('q') => {
-                app.show_effect_help = false;
-                app.effect_help_scroll = 0;
+        InputContext::HelpOverlay => {
+            let max_scroll = {
+                let content = ui::help::content_line_count();
+                let term_rows = crossterm::terminal::size().map(|(_, h)| h).unwrap_or(24);
+                let visible = ((term_rows as u32 * 85 / 100) as u16).saturating_sub(2);
+                content.saturating_sub(visible)
+            };
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') => {
+                    app.show_help = false;
+                    app.help_scroll = 0;
+                }
+                KeyCode::Char('j') | KeyCode::Down => {
+                    app.help_scroll = app.help_scroll.saturating_add(1).min(max_scroll);
+                }
+                KeyCode::Char('k') | KeyCode::Up => {
+                    app.help_scroll = app.help_scroll.saturating_sub(1);
+                }
+                KeyCode::PageDown => {
+                    app.help_scroll = app.help_scroll.saturating_add(10).min(max_scroll);
+                }
+                KeyCode::PageUp => {
+                    app.help_scroll = app.help_scroll.saturating_sub(10);
+                }
+                KeyCode::Home | KeyCode::Char('g') => {
+                    app.help_scroll = 0;
+                }
+                _ => {}
             }
-            KeyCode::Char('j') | KeyCode::Down => {
-                app.effect_help_scroll = app.effect_help_scroll.saturating_add(1).min(max_scroll);
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                app.effect_help_scroll = app.effect_help_scroll.saturating_sub(1);
-            }
-            KeyCode::PageDown => {
-                app.effect_help_scroll = app.effect_help_scroll.saturating_add(10).min(max_scroll);
-            }
-            KeyCode::PageUp => {
-                app.effect_help_scroll = app.effect_help_scroll.saturating_sub(10);
-            }
-            KeyCode::Home | KeyCode::Char('g') => {
-                app.effect_help_scroll = 0;
-            }
-            _ => {}
         }
-        return;
-    }
 
-    // If help overlay is open, handle navigation and close
-    if app.show_help {
-        // Compute max scroll: content lines minus visible inner height (85% of terminal - 2 borders)
-        let max_scroll = {
-            let content = ui::help::content_line_count();
-            let term_rows = crossterm::terminal::size().map(|(_, h)| h).unwrap_or(24);
-            let visible = ((term_rows as u32 * 85 / 100) as u16).saturating_sub(2);
-            content.saturating_sub(visible)
-        };
-        match key.code {
-            KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') => {
-                app.show_help = false;
-                app.help_scroll = 0;
+        InputContext::ExportDialog => handle_export_dialog_key(app, key),
+
+        InputContext::FileBrowser => handle_file_browser_key(app, key),
+
+        // SampleBrowser: if the browser doesn't consume the key, fall through
+        // to normal processing so global actions (view switching, transport, etc.) work.
+        InputContext::SampleBrowser => {
+            if !handle_sample_browser_key(app, key) {
+                handle_normal_key(app, key);
             }
-            KeyCode::Char('j') | KeyCode::Down => {
-                app.help_scroll = app.help_scroll.saturating_add(1).min(max_scroll);
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                app.help_scroll = app.help_scroll.saturating_sub(1);
-            }
-            KeyCode::PageDown => {
-                app.help_scroll = app.help_scroll.saturating_add(10).min(max_scroll);
-            }
-            KeyCode::PageUp => {
-                app.help_scroll = app.help_scroll.saturating_sub(10);
-            }
-            KeyCode::Home | KeyCode::Char('g') => {
-                app.help_scroll = 0;
-            }
-            _ => {}
         }
-        return;
-    }
 
-    // If export dialog is open, handle export dialog input
-    if app.has_export_dialog() {
-        handle_export_dialog_key(app, key);
-        return;
-    }
+        // Panel contexts: if the panel doesn't consume the key, fall through
+        // to normal processing (which includes Tab-cycle and action dispatch).
+        InputContext::InstrumentEditorPanel => {
+            if !handle_instrument_editor_key(app, key) {
+                handle_normal_key(app, key);
+            }
+        }
+        InputContext::EnvelopeEditorPanel => {
+            if !handle_envelope_editor_key(app, key) {
+                handle_normal_key(app, key);
+            }
+        }
+        InputContext::WaveformEditorPanel => {
+            if !handle_waveform_editor_key(app, key) {
+                handle_normal_key(app, key);
+            }
+        }
 
-    // If file browser is open, handle file browser input
-    if app.has_file_browser() {
-        handle_file_browser_key(app, key);
-        return;
-    }
+        InputContext::CodeEditor => handle_code_editor_key(app, key),
 
-    // If the sample browser view is active, handle browser-specific keys.
-    // Unhandled keys fall through to normal processing so view switching,
-    // command mode, help, transport, etc. all continue to work.
-    if app.current_view == AppView::SampleBrowser && handle_sample_browser_key(app, key) {
-        return;
+        InputContext::Normal => handle_normal_key(app, key),
     }
+}
 
-    // If instrument editor panel is focused, handle its input first
-    if app.current_view == AppView::InstrumentList
-        && app.inst_editor.focused
-        && handle_instrument_editor_key(app, key)
-    {
-        return;
-    }
-
-    // If envelope editor panel is focused, handle its input first
-    if app.current_view == AppView::InstrumentList
-        && app.env_editor.focused
-        && handle_envelope_editor_key(app, key)
-    {
-        return;
-    }
-
-    // If waveform editor panel is focused, handle its input first
-    if app.current_view == AppView::InstrumentList
-        && app.waveform_editor.focused
-        && handle_waveform_editor_key(app, key)
-    {
-        return;
-    }
-
+/// Handle a key event in the "normal" context: InstrumentList Tab cycling,
+/// pattern editor hex entry, replace-once, chord handling, and action dispatch.
+/// Also called as a fallback when SampleBrowser or panel handlers don't consume a key.
+fn handle_normal_key(app: &mut App, key: KeyEvent) {
     // In InstrumentList, Tab/Shift-Tab cycle focus between the right panels:
     //   none → env_editor → waveform_editor → none  (Tab)
     //   none → waveform_editor → env_editor → inst_editor → none  (Shift-Tab)
@@ -363,7 +405,6 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                     app.env_editor.select_first_point(envelope);
                 }
             }
-            // Shift-Tab from inst_editor → back to list (no focus)
         } else if app.env_editor.focused {
             app.env_editor.unfocus();
             if is_tab {
@@ -380,9 +421,7 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                     app.env_editor.select_first_point(envelope);
                 }
             }
-            // Tab from waveform → back to list (no focus)
         } else {
-            // Nothing focused: Tab → envelope, Shift-Tab → waveform
             if is_tab {
                 app.env_editor.focus();
                 if let Some(idx) = app.instrument_selection() {
@@ -396,19 +435,12 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
         return;
     }
 
-    // If code editor is active, handle code editor input first
-    if app.is_code_editor_active() {
-        handle_code_editor_key(app, key);
-        return;
-    }
-
-    // Escape during playback: stop transport (in addition to normal Escape behavior)
+    // Escape during playback: stop transport
     if key.code == crossterm::event::KeyCode::Esc && !app.transport.is_stopped() {
         app.stop();
     }
 
-    // In Insert mode on Effect/Instrument/Volume sub-columns, intercept hex digit
-    // keys (0-9, A-F) for data entry instead of their normal note/octave mappings.
+    // In Insert/Replace mode on non-Note sub-columns, intercept hex digit keys.
     if matches!(app.editor.mode(), EditorMode::Insert | EditorMode::Replace)
         && key.modifiers == crossterm::event::KeyModifiers::NONE
     {
@@ -418,7 +450,7 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                     SubColumn::Effect => app.editor.enter_effect_digit(digit),
                     SubColumn::Instrument => app.editor.enter_instrument_digit(digit),
                     SubColumn::Volume => app.editor.enter_volume_digit(digit),
-                    SubColumn::Note => {} // fall through to note entry
+                    SubColumn::Note => {}
                 }
                 if app.editor.sub_column() != SubColumn::Note {
                     app.mark_dirty();
@@ -428,12 +460,12 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
         }
     }
 
-    // Replace-once state: r was pressed, intercept the next key
+    // Replace-once: r was pressed, intercept the next key.
     if app.pending_replace {
         app.pending_replace = false;
         if app.editor.sub_column() == SubColumn::Note {
             match key.code {
-                crossterm::event::KeyCode::Esc => {} // cancel silently
+                crossterm::event::KeyCode::Esc => {}
                 crossterm::event::KeyCode::Char('~') => {
                     app.editor.replace_cell_note_off();
                     app.mark_dirty();
@@ -453,13 +485,13 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                         }
                     }
                 }
-                _ => {} // any other key: cancel silently
+                _ => {}
             }
         }
         return;
     }
 
-    // Chord handling for Normal mode (e.g. dd = delete row, gg = go to top)
+    // Chord handling for Normal mode (dd = delete row, gg = go to top).
     if app.editor.mode() == EditorMode::Normal
         && key.modifiers == crossterm::event::KeyModifiers::NONE
     {
@@ -475,12 +507,9 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                         app.editor.go_to_row(0);
                         return;
                     }
-                    _ => {
-                        // Not a recognized chord — fall through with the new key
-                    }
+                    _ => {}
                 }
             }
-            // 'd' and 'g' start chords; consume and wait for next key
             if c == 'd' {
                 app.pending_key = Some('d');
                 return;
@@ -490,7 +519,6 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                 return;
             }
         } else {
-            // Non-char key clears any pending chord
             app.pending_key = None;
         }
     } else {
@@ -499,7 +527,7 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
 
     let action = map_key_to_action(key, app.editor_mode());
 
-    // Intercept note entry while in InstrumentList to preview samples without editing the pattern
+    // In InstrumentList, preview notes instead of editing the pattern.
     if app.current_view == AppView::InstrumentList {
         match action {
             Action::EnterNote(c) => {
@@ -512,9 +540,7 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                 }
                 return;
             }
-            Action::EnterNoteOff | Action::EnterNoteCut => {
-                return; // ignore silently
-            }
+            Action::EnterNoteOff | Action::EnterNoteCut => return,
             _ => {}
         }
     }
