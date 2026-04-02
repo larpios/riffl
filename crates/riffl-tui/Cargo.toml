@@ -1,6 +1,6 @@
 [package]
 name = "riffl-tui"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 description = "Modern terminal-based music tracker and pattern editor for Riffl."
 repository = "https://github.com/larpios/riffl"
@@ -22,7 +22,7 @@ bin-dir = "riffl-{ target }/{ bin }{ binary-ext }"
 pkg-url = "{ repo }/releases/download/v{ version }/riffl-{ target }.{ archive-format }"
 
 [dependencies]
-riffl_core = { package = "riffl-core", path = "../riffl-core", version ="0.1.2", features = ["adlib"] }
+riffl-core = { package = "riffl-core", path = "../riffl-core", version = "0.2.0", features = ["adlib"] }
 ratatui = "0.30"
 crossterm = "0.28"
 anyhow = "1.0"
