@@ -98,15 +98,12 @@ impl super::App {
         let sample_idx = self.song.instruments[inst_idx]
             .sample_index
             .ok_or_else(|| "Selected instrument has no sample".to_string())?;
-        let sample = self
-            .loaded_samples()
-            .get(sample_idx)
-            .map(|sample| sample.as_ref().clone())
-            .ok_or_else(|| "Selected sample is not loaded".to_string())?;
 
-        let mut updated = sample;
-        self.waveform_editor.draw_at_cursor(&mut updated);
-        self.replace_instrument_sample(inst_idx, sample_idx, updated)
+        let wf_editor = self.waveform_editor.clone();
+        self.modify_sample(inst_idx, sample_idx, true, |sample| {
+            wf_editor.draw_at_cursor(sample);
+        });
+        Ok(())
     }
     /// Preview a note pitch through the current pattern editor instrument's sample.
     /// Called when the user enters a note in Insert mode.

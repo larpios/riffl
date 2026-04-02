@@ -828,6 +828,18 @@ mod tests {
         s.next_field();
         assert_eq!(s.field, InstrumentField::KeyzoneList);
         s.next_field();
+        assert_eq!(s.field, InstrumentField::KeyzoneNoteMin);
+        s.next_field();
+        assert_eq!(s.field, InstrumentField::KeyzoneNoteMax);
+        s.next_field();
+        assert_eq!(s.field, InstrumentField::KeyzoneVelMin);
+        s.next_field();
+        assert_eq!(s.field, InstrumentField::KeyzoneVelMax);
+        s.next_field();
+        assert_eq!(s.field, InstrumentField::KeyzoneSample);
+        s.next_field();
+        assert_eq!(s.field, InstrumentField::KeyzoneBaseNote);
+        s.next_field();
         assert_eq!(s.field, InstrumentField::Name);
 
         // Sample Tab

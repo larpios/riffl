@@ -106,6 +106,19 @@ pub enum AppView {
     SampleBrowser,
 }
 
+/// Global undo snapshot types for non-pattern data (Instruments and Samples).
+pub enum UndoSnapshot {
+    Instrument {
+        inst_idx: usize,
+        snapshot: Box<Instrument>,
+    },
+    Sample {
+        inst_idx: usize,
+        sample_idx: usize,
+        snapshot: Arc<Sample>,
+    },
+}
+
 /// Application state
 pub struct App {
     /// Whether the application should exit
@@ -258,10 +271,10 @@ pub struct App {
     /// The last note entered in Insert mode, replayed on each cursor-down when draw_mode is on
     pub draw_note: Option<NoteEvent>,
 
-    /// Undo history for the currently selected instrument.
-    instrument_undo_stack: Vec<Instrument>,
-    /// Redo stack for the currently selected instrument.
-    instrument_redo_stack: Vec<Instrument>,
+    /// Global undo history for non-pattern actions.
+    pub undo_stack: Vec<UndoSnapshot>,
+    /// Global redo stack for non-pattern actions.
+    pub redo_stack: Vec<UndoSnapshot>,
 
     /// Instrument editor panel state (shown below the instrument list)
     pub inst_editor: InstrumentEditorState,
@@ -445,8 +458,8 @@ impl App {
             tap_times: Vec::new(),
             draw_mode: false,
             draw_note: None,
-            instrument_undo_stack: Vec::new(),
-            instrument_redo_stack: Vec::new(),
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
             inst_editor: InstrumentEditorState::default(),
             env_editor: EnvelopeEditorState::default(),
             lfo_editor: LfoEditorState::default(),
