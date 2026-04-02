@@ -5,10 +5,22 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
 
-const RIFFL_CORE_CRATE_NAME: &str = "riffl-core";
-const RIFFL_CORE_CARGO_TOML: &str = "crates/riffl-core/Cargo.toml";
-const RIFFL_TUI_CARGO_TOML: &str = "crates/riffl-tui/Cargo.toml";
-const RIFFL_ROOT_CARGO_TOML: &str = "Cargo.toml";
+#[derive(Debug)]
+struct CrateMetadta {
+    name: &'static str,
+    /// Path releative to the root of the workspace
+    path: &'static str,
+}
+
+const RIFFLE_CORE_CRATE: CrateMetadta = CrateMetadta {
+    name: "riffl-core",
+    path: "crates/riffl-core",
+};
+
+const RIFFL_TUI_CRATE: CrateMetadta = CrateMetadta {
+    name: "riffl-tui",
+    path: "crates/riffl-tui",
+};
 const FLAKE_NIX: &str = "flake.nix";
 
 #[derive(Parser)]
@@ -190,12 +202,16 @@ fn bump_version_to(version: String) -> Result<()> {
     println!("Bumping version to {}...", version);
     let root = project_root();
 
-    update_cargo_toml(&root.join(RIFFL_CORE_CARGO_TOML), &version, None)?;
+    update_cargo_toml(
+        &root.join(RIFFLE_CORE_CRATE.path).join("Cargo.toml"),
+        &version,
+        None,
+    )?;
 
     update_cargo_toml(
-        &root.join(RIFFL_TUI_CARGO_TOML),
+        &root.join(RIFFL_TUI_CRATE.path).join("Cargo.toml"),
         &version,
-        Some(RIFFL_CORE_CRATE_NAME),
+        Some(RIFFLE_CORE_CRATE.name),
     )?;
 
     update_flake_nix(&root.join(FLAKE_NIX), &version)?;
@@ -207,7 +223,11 @@ fn bump_version_to(version: String) -> Result<()> {
 fn bump_version(part: VersionPart) -> Result<()> {
     println!("Bumping version {}...", part);
 
-    let current_version = version_from_cargo_toml(&project_root().join(RIFFL_ROOT_CARGO_TOML))?;
+    let current_version = version_from_cargo_toml(
+        &project_root()
+            .join(RIFFLE_CORE_CRATE.path)
+            .join("Cargo.toml"),
+    )?;
     let target_version = match part {
         VersionPart::Major => format!("{}.0.0", current_version.major + 1),
         VersionPart::Minor => format!("{}.{}.0", current_version.major, current_version.minor + 1),
@@ -219,26 +239,7 @@ fn bump_version(part: VersionPart) -> Result<()> {
         ),
     };
 
-    let root = project_root();
-
-    // Update crates/riffl-core/Cargo.toml
-    update_cargo_toml(&root.join(RIFFL_CORE_CARGO_TOML), &target_version, None)?;
-
-    // Update crates/riffl/Cargo.toml (version and dependency)
-    update_cargo_toml(
-        &root.join(RIFFL_TUI_CARGO_TOML),
-        &target_version,
-        Some(RIFFL_CORE_CRATE_NAME),
-    )?;
-
-    // Update flake.nix
-    update_flake_nix(&root.join(FLAKE_NIX), &target_version)?;
-
-    println!(
-        "Version bumped to {}. Please verify and commit.",
-        target_version
-    );
-    Ok(())
+    bump_version_to(target_version)
 }
 
 fn update_cargo_toml(path: &Path, version: &str, dep_to_update: Option<&str>) -> Result<()> {
@@ -288,11 +289,7 @@ fn update_flake_nix(path: &Path, version: &str) -> Result<()> {
 }
 
 fn project_root() -> PathBuf {
-    Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".into()))
-        .ancestors()
-        .nth(2)
-        .expect("Failed to find project root")
-        .to_path_buf()
+    riffl_core::metadata::find_project_root().expect("Failed to find project root")
 }
 
 fn version_from_cargo_toml(path: &Path) -> Result<SemVer> {
