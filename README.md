@@ -62,6 +62,21 @@ You can also just clone the repository and build and run the project like so:
 cargo run --bin riffl
 ```
 
+## Development
+
+
+### xtask
+
+The project is using the `xtask` pattern for automation.
+`justfile` is only there to hint at the xtask commands so you actually don't need it.
+
+Run this to see what commands are available:
+```bash
+cargo xtask --help
+# or if you have just installed
+# just
+```
+
 ## ☕ Support the Project
 
 If you find Riffl useful and would like to support its development, you can buy me a coffee!
