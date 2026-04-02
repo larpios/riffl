@@ -187,9 +187,9 @@ fn bump_version_to(version: String) -> Result<()> {
     // 1. Update crates/riffl-core/Cargo.toml
     update_cargo_toml(&root.join("crates/riffl-core/Cargo.toml"), &version, None)?;
 
-    // 2. Update crates/riffl-tui/Cargo.toml (version and dependency)
+    // 2. Update crates/riffl/Cargo.toml (version and dependency)
     update_cargo_toml(
-        &root.join("crates/riffl-tui/Cargo.toml"),
+        &root.join("crates/riffl/Cargo.toml"),
         &version,
         Some("riffl-core"),
     )?;
@@ -226,9 +226,9 @@ fn bump_version(part: VersionPart) -> Result<()> {
         None,
     )?;
 
-    // Update crates/riffl-tui/Cargo.toml (version and dependency)
+    // Update crates/riffl/Cargo.toml (version and dependency)
     update_cargo_toml(
-        &root.join("crates/riffl-tui/Cargo.toml"),
+        &root.join("crates/riffl/Cargo.toml"),
         &target_version,
         Some("riffl-core"),
     )?;

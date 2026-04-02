@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 
 use crate::config::Config;
+use crate::input::handler::keyboard::prompts::TextPrompt;
 use crate::editor::{Editor, EditorMode};
 use crate::ui::arrangement::ArrangementView;
 use crate::ui::code_editor::{self, CodeEditor};
@@ -200,17 +201,11 @@ pub struct App {
     /// Current command-line input buffer
     pub command_input: String,
 
-    /// Whether BPM inline prompt is active (Ctrl+B opens it, Enter applies, Esc cancels)
-    pub bpm_prompt_mode: bool,
+    /// Inline BPM prompt (Ctrl+B opens it, Enter applies, Esc cancels).
+    pub bpm_prompt: TextPrompt,
 
-    /// Current BPM prompt input buffer
-    pub bpm_prompt_input: String,
-
-    /// Whether pattern length inline prompt is active (Ctrl+P opens it)
-    pub len_prompt_mode: bool,
-
-    /// Current pattern length prompt input buffer
-    pub len_prompt_input: String,
+    /// Inline pattern length prompt (Ctrl+P opens it).
+    pub len_prompt: TextPrompt,
 
     /// Timestamps of recent taps for tap-tempo (`t` in Normal mode)
     pub tap_times: Vec<Instant>,
@@ -404,10 +399,8 @@ impl App {
             pending_sample_path: None,
             command_mode: false,
             command_input: String::new(),
-            bpm_prompt_mode: false,
-            bpm_prompt_input: String::new(),
-            len_prompt_mode: false,
-            len_prompt_input: String::new(),
+            bpm_prompt: TextPrompt::new(|c| c.is_ascii_digit() || c == '.'),
+            len_prompt: TextPrompt::new(|c| c.is_ascii_digit()),
             tap_times: Vec::new(),
             draw_mode: false,
             draw_note: None,

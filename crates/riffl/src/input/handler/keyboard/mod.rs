@@ -11,6 +11,7 @@ mod browsers;
 mod code_editor;
 mod export;
 mod panels;
+pub mod prompts;
 
 use browsers::{handle_file_browser_key, handle_sample_browser_key};
 use code_editor::handle_code_editor_key;
@@ -18,6 +19,7 @@ use export::{handle_export_dialog_key, hex_char_to_digit};
 use panels::{
     handle_envelope_editor_key, handle_instrument_editor_key, handle_waveform_editor_key,
 };
+use prompts::PromptAction;
 
 /// The active input context, used to route key events to the right handler.
 /// Variants are ordered by priority — higher-priority contexts are checked first
@@ -45,10 +47,10 @@ enum InputContext {
 /// Determine which input context is active based on the current app state.
 /// This is the single authoritative place that encodes dispatch priority.
 fn current_input_context(app: &App) -> InputContext {
-    if app.bpm_prompt_mode {
+    if app.bpm_prompt.active {
         return InputContext::BpmPrompt;
     }
-    if app.len_prompt_mode {
+    if app.len_prompt.active {
         return InputContext::LenPrompt;
     }
     if app.command_mode {
@@ -111,35 +113,17 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
     }
 
     match current_input_context(app) {
-        InputContext::BpmPrompt => match key.code {
-            KeyCode::Enter => app.execute_bpm_prompt(),
-            KeyCode::Esc => {
-                app.bpm_prompt_mode = false;
-                app.bpm_prompt_input.clear();
+        InputContext::BpmPrompt => {
+            if let Some(PromptAction::Confirm) = app.bpm_prompt.handle_key(key) {
+                app.execute_bpm_prompt();
             }
-            KeyCode::Backspace => {
-                app.bpm_prompt_input.pop();
-            }
-            KeyCode::Char(c @ '0'..='9') if key.modifiers == KeyModifiers::NONE => {
-                app.bpm_prompt_input.push(c);
-            }
-            _ => {}
-        },
+        }
 
-        InputContext::LenPrompt => match key.code {
-            KeyCode::Enter => app.execute_len_prompt(),
-            KeyCode::Esc => {
-                app.len_prompt_mode = false;
-                app.len_prompt_input.clear();
+        InputContext::LenPrompt => {
+            if let Some(PromptAction::Confirm) = app.len_prompt.handle_key(key) {
+                app.execute_len_prompt();
             }
-            KeyCode::Backspace => {
-                app.len_prompt_input.pop();
-            }
-            KeyCode::Char(c @ '0'..='9') if key.modifiers == KeyModifiers::NONE => {
-                app.len_prompt_input.push(c);
-            }
-            _ => {}
-        },
+        }
 
         InputContext::CommandMode => match key.code {
             KeyCode::Enter => app.execute_command(),

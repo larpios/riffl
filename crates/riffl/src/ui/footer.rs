@@ -21,7 +21,7 @@ pub(super) fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app:
     let status_bar_cfg = &app.config.status_bar;
 
     // Pattern length prompt mode: show inline length input
-    if app.len_prompt_mode {
+    if app.len_prompt.active {
         let input_style = Style::default().fg(theme.text);
         let label_style = Style::default()
             .fg(theme.cursor_fg)
@@ -30,7 +30,7 @@ pub(super) fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app:
         let line = Line::from(vec![
             Span::styled(" LEN ", label_style),
             Span::raw(" "),
-            Span::styled(app.len_prompt_input.clone(), input_style),
+            Span::styled(app.len_prompt.input.clone(), input_style),
             Span::styled("█", Style::default().fg(theme.primary)),
             Span::styled(
                 "  Enter:apply  Esc:cancel  (16–512)",
@@ -42,7 +42,7 @@ pub(super) fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app:
     }
 
     // BPM prompt mode: show inline BPM input
-    if app.bpm_prompt_mode {
+    if app.bpm_prompt.active {
         let bpm_style = Style::default().fg(theme.text);
         let label_style = Style::default()
             .fg(theme.cursor_fg)
@@ -51,7 +51,7 @@ pub(super) fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app:
         let line = Line::from(vec![
             Span::styled(" BPM ", label_style),
             Span::raw(" "),
-            Span::styled(app.bpm_prompt_input.clone(), bpm_style),
+            Span::styled(app.bpm_prompt.input.clone(), bpm_style),
             Span::styled("█", Style::default().fg(theme.primary)),
             Span::styled(
                 "  Enter:apply  Esc:cancel",

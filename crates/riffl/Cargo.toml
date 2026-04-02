@@ -1,0 +1,34 @@
+[package]
+name = "riffl"
+version = "0.1.3"
+edition = "2021"
+description = "Modern terminal-based music tracker and pattern editor for Riffl."
+repository = "https://github.com/larpios/riffl"
+homepage = "https://github.com/larpios/riffl"
+license-file = "../../LICENSE"
+keywords = ["tui", "music", "tracker", "sequencer", "ratatui"]
+categories = ["multimedia::audio", "command-line-utilities"]
+default-run = "riffl"
+
+[[bin]]
+name = "riffl"
+path = "src/main.rs"
+
+[package.metadata.dist]
+dist = true
+
+[package.metadata.binstall]
+bin-dir = "riffl-{ target }/{ bin }{ binary-ext }"
+pkg-url = "{ repo }/releases/download/v{ version }/riffl-{ target }.{ archive-format }"
+
+[dependencies]
+riffl_core = { package = "riffl-core", path = "../riffl-core", version ="0.1.3", features = ["adlib"] }
+ratatui = "0.30"
+crossterm = "0.28"
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+sysinfo = "0.32"
+
+[dev-dependencies]
+hound = "3.5"

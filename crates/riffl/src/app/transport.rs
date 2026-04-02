@@ -201,13 +201,12 @@ impl App {
 
     /// Open the inline BPM prompt, pre-populated with the current BPM.
     pub fn open_bpm_prompt(&mut self) {
-        self.bpm_prompt_mode = true;
-        self.bpm_prompt_input = format!("{:.0}", self.transport.bpm());
+        self.bpm_prompt.open(format!("{:.0}", self.transport.bpm()));
     }
 
     /// Execute the BPM prompt: parse input and apply BPM if valid.
     pub fn execute_bpm_prompt(&mut self) {
-        if let Ok(bpm) = self.bpm_prompt_input.trim().parse::<f64>() {
+        if let Ok(bpm) = self.bpm_prompt.input.trim().parse::<f64>() {
             let clamped = bpm.clamp(20.0, 999.0);
             self.transport.set_bpm(clamped);
             self.song.bpm = clamped;
@@ -215,19 +214,17 @@ impl App {
                 mixer.update_tempo(clamped);
             }
         }
-        self.bpm_prompt_mode = false;
-        self.bpm_prompt_input.clear();
+        self.bpm_prompt.close();
     }
 
     /// Open the inline pattern length prompt, pre-populated with current row count.
     pub fn open_len_prompt(&mut self) {
-        self.len_prompt_mode = true;
-        self.len_prompt_input = format!("{}", self.editor.pattern().row_count());
+        self.len_prompt.open(format!("{}", self.editor.pattern().row_count()));
     }
 
     /// Execute the pattern length prompt: parse input and resize pattern if valid.
     pub fn execute_len_prompt(&mut self) {
-        if let Ok(n) = self.len_prompt_input.trim().parse::<usize>() {
+        if let Ok(n) = self.len_prompt.input.trim().parse::<usize>() {
             use riffl_core::pattern::pattern::{MAX_ROW_COUNT, MIN_ROW_COUNT};
             let clamped = n.clamp(MIN_ROW_COUNT, MAX_ROW_COUNT);
             self.editor.pattern_mut().set_row_count(clamped);
@@ -241,8 +238,7 @@ impl App {
             let pos = self.transport.arrangement_position();
             self.flush_editor_pattern(pos);
         }
-        self.len_prompt_mode = false;
-        self.len_prompt_input.clear();
+        self.len_prompt.close();
     }
 
     /// Record a tap for tap-tempo. Computes BPM from the average interval
