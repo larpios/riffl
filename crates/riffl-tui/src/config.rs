@@ -274,8 +274,8 @@ impl Default for StatusBarConfig {
     }
 }
 
-/// Application name, sourced from Cargo.toml at compile time.
-pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
+/// Application name — the binary name from the [[bin]] section of Cargo.toml.
+pub const APP_NAME: &str = env!("CARGO_BIN_NAME");
 
 /// Return the platform-specific config directory for this application.
 ///

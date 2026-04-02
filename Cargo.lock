@@ -2083,20 +2083,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "riffl"
-version = "0.1.3"
-dependencies = [
- "anyhow",
- "crossterm 0.28.1",
- "hound",
- "ratatui",
- "riffl-core",
- "serde",
- "sysinfo",
- "toml",
-]
-
-[[package]]
 name = "riffl-core"
 version = "0.1.3"
 dependencies = [
@@ -2117,6 +2103,20 @@ dependencies = [
  "serde_json",
  "symphonia",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "riffl-tui"
+version = "0.1.3"
+dependencies = [
+ "anyhow",
+ "crossterm 0.28.1",
+ "hound",
+ "ratatui",
+ "riffl-core",
+ "serde",
+ "sysinfo",
+ "toml",
 ]
 
 [[package]]

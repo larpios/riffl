@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/riffl-core", "crates/riffl", "crates/xtask"]
+members = ["crates/riffl-core", "crates/riffl-tui", "crates/xtask"]
 exclude = ["test-opl"]
 resolver = "2"
 
