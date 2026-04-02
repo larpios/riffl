@@ -5,6 +5,18 @@ use std::time::Instant;
 use riffl_core::pattern::{note::NoteEvent, Pattern};
 
 impl App {
+    /// Set BPM on all three subsystems atomically (transport, song, mixer).
+    ///
+    /// This is the only correct way to change the tempo — it keeps
+    /// `transport.bpm`, `song.bpm`, and the mixer's tempo in sync.
+    pub fn set_bpm(&mut self, bpm: f64) {
+        self.transport.set_bpm(bpm);
+        self.song.bpm = bpm;
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.update_tempo(bpm);
+        }
+    }
+
     /// Toggle audio playback between play and pause.
     ///
     /// In Song mode, starting from stopped loads the first arrangement pattern.
@@ -13,12 +25,10 @@ impl App {
             TransportState::Stopped => {
                 // Restore the original tempo in case pattern effects (Txx/Axx) modified
                 // it during the previous playback run.
-                self.song.bpm = self.initial_bpm;
+                self.set_bpm(self.initial_bpm);
                 self.song.tpl = self.initial_tpl;
-                self.transport.set_bpm(self.initial_bpm);
                 self.transport.set_tpl(self.initial_tpl);
                 if let Ok(mut mixer) = self.mixer.lock() {
-                    mixer.update_tempo(self.initial_bpm);
                     mixer.set_tpl(self.initial_tpl);
                 }
 
@@ -193,10 +203,7 @@ impl App {
     pub fn adjust_bpm(&mut self, delta: f64) {
         self.transport.adjust_bpm(delta);
         let new_bpm = self.transport.bpm();
-        self.song.bpm = new_bpm;
-        if let Ok(mut mixer) = self.mixer.lock() {
-            mixer.update_tempo(new_bpm);
-        }
+        self.set_bpm(new_bpm);
     }
 
     /// Open the inline BPM prompt, pre-populated with the current BPM.
@@ -207,12 +214,7 @@ impl App {
     /// Execute the BPM prompt: parse input and apply BPM if valid.
     pub fn execute_bpm_prompt(&mut self) {
         if let Ok(bpm) = self.bpm_prompt.input.trim().parse::<f64>() {
-            let clamped = bpm.clamp(20.0, 999.0);
-            self.transport.set_bpm(clamped);
-            self.song.bpm = clamped;
-            if let Ok(mut mixer) = self.mixer.lock() {
-                mixer.update_tempo(clamped);
-            }
+            self.set_bpm(bpm.clamp(20.0, 999.0));
         }
         self.bpm_prompt.close();
     }
@@ -258,11 +260,7 @@ impl App {
                 .collect();
             let avg_interval = intervals.iter().sum::<f64>() / intervals.len() as f64;
             let bpm = (60.0 / avg_interval).clamp(20.0, 999.0);
-            self.transport.set_bpm(bpm);
-            self.song.bpm = bpm;
-            if let Ok(mut mixer) = self.mixer.lock() {
-                mixer.update_tempo(bpm);
-            }
+            self.set_bpm(bpm);
         }
     }
 
@@ -351,12 +349,7 @@ impl App {
         for cmd in commands {
             match cmd {
                 TransportCommand::SetBpm(bpm) => {
-                    let clamped = bpm.clamp(20.0, 999.0);
-                    self.transport.set_bpm(clamped);
-                    self.song.bpm = clamped;
-                    if let Ok(mut mixer) = self.mixer.lock() {
-                        mixer.update_tempo(clamped);
-                    }
+                    self.set_bpm(bpm.clamp(20.0, 999.0));
                 }
                 TransportCommand::SetTpl(tpl) => {
                     self.transport.set_tpl(tpl);

@@ -637,12 +637,10 @@ impl App {
                         && row == 0
                         && current_arrangement_pos >= self.song.arrangement.len().saturating_sub(1)
                     {
-                        self.transport.set_bpm(self.initial_bpm);
-                        self.transport.set_tpl(self.initial_tpl);
-                        self.song.bpm = self.initial_bpm;
+                        self.set_bpm(self.initial_bpm);
                         self.song.tpl = self.initial_tpl;
+                        self.transport.set_tpl(self.initial_tpl);
                         if let Ok(mut mixer) = self.mixer.lock() {
-                            mixer.update_tempo(self.initial_bpm);
                             mixer.set_tpl(self.initial_tpl);
                         }
                     }

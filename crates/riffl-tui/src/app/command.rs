@@ -32,12 +32,7 @@ impl super::App {
 
             Some(Command::Bpm) => {
                 if let Some(val) = args.parse::<f64>().ok().filter(|_| !args.is_empty()) {
-                    let clamped = val.clamp(20.0, 999.0);
-                    self.transport.set_bpm(clamped);
-                    self.song.bpm = clamped;
-                    if let Ok(mut mixer) = self.mixer.lock() {
-                        mixer.update_tempo(clamped);
-                    }
+                    self.set_bpm(val.clamp(20.0, 999.0));
                     self.mark_dirty();
                 } else {
                     self.open_modal(Modal::error(

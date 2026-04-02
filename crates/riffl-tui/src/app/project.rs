@@ -30,12 +30,11 @@ impl App {
         self.song = result.song;
         self.initial_bpm = self.song.bpm;
         self.initial_tpl = self.song.tpl;
-        self.transport.set_bpm(self.song.bpm);
+        self.set_bpm(self.song.bpm);
         self.transport.set_tpl(self.song.tpl);
         self.transport.set_lpb(self.song.lpb);
         if let Ok(mut mixer) = self.mixer.lock() {
             mixer.set_num_channels(self.song.tracks.len());
-            mixer.update_tempo(self.song.bpm);
             mixer.set_tpl(self.song.tpl);
             mixer.set_global_volume(self.song.global_volume);
             mixer.set_effect_mode(self.song.effect_mode);
@@ -217,11 +216,10 @@ impl App {
 
                 self.initial_bpm = self.song.bpm;
                 self.initial_tpl = self.song.tpl;
-                self.transport.set_bpm(self.song.bpm);
+                self.set_bpm(self.song.bpm);
                 self.transport.set_tpl(self.song.tpl);
                 self.transport.set_lpb(self.song.lpb);
                 if let Ok(mut mixer) = self.mixer.lock() {
-                    mixer.update_tempo(self.song.bpm);
                     mixer.set_tpl(self.song.tpl);
                     mixer.set_global_volume(self.song.global_volume);
                     mixer.set_effect_mode(self.song.effect_mode);
