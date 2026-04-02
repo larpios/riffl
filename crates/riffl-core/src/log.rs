@@ -1,7 +1,6 @@
 use chrono::Local;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::PathBuf;
 use std::sync::Mutex;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
@@ -41,7 +40,14 @@ pub fn init() -> std::io::Result<()> {
 
 impl Logger {
     pub fn init() -> std::io::Result<()> {
-        let log_file_path = PathBuf::from("log.txt");
+        let log_dir = crate::metadata::log_dir().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Could not determine log directory",
+            )
+        })?;
+        std::fs::create_dir_all(&log_dir)?;
+        let log_file_path = log_dir.join("log.txt");
         let file = OpenOptions::new()
             .create(true)
             .append(true)

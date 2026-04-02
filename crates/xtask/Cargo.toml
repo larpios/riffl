@@ -9,3 +9,4 @@ clap = { version = "4.5", features = ["derive"] }
 anyhow = "1.0"
 # For file editing in the bump command
 toml_edit = "0.22"
+riffl_core = { package = "riffl-core", path = "../riffl-core" }

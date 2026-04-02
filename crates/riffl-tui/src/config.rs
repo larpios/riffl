@@ -7,6 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::ui::theme::ThemeKind;
+use riffl_core::metadata;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -160,12 +161,14 @@ impl Config {
 
     /// Return the application config directory (platform-aware).
     pub fn config_dir() -> std::path::PathBuf {
-        get_config_dir()
+        metadata::config_dir().unwrap_or_else(|| std::path::PathBuf::from("."))
     }
 
     /// Return the default samples directory (`~/.config/riffl/samples/`).
     pub fn default_samples_dir() -> std::path::PathBuf {
-        Self::config_dir().join("samples")
+        metadata::config_dir()
+            .map(|p| p.join("samples"))
+            .unwrap_or_else(|| std::path::PathBuf::from("samples"))
     }
 
     /// Resolve all sample directories for the browser.
@@ -209,7 +212,9 @@ impl Config {
 
     /// Return the default modules directory (`~/.config/riffl/modules/`).
     pub fn default_modules_dir() -> std::path::PathBuf {
-        Self::config_dir().join("modules")
+        metadata::config_dir()
+            .map(|p| p.join("modules"))
+            .unwrap_or_else(|| std::path::PathBuf::from("modules"))
     }
 
     /// Resolve all module directories for the browser.
@@ -239,7 +244,7 @@ impl Config {
         if let Ok(p) = std::env::var("TRACKER_RS_CONFIG") {
             return Some(std::path::PathBuf::from(p));
         }
-        Some(get_config_dir().join("config.toml"))
+        metadata::config_dir().map(|p| p.join("config.toml"))
     }
 }
 
@@ -272,61 +277,6 @@ impl Default for StatusBarConfig {
             show_selection: true,
         }
     }
-}
-
-/// Application name — the binary name from the [[bin]] section of Cargo.toml.
-pub const APP_NAME: &str = env!("CARGO_BIN_NAME");
-
-/// Return the platform-specific config directory for this application.
-///
-/// - Linux/BSD: `$XDG_CONFIG_HOME/<app>` or `~/.config/<app>`
-/// - macOS:     `~/Library/Application Support/<app>`
-/// - Windows:   `%APPDATA%\<app>`
-pub fn get_config_dir() -> std::path::PathBuf {
-    #[cfg(target_os = "windows")]
-    {
-        std::env::var("APPDATA")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|_| std::path::PathBuf::from("."))
-            .join(APP_NAME)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-            std::path::PathBuf::from(xdg)
-        } else {
-            home_dir().join(".config")
-        }
-        .join(APP_NAME)
-    }
-}
-
-/// Return the platform-specific data directory for this application.
-///
-/// - Linux/BSD/macOS: `$XDG_DATA_HOME/<app>` or `~/.local/share/<app>`
-/// - Windows:         `%APPDATA%\<app>`
-pub fn get_data_dir() -> std::path::PathBuf {
-    #[cfg(target_os = "windows")]
-    {
-        std::env::var("APPDATA")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|_| std::path::PathBuf::from("."))
-            .join(APP_NAME)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
-            std::path::PathBuf::from(xdg)
-        } else {
-            home_dir().join(".local").join("share")
-        }
-        .join(APP_NAME)
-    }
-}
-
-/// Return the user's home directory.
-fn home_dir() -> std::path::PathBuf {
-    std::env::home_dir().unwrap()
 }
 
 #[cfg(test)]
