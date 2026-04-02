@@ -207,6 +207,15 @@ pub fn handle_file_browser_key(app: &mut App, key: KeyEvent) {
                 return;
             }
 
+            // Project browser: load selected .rtm as a project
+            if app.is_project_browser {
+                if let Some(path) = app.file_browser.selected_path().map(|p| p.to_path_buf()) {
+                    app.close_file_browser(); // also resets is_project_browser
+                    app.load_project(&path);
+                }
+                return;
+            }
+
             let is_module = app
                 .file_browser
                 .selected_path()

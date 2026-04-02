@@ -5,21 +5,7 @@ use crate::ui;
 pub(super) fn handle(app: &mut App, action: &Action) {
     match action {
         Action::SaveProject => app.save_project(),
-        Action::LoadProject => {
-            if let Some(path) = app.project_path.clone() {
-                app.load_project(&path);
-            } else {
-                let path = std::path::PathBuf::from("untitled.rtm");
-                if path.exists() {
-                    app.load_project(&path);
-                } else {
-                    app.open_modal(ui::modal::Modal::info(
-                        "No Project".to_string(),
-                        "No project file found. Save first with Ctrl+S.".to_string(),
-                    ));
-                }
-            }
-        }
+        Action::LoadProject => app.open_project_browser(),
         Action::OpenExportDialog => app.open_export_dialog(),
         Action::AddPattern => {
             if app.current_view == AppView::PatternList {

@@ -271,6 +271,20 @@ impl super::App {
     /// Close the file browser overlay
     pub fn close_file_browser(&mut self) {
         self.file_browser.close();
+        self.is_project_browser = false;
+    }
+
+    /// Open the project file browser (Ctrl-O). Shows only .rtm files.
+    pub fn open_project_browser(&mut self) {
+        let start_dir = self
+            .project_path
+            .as_ref()
+            .and_then(|p| p.parent())
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        self.file_browser = crate::ui::file_browser::FileBrowser::new_project(&start_dir);
+        self.file_browser.open();
+        self.is_project_browser = true;
     }
 
     /// Check if the export dialog is currently active.

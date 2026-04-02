@@ -8,6 +8,9 @@ use std::path::{Path, PathBuf};
 /// Supported file extensions for the sample/MOD browser.
 const AUDIO_EXTENSIONS: &[&str] = &["wav", "flac", "ogg", "mod", "xm", "it", "s3m"];
 
+/// Supported file extensions for the project browser.
+const PROJECT_EXTENSIONS: &[&str] = &["rtm"];
+
 /// Interactive file browser state for selecting audio samples.
 #[derive(Debug, Clone)]
 pub struct FileBrowser {
@@ -19,6 +22,8 @@ pub struct FileBrowser {
     selected: usize,
     /// Whether the browser is currently open/active
     pub active: bool,
+    /// File extensions this browser will show
+    extensions: &'static [&'static str],
 }
 
 impl FileBrowser {
@@ -26,18 +31,28 @@ impl FileBrowser {
     ///
     /// Scans the directory for supported audio files (.wav, .flac, .ogg).
     pub fn new(directory: &Path) -> Self {
-        let entries = scan_entries(directory);
+        Self::new_with_extensions(directory, AUDIO_EXTENSIONS)
+    }
+
+    /// Create a new file browser that shows only project files (.rtm).
+    pub fn new_project(directory: &Path) -> Self {
+        Self::new_with_extensions(directory, PROJECT_EXTENSIONS)
+    }
+
+    fn new_with_extensions(directory: &Path, extensions: &'static [&'static str]) -> Self {
+        let entries = scan_entries(directory, extensions);
         Self {
             directory: directory.to_path_buf(),
             entries,
             selected: 0,
             active: false,
+            extensions,
         }
     }
 
     /// Open the file browser (set active and refresh file list).
     pub fn open(&mut self) {
-        self.entries = scan_entries(&self.directory);
+        self.entries = scan_entries(&self.directory, self.extensions);
         self.selected = 0;
         self.active = true;
     }
@@ -61,7 +76,7 @@ impl FileBrowser {
         if let Some(path) = self.entries.get(self.selected).cloned() {
             if path.is_dir() {
                 self.directory = path;
-                self.entries = scan_entries(&self.directory);
+                self.entries = scan_entries(&self.directory, self.extensions);
                 self.selected = 0;
             }
         }
@@ -71,7 +86,7 @@ impl FileBrowser {
     pub fn go_up(&mut self) {
         if let Some(parent) = self.directory.parent().map(|p| p.to_path_buf()) {
             self.directory = parent;
-            self.entries = scan_entries(&self.directory);
+            self.entries = scan_entries(&self.directory, self.extensions);
             self.selected = 0;
         }
     }
@@ -121,8 +136,8 @@ impl FileBrowser {
     }
 }
 
-/// Scan a directory for subdirectories and audio files (directories first, then files).
-fn scan_entries(dir: &Path) -> Vec<PathBuf> {
+/// Scan a directory for subdirectories and files matching `extensions` (directories first, then files).
+fn scan_entries(dir: &Path, extensions: &[&str]) -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     let mut files = Vec::new();
 
@@ -145,7 +160,7 @@ fn scan_entries(dir: &Path) -> Vec<PathBuf> {
             }
         } else if path.is_file() {
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                if AUDIO_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
+                if extensions.contains(&ext.to_lowercase().as_str()) {
                     files.push(path);
                 }
             }
@@ -319,7 +334,7 @@ mod tests {
         fs::write(dir.join("test.wav"), b"fake").unwrap();
         fs::write(dir.join("test.mp3"), b"fake").unwrap();
 
-        let files = scan_entries(&dir);
+        let files = scan_entries(&dir, AUDIO_EXTENSIONS);
         assert_eq!(files.len(), 1);
         assert!(files[0].file_name().unwrap().to_str().unwrap() == "test.wav");
 
