@@ -14,6 +14,7 @@ pub(super) fn handle(app: &mut App, action: &Action) -> bool {
         }
         Action::ShowWhichKey => app.which_key_mode = !app.which_key_mode,
         Action::OpenFileBrowser => app.open_file_browser(),
+        Action::OpenModuleBrowser => app.open_module_browser(),
         Action::ToggleSplitView => app.toggle_split_view(),
         Action::ToggleLiveMode => app.toggle_live_mode(),
         Action::ToggleFollowMode => app.follow_mode = !app.follow_mode,

@@ -106,6 +106,16 @@ pub enum AppView {
     SampleBrowser,
 }
 
+/// Outcome sent from the background external-picker thread back to the main loop.
+pub(crate) enum PickerOutcome {
+    /// User selected a file.
+    File(std::path::PathBuf),
+    /// Picker exited without a selection.
+    Cancelled,
+    /// Command was not found and the picker was "auto" — open the builtin browser instead.
+    Fallback(std::path::PathBuf),
+}
+
 /// Global undo snapshot types for non-pattern data (Instruments and Samples).
 pub enum UndoSnapshot {
     Instrument {
@@ -322,6 +332,13 @@ pub struct App {
 
     /// The TPL (ticks-per-line) the song had when it was loaded.
     initial_tpl: u32,
+
+    /// Receiver for the result of a background external file-picker (yazi etc.).
+    /// `Some` while the picker thread is running or has a pending result; `None` otherwise.
+    picker_rx: Option<std::sync::mpsc::Receiver<PickerOutcome>>,
+
+    /// When true, the active picker is importing a module; when false, loading a sample.
+    picker_is_module: bool,
 }
 
 impl App {
@@ -476,6 +493,8 @@ impl App {
             command_history_index: None,
             initial_bpm,
             initial_tpl,
+            picker_rx: None,
+            picker_is_module: false,
         }
     }
 

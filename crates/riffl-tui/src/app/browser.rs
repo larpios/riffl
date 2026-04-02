@@ -1,3 +1,4 @@
+use crate::app::PickerOutcome;
 use crate::ui::file_browser::FileBrowser;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -80,7 +81,7 @@ impl super::App {
         self.sample_browser.set_bookmarks(bookmarks);
     }
 
-    /// Open the file browser overlay, delegating to an external picker or the built-in browser.
+    /// Open the sample file picker (Ctrl-F). Loads the selection as a sample.
     ///
     /// Behaviour is controlled by `config.file_picker`:
     ///   "auto"    — try yazi, fall back to built-in on failure (default)
@@ -94,15 +95,36 @@ impl super::App {
             .cloned()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
 
-        let picker = self.config.file_picker.clone();
-
-        if picker == "builtin" {
+        if self.config.file_picker == "builtin" {
             self.file_browser = crate::ui::file_browser::FileBrowser::new(&start_dir);
             self.file_browser.open();
             return;
         }
 
-        // Determine the external command to try (empty string = skip external)
+        self.launch_external_picker(start_dir, false);
+    }
+
+    /// Open the module file picker (Ctrl-I). Imports the selection as a module.
+    pub fn open_module_browser(&mut self) {
+        let start_dir = crate::config::Config::default_modules_dir();
+
+        if self.config.file_picker == "builtin" {
+            // file_browser is already rooted at the modules dir (see refresh_browser_roots)
+            self.file_browser.open();
+            return;
+        }
+
+        self.launch_external_picker(start_dir, true);
+    }
+
+    /// Spawn the external picker on a background thread and yield the terminal to it.
+    /// Does nothing if a picker is already running.
+    fn launch_external_picker(&mut self, start_dir: std::path::PathBuf, is_module: bool) {
+        if self.picker_rx.is_some() {
+            return;
+        }
+
+        let picker = self.config.file_picker.clone();
         let cmd = if picker == "auto" || picker == "yazi" {
             "yazi".to_string()
         } else {
@@ -111,9 +133,7 @@ impl super::App {
 
         use crossterm::{
             execute,
-            terminal::{
-                disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
-            },
+            terminal::{disable_raw_mode, LeaveAlternateScreen},
         };
 
         let mut stdout = std::io::stdout();
@@ -123,94 +143,129 @@ impl super::App {
         let temp_file = std::env::temp_dir().join("riffl_picker_selection");
         let _ = std::fs::remove_file(&temp_file);
 
-        let status = std::process::Command::new(&cmd)
-            .arg("--chooser-file")
-            .arg(&temp_file)
-            .arg(&start_dir)
-            .status();
+        let (tx, rx) = std::sync::mpsc::channel::<PickerOutcome>();
+        self.picker_rx = Some(rx);
+        self.picker_is_module = is_module;
 
-        // Restore UI
+        let is_auto = picker == "auto";
+        std::thread::spawn(move || {
+            let result = std::process::Command::new(&cmd)
+                .arg("--chooser-file")
+                .arg(&temp_file)
+                .arg(&start_dir)
+                .status();
+
+            let outcome = match result {
+                Ok(s) if s.success() => {
+                    let selected = std::fs::read_to_string(&temp_file)
+                        .ok()
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .map(std::path::PathBuf::from);
+                    match selected {
+                        Some(path) => PickerOutcome::File(path),
+                        None => PickerOutcome::Cancelled,
+                    }
+                }
+                Ok(_) => PickerOutcome::Cancelled,
+                Err(_) => {
+                    if is_auto {
+                        PickerOutcome::Fallback(start_dir)
+                    } else {
+                        PickerOutcome::Cancelled
+                    }
+                }
+            };
+            let _ = tx.send(outcome);
+        });
+    }
+
+    /// Poll the background picker thread. Called every tick while the picker is running.
+    /// Restores the terminal and handles the result when the picker exits.
+    pub fn poll_picker(&mut self) {
+        use std::sync::mpsc::TryRecvError;
+
+        let outcome = match self.picker_rx.as_ref() {
+            None => return,
+            Some(rx) => match rx.try_recv() {
+                Ok(o) => {
+                    self.picker_rx = None;
+                    o
+                }
+                Err(TryRecvError::Disconnected) => {
+                    self.picker_rx = None;
+                    PickerOutcome::Cancelled
+                }
+                Err(TryRecvError::Empty) => return,
+            },
+        };
+
+        use crossterm::{
+            execute,
+            terminal::{enable_raw_mode, EnterAlternateScreen},
+        };
+        let mut stdout = std::io::stdout();
         let _ = enable_raw_mode();
         let _ = execute!(stdout, EnterAlternateScreen);
-
-        // Force ratatui to flush its full buffer on the next draw cycle —
-        // without this the screen stays blank until the user presses a key.
         self.needs_full_redraw = true;
 
-        match status {
-            Ok(s) if s.success() => {
-                if let Ok(path_str) = std::fs::read_to_string(&temp_file) {
-                    let trimmed = path_str.trim();
-                    if !trimmed.is_empty() {
-                        let path = std::path::PathBuf::from(trimmed);
-                        let is_module = path
-                            .extension()
-                            .and_then(|e| e.to_str())
-                            .map(|e| {
-                                let e = e.to_ascii_lowercase();
-                                e == "mod" || e == "xm" || e == "it" || e == "s3m" || e == "rtm"
-                            })
-                            .unwrap_or(false);
-
-                        if is_module {
-                            match self.import_file(&path) {
-                                Ok(()) => {
-                                    let name = path
-                                        .file_name()
-                                        .and_then(|n| n.to_str())
-                                        .unwrap_or("unknown")
-                                        .to_string();
-                                    self.open_modal(crate::ui::modal::Modal::info(
-                                        "Module Imported".to_string(),
-                                        format!("Imported '{}'", name),
-                                    ));
-                                }
-                                Err(msg) => {
-                                    self.open_modal(crate::ui::modal::Modal::error(
-                                        "Import Failed".to_string(),
-                                        msg,
-                                    ));
-                                }
-                            }
-                        } else {
-                            match self.load_sample_from_path(&path) {
-                                Ok(idx) => {
-                                    let name = self
-                                        .song
-                                        .instruments
-                                        .get(idx)
-                                        .map(|i| i.name.clone())
-                                        .unwrap_or_default();
-                                    self.open_modal(crate::ui::modal::Modal::info(
-                                        "Sample Loaded".to_string(),
-                                        format!("Loaded '{}' to instrument {:02X}", name, idx),
-                                    ));
-                                }
-                                Err(msg) => {
-                                    self.open_modal(crate::ui::modal::Modal::error(
-                                        "Load Failed".to_string(),
-                                        msg,
-                                    ));
-                                }
-                            }
+        let is_module = self.picker_is_module;
+        match outcome {
+            PickerOutcome::Cancelled => {}
+            PickerOutcome::Fallback(start_dir) => {
+                self.file_browser = crate::ui::file_browser::FileBrowser::new(&start_dir);
+                self.file_browser.open();
+            }
+            PickerOutcome::File(path) => {
+                if is_module {
+                    match self.import_file(&path) {
+                        Ok(()) => {
+                            let name = path
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("unknown")
+                                .to_string();
+                            self.open_modal(crate::ui::modal::Modal::info(
+                                "Module Imported".to_string(),
+                                format!("Imported '{}'", name),
+                            ));
+                        }
+                        Err(msg) => {
+                            self.open_modal(crate::ui::modal::Modal::error(
+                                "Import Failed".to_string(),
+                                msg,
+                            ));
+                        }
+                    }
+                } else {
+                    match self.load_sample_from_path(&path) {
+                        Ok(idx) => {
+                            let name = self
+                                .song
+                                .instruments
+                                .get(idx)
+                                .map(|i| i.name.clone())
+                                .unwrap_or_default();
+                            self.open_modal(crate::ui::modal::Modal::info(
+                                "Sample Loaded".to_string(),
+                                format!("Loaded '{}' to instrument {:02X}", name, idx),
+                            ));
+                        }
+                        Err(msg) => {
+                            self.open_modal(crate::ui::modal::Modal::error(
+                                "Load Failed".to_string(),
+                                msg,
+                            ));
                         }
                     }
                 }
             }
-            Ok(_) => {
-                // External picker closed without selecting a file — nothing to do.
-            }
-            Err(_) => {
-                // Command not found or failed to spawn.
-                if picker == "auto" {
-                    // Fall back to built-in browser.
-                    self.file_browser = crate::ui::file_browser::FileBrowser::new(&start_dir);
-                    self.file_browser.open();
-                }
-                // For "yazi" or a named command we don't silently fall back,
-                // so the user knows their configured picker isn't available.
-            }
         }
+    }
+
+    /// Returns true while a background external file-picker is running.
+    pub fn has_external_picker_running(&self) -> bool {
+        self.picker_rx.is_some()
     }
 
     /// Close the file browser overlay

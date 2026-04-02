@@ -115,6 +115,17 @@ fn restore_terminal() -> Result<()> {
 
 fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> Result<()> {
     while app.should_run() {
+        // While an external file picker (e.g. yazi) owns the terminal, skip
+        // rendering and event reading — they would corrupt the picker's UI.
+        // The sequencer update still runs so audio playback continues normally.
+        if app.has_external_picker_running() {
+            std::thread::sleep(TICK_RATE);
+            app.refresh_system_stats();
+            app.update()?;
+            app.poll_picker();
+            continue;
+        }
+
         if app.needs_full_redraw {
             app.needs_full_redraw = false;
             terminal.clear()?;

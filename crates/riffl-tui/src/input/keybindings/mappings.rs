@@ -342,6 +342,11 @@ pub(super) const KEY_MAPPINGS: &[KeyMapping] = &[
         mode: EditorMode::Normal,
     },
     KeyMapping {
+        key: "Ctrl+N",
+        action: Action::OpenModuleBrowser,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
         key: "Ctrl+E",
         action: Action::OpenExportDialog,
         mode: EditorMode::Normal,

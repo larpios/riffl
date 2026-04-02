@@ -57,6 +57,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             KeyCode::Char('s') => Action::SaveProject,
             KeyCode::Char('o') => Action::LoadProject,
             KeyCode::Char('f') => Action::OpenFileBrowser,
+            KeyCode::Char('n') => Action::OpenModuleBrowser,
             KeyCode::Char('e') => Action::OpenExportDialog,
             KeyCode::Char('\\') => Action::ToggleSplitView,
             KeyCode::Char('t') => Action::OpenTemplates,

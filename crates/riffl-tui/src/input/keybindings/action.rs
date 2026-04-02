@@ -148,6 +148,7 @@ pub enum Action {
     ToggleEffectHelp,
     ShowWhichKey,
     OpenFileBrowser,
+    OpenModuleBrowser,
 
     // Instrument management
     AddInstrument,
@@ -296,6 +297,7 @@ impl ActionMetadata for Action {
             Action::ToggleHelp => "Help",
             Action::ToggleEffectHelp => "Effect Help",
             Action::OpenFileBrowser => "File Browser",
+            Action::OpenModuleBrowser => "Module Browser",
             Action::AddInstrument => "Add Instrument",
             Action::DeleteInstrument => "Delete Instrument",
             Action::RenameInstrument => "Rename Instrument",
@@ -433,6 +435,7 @@ impl ActionMetadata for Action {
             Action::ToggleHelp => "Show help screen",
             Action::ToggleEffectHelp => "Show effect command explorer",
             Action::OpenFileBrowser => "Open file browser",
+            Action::OpenModuleBrowser => "Open module browser",
             Action::AddInstrument => "Add a new instrument",
             Action::DeleteInstrument => "Delete current instrument",
             Action::RenameInstrument => "Rename current instrument",
@@ -618,6 +621,7 @@ impl ActionMetadata for Action {
             | Action::ToggleHelp
             | Action::ToggleEffectHelp
             | Action::OpenFileBrowser
+            | Action::OpenModuleBrowser
             | Action::ShowWhichKey => ActionCategory::Application,
 
             Action::None => ActionCategory::None,
