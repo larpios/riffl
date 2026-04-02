@@ -47,6 +47,48 @@ mod tests;
 pub mod transport;
 pub mod view;
 
+/// CPU and memory usage, polled every 2 seconds for the status bar.
+struct SystemMonitor {
+    sys: sysinfo::System,
+    cpu_percent: f32,
+    mem_percent: f32,
+    last_update: Instant,
+}
+
+impl SystemMonitor {
+    fn new() -> Self {
+        Self {
+            sys: sysinfo::System::new(),
+            cpu_percent: 0.0,
+            mem_percent: 0.0,
+            last_update: Instant::now(),
+        }
+    }
+
+    fn refresh(&mut self) {
+        if self.last_update.elapsed().as_secs() < 2 {
+            return;
+        }
+        self.last_update = Instant::now();
+        self.sys.refresh_memory();
+        self.sys.refresh_cpu_all();
+
+        let total_mem = self.sys.total_memory() as f64;
+        let used_mem = self.sys.used_memory() as f64;
+        self.mem_percent = if total_mem > 0.0 {
+            (used_mem / total_mem * 100.0) as f32
+        } else {
+            0.0
+        };
+
+        let cpus = self.sys.cpus();
+        if !cpus.is_empty() {
+            let total_cpu: f32 = cpus.iter().map(|c| c.cpu_usage()).sum::<f32>();
+            self.cpu_percent = total_cpu / cpus.len() as f32;
+        }
+    }
+}
+
 /// Which top-level view is currently active.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppView {
@@ -243,14 +285,8 @@ pub struct App {
     /// Pending Zxx script triggers from the last tick (channel, param).
     pub pending_script_triggers: Vec<(usize, u8)>,
 
-    /// Cached system info for CPU/memory status bar display.
-    sys_info: sysinfo::System,
-    /// Cached CPU usage percentage (updated periodically).
-    cached_cpu_percent: f32,
-    /// Cached memory usage percentage (updated periodically).
-    cached_mem_percent: f32,
-    /// Last time system stats were refreshed.
-    sys_info_last_update: Instant,
+    /// System resource monitor (CPU/memory), updated periodically for the status bar.
+    sys_monitor: SystemMonitor,
 
     /// Timestamp of the last autosave (used to check autosave interval).
     last_autosave: Instant,
@@ -413,10 +449,7 @@ impl App {
             browser_preview_rate: 1.0,
             browser_preview_offset_frames: 0,
             pending_script_triggers: Vec::new(),
-            sys_info: sysinfo::System::new(),
-            cached_cpu_percent: 0.0,
-            cached_mem_percent: 0.0,
-            sys_info_last_update: Instant::now(),
+            sys_monitor: SystemMonitor::new(),
             last_autosave: Instant::now(),
             channel_scroll: 0,
             command_history: Vec::new(),
@@ -756,7 +789,7 @@ impl App {
 
     /// Get system CPU and memory usage as (cpu_percent, memory_percent).
     pub fn system_stats(&self) -> Option<(f32, f32)> {
-        Some((self.cached_cpu_percent, self.cached_mem_percent))
+        Some((self.sys_monitor.cpu_percent, self.sys_monitor.mem_percent))
     }
 
     /// Returns whether the metronome is currently enabled.
@@ -807,27 +840,7 @@ impl App {
 
     /// Refresh system stats (called periodically from the update loop).
     pub fn refresh_system_stats(&mut self) {
-        if self.sys_info_last_update.elapsed().as_secs() < 2 {
-            return;
-        }
-        self.sys_info_last_update = Instant::now();
-
-        self.sys_info.refresh_memory();
-        self.sys_info.refresh_cpu_all();
-
-        let total_mem = self.sys_info.total_memory() as f64;
-        let used_mem = self.sys_info.used_memory() as f64;
-        self.cached_mem_percent = if total_mem > 0.0 {
-            (used_mem / total_mem * 100.0) as f32
-        } else {
-            0.0
-        };
-
-        let cpus = self.sys_info.cpus();
-        if !cpus.is_empty() {
-            let total_cpu: f32 = cpus.iter().map(|c| c.cpu_usage()).sum::<f32>();
-            self.cached_cpu_percent = total_cpu / cpus.len() as f32;
-        }
+        self.sys_monitor.refresh();
     }
 }
 
