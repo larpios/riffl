@@ -42,7 +42,7 @@
 
         packages.default = pkgs.rustPlatform.buildRustPackage {
           pname = "riffl";
-          version = "0.1.2";
+          version = "0.2.0";
           src = self;
 
           cargoLock.lockFile = ./Cargo.lock;
