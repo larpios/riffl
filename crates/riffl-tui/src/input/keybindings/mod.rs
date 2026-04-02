@@ -61,4 +61,22 @@ impl KeybindingRegistry {
             })
             .collect()
     }
+
+    /// Get all keybindings with their editor mode, for help generation.
+    pub fn all_bindings() -> Vec<(EditorMode, Keybinding)> {
+        KEY_MAPPINGS
+            .iter()
+            .map(|m| {
+                (
+                    m.mode,
+                    Keybinding {
+                        key: m.key.to_string(),
+                        action: m.action.name().to_string(),
+                        description: m.action.description().to_string(),
+                        category: m.action.category(),
+                    },
+                )
+            })
+            .collect()
+    }
 }

@@ -147,10 +147,16 @@ pub(super) const KEY_MAPPINGS: &[KeyMapping] = &[
         mode: EditorMode::Normal,
     },
     KeyMapping {
+        key: "Esc",
+        action: Action::Cancel,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
         key: "1-6",
         action: Action::SwitchView(AppView::PatternEditor),
         mode: EditorMode::Normal,
     },
+    // Clipboard (Normal)
     KeyMapping {
         key: "Ctrl+C",
         action: Action::Copy,
@@ -171,9 +177,112 @@ pub(super) const KEY_MAPPINGS: &[KeyMapping] = &[
         action: Action::Redo,
         mode: EditorMode::Normal,
     },
+    // Editing (Normal)
     KeyMapping {
-        key: "Ctrl+S",
-        action: Action::SaveProject,
+        key: "{",
+        action: Action::StepDown,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "}",
+        action: Action::StepUp,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "(",
+        action: Action::OctaveDown,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: ")",
+        action: Action::OctaveUp,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+Del",
+        action: Action::DeleteRow,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Shift+Up",
+        action: Action::TransposeUp,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Shift+Down",
+        action: Action::TransposeDown,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+Shift+Up",
+        action: Action::TransposeOctaveUp,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+Shift+Down",
+        action: Action::TransposeOctaveDown,
+        mode: EditorMode::Normal,
+    },
+    // Track management (Normal)
+    KeyMapping {
+        key: "T",
+        action: Action::AddTrack,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "D",
+        action: Action::DeleteTrack,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "C",
+        action: Action::CloneTrack,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "M",
+        action: Action::ToggleMute,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "S",
+        action: Action::ToggleSolo,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Q",
+        action: Action::Quantize,
+        mode: EditorMode::Normal,
+    },
+    // Transport (Normal)
+    KeyMapping {
+        key: "=",
+        action: Action::BpmUp,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "-",
+        action: Action::BpmDown,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "[",
+        action: Action::JumpPrevPattern,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "]",
+        action: Action::JumpNextPattern,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "L",
+        action: Action::ToggleLoop,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "P",
+        action: Action::TogglePlaybackMode,
         mode: EditorMode::Normal,
     },
     KeyMapping {
@@ -199,6 +308,48 @@ pub(super) const KEY_MAPPINGS: &[KeyMapping] = &[
     KeyMapping {
         key: "Ctrl+Shift+L",
         action: Action::ToggleLoopRegion,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+M",
+        action: Action::ToggleMetronome,
+        mode: EditorMode::Normal,
+    },
+    // Project (Normal)
+    KeyMapping {
+        key: "Ctrl+S",
+        action: Action::SaveProject,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+O",
+        action: Action::LoadProject,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+F",
+        action: Action::OpenFileBrowser,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+E",
+        action: Action::OpenExportDialog,
+        mode: EditorMode::Normal,
+    },
+    // View (Normal)
+    KeyMapping {
+        key: "Ctrl+\\",
+        action: Action::ToggleSplitView,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+L",
+        action: Action::ToggleLiveMode,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+T",
+        action: Action::OpenTemplates,
         mode: EditorMode::Normal,
     },
     KeyMapping {

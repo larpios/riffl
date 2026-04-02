@@ -7,6 +7,9 @@ use ratatui::{
 };
 
 use super::theme::Theme;
+use crate::editor::EditorMode;
+use crate::input::keybindings::KeybindingRegistry;
+use crate::registry::{ActionCategory, CommandMetadata, CommandRegistry, Keybinding};
 use riffl_core::pattern::effect::{EffectMode, EffectType};
 
 /// Total line count of the taller help column. Used to cap scroll offset.
@@ -170,97 +173,88 @@ fn blank() -> Line<'static> {
     Line::from("")
 }
 
+/// Generate lines for all bindings in a given mode+category, with a section header.
+/// Returns empty if no bindings match.
+fn category_section(
+    bindings: &[(EditorMode, Keybinding)],
+    mode: EditorMode,
+    category: ActionCategory,
+    theme: &Theme,
+) -> Vec<Line<'static>> {
+    let entries: Vec<_> = bindings
+        .iter()
+        .filter(|(m, kb)| *m == mode && kb.category == category)
+        .collect();
+    if entries.is_empty() {
+        return vec![];
+    }
+    let mut lines = vec![section(category.name(), theme)];
+    for (_, kb) in &entries {
+        lines.push(key(&kb.key, &kb.description, theme));
+    }
+    lines.push(blank());
+    lines
+}
+
+/// Generate lines for all bindings in a given mode, with a custom section title.
+fn mode_section(
+    bindings: &[(EditorMode, Keybinding)],
+    mode: EditorMode,
+    title: &str,
+    theme: &Theme,
+) -> Vec<Line<'static>> {
+    let entries: Vec<_> = bindings
+        .iter()
+        .filter(|(m, _)| *m == mode)
+        .collect();
+    if entries.is_empty() {
+        return vec![];
+    }
+    let mut lines = vec![section(title, theme)];
+    for (_, kb) in &entries {
+        lines.push(key(&kb.key, &kb.description, theme));
+    }
+    lines.push(blank());
+    lines
+}
+
+/// Generate lines for all commands from the CommandRegistry.
+fn commands_section(theme: &Theme) -> Vec<Line<'static>> {
+    let mut lines = vec![section("Commands", theme)];
+    for cmd in CommandRegistry::all_commands() {
+        lines.push(key(cmd.usage(), cmd.description(), theme));
+    }
+    lines.push(blank());
+    lines
+}
+
 fn left_column(theme: &Theme) -> Vec<Line<'static>> {
-    vec![
-        section("NAVIGATION", theme),
-        key("hjkl / arrows", "Move cursor", theme),
-        key("Tab", "Next track", theme),
-        key("PageUp / PageDown", "Page up / down", theme),
-        key("( )", "Octave down / up", theme),
-        blank(),
-        section("MODES", theme),
-        key("i", "Enter Insert mode", theme),
-        key("v", "Enter Visual mode", theme),
-        key("Esc", "Return to Normal mode", theme),
-        blank(),
-        section("EDITING  (Normal)", theme),
-        key("x / Delete", "Delete cell", theme),
-        key("Insert", "Insert row", theme),
-        key("Ctrl+Delete", "Delete row", theme),
-        key("u  /  Ctrl+R", "Undo / Redo", theme),
-        key("y / p", "Copy / Paste", theme),
-        key("Ctrl+C / Ctrl+V", "Copy / Paste (alt)", theme),
-        key("Ctrl+X", "Cut", theme),
-        blank(),
-        section("TRACKS", theme),
-        key("T", "Add track", theme),
-        key("D", "Delete track", theme),
-        key("C", "Clone track", theme),
-        key("M", "Mute track", theme),
-        key("S", "Solo track", theme),
-        key("Q", "Quantize selection", theme),
-        key("G", "Go to row 0", theme),
-        blank(),
-        section("INSERT MODE", theme),
-        key("a–g", "Enter natural note (C D E F G A B)", theme),
-        key("A–G (shift)", "Enter sharp (C# D# F# G# A#)", theme),
-        key("~ (tilde)", "Enter note-off (===)", theme),
-        key("0–9", "Set octave", theme),
-        key("0–F  (inst/vol/eff)", "Enter hex digit", theme),
-        key("K", "Effect command help", theme),
-        blank(),
-        section("STEP SIZE", theme),
-        key("{ / }", "Step -1 / +1", theme),
-        key(":step N", "Set step to N (0–8)", theme),
-    ]
+    let bindings = KeybindingRegistry::all_bindings();
+    let mut lines = Vec::new();
+    for cat in [
+        ActionCategory::Navigation,
+        ActionCategory::Editing,
+        ActionCategory::Clipboard,
+        ActionCategory::Track,
+    ] {
+        lines.extend(category_section(&bindings, EditorMode::Normal, cat, theme));
+    }
+    lines
 }
 
 fn right_column(theme: &Theme) -> Vec<Line<'static>> {
-    vec![
-        section("TRANSPORT", theme),
-        key("Space", "Play / Pause", theme),
-        key("Enter  (stopped)", "Play from cursor row", theme),
-        key("= / -", "BPM up / down", theme),
-        key(":bpm <n>", "Set BPM directly", theme),
-        key("Ctrl+B", "BPM inline prompt", theme),
-        key("t  (Normal)", "Tap tempo (≥2 taps)", theme),
-        key("[ / ]", "Prev / Next pattern", theme),
-        key("Shift+P", "Toggle Pattern / Song", theme),
-        key("Shift+L", "Toggle loop", theme),
-        key("Shift+Up/Down", "Transpose +/- semitone", theme),
-        key("Ctrl+Shift+Up/Down", "Transpose +/- octave", theme),
-        blank(),
-        section("VIEWS", theme),
-        key("1", "Pattern editor", theme),
-        key("2", "Arrangement", theme),
-        key("3", "Instrument list", theme),
-        key("4", "Code editor", theme),
-        key("5", "Pattern list", theme),
-        key("6", "Sample browser", theme),
-        key("Ctrl+\\", "Toggle split view", theme),
-        blank(),
-        section("PROJECT", theme),
-        key("Ctrl+S", "Save project", theme),
-        key("Ctrl+O", "Load project", theme),
-        key("Ctrl+F", "Load sample / MOD", theme),
-        key("Ctrl+E", "Export audio", theme),
-        blank(),
-        section("LIVE / SCRIPT", theme),
-        key("Ctrl+L", "Toggle Live mode", theme),
-        key("Ctrl+Enter", "Execute script", theme),
-        key("Ctrl+T", "Open templates", theme),
-        blank(),
-        section("VISUAL MODE", theme),
-        key("hjkl", "Extend selection", theme),
-        key("x / d", "Delete / Cut selection", theme),
-        key("y / p", "Copy / Paste selection", theme),
-        key("I", "Interpolate selection", theme),
-        blank(),
-        section("SAMPLE BROWSER (view 6)", theme),
-        key("j / k", "Navigate", theme),
-        key("l / Enter", "Enter dir / load", theme),
-        key("h", "Go up a directory", theme),
-        blank(),
-        key("?", "Toggle this help", theme),
-    ]
+    let bindings = KeybindingRegistry::all_bindings();
+    let mut lines = Vec::new();
+    for cat in [
+        ActionCategory::Transport,
+        ActionCategory::View,
+        ActionCategory::Project,
+        ActionCategory::Application,
+    ] {
+        lines.extend(category_section(&bindings, EditorMode::Normal, cat, theme));
+    }
+    lines.extend(mode_section(&bindings, EditorMode::Insert, "Insert Mode", theme));
+    lines.extend(mode_section(&bindings, EditorMode::Visual, "Visual Mode", theme));
+    lines.extend(commands_section(theme));
+    lines
 }
