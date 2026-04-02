@@ -702,18 +702,18 @@ fn test_open_bpm_prompt_prepopulates_current_bpm() {
     let mut app = App::new();
     app.transport.set_bpm(140.0);
     app.open_bpm_prompt();
-    assert!(app.bpm_prompt_mode);
-    assert_eq!(app.bpm_prompt_input, "140");
+    assert!(app.bpm_prompt.active);
+    assert_eq!(app.bpm_prompt.input, "140");
 }
 
 #[test]
 fn test_execute_bpm_prompt_applies_valid_bpm() {
     let mut app = App::new();
-    app.bpm_prompt_mode = true;
-    app.bpm_prompt_input = "180".to_string();
+    app.bpm_prompt.active = true;
+    app.bpm_prompt.input = "180".to_string();
     app.execute_bpm_prompt();
-    assert!(!app.bpm_prompt_mode);
-    assert!(app.bpm_prompt_input.is_empty());
+    assert!(!app.bpm_prompt.active);
+    assert!(app.bpm_prompt.input.is_empty());
     assert_eq!(app.transport.bpm(), 180.0);
     assert_eq!(app.song.bpm, 180.0);
 }
@@ -721,8 +721,8 @@ fn test_execute_bpm_prompt_applies_valid_bpm() {
 #[test]
 fn test_execute_bpm_prompt_clamps_to_min() {
     let mut app = App::new();
-    app.bpm_prompt_mode = true;
-    app.bpm_prompt_input = "5".to_string();
+    app.bpm_prompt.active = true;
+    app.bpm_prompt.input = "5".to_string();
     app.execute_bpm_prompt();
     assert_eq!(app.transport.bpm(), 20.0);
 }
@@ -730,8 +730,8 @@ fn test_execute_bpm_prompt_clamps_to_min() {
 #[test]
 fn test_execute_bpm_prompt_clamps_to_max() {
     let mut app = App::new();
-    app.bpm_prompt_mode = true;
-    app.bpm_prompt_input = "9999".to_string();
+    app.bpm_prompt.active = true;
+    app.bpm_prompt.input = "9999".to_string();
     app.execute_bpm_prompt();
     assert_eq!(app.transport.bpm(), 999.0);
 }
@@ -740,10 +740,10 @@ fn test_execute_bpm_prompt_clamps_to_max() {
 fn test_execute_bpm_prompt_ignores_invalid_input() {
     let mut app = App::new();
     let original_bpm = app.transport.bpm();
-    app.bpm_prompt_mode = true;
-    app.bpm_prompt_input = "abc".to_string();
+    app.bpm_prompt.active = true;
+    app.bpm_prompt.input = "abc".to_string();
     app.execute_bpm_prompt();
-    assert!(!app.bpm_prompt_mode);
+    assert!(!app.bpm_prompt.active);
     // BPM unchanged for invalid input
     assert_eq!(app.transport.bpm(), original_bpm);
 }
@@ -755,17 +755,17 @@ fn test_open_len_prompt_prepopulates_current_row_count() {
     let mut app = App::new();
     let current_len = app.editor.pattern().row_count();
     app.open_len_prompt();
-    assert!(app.len_prompt_mode);
-    assert_eq!(app.len_prompt_input, format!("{}", current_len));
+    assert!(app.len_prompt.active);
+    assert_eq!(app.len_prompt.input, format!("{}", current_len));
 }
 
 #[test]
 fn test_execute_len_prompt_resizes_pattern_and_transport() {
     let mut app = App::new();
-    app.len_prompt_mode = true;
-    app.len_prompt_input = "32".to_string();
+    app.len_prompt.active = true;
+    app.len_prompt.input = "32".to_string();
     app.execute_len_prompt();
-    assert!(!app.len_prompt_mode);
+    assert!(!app.len_prompt.active);
     assert_eq!(app.editor.pattern().row_count(), 32);
     assert_eq!(app.transport.num_rows(), 32);
 }
@@ -773,8 +773,8 @@ fn test_execute_len_prompt_resizes_pattern_and_transport() {
 #[test]
 fn test_execute_len_prompt_clamps_to_min() {
     let mut app = App::new();
-    app.len_prompt_mode = true;
-    app.len_prompt_input = "4".to_string(); // below 16
+    app.len_prompt.active = true;
+    app.len_prompt.input = "4".to_string(); // below 16
     app.execute_len_prompt();
     assert_eq!(app.editor.pattern().row_count(), 16);
     assert_eq!(app.transport.num_rows(), 16);
@@ -783,8 +783,8 @@ fn test_execute_len_prompt_clamps_to_min() {
 #[test]
 fn test_execute_len_prompt_clamps_to_max() {
     let mut app = App::new();
-    app.len_prompt_mode = true;
-    app.len_prompt_input = "9999".to_string(); // above 512
+    app.len_prompt.active = true;
+    app.len_prompt.input = "9999".to_string(); // above 512
     app.execute_len_prompt();
     assert_eq!(app.editor.pattern().row_count(), 512);
     assert_eq!(app.transport.num_rows(), 512);
@@ -794,10 +794,10 @@ fn test_execute_len_prompt_clamps_to_max() {
 fn test_execute_len_prompt_ignores_invalid_input() {
     let mut app = App::new();
     let original = app.editor.pattern().row_count();
-    app.len_prompt_mode = true;
-    app.len_prompt_input = "abc".to_string();
+    app.len_prompt.active = true;
+    app.len_prompt.input = "abc".to_string();
     app.execute_len_prompt();
-    assert!(!app.len_prompt_mode);
+    assert!(!app.len_prompt.active);
     // Row count unchanged for invalid input
     assert_eq!(app.editor.pattern().row_count(), original);
 }
@@ -805,8 +805,8 @@ fn test_execute_len_prompt_ignores_invalid_input() {
 #[test]
 fn test_execute_len_prompt_flushes_to_song() {
     let mut app = App::new();
-    app.len_prompt_mode = true;
-    app.len_prompt_input = "48".to_string();
+    app.len_prompt.active = true;
+    app.len_prompt.input = "48".to_string();
     app.execute_len_prompt();
     // The song's pattern 0 should also be updated
     let pat_idx = app.song.arrangement[app.transport.arrangement_position()];

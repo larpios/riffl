@@ -290,14 +290,7 @@ pub fn get_config_dir() -> std::path::PathBuf {
             .unwrap_or_else(|_| std::path::PathBuf::from("."))
             .join(APP_NAME)
     }
-    #[cfg(target_os = "macos")]
-    {
-        home_dir()
-            .join("Library")
-            .join("Application Support")
-            .join(APP_NAME)
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[cfg(not(target_os = "windows"))]
     {
         if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
             std::path::PathBuf::from(xdg)
@@ -310,9 +303,8 @@ pub fn get_config_dir() -> std::path::PathBuf {
 
 /// Return the platform-specific data directory for this application.
 ///
-/// - Linux/BSD: `$XDG_DATA_HOME/<app>` or `~/.local/share/<app>`
-/// - macOS:     `~/Library/Application Support/<app>`
-/// - Windows:   `%APPDATA%\<app>`
+/// - Linux/BSD/macOS: `$XDG_DATA_HOME/<app>` or `~/.local/share/<app>`
+/// - Windows:         `%APPDATA%\<app>`
 pub fn get_data_dir() -> std::path::PathBuf {
     #[cfg(target_os = "windows")]
     {
@@ -321,14 +313,7 @@ pub fn get_data_dir() -> std::path::PathBuf {
             .unwrap_or_else(|_| std::path::PathBuf::from("."))
             .join(APP_NAME)
     }
-    #[cfg(target_os = "macos")]
-    {
-        home_dir()
-            .join("Library")
-            .join("Application Support")
-            .join(APP_NAME)
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[cfg(not(target_os = "windows"))]
     {
         if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
             std::path::PathBuf::from(xdg)
@@ -341,9 +326,7 @@ pub fn get_data_dir() -> std::path::PathBuf {
 
 /// Return the user's home directory.
 fn home_dir() -> std::path::PathBuf {
-    std::env::var("HOME")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+    std::env::home_dir().unwrap()
 }
 
 #[cfg(test)]

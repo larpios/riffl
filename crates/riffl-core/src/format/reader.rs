@@ -137,8 +137,9 @@ impl<'a> BinaryReader<'a> {
                 self.remaining()
             )));
         }
-        let s = String::from_utf8_lossy(&self.data[self.pos..end])
-            .trim_end_matches('\0')
+        let bytes = &self.data[self.pos..end];
+        let null_pos = bytes.iter().position(|&b| b == 0).unwrap_or(len);
+        let s = String::from_utf8_lossy(&bytes[..null_pos])
             .trim()
             .to_string();
         self.pos += len;
