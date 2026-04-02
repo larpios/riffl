@@ -368,16 +368,14 @@ impl App {
                 TransportCommand::PositionJump(pos) => {
                     let old_pos = self.transport.arrangement_position();
                     if self.transport.jump_to_arrangement_position(pos) && pos != old_pos {
-                        self.flush_editor_pattern(old_pos);
-                        self.load_arrangement_pattern(pos);
+                        self.switch_editor_pattern(old_pos, pos);
                     }
                 }
                 TransportCommand::PatternBreak(row) => {
                     let old_pos = self.transport.arrangement_position();
                     if self.transport.pattern_break(row) {
                         let new_pos = self.transport.arrangement_position();
-                        self.flush_editor_pattern(old_pos);
-                        self.load_arrangement_pattern(new_pos);
+                        self.switch_editor_pattern(old_pos, new_pos);
                     }
                 }
                 TransportCommand::PatternLoop(sub_param) => {

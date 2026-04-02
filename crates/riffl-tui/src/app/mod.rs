@@ -616,8 +616,7 @@ impl App {
 
                     let saved_cursor_row = self.editor.cursor_row();
                     let saved_cursor_channel = self.editor.cursor_channel();
-                    self.flush_editor_pattern(current_arrangement_pos);
-                    self.load_arrangement_pattern(arrangement_pos);
+                    self.switch_editor_pattern(current_arrangement_pos, arrangement_pos);
                     current_arrangement_pos = arrangement_pos;
                     if self.follow_mode {
                         self.editor.go_to_row(row);

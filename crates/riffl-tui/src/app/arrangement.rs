@@ -100,9 +100,8 @@ impl App {
         let current = self.transport.arrangement_position();
         let next = current + 1;
         if next < self.song.arrangement.len() {
-            self.flush_editor_pattern(current);
             self.transport.jump_to_arrangement_position(next);
-            self.load_arrangement_pattern(next);
+            self.switch_editor_pattern(current, next);
             if self.transport.is_playing() {
                 self.chase_notes();
             }
@@ -116,9 +115,8 @@ impl App {
         let current = self.transport.arrangement_position();
         if current > 0 {
             let prev = current - 1;
-            self.flush_editor_pattern(current);
             self.transport.jump_to_arrangement_position(prev);
-            self.load_arrangement_pattern(prev);
+            self.switch_editor_pattern(current, prev);
             if self.transport.is_playing() {
                 self.chase_notes();
             }
@@ -128,9 +126,8 @@ impl App {
     /// Jump to the very beginning of the song (Pattern 0, Row 0).
     pub fn jump_to_start(&mut self) {
         let current = self.transport.arrangement_position();
-        self.flush_editor_pattern(current);
         self.transport.jump_to_arrangement_position(0);
-        self.load_arrangement_pattern(0);
+        self.switch_editor_pattern(current, 0);
         self.editor.go_to_row(0);
         if self.transport.is_playing() {
             self.chase_notes();
@@ -141,9 +138,8 @@ impl App {
     pub fn jump_to_end(&mut self) {
         let current = self.transport.arrangement_position();
         let last_pos = self.song.arrangement.len().saturating_sub(1);
-        self.flush_editor_pattern(current);
         self.transport.jump_to_arrangement_position(last_pos);
-        self.load_arrangement_pattern(last_pos);
+        self.switch_editor_pattern(current, last_pos);
         self.editor.go_to_row(usize::MAX);
         if self.transport.is_playing() {
             self.chase_notes();
@@ -170,12 +166,27 @@ impl App {
 }
 
 impl App {
+    /// Flush the editor's in-memory pattern back into `song.patterns` at `arrangement_pos`.
+    ///
+    /// Call this before reading `song.patterns` directly (save, export, clone) or before
+    /// navigating away from the current arrangement position. Prefer `switch_editor_pattern`
+    /// for navigation — it pairs the flush with the subsequent load atomically.
     pub fn flush_editor_pattern(&mut self, arrangement_pos: usize) {
         if let Some(&pattern_idx) = self.song.arrangement.get(arrangement_pos) {
             if let Some(pattern) = self.song.patterns.get_mut(pattern_idx) {
                 *pattern = self.editor.pattern().clone();
             }
         }
+    }
+
+    /// Flush the current editor pattern then load the one at `new_pos`.
+    ///
+    /// This is the single safe path for arrangement navigation: it guarantees the
+    /// flush and the load always happen together. Use plain `flush_editor_pattern`
+    /// only when mutating the song directly without switching positions (save, clone, resize).
+    pub fn switch_editor_pattern(&mut self, old_pos: usize, new_pos: usize) {
+        self.flush_editor_pattern(old_pos);
+        self.load_arrangement_pattern(new_pos);
     }
 
     /// Load the pattern at the given arrangement position into the editor.
