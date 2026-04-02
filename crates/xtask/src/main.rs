@@ -110,7 +110,7 @@ fn main() -> Result<()> {
         Commands::Check => run_check()?,
         Commands::Run { args } => run_riffl(args)?,
         Commands::Test { args } => run_tests(args)?,
-        Commands::BumpTo { version } => bump_version_to(version)?,
+        Commands::BumpTo { version } => bump_version_to(&version)?,
         Commands::Bump { part } => bump_version(part)?,
     }
 
@@ -198,23 +198,56 @@ fn run_tests(args: Vec<String>) -> Result<()> {
     Ok(())
 }
 
-fn bump_version_to(version: String) -> Result<()> {
+fn bump_version_to(version: &str) -> Result<()> {
     println!("Bumping version to {}...", version);
     let root = project_root();
 
-    update_cargo_toml(
-        &root.join(RIFFLE_CORE_CRATE.path).join("Cargo.toml"),
-        &version,
-        None,
-    )?;
+    let core_manifest = root.join(RIFFLE_CORE_CRATE.path).join("Cargo.toml");
+    let tui_manifest = root.join(RIFFL_TUI_CRATE.path).join("Cargo.toml");
+    let flake_nix = root.join(FLAKE_NIX);
 
-    update_cargo_toml(
-        &root.join(RIFFL_TUI_CRATE.path).join("Cargo.toml"),
-        &version,
-        Some(RIFFLE_CORE_CRATE.name),
-    )?;
+    // Read all files into memory
+    let core_content = fs::read_to_string(&core_manifest)
+        .with_context(|| format!("Failed to read {}", core_manifest.display()))?;
+    let tui_content = fs::read_to_string(&tui_manifest)
+        .with_context(|| format!("Failed to read {}", tui_manifest.display()))?;
+    let flake_content = fs::read_to_string(&flake_nix)
+        .with_context(|| format!("Failed to read {}", flake_nix.display()))?;
 
-    update_flake_nix(&root.join(FLAKE_NIX), &version)?;
+    // Prepare new contents (this handles parsing and logic errors)
+    let core_new = get_updated_cargo_toml(&core_content, version, None)?;
+    let tui_new = get_updated_cargo_toml(&tui_content, version, Some(RIFFLE_CORE_CRATE.name))?;
+    let flake_new = get_updated_flake_nix(&flake_content, version)?;
+
+    let updates = [
+        (&core_manifest, core_new, core_content),
+        (&tui_manifest, tui_new, tui_content),
+        (&flake_nix, flake_new, flake_content),
+    ];
+
+    // Write updates with rollback on failure
+    for (written_count, (path, new_content, _)) in updates.iter().enumerate() {
+        println!("Writing to {}...", path.display());
+        if let Err(e) = fs::write(path, new_content) {
+            println!(
+                "Error writing to {}: {}. Rolling back changes...",
+                path.display(),
+                e
+            );
+
+            // Rollback previous writes
+            for (r_path, _, r_original) in updates.iter().take(written_count) {
+                if let Err(rollback_err) = fs::write(r_path, r_original) {
+                    eprintln!(
+                        "CRITICAL: Rollback failed for {}: {}",
+                        r_path.display(),
+                        rollback_err
+                    );
+                }
+            }
+            return Err(anyhow!("Failed to update {}: {}", path.display(), e));
+        }
+    }
 
     println!("Version bumped to {}. Please verify and commit.", version);
     Ok(())
@@ -239,11 +272,14 @@ fn bump_version(part: VersionPart) -> Result<()> {
         ),
     };
 
-    bump_version_to(target_version)
+    bump_version_to(&target_version)
 }
 
-fn update_cargo_toml(path: &Path, version: &str, dep_to_update: Option<&str>) -> Result<()> {
-    let content = fs::read_to_string(path)?;
+fn get_updated_cargo_toml(
+    content: &str,
+    version: &str,
+    dep_to_update: Option<&str>,
+) -> Result<String> {
     let mut doc = content.parse::<toml_edit::DocumentMut>()?;
 
     // Update [package] version
@@ -264,12 +300,10 @@ fn update_cargo_toml(path: &Path, version: &str, dep_to_update: Option<&str>) ->
         }
     }
 
-    fs::write(path, doc.to_string())?;
-    Ok(())
+    Ok(doc.to_string())
 }
 
-fn update_flake_nix(path: &Path, version: &str) -> Result<()> {
-    let content = fs::read_to_string(path)?;
+fn get_updated_flake_nix(content: &str, version: &str) -> Result<String> {
     // flake.nix is not TOML, using simple regex-like replacement
     let new_content = content
         .lines()
@@ -284,8 +318,7 @@ fn update_flake_nix(path: &Path, version: &str) -> Result<()> {
         .collect::<Vec<_>>()
         .join("\n");
 
-    fs::write(path, new_content)?;
-    Ok(())
+    Ok(new_content)
 }
 
 fn project_root() -> PathBuf {
