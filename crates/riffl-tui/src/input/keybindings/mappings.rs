@@ -315,6 +315,16 @@ pub(super) const KEY_MAPPINGS: &[KeyMapping] = &[
         action: Action::ToggleMetronome,
         mode: EditorMode::Normal,
     },
+    KeyMapping {
+        key: "Alt+.",
+        action: Action::InstrumentNextTab,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Alt+,",
+        action: Action::InstrumentPrevTab,
+        mode: EditorMode::Normal,
+    },
     // Project (Normal)
     KeyMapping {
         key: "Ctrl+S",

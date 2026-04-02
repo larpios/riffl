@@ -158,6 +158,8 @@ pub enum Action {
     PreviewInstrument,
     ToggleInstrumentMiniPanel,
     ToggleInstrumentExpanded,
+    InstrumentNextTab,
+    InstrumentPrevTab,
 
     // Pattern management
     AddPattern,
@@ -302,6 +304,8 @@ impl ActionMetadata for Action {
             Action::PreviewInstrument => "Preview Instrument",
             Action::ToggleInstrumentMiniPanel => "Instrument Mini Panel",
             Action::ToggleInstrumentExpanded => "Instrument Expand",
+            Action::InstrumentNextTab => "Next Instrument Tab",
+            Action::InstrumentPrevTab => "Prev Instrument Tab",
             Action::AddPattern => "Add Pattern",
             Action::DeletePattern => "Delete Pattern",
             Action::ClonePattern => "Clone Pattern",
@@ -437,6 +441,8 @@ impl ActionMetadata for Action {
             Action::PreviewInstrument => "Play a preview note for the selected instrument",
             Action::ToggleInstrumentMiniPanel => "Toggle instrument mini panel",
             Action::ToggleInstrumentExpanded => "Toggle instrument expanded view",
+            Action::InstrumentNextTab => "Switch to next instrument editor tab",
+            Action::InstrumentPrevTab => "Switch to previous instrument editor tab",
             Action::AddPattern => "Add a new pattern",
             Action::DeletePattern => "Delete current pattern",
             Action::ClonePattern => "Clone current pattern",
@@ -537,7 +543,9 @@ impl ActionMetadata for Action {
             | Action::SelectInstrument
             | Action::PreviewInstrument
             | Action::ToggleInstrumentMiniPanel
-            | Action::ToggleInstrumentExpanded => ActionCategory::Instrument,
+            | Action::ToggleInstrumentExpanded
+            | Action::InstrumentNextTab
+            | Action::InstrumentPrevTab => ActionCategory::Instrument,
 
             Action::AddPattern
             | Action::DeletePattern

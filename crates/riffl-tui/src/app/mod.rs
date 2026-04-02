@@ -258,6 +258,11 @@ pub struct App {
     /// The last note entered in Insert mode, replayed on each cursor-down when draw_mode is on
     pub draw_note: Option<NoteEvent>,
 
+    /// Undo history for the currently selected instrument.
+    instrument_undo_stack: Vec<Instrument>,
+    /// Redo stack for the currently selected instrument.
+    instrument_redo_stack: Vec<Instrument>,
+
     /// Instrument editor panel state (shown below the instrument list)
     pub inst_editor: InstrumentEditorState,
 
@@ -440,6 +445,8 @@ impl App {
             tap_times: Vec::new(),
             draw_mode: false,
             draw_note: None,
+            instrument_undo_stack: Vec::new(),
+            instrument_redo_stack: Vec::new(),
             inst_editor: InstrumentEditorState::default(),
             env_editor: EnvelopeEditorState::default(),
             lfo_editor: LfoEditorState::default(),

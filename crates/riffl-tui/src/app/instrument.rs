@@ -4,6 +4,61 @@ use riffl_core::pattern::{Note, Pattern};
 use riffl_core::song::{Instrument, Song};
 
 impl App {
+    /// Save the current state of the selected instrument to the undo stack.
+    pub fn save_instrument_undo(&mut self) {
+        if let Some(idx) = self.instrument_selection {
+            if let Some(inst) = self.song.instruments.get(idx) {
+                self.instrument_undo_stack.push(inst.clone());
+                // Keep only last 32 undos
+                if self.instrument_undo_stack.len() > 32 {
+                    self.instrument_undo_stack.remove(0);
+                }
+                // Clear redo stack on new action
+                self.instrument_redo_stack.clear();
+            }
+        }
+    }
+
+    /// Undo the last change to the selected instrument.
+    pub fn undo_instrument(&mut self) -> bool {
+        let prev = match self.instrument_undo_stack.pop() {
+            Some(p) => p,
+            None => return false,
+        };
+
+        if let Some(idx) = self.instrument_selection {
+            if let Some(current) = self.song.instruments.get_mut(idx) {
+                // Save current for redo
+                self.instrument_redo_stack.push(current.clone());
+                *current = prev;
+                self.sync_mixer_instruments();
+                self.mark_dirty();
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Redo the last undone change to the selected instrument.
+    pub fn redo_instrument(&mut self) -> bool {
+        let next = match self.instrument_redo_stack.pop() {
+            Some(n) => n,
+            None => return false,
+        };
+
+        if let Some(idx) = self.instrument_selection {
+            if let Some(current) = self.song.instruments.get_mut(idx) {
+                // Save current back to undo
+                self.instrument_undo_stack.push(current.clone());
+                *current = next;
+                self.sync_mixer_instruments();
+                self.mark_dirty();
+                return true;
+            }
+        }
+        false
+    }
+
     pub fn instrument_selection(&self) -> Option<usize> {
         self.instrument_selection
     }
@@ -84,6 +139,7 @@ impl App {
     pub fn update_instrument(&mut self, volume: f32, base_note_midi: u8) -> bool {
         if let Some(idx) = self.instrument_selection {
             if idx < self.song.instruments.len() {
+                self.save_instrument_undo();
                 self.song.instruments[idx].volume = volume;
                 if let Some(pitch) = Pitch::from_semitone(base_note_midi % 12) {
                     let octave = base_note_midi / 12;
@@ -101,6 +157,7 @@ impl App {
     pub fn set_instrument_name(&mut self, name: String) {
         if let Some(idx) = self.instrument_selection {
             if idx < self.song.instruments.len() && !name.is_empty() {
+                self.save_instrument_undo();
                 self.song.instruments[idx].name = name;
                 self.mark_dirty();
             }
@@ -117,6 +174,7 @@ impl App {
         loop_start: usize,
         loop_end: usize,
     ) {
+        self.save_instrument_undo();
         if let Ok(mut mixer) = self.mixer.lock() {
             mixer.set_sample_loop(sample_idx, mode, loop_start, loop_end);
         }
@@ -127,6 +185,7 @@ impl App {
     pub fn adjust_instrument_volume(&mut self, delta: i32) {
         if let Some(idx) = self.instrument_selection {
             if idx < self.song.instruments.len() {
+                self.save_instrument_undo();
                 let current_pct = (self.song.instruments[idx].volume * 100.0).round() as i32;
                 let new_pct = (current_pct + delta).clamp(0, 100);
                 self.song.instruments[idx].volume = new_pct as f32 / 100.0;
@@ -140,6 +199,7 @@ impl App {
     pub fn adjust_instrument_base_note(&mut self, semitones: i32) {
         if let Some(idx) = self.instrument_selection {
             if idx < self.song.instruments.len() {
+                self.save_instrument_undo();
                 let current_midi = self.song.instruments[idx].base_note.midi_note() as i32;
                 let new_midi = (current_midi + semitones).clamp(0, 127) as u8;
                 if let Some(pitch) = Pitch::from_semitone(new_midi % 12) {
@@ -156,6 +216,7 @@ impl App {
     pub fn adjust_instrument_finetune(&mut self, delta: i32) {
         if let Some(idx) = self.instrument_selection {
             if idx < self.song.instruments.len() {
+                self.save_instrument_undo();
                 let current = self.song.instruments[idx].finetune as i32;
                 let new_val = (current + delta).clamp(-8, 7) as i8;
                 self.song.instruments[idx].finetune = new_val;
@@ -169,6 +230,7 @@ impl App {
     pub fn cycle_instrument_loop_mode(&mut self) {
         if let Some(idx) = self.instrument_selection {
             if let Some(sample_idx) = self.song.instruments[idx].sample_index {
+                self.save_instrument_undo();
                 let (current, frame_count) = {
                     let mixer = match self.mixer.lock() {
                         Ok(m) => m,
@@ -203,6 +265,7 @@ impl App {
     pub fn adjust_instrument_loop_start(&mut self, delta: i32) {
         if let Some(idx) = self.instrument_selection {
             if let Some(sample_idx) = self.song.instruments[idx].sample_index {
+                self.save_instrument_undo();
                 let (loop_mode, loop_start, loop_end) = {
                     let mixer = match self.mixer.lock() {
                         Ok(m) => m,
@@ -227,6 +290,7 @@ impl App {
     pub fn adjust_instrument_loop_end(&mut self, delta: i32) {
         if let Some(idx) = self.instrument_selection {
             if let Some(sample_idx) = self.song.instruments[idx].sample_index {
+                self.save_instrument_undo();
                 let (loop_mode, loop_start, loop_end, frame_count) = {
                     let mixer = match self.mixer.lock() {
                         Ok(m) => m,
@@ -258,6 +322,7 @@ impl App {
         if let Some(idx) = self.instrument_selection {
             if let Some(kz_idx) = self.inst_editor.selected_keyzone_index() {
                 if idx < self.song.instruments.len() {
+                    self.save_instrument_undo();
                     let inst = &mut self.song.instruments[idx];
                     if kz_idx < inst.keyzones.len() {
                         let current = inst.keyzones[kz_idx].note_min as i32;
@@ -278,6 +343,7 @@ impl App {
         if let Some(idx) = self.instrument_selection {
             if let Some(kz_idx) = self.inst_editor.selected_keyzone_index() {
                 if idx < self.song.instruments.len() {
+                    self.save_instrument_undo();
                     let inst = &mut self.song.instruments[idx];
                     if kz_idx < inst.keyzones.len() {
                         let current = inst.keyzones[kz_idx].note_max as i32;
@@ -298,6 +364,7 @@ impl App {
         if let Some(idx) = self.instrument_selection {
             if let Some(kz_idx) = self.inst_editor.selected_keyzone_index() {
                 if idx < self.song.instruments.len() {
+                    self.save_instrument_undo();
                     let inst = &mut self.song.instruments[idx];
                     if kz_idx < inst.keyzones.len() {
                         let current = inst.keyzones[kz_idx].velocity_min as i32;
@@ -318,6 +385,7 @@ impl App {
         if let Some(idx) = self.instrument_selection {
             if let Some(kz_idx) = self.inst_editor.selected_keyzone_index() {
                 if idx < self.song.instruments.len() {
+                    self.save_instrument_undo();
                     let inst = &mut self.song.instruments[idx];
                     if kz_idx < inst.keyzones.len() {
                         let current = inst.keyzones[kz_idx].velocity_max as i32;
@@ -354,6 +422,7 @@ impl App {
         if let Some(idx) = self.instrument_selection {
             if let Some(kz_idx) = self.inst_editor.selected_keyzone_index() {
                 if idx < self.song.instruments.len() {
+                    self.save_instrument_undo();
                     let sample_count = self.mixer.lock().map(|m| m.sample_count()).unwrap_or(0);
                     let max_sample = sample_count.saturating_sub(1) as i32;
                     let inst = &mut self.song.instruments[idx];
@@ -373,6 +442,7 @@ impl App {
         if let Some(idx) = self.instrument_selection {
             if let Some(kz_idx) = self.inst_editor.selected_keyzone_index() {
                 if idx < self.song.instruments.len() {
+                    self.save_instrument_undo();
                     let inst = &mut self.song.instruments[idx];
                     if kz_idx < inst.keyzones.len() {
                         let current = inst.keyzones[kz_idx].base_note_override.unwrap_or(48) as i32;

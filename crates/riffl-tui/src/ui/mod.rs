@@ -306,7 +306,7 @@ fn render_instrument_view_empty(frame: &mut Frame, area: ratatui::layout::Rect, 
 
 /// Render the two-column instrument view:
 ///   left  (~38%): instrument list
-///   right (~62%): instrument editor (top) / envelope editor (middle) / waveform editor (bottom)
+///   right (~62%): tabbed instrument editor
 fn render_instrument_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App, idx: usize) {
     use ratatui::layout::{Constraint, Direction, Layout};
 
@@ -331,38 +331,93 @@ fn render_instrument_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &
             .and_then(|si| samples.get(si).cloned())
     };
 
-    let right_rows = Layout::default()
+    // Right side: Tabs at top, active editor below
+    let right_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage(25),
-            Constraint::Percentage(50),
-            Constraint::Percentage(25),
-        ])
+        .constraints([Constraint::Length(1), Constraint::Min(0)])
         .split(cols[1]);
 
-    instrument_editor::render_instrument_editor(
-        frame,
-        right_rows[0],
-        &app.song.instruments[idx],
-        &app.inst_editor,
-        &app.theme,
-        sample.as_deref(),
-    );
-    envelope_editor::render_envelope_editor(
-        frame,
-        right_rows[1],
-        &app.song.instruments[idx],
-        &app.env_editor,
-        &app.theme,
-    );
-    waveform_editor::render_waveform_editor(
-        frame,
-        right_rows[2],
-        &app.song.instruments[idx],
-        sample.as_deref(),
-        &app.waveform_editor,
-        &app.theme,
-    );
+    render_instrument_tabs(frame, right_chunks[0], &app.inst_editor, &app.theme);
+
+    use crate::ui::instrument_editor::InstrumentTab;
+    match app.inst_editor.tab {
+        InstrumentTab::General => {
+            instrument_editor::render_instrument_editor(
+                frame,
+                right_chunks[1],
+                &app.song.instruments[idx],
+                &app.inst_editor,
+                &app.theme,
+                sample.as_deref(),
+            );
+        }
+        InstrumentTab::Sample => {
+            waveform_editor::render_waveform_editor(
+                frame,
+                right_chunks[1],
+                &app.song.instruments[idx],
+                sample.as_deref(),
+                &app.waveform_editor,
+                &app.theme,
+            );
+        }
+        InstrumentTab::Envelopes => {
+            envelope_editor::render_envelope_editor(
+                frame,
+                right_chunks[1],
+                &app.song.instruments[idx],
+                &app.env_editor,
+                &app.theme,
+            );
+        }
+        InstrumentTab::Lfos => {
+            lfo_editor::render_lfo_editor(
+                frame,
+                right_chunks[1],
+                &app.song.instruments[idx],
+                &app.lfo_editor,
+                &app.theme,
+            );
+        }
+    }
+}
+
+/// Render the instrument editor tab bar.
+fn render_instrument_tabs(
+    frame: &mut Frame,
+    area: Rect,
+    state: &instrument_editor::InstrumentEditorState,
+    theme: &theme::Theme,
+) {
+    use crate::ui::instrument_editor::InstrumentTab;
+    let tabs = InstrumentTab::ALL;
+    let mut spans = vec![Span::raw("  ")];
+
+    for (i, tab) in tabs.iter().enumerate() {
+        let is_selected = state.tab == *tab;
+        let style = if is_selected {
+            Style::default()
+                .fg(theme.cursor_fg)
+                .bg(theme.primary)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.text_dimmed)
+        };
+
+        spans.push(Span::styled(format!(" {} ", tab.label()), style));
+        if i < tabs.len() - 1 {
+            spans.push(Span::styled("│", Style::default().fg(theme.text_dimmed)));
+        }
+    }
+
+    if !state.focused {
+        spans.push(Span::styled(
+            "  Alt+, / Alt+. to switch",
+            Style::default().fg(theme.text_dimmed),
+        ));
+    }
+
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
 pub const CHANNEL_COL_WIDTH: u16 = 17;

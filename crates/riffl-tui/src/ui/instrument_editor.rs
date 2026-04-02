@@ -20,6 +20,51 @@ use riffl_core::song::Instrument;
 
 use crate::ui::theme::Theme;
 
+/// Tabs within the instrument editor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstrumentTab {
+    General,
+    Sample,
+    Envelopes,
+    Lfos,
+}
+
+impl InstrumentTab {
+    pub const ALL: &'static [InstrumentTab] = &[
+        InstrumentTab::General,
+        InstrumentTab::Sample,
+        InstrumentTab::Envelopes,
+        InstrumentTab::Lfos,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::General => "General",
+            Self::Sample => "Sample",
+            Self::Envelopes => "Envelopes",
+            Self::Lfos => "LFOs",
+        }
+    }
+
+    pub fn next(self) -> Self {
+        match self {
+            Self::General => Self::Sample,
+            Self::Sample => Self::Envelopes,
+            Self::Envelopes => Self::Lfos,
+            Self::Lfos => Self::General,
+        }
+    }
+
+    pub fn prev(self) -> Self {
+        match self {
+            Self::General => Self::Lfos,
+            Self::Sample => Self::General,
+            Self::Envelopes => Self::Sample,
+            Self::Lfos => Self::Envelopes,
+        }
+    }
+}
+
 /// Which field is currently focused in the instrument editor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstrumentField {
@@ -57,41 +102,55 @@ impl InstrumentField {
         InstrumentField::KeyzoneBaseNote,
     ];
 
-    pub fn next(self) -> Self {
-        match self {
-            Self::Name => Self::BaseNote,
-            Self::BaseNote => Self::Volume,
-            Self::Volume => Self::Finetune,
-            Self::Finetune => Self::LoopMode,
-            Self::LoopMode => Self::LoopStart,
-            Self::LoopStart => Self::LoopEnd,
-            Self::LoopEnd => Self::KeyzoneList,
-            Self::KeyzoneList => Self::KeyzoneNoteMin,
-            Self::KeyzoneNoteMin => Self::KeyzoneNoteMax,
-            Self::KeyzoneNoteMax => Self::KeyzoneVelMin,
-            Self::KeyzoneVelMin => Self::KeyzoneVelMax,
-            Self::KeyzoneVelMax => Self::KeyzoneSample,
-            Self::KeyzoneSample => Self::KeyzoneBaseNote,
-            Self::KeyzoneBaseNote => Self::Name,
+    pub fn next(self, tab: InstrumentTab) -> Self {
+        match tab {
+            InstrumentTab::General => match self {
+                Self::Name => Self::BaseNote,
+                Self::BaseNote => Self::Volume,
+                Self::Volume => Self::Finetune,
+                Self::Finetune => Self::KeyzoneList,
+                Self::KeyzoneList => Self::KeyzoneNoteMin,
+                Self::KeyzoneNoteMin => Self::KeyzoneNoteMax,
+                Self::KeyzoneNoteMax => Self::KeyzoneVelMin,
+                Self::KeyzoneVelMin => Self::KeyzoneVelMax,
+                Self::KeyzoneVelMax => Self::KeyzoneSample,
+                Self::KeyzoneSample => Self::KeyzoneBaseNote,
+                Self::KeyzoneBaseNote => Self::Name,
+                _ => Self::Name,
+            },
+            InstrumentTab::Sample => match self {
+                Self::LoopMode => Self::LoopStart,
+                Self::LoopStart => Self::LoopEnd,
+                Self::LoopEnd => Self::LoopMode,
+                _ => Self::LoopMode,
+            },
+            _ => self,
         }
     }
 
-    pub fn prev(self) -> Self {
-        match self {
-            Self::Name => Self::KeyzoneBaseNote,
-            Self::BaseNote => Self::Name,
-            Self::Volume => Self::BaseNote,
-            Self::Finetune => Self::Volume,
-            Self::LoopMode => Self::Finetune,
-            Self::LoopStart => Self::LoopMode,
-            Self::LoopEnd => Self::LoopStart,
-            Self::KeyzoneList => Self::LoopEnd,
-            Self::KeyzoneNoteMin => Self::KeyzoneList,
-            Self::KeyzoneNoteMax => Self::KeyzoneNoteMin,
-            Self::KeyzoneVelMin => Self::KeyzoneNoteMax,
-            Self::KeyzoneVelMax => Self::KeyzoneVelMin,
-            Self::KeyzoneSample => Self::KeyzoneVelMax,
-            Self::KeyzoneBaseNote => Self::KeyzoneSample,
+    pub fn prev(self, tab: InstrumentTab) -> Self {
+        match tab {
+            InstrumentTab::General => match self {
+                Self::Name => Self::KeyzoneBaseNote,
+                Self::BaseNote => Self::Name,
+                Self::Volume => Self::BaseNote,
+                Self::Finetune => Self::Volume,
+                Self::KeyzoneList => Self::Finetune,
+                Self::KeyzoneNoteMin => Self::KeyzoneList,
+                Self::KeyzoneNoteMax => Self::KeyzoneNoteMin,
+                Self::KeyzoneVelMin => Self::KeyzoneNoteMax,
+                Self::KeyzoneVelMax => Self::KeyzoneVelMin,
+                Self::KeyzoneSample => Self::KeyzoneVelMax,
+                Self::KeyzoneBaseNote => Self::KeyzoneSample,
+                _ => Self::Name,
+            },
+            InstrumentTab::Sample => match self {
+                Self::LoopMode => Self::LoopEnd,
+                Self::LoopStart => Self::LoopMode,
+                Self::LoopEnd => Self::LoopStart,
+                _ => Self::LoopMode,
+            },
+            _ => self,
         }
     }
 
@@ -159,6 +218,8 @@ pub fn field_at_row(row_offset: u16) -> Option<InstrumentField> {
 pub struct InstrumentEditorState {
     /// Whether the editor panel is focused (vs the list above).
     pub focused: bool,
+    /// Currently active tab.
+    pub tab: InstrumentTab,
     /// Currently focused field.
     pub field: InstrumentField,
     /// Whether we are in inline text-edit mode for the Name field.
@@ -177,6 +238,7 @@ impl Default for InstrumentEditorState {
     fn default() -> Self {
         Self {
             focused: false,
+            tab: InstrumentTab::General,
             field: InstrumentField::Name,
             text_editing: false,
             input_buffer: String::new(),
@@ -201,16 +263,38 @@ impl InstrumentEditorState {
         self.text_editing = false;
     }
 
+    /// Move to the next tab.
+    pub fn next_tab(&mut self) {
+        self.tab = self.tab.next();
+        self.reset_field_for_tab();
+    }
+
+    /// Move to the previous tab.
+    pub fn prev_tab(&mut self) {
+        self.tab = self.tab.prev();
+        self.reset_field_for_tab();
+    }
+
+    fn reset_field_for_tab(&mut self) {
+        self.text_editing = false;
+        self.field = match self.tab {
+            InstrumentTab::General => InstrumentField::Name,
+            InstrumentTab::Sample => InstrumentField::LoopMode,
+            InstrumentTab::Envelopes => InstrumentField::Name, // Placeholder as envelopes manage their own
+            InstrumentTab::Lfos => InstrumentField::Name,      // Placeholder
+        };
+    }
+
     /// Move to the next field.
     pub fn next_field(&mut self) {
         self.text_editing = false;
-        self.field = self.field.next();
+        self.field = self.field.next(self.tab);
     }
 
     /// Move to the previous field.
     pub fn prev_field(&mut self) {
         self.text_editing = false;
-        self.field = self.field.prev();
+        self.field = self.field.prev(self.tab);
     }
 
     /// Start text-editing the Name field.
@@ -732,6 +816,8 @@ mod tests {
     #[test]
     fn test_field_cycle() {
         let mut s = InstrumentEditorState::default();
+        // General Tab
+        s.tab = InstrumentTab::General;
         s.field = InstrumentField::Name;
         s.next_field();
         assert_eq!(s.field, InstrumentField::BaseNote);
@@ -740,27 +826,19 @@ mod tests {
         s.next_field();
         assert_eq!(s.field, InstrumentField::Finetune);
         s.next_field();
-        assert_eq!(s.field, InstrumentField::LoopMode);
+        assert_eq!(s.field, InstrumentField::KeyzoneList);
+        s.next_field();
+        assert_eq!(s.field, InstrumentField::Name);
+
+        // Sample Tab
+        s.tab = InstrumentTab::Sample;
+        s.field = InstrumentField::LoopMode;
         s.next_field();
         assert_eq!(s.field, InstrumentField::LoopStart);
         s.next_field();
         assert_eq!(s.field, InstrumentField::LoopEnd);
         s.next_field();
-        assert_eq!(s.field, InstrumentField::KeyzoneList);
-        s.next_field();
-        assert_eq!(s.field, InstrumentField::KeyzoneNoteMin);
-        s.next_field();
-        assert_eq!(s.field, InstrumentField::KeyzoneNoteMax);
-        s.next_field();
-        assert_eq!(s.field, InstrumentField::KeyzoneVelMin);
-        s.next_field();
-        assert_eq!(s.field, InstrumentField::KeyzoneVelMax);
-        s.next_field();
-        assert_eq!(s.field, InstrumentField::KeyzoneSample);
-        s.next_field();
-        assert_eq!(s.field, InstrumentField::KeyzoneBaseNote);
-        s.next_field();
-        assert_eq!(s.field, InstrumentField::Name);
+        assert_eq!(s.field, InstrumentField::LoopMode);
     }
 
     #[test]

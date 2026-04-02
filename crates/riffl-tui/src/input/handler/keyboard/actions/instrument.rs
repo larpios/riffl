@@ -23,6 +23,7 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
             {
                 app.pending_replace = true;
             } else if app.current_view == AppView::InstrumentList {
+                app.save_instrument_undo();
                 app.open_modal(ui::modal::Modal::info(
                     "Rename Instrument".to_string(),
                     "Enter new name in the terminal.".to_string(),
@@ -47,6 +48,8 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
         }
         Action::ToggleInstrumentMiniPanel => app.toggle_instrument_mini_panel(),
         Action::ToggleInstrumentExpanded => app.toggle_instrument_expanded(),
+        Action::InstrumentNextTab => app.inst_editor.next_tab(),
+        Action::InstrumentPrevTab => app.inst_editor.prev_tab(),
 
         // Envelope editor
         Action::EnvCycle => {
@@ -73,6 +76,7 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
             if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
                 app.env_editor.focus();
                 if let Some(idx) = app.instrument_selection() {
+                    app.save_instrument_undo();
                     let env_type = app.env_editor.envelope_type;
                     let envelope = app
                         .env_editor
@@ -85,6 +89,7 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
             if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
                 app.env_editor.focus();
                 if let Some(idx) = app.instrument_selection() {
+                    app.save_instrument_undo();
                     let env_type = app.env_editor.envelope_type;
                     let envelope = app
                         .env_editor
@@ -97,6 +102,7 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
             if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
                 app.env_editor.focus();
                 if let Some(idx) = app.instrument_selection() {
+                    app.save_instrument_undo();
                     let envelope = app
                         .env_editor
                         .get_envelope_mut(&mut app.song.instruments[idx]);
@@ -108,6 +114,7 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
             if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
                 app.env_editor.focus();
                 if let Some(idx) = app.instrument_selection() {
+                    app.save_instrument_undo();
                     let envelope = app
                         .env_editor
                         .get_envelope_mut(&mut app.song.instruments[idx]);
@@ -119,6 +126,7 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
             if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
                 app.env_editor.focus();
                 if let Some(idx) = app.instrument_selection() {
+                    app.save_instrument_undo();
                     let envelope = app
                         .env_editor
                         .get_envelope_mut(&mut app.song.instruments[idx]);
@@ -136,6 +144,7 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
             if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
                 app.env_editor.focus();
                 if let Some(idx) = app.instrument_selection() {
+                    app.save_instrument_undo();
                     let envelope = app
                         .env_editor
                         .get_envelope_mut(&mut app.song.instruments[idx]);
@@ -165,6 +174,7 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
             if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
                 app.env_editor.focus();
                 if let Some(idx) = app.instrument_selection() {
+                    app.save_instrument_undo();
                     let envelope = app
                         .env_editor
                         .get_envelope_mut(&mut app.song.instruments[idx]);
@@ -182,9 +192,24 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
             if app.current_view == AppView::InstrumentList && app.instrument_selection().is_some() {
                 app.env_editor.focus();
                 if let Some(idx) = app.instrument_selection() {
+                    app.save_instrument_undo();
                     app.env_editor
                         .toggle_envelope_enabled(&mut app.song.instruments[idx]);
                 }
+            }
+        }
+        Action::Undo => {
+            if app.current_view == AppView::InstrumentList {
+                app.undo_instrument();
+            } else {
+                return false;
+            }
+        }
+        Action::Redo => {
+            if app.current_view == AppView::InstrumentList {
+                app.redo_instrument();
+            } else {
+                return false;
             }
         }
 
@@ -279,14 +304,17 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
             }
         }
         Action::WfValueUp => {
+            app.save_instrument_undo();
             app.waveform_editor.focus();
             app.waveform_editor.pencil_value_up();
         }
         Action::WfValueDown => {
+            app.save_instrument_undo();
             app.waveform_editor.focus();
             app.waveform_editor.pencil_value_down();
         }
         Action::WfDrawSample => {
+            app.save_instrument_undo();
             if app.draw_waveform_sample().is_ok() {
                 app.waveform_editor.focus();
             }
