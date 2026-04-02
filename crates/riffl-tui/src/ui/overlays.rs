@@ -25,7 +25,11 @@ pub(super) fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect
     frame.render_widget(Clear, browser_area);
 
     let dir_display = browser.directory().display().to_string();
-    let title = format!(" Load File  {}  ", dir_display);
+    let title = if app.is_project_browser {
+        format!(" Open Project  {}  ", dir_display)
+    } else {
+        format!(" Load File  {}  ", dir_display)
+    };
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -65,12 +69,16 @@ pub(super) fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect
             .and_then(|p| p.extension())
             .and_then(|e| e.to_str())
             .map(|e| e.to_ascii_lowercase());
-        let action_hint = match selected_ext.as_deref() {
-            Some("mod") => "  Enter → import MOD as new song (replaces current)".to_string(),
-            _ => format!(
-                "  Enter → load as instrument {:02X} (adds to instrument list)",
-                app.song.instruments.len()
-            ),
+        let action_hint = if app.is_project_browser {
+            "  Enter → open project".to_string()
+        } else {
+            match selected_ext.as_deref() {
+                Some("mod") => "  Enter → import MOD as new song (replaces current)".to_string(),
+                _ => format!(
+                    "  Enter → load as instrument {:02X} (adds to instrument list)",
+                    app.song.instruments.len()
+                ),
+            }
         };
         lines.push(Line::from(Span::styled(
             format!("  {} file(s)", total),
@@ -104,6 +112,11 @@ pub(super) fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect
     }
 
     // Footer with instructions
+    let ext_hint = if app.is_project_browser {
+        ".rtm"
+    } else {
+        ".wav .flac .ogg .mod"
+    };
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
         Span::raw("  "),
@@ -113,10 +126,7 @@ pub(super) fn render_file_browser(frame: &mut Frame, area: ratatui::layout::Rect
         Span::raw(":load  "),
         Span::styled("Esc", Style::default().fg(theme.error_color())),
         Span::raw(":close  "),
-        Span::styled(
-            ".wav .flac .ogg .mod",
-            Style::default().fg(theme.text_dimmed),
-        ),
+        Span::styled(ext_hint, Style::default().fg(theme.text_dimmed)),
     ]));
 
     let paragraph = Paragraph::new(lines)
@@ -131,8 +141,13 @@ pub(super) fn render_command_completions(
     footer_area: ratatui::layout::Rect,
     app: &App,
 ) {
-    let input = app.command_input.trim();
-    let input_word = input.split_whitespace().next().unwrap_or(input);
+    // Use saved tab prefix when cycling, otherwise use first word of current input
+    let filter_word: &str = if let Some(ref prefix) = app.command_tab_prefix {
+        prefix.as_str()
+    } else {
+        let input = app.command_input.trim();
+        input.split_whitespace().next().unwrap_or(input)
+    };
 
     let matches: Vec<(String, String)> = CommandRegistry::all_commands()
         .into_iter()
@@ -143,7 +158,7 @@ pub(super) fn render_command_completions(
                 .chain(aliases.iter().copied())
                 .collect();
 
-            let _ = all_names.iter().find(|&&n| n.starts_with(input_word))?;
+            let _ = all_names.iter().find(|&&n| n.starts_with(filter_word))?;
             let usage = cmd.usage().strip_prefix(':').unwrap_or(cmd.usage());
             Some((usage.to_string(), cmd.description().to_string()))
         })
@@ -154,7 +169,12 @@ pub(super) fn render_command_completions(
     }
 
     let theme = &app.theme;
-    let width = 30u16;
+    let content_width = matches
+        .iter()
+        .map(|(cmd, desc)| 3 + cmd.len() + 2 + desc.len()) // " :" + cmd + "  " + desc
+        .max()
+        .unwrap_or(28) as u16;
+    let width = (content_width + 2).min(footer_area.width); // +2 for borders
     let height = matches.len() as u16 + 2;
     let x = 0;
     let y = footer_area.y.saturating_sub(height);
@@ -164,17 +184,36 @@ pub(super) fn render_command_completions(
 
     let lines: Vec<Line> = matches
         .iter()
-        .map(|(cmd, desc)| {
-            Line::from(vec![
-                Span::raw(" :"),
-                Span::styled(
-                    cmd.clone(),
-                    Style::default()
-                        .fg(theme.success_color())
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(format!("  {}", desc)),
-            ])
+        .enumerate()
+        .map(|(i, (cmd, desc))| {
+            let is_selected = app.command_completion_idx == Some(i);
+            if is_selected {
+                Line::from(vec![
+                    Span::styled(" :", Style::default().fg(theme.cursor_fg).bg(theme.primary)),
+                    Span::styled(
+                        cmd.clone(),
+                        Style::default()
+                            .fg(theme.cursor_fg)
+                            .bg(theme.primary)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        format!("  {}", desc),
+                        Style::default().fg(theme.cursor_fg).bg(theme.primary),
+                    ),
+                ])
+            } else {
+                Line::from(vec![
+                    Span::raw(" :"),
+                    Span::styled(
+                        cmd.clone(),
+                        Style::default()
+                            .fg(theme.success_color())
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw(format!("  {}", desc)),
+                ])
+            }
         })
         .collect();
 
