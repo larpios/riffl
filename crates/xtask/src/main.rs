@@ -5,6 +5,12 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
 
+const RIFFL_CORE_CRATE_NAME: &str = "riffl-core";
+const RIFFL_CORE_CARGO_TOML: &str = "crates/riffl-core/Cargo.toml";
+const RIFFL_TUI_CARGO_TOML: &str = "crates/riffl-tui/Cargo.toml";
+const RIFFL_ROOT_CARGO_TOML: &str = "Cargo.toml";
+const FLAKE_NIX: &str = "flake.nix";
+
 #[derive(Parser)]
 #[command(name = "xtask")]
 #[command(about = "Build and automation tasks for Riffl", long_about = None)]
@@ -184,18 +190,15 @@ fn bump_version_to(version: String) -> Result<()> {
     println!("Bumping version to {}...", version);
     let root = project_root();
 
-    // 1. Update crates/riffl-core/Cargo.toml
-    update_cargo_toml(&root.join("crates/riffl-core/Cargo.toml"), &version, None)?;
+    update_cargo_toml(&root.join(RIFFL_CORE_CARGO_TOML), &version, None)?;
 
-    // 2. Update crates/riffl/Cargo.toml (version and dependency)
     update_cargo_toml(
-        &root.join("crates/riffl/Cargo.toml"),
+        &root.join(RIFFL_TUI_CARGO_TOML),
         &version,
-        Some("riffl-core"),
+        Some(RIFFL_CORE_CRATE_NAME),
     )?;
 
-    // 3. Update flake.nix
-    update_flake_nix(&root.join("flake.nix"), &version)?;
+    update_flake_nix(&root.join(FLAKE_NIX), &version)?;
 
     println!("Version bumped to {}. Please verify and commit.", version);
     Ok(())
@@ -204,8 +207,7 @@ fn bump_version_to(version: String) -> Result<()> {
 fn bump_version(part: VersionPart) -> Result<()> {
     println!("Bumping version {}...", part);
 
-    let current_version =
-        version_from_cargo_toml(&project_root().join("crates/riffl-core/Cargo.toml"))?;
+    let current_version = version_from_cargo_toml(&project_root().join(RIFFL_ROOT_CARGO_TOML))?;
     let target_version = match part {
         VersionPart::Major => format!("{}.0.0", current_version.major + 1),
         VersionPart::Minor => format!("{}.{}.0", current_version.major, current_version.minor + 1),
@@ -220,21 +222,17 @@ fn bump_version(part: VersionPart) -> Result<()> {
     let root = project_root();
 
     // Update crates/riffl-core/Cargo.toml
-    update_cargo_toml(
-        &root.join("crates/riffl-core/Cargo.toml"),
-        &target_version,
-        None,
-    )?;
+    update_cargo_toml(&root.join(RIFFL_CORE_CARGO_TOML), &target_version, None)?;
 
     // Update crates/riffl/Cargo.toml (version and dependency)
     update_cargo_toml(
-        &root.join("crates/riffl/Cargo.toml"),
+        &root.join(RIFFL_TUI_CARGO_TOML),
         &target_version,
-        Some("riffl-core"),
+        Some(RIFFL_CORE_CRATE_NAME),
     )?;
 
     // Update flake.nix
-    update_flake_nix(&root.join("flake.nix"), &target_version)?;
+    update_flake_nix(&root.join(FLAKE_NIX), &target_version)?;
 
     println!(
         "Version bumped to {}. Please verify and commit.",
