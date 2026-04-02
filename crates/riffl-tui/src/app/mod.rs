@@ -260,11 +260,20 @@ pub struct App {
     /// Path of a sample the user selected in the browser but hasn't confirmed an action for yet.
     pub pending_sample_path: Option<PathBuf>,
 
+    /// Whether the file browser is open for loading a project file (Ctrl-O)
+    pub is_project_browser: bool,
+
     /// Whether vim command-line mode is active (`:` was pressed)
     pub command_mode: bool,
 
     /// Current command-line input buffer
     pub command_input: String,
+
+    /// Prefix saved when Tab-cycling begins; cleared on character input
+    pub command_tab_prefix: Option<String>,
+
+    /// Index of highlighted item in the completion list while Tab-cycling
+    pub command_completion_idx: Option<usize>,
 
     /// Inline BPM prompt (Ctrl+B opens it, Enter applies, Esc cancels).
     pub bpm_prompt: TextPrompt,
@@ -468,8 +477,11 @@ impl App {
             pending_quit: false,
             needs_full_redraw: false,
             pending_sample_path: None,
+            is_project_browser: false,
             command_mode: false,
             command_input: String::new(),
+            command_tab_prefix: None,
+            command_completion_idx: None,
             bpm_prompt: TextPrompt::new(|c| c.is_ascii_digit() || c == '.'),
             len_prompt: TextPrompt::new(|c| c.is_ascii_digit()),
             tap_times: Vec::new(),

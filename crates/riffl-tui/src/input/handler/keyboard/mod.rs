@@ -126,17 +126,45 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
         }
 
         InputContext::CommandMode => match key.code {
-            KeyCode::Enter => app.execute_command(),
+            KeyCode::Enter => {
+                app.command_tab_prefix = None;
+                app.command_completion_idx = None;
+                app.execute_command();
+            }
             KeyCode::Esc => {
                 app.command_mode = false;
                 app.command_input.clear();
                 app.command_history_index = None;
+                app.command_tab_prefix = None;
+                app.command_completion_idx = None;
             }
             KeyCode::Backspace => {
                 app.command_input.pop();
+                app.command_tab_prefix = None;
+                app.command_completion_idx = None;
             }
             KeyCode::Up => {
-                if let Some(idx) = app.command_history_index {
+                if app.command_completion_idx.is_some() {
+                    let prefix = app.command_tab_prefix.clone().unwrap_or_default();
+                    let matching: Vec<_> = CommandRegistry::all_commands()
+                        .into_iter()
+                        .filter(|c| {
+                            std::iter::once(c.name())
+                                .chain(c.aliases())
+                                .any(|n| n.starts_with(prefix.as_str()))
+                        })
+                        .collect();
+                    if !matching.is_empty() {
+                        let idx = app.command_completion_idx.unwrap_or(0);
+                        let prev = if idx == 0 {
+                            matching.len() - 1
+                        } else {
+                            idx - 1
+                        };
+                        app.command_completion_idx = Some(prev);
+                        app.command_input = matching[prev].name().to_string();
+                    }
+                } else if let Some(idx) = app.command_history_index {
                     if idx + 1 < app.command_history.len() {
                         app.command_history_index = Some(idx + 1);
                         app.command_input =
@@ -148,7 +176,23 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                 }
             }
             KeyCode::Down => {
-                if let Some(idx) = app.command_history_index {
+                if app.command_completion_idx.is_some() {
+                    let prefix = app.command_tab_prefix.clone().unwrap_or_default();
+                    let matching: Vec<_> = CommandRegistry::all_commands()
+                        .into_iter()
+                        .filter(|c| {
+                            std::iter::once(c.name())
+                                .chain(c.aliases())
+                                .any(|n| n.starts_with(prefix.as_str()))
+                        })
+                        .collect();
+                    if !matching.is_empty() {
+                        let idx = app.command_completion_idx.unwrap_or(0);
+                        let next = (idx + 1) % matching.len();
+                        app.command_completion_idx = Some(next);
+                        app.command_input = matching[next].name().to_string();
+                    }
+                } else if let Some(idx) = app.command_history_index {
                     if idx == 0 {
                         app.command_history_index = None;
                         app.command_input.clear();
@@ -160,21 +204,42 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                 }
             }
             KeyCode::Tab => {
-                let input = app.command_input.trim().to_string();
-                let all_commands = CommandRegistry::all_commands();
-                let candidates: Vec<&str> = all_commands
-                    .iter()
-                    .flat_map(|c| std::iter::once(c.name()).chain(c.aliases()))
+                let prefix = app.command_tab_prefix.clone().unwrap_or_else(|| {
+                    app.command_input
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or("")
+                        .to_string()
+                });
+                app.command_tab_prefix = Some(prefix.clone());
+
+                let matching: Vec<_> = CommandRegistry::all_commands()
+                    .into_iter()
+                    .filter(|c| {
+                        std::iter::once(c.name())
+                            .chain(c.aliases())
+                            .any(|n| n.starts_with(prefix.as_str()))
+                    })
                     .collect();
-                if let Some(candidate) = candidates.iter().find(|c| c.starts_with(input.as_str())) {
-                    app.command_input = candidate.to_string();
+
+                if matching.is_empty() {
+                    return;
                 }
+
+                let next = match app.command_completion_idx {
+                    None => 0,
+                    Some(i) => (i + 1) % matching.len(),
+                };
+                app.command_completion_idx = Some(next);
+                app.command_input = matching[next].name().to_string();
             }
             KeyCode::Char(c)
                 if key.modifiers == KeyModifiers::NONE || key.modifiers == KeyModifiers::SHIFT =>
             {
                 app.command_input.push(c);
                 app.command_history_index = None;
+                app.command_tab_prefix = None;
+                app.command_completion_idx = None;
             }
             _ => {}
         },
