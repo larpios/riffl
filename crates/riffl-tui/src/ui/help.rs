@@ -161,10 +161,10 @@ fn section(label: &str, theme: &Theme) -> Line<'static> {
     ))
 }
 
-fn key(keys: &str, desc: &str, theme: &Theme) -> Line<'static> {
+fn key(keys: &str, desc: &str, key_width: usize, theme: &Theme) -> Line<'static> {
     Line::from(vec![
         Span::styled(
-            format!("  {:<18}", keys),
+            format!("  {:<width$}", keys, width = key_width),
             Style::default().fg(theme.success_color()),
         ),
         Span::styled(desc.to_string(), Style::default().fg(theme.text)),
@@ -190,9 +190,15 @@ fn category_section(
     if entries.is_empty() {
         return vec![];
     }
+    let key_width = entries
+        .iter()
+        .map(|(_, kb)| kb.key.len())
+        .max()
+        .unwrap_or(0)
+        .max(18);
     let mut lines = vec![section(category.name(), theme)];
     for (_, kb) in &entries {
-        lines.push(key(&kb.key, &kb.description, theme));
+        lines.push(key(&kb.key, &kb.description, key_width, theme));
     }
     lines.push(blank());
     lines
@@ -209,9 +215,15 @@ fn mode_section(
     if entries.is_empty() {
         return vec![];
     }
+    let key_width = entries
+        .iter()
+        .map(|(_, kb)| kb.key.len())
+        .max()
+        .unwrap_or(0)
+        .max(18);
     let mut lines = vec![section(title, theme)];
     for (_, kb) in &entries {
-        lines.push(key(&kb.key, &kb.description, theme));
+        lines.push(key(&kb.key, &kb.description, key_width, theme));
     }
     lines.push(blank());
     lines
@@ -226,9 +238,15 @@ fn command_category_section(category: CommandCategory, theme: &Theme) -> Vec<Lin
     if cmds.is_empty() {
         return vec![];
     }
+    let key_width = cmds
+        .iter()
+        .map(|c| c.usage().len())
+        .max()
+        .unwrap_or(0)
+        .max(18);
     let mut lines = vec![section(category.name(), theme)];
     for cmd in cmds {
-        lines.push(key(cmd.usage(), cmd.description(), theme));
+        lines.push(key(cmd.usage(), cmd.description(), key_width, theme));
     }
     lines.push(blank());
     lines
