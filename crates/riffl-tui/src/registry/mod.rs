@@ -97,6 +97,7 @@ pub enum Command {
     Dup,
     Pname,
     Alias,
+    Plen,
     // Transport / timing
     Speed,
     Lpb,
@@ -154,6 +155,7 @@ impl CommandMetadata for Command {
             Self::Dup => "dup",
             Self::Pname => "pname",
             Self::Alias => "alias",
+            Self::Plen => "plen",
             Self::Speed => "speed",
             Self::Lpb => "lpb",
             Self::Loop => "loop",
@@ -205,6 +207,7 @@ impl CommandMetadata for Command {
             Self::Dup => "Duplicate current pattern",
             Self::Pname => "Rename selected pattern",
             Self::Alias => "Insert an existing pattern as an alias in the arrangement",
+            Self::Plen => "Set the row count of a pattern (for polyrhythm)",
             Self::Speed => "Set ticks per line (1-31)",
             Self::Lpb => "Set lines per beat",
             Self::Loop => "Set loop region rows",
@@ -256,6 +259,7 @@ impl CommandMetadata for Command {
             Self::Dup => ":dup",
             Self::Pname => ":pname <name>",
             Self::Alias => ":alias <pattern-index>",
+            Self::Plen => ":plen <rows> [pattern-index]",
             Self::Speed => ":speed <1-31>",
             Self::Lpb => ":lpb <value>",
             Self::Loop => ":loop <start> <end>",
@@ -302,7 +306,7 @@ impl CommandMetadata for Command {
             | Self::Tutor
             | Self::Title
             | Self::Artist => CommandCategory::Project,
-            Self::Len | Self::Clear | Self::Dup | Self::Pname | Self::Alias => {
+            Self::Len | Self::Clear | Self::Dup | Self::Pname | Self::Alias | Self::Plen => {
                 CommandCategory::Pattern
             }
             Self::Speed | Self::Lpb | Self::Loop | Self::CountIn | Self::Metronome => {

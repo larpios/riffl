@@ -552,6 +552,62 @@ impl super::App {
                 }
             }
 
+            Some(Command::Plen) => {
+                use riffl_core::pattern::pattern::{MAX_ROW_COUNT, MIN_ROW_COUNT};
+                let mut parts = args.splitn(2, ' ');
+                let rows_str = parts.next().unwrap_or("").trim();
+                let pat_idx_str = parts.next().unwrap_or("").trim();
+                if rows_str.is_empty() {
+                    let arr_pos = self.transport.arrangement_position();
+                    let pat_idx = self.song.arrangement.get(arr_pos).copied().unwrap_or(0);
+                    let rows = self.song.patterns.get(pat_idx).map_or(0, |p| p.num_rows());
+                    self.open_modal(Modal::info(
+                        "Pattern Length".to_string(),
+                        format!(
+                            "Pattern {:02} has {} rows.\nUsage: :plen <rows> [pattern-index]",
+                            pat_idx, rows
+                        ),
+                    ));
+                } else if let Ok(new_rows) = rows_str.parse::<usize>() {
+                    let new_rows = new_rows.clamp(MIN_ROW_COUNT, MAX_ROW_COUNT);
+                    let arr_pos = self.transport.arrangement_position();
+                    let pat_idx = if let Ok(idx) = pat_idx_str.parse::<usize>() {
+                        idx
+                    } else {
+                        self.song.arrangement.get(arr_pos).copied().unwrap_or(0)
+                    };
+                    if pat_idx >= self.song.patterns.len() {
+                        self.open_modal(Modal::error(
+                            "Pattern not found".to_string(),
+                            format!("Pattern {} does not exist.", pat_idx),
+                        ));
+                    } else {
+                        // If this is the pattern currently in the editor, resize via editor
+                        let editor_pat_idx =
+                            self.song.arrangement.get(arr_pos).copied().unwrap_or(0);
+                        if editor_pat_idx == pat_idx {
+                            self.editor.pattern_mut().set_row_count(new_rows);
+                            self.flush_editor_pattern(arr_pos);
+                            if self.transport.arrangement_position() == arr_pos {
+                                self.transport.set_num_rows(new_rows);
+                            }
+                        } else if let Some(pat) = self.song.patterns.get_mut(pat_idx) {
+                            pat.set_row_count(new_rows);
+                        }
+                        self.mark_dirty();
+                        self.open_modal(Modal::info(
+                            "Pattern Resized".to_string(),
+                            format!("Pattern {:02} → {} rows.", pat_idx, new_rows),
+                        ));
+                    }
+                } else {
+                    self.open_modal(Modal::error(
+                        "Invalid length".to_string(),
+                        "Usage: :plen <rows> [pattern-index]".to_string(),
+                    ));
+                }
+            }
+
             Some(Command::Alias) => {
                 if let Some(idx) = args.parse::<usize>().ok().filter(|_| !args.is_empty()) {
                     if idx >= self.song.patterns.len() {
