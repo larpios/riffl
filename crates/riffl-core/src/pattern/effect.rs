@@ -660,7 +660,7 @@ impl fmt::Display for Effect {
 }
 
 /// Maximum number of effects per cell.
-pub const MAX_EFFECTS_PER_CELL: usize = 2;
+pub const MAX_EFFECTS_PER_CELL: usize = 3;
 
 #[cfg(test)]
 mod tests {
@@ -955,7 +955,7 @@ mod tests {
 
     #[test]
     fn test_max_effects_per_cell() {
-        assert_eq!(MAX_EFFECTS_PER_CELL, 2);
+        assert_eq!(MAX_EFFECTS_PER_CELL, 3);
     }
 
     // --- Serde Encoding/Decoding Tests ---

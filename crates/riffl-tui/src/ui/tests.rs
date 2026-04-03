@@ -29,26 +29,26 @@ fn test_scroll_offset_at_bottom() {
 #[test]
 fn test_format_cell_empty() {
     let cell = riffl_core::pattern::row::Cell::empty();
-    assert_eq!(format_cell_display(&cell), "--- .. .. ....");
+    assert_eq!(format_cell_display(&cell), "--- .. .. .... ....");
 }
 
 #[test]
 fn test_format_cell_with_note() {
     use riffl_core::pattern::note::{Note, Pitch};
     let cell = riffl_core::pattern::row::Cell::with_note(NoteEvent::On(Note::simple(Pitch::C, 4)));
-    assert_eq!(format_cell_display(&cell), "C-4 .. .. ....");
+    assert_eq!(format_cell_display(&cell), "C-4 .. .. .... ....");
 }
 
 #[test]
 fn test_format_cell_note_off() {
     let cell = riffl_core::pattern::row::Cell::with_note(NoteEvent::Off);
-    assert_eq!(format_cell_display(&cell), "=== .. .. ....");
+    assert_eq!(format_cell_display(&cell), "=== .. .. .... ....");
 }
 
 #[test]
 fn test_format_cell_note_cut() {
     let cell = riffl_core::pattern::row::Cell::with_note(NoteEvent::Cut);
-    assert_eq!(format_cell_display(&cell), "^^^ .. .. ....");
+    assert_eq!(format_cell_display(&cell), "^^^ .. .. .... ....");
 }
 
 #[test]
@@ -61,14 +61,14 @@ fn test_format_cell_full() {
         volume: Some(0x40),
         effects: vec![Effect::new(0xC, 0x20)],
     };
-    assert_eq!(format_cell_display(&cell), "C#4 01 40 0C20");
+    assert_eq!(format_cell_display(&cell), "C#4 01 40 0C20 ....");
 }
 
 // --- format_cell_parts tests ---
 
 #[test]
 fn test_format_cell_parts_none() {
-    let (n, i, v, e) = format_cell_parts(None);
+    let (n, i, v, e, _) = format_cell_parts(None);
     assert_eq!(n, "---");
     assert_eq!(i, "..");
     assert_eq!(v, "..");
@@ -78,7 +78,7 @@ fn test_format_cell_parts_none() {
 #[test]
 fn test_format_cell_parts_empty() {
     let cell = riffl_core::pattern::row::Cell::empty();
-    let (n, i, v, e) = format_cell_parts(Some(&cell));
+    let (n, i, v, e, _) = format_cell_parts(Some(&cell));
     assert_eq!(n, "---");
     assert_eq!(i, "..");
     assert_eq!(v, "..");
@@ -89,7 +89,7 @@ fn test_format_cell_parts_empty() {
 fn test_format_cell_parts_with_note() {
     use riffl_core::pattern::note::{Note, Pitch};
     let cell = riffl_core::pattern::row::Cell::with_note(NoteEvent::On(Note::simple(Pitch::C, 4)));
-    let (n, i, v, e) = format_cell_parts(Some(&cell));
+    let (n, i, v, e, _) = format_cell_parts(Some(&cell));
     assert_eq!(n, "C-4");
     assert_eq!(i, "..");
     assert_eq!(v, "..");
@@ -106,7 +106,7 @@ fn test_format_cell_parts_full() {
         volume: Some(0x40),
         effects: vec![Effect::new(0xC, 0x20)],
     };
-    let (n, i, v, e) = format_cell_parts(Some(&cell));
+    let (n, i, v, e, _) = format_cell_parts(Some(&cell));
     assert_eq!(n, "C#4");
     assert_eq!(i, "01");
     assert_eq!(v, "40");
@@ -124,7 +124,7 @@ fn test_format_cell_parts_effect_5xy_tone_porta_vol_slide() {
         volume: None,
         effects: vec![Effect::new(0x5, 0x34)],
     };
-    let (_, _, _, e) = format_cell_parts(Some(&cell));
+    let (_, _, _, e, _) = format_cell_parts(Some(&cell));
     assert_eq!(e, "0534");
 }
 
@@ -137,7 +137,7 @@ fn test_format_cell_parts_effect_6xy_vibrato_vol_slide() {
         volume: None,
         effects: vec![Effect::new(0x6, 0x12)],
     };
-    let (_, _, _, e) = format_cell_parts(Some(&cell));
+    let (_, _, _, e, _) = format_cell_parts(Some(&cell));
     assert_eq!(e, "0612");
 }
 
@@ -150,7 +150,7 @@ fn test_format_cell_parts_effect_7xy_tremolo() {
         volume: None,
         effects: vec![Effect::new(0x7, 0x44)],
     };
-    let (_, _, _, e) = format_cell_parts(Some(&cell));
+    let (_, _, _, e, _) = format_cell_parts(Some(&cell));
     assert_eq!(e, "0744");
 }
 
@@ -163,7 +163,7 @@ fn test_format_cell_parts_effect_9xx_sample_offset() {
         volume: None,
         effects: vec![Effect::new(0x9, 0x80)],
     };
-    let (_, _, _, e) = format_cell_parts(Some(&cell));
+    let (_, _, _, e, _) = format_cell_parts(Some(&cell));
     assert_eq!(e, "0980");
 }
 
@@ -176,7 +176,7 @@ fn test_format_cell_parts_effect_exy_extended() {
         volume: None,
         effects: vec![Effect::new(0xE, 0x10)],
     };
-    let (_, _, _, e) = format_cell_parts(Some(&cell));
+    let (_, _, _, e, _) = format_cell_parts(Some(&cell));
     assert_eq!(e, "0E10");
 }
 
@@ -190,7 +190,7 @@ fn test_format_cell_parts_effect_zero_param() {
         volume: None,
         effects: vec![Effect::new(0xA, 0x00)],
     };
-    let (_, _, _, e) = format_cell_parts(Some(&cell));
+    let (_, _, _, e, _) = format_cell_parts(Some(&cell));
     assert_eq!(e, "0A00");
 }
 
@@ -204,14 +204,14 @@ fn test_format_cell_parts_effect_ff_param() {
         volume: None,
         effects: vec![Effect::new(0xF, 0xFF)],
     };
-    let (_, _, _, e) = format_cell_parts(Some(&cell));
+    let (_, _, _, e, _) = format_cell_parts(Some(&cell));
     assert_eq!(e, "0FFF");
 }
 
 #[test]
 fn test_format_cell_parts_note_off() {
     let cell = riffl_core::pattern::row::Cell::with_note(NoteEvent::Off);
-    let (n, _i, _v, _e) = format_cell_parts(Some(&cell));
+    let (n, _i, _v, _e, _) = format_cell_parts(Some(&cell));
     assert_eq!(n, "===");
 }
 

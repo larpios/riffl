@@ -61,7 +61,10 @@ pub enum SubColumn {
     Note,
     Instrument,
     Volume,
+    /// First effect slot (effects[0]).
     Effect,
+    /// Second effect slot (effects[1]).
+    Effect2,
 }
 
 impl SubColumn {
@@ -71,17 +74,19 @@ impl SubColumn {
             SubColumn::Note => SubColumn::Instrument,
             SubColumn::Instrument => SubColumn::Volume,
             SubColumn::Volume => SubColumn::Effect,
-            SubColumn::Effect => SubColumn::Note,
+            SubColumn::Effect => SubColumn::Effect2,
+            SubColumn::Effect2 => SubColumn::Note,
         }
     }
 
     /// Move to the previous sub-column (wraps around).
     pub fn prev(self) -> Self {
         match self {
-            SubColumn::Note => SubColumn::Effect,
+            SubColumn::Note => SubColumn::Effect2,
             SubColumn::Instrument => SubColumn::Note,
             SubColumn::Volume => SubColumn::Instrument,
             SubColumn::Effect => SubColumn::Volume,
+            SubColumn::Effect2 => SubColumn::Effect,
         }
     }
 }
@@ -133,8 +138,9 @@ const PAGE_SIZE: usize = 16;
 /// Maximum undo history depth.
 const MAX_HISTORY: usize = 100;
 
-/// Width of a single channel column (including separator): "│ C#4 01 40 C20 " = 2 + 14 + 1 = 17
-const CHANNEL_COL_WIDTH: u16 = 17;
+/// Width of a single channel column (including separator):
+/// "│ C#4 01 40 0C20 0A04 " = 2 + 3+1+2+1+2+1+4+1+4 + 1 = 22
+const CHANNEL_COL_WIDTH: u16 = 22;
 
 /// Width of the row number column: "  XX  " = 6
 const ROW_NUM_WIDTH: u16 = 6;

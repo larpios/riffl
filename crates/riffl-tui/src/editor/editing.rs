@@ -127,9 +127,14 @@ impl Editor {
     /// param_lo (1 nibble). Each call fills one position and advances. After the
     /// third digit, the cursor advances to the next row and resets the position.
     ///
-    /// Only works in Insert mode on the Effect sub-column.
+    /// Works on both Effect (slot 0) and Effect2 (slot 1) sub-columns in Insert/Replace mode.
     pub fn enter_effect_digit(&mut self, digit: u8) {
-        if !self.is_entry_mode() || self.sub_column != SubColumn::Effect {
+        let slot = match self.sub_column {
+            SubColumn::Effect => 0,
+            SubColumn::Effect2 => 1,
+            _ => return,
+        };
+        if !self.is_entry_mode() {
             return;
         }
         let digit = digit & 0x0F; // clamp to single nibble
@@ -139,7 +144,7 @@ impl Editor {
             .pattern
             .get_cell_mut(self.cursor_row, self.cursor_channel)
         {
-            let current = cell.first_effect().copied().unwrap_or(Effect::new(0, 0));
+            let current = cell.effect_at(slot).copied().unwrap_or(Effect::new(0, 0));
 
             let new_effect = match self.effect_digit_position {
                 0 => Effect::new(digit, current.param),
@@ -153,7 +158,7 @@ impl Editor {
                 }
             };
 
-            cell.set_effect(new_effect);
+            cell.set_effect_at(slot, new_effect);
 
             self.effect_digit_position = (self.effect_digit_position + 1) % 3;
 
@@ -239,7 +244,16 @@ impl Editor {
                 SubColumn::Note => cell.note = None,
                 SubColumn::Instrument => cell.instrument = None,
                 SubColumn::Volume => cell.volume = None,
-                SubColumn::Effect => cell.effects.clear(),
+                SubColumn::Effect => {
+                    if !cell.effects.is_empty() {
+                        cell.effects.remove(0);
+                    }
+                }
+                SubColumn::Effect2 => {
+                    if cell.effects.len() > 1 {
+                        cell.effects.remove(1);
+                    }
+                }
             }
         }
     }

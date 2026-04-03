@@ -561,7 +561,7 @@ pub fn calculate_channel_scroll_for_mouse(
     available_width: u16,
     num_channels: usize,
 ) -> usize {
-    const CHANNEL_COL_WIDTH: u16 = 17;
+    const CHANNEL_COL_WIDTH: u16 = 22;
     const ROW_NUM_WIDTH: u16 = 6;
 
     let channel_space = available_width.saturating_sub(ROW_NUM_WIDTH);

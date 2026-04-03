@@ -123,10 +123,10 @@ fn test_move_left_normal_mode() {
 fn test_move_left_wraps_to_prev_channel() {
     let mut editor = test_editor();
     editor.cursor_channel = 2;
-    // at Note sub-column, moving left wraps to Effect of previous channel
+    // at Note sub-column, moving left wraps to Effect2 of previous channel
     editor.move_left();
     assert_eq!(editor.cursor_channel(), 1);
-    assert_eq!(editor.sub_column(), SubColumn::Effect);
+    assert_eq!(editor.sub_column(), SubColumn::Effect2);
 }
 
 #[test]
@@ -151,20 +151,20 @@ fn test_move_right_normal_mode() {
 #[test]
 fn test_move_right_wraps_to_next_channel() {
     let mut editor = test_editor();
-    editor.sub_column = SubColumn::Effect;
+    editor.sub_column = SubColumn::Effect2;
     editor.move_right();
     assert_eq!(editor.cursor_channel(), 1);
     assert_eq!(editor.sub_column(), SubColumn::Note);
 }
 
 #[test]
-fn test_move_right_at_max_channel_effect() {
+fn test_move_right_at_max_channel_effect2() {
     let mut editor = test_editor();
     editor.cursor_channel = 3;
-    editor.sub_column = SubColumn::Effect;
+    editor.sub_column = SubColumn::Effect2;
     editor.move_right();
     assert_eq!(editor.cursor_channel(), 3);
-    assert_eq!(editor.sub_column(), SubColumn::Effect);
+    assert_eq!(editor.sub_column(), SubColumn::Effect2);
 }
 
 #[test]
@@ -232,7 +232,7 @@ fn test_insert_mode_move_right_sub_columns() {
 fn test_insert_mode_move_right_wraps_channel() {
     let mut editor = test_editor();
     editor.enter_insert_mode();
-    editor.sub_column = SubColumn::Effect;
+    editor.sub_column = SubColumn::Effect2;
     editor.move_right();
     assert_eq!(editor.cursor_channel(), 1);
     assert_eq!(editor.sub_column(), SubColumn::Note);
@@ -259,7 +259,7 @@ fn test_insert_mode_move_left_wraps_channel() {
     editor.sub_column = SubColumn::Note;
     editor.move_left();
     assert_eq!(editor.cursor_channel(), 0);
-    assert_eq!(editor.sub_column(), SubColumn::Effect);
+    assert_eq!(editor.sub_column(), SubColumn::Effect2);
 }
 
 #[test]
@@ -506,12 +506,14 @@ fn test_sub_column_next_cycle() {
     assert_eq!(SubColumn::Note.next(), SubColumn::Instrument);
     assert_eq!(SubColumn::Instrument.next(), SubColumn::Volume);
     assert_eq!(SubColumn::Volume.next(), SubColumn::Effect);
-    assert_eq!(SubColumn::Effect.next(), SubColumn::Note);
+    assert_eq!(SubColumn::Effect.next(), SubColumn::Effect2);
+    assert_eq!(SubColumn::Effect2.next(), SubColumn::Note);
 }
 
 #[test]
 fn test_sub_column_prev_cycle() {
-    assert_eq!(SubColumn::Note.prev(), SubColumn::Effect);
+    assert_eq!(SubColumn::Note.prev(), SubColumn::Effect2);
+    assert_eq!(SubColumn::Effect2.prev(), SubColumn::Effect);
     assert_eq!(SubColumn::Effect.prev(), SubColumn::Volume);
     assert_eq!(SubColumn::Volume.prev(), SubColumn::Instrument);
     assert_eq!(SubColumn::Instrument.prev(), SubColumn::Note);

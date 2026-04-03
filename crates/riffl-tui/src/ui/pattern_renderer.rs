@@ -179,10 +179,9 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
             format!("L{:02}", (-pan_pct).min(99))
         };
 
-        // Total: 6 + 3 + 3 + 3 = 15 chars
+        // Total: 6 + 3 + 3 + 3 = 15 chars; pad to 20 for 22-char column (2-char separator)
         let label = format!("{:<6}{}{}{}", track_name, badge, vol_str, pan_str);
-        // Pad/truncate to fit column width (15 chars content + separator)
-        let display = format!("│ {:<15}", label);
+        let display = format!("│ {:<20}", label);
 
         let header_style = if is_soloed {
             Style::default()
@@ -300,7 +299,7 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
             };
 
             // Format cell parts
-            let (note_str, inst_str, vol_str, eff_str) = format_cell_parts(cell);
+            let (note_str, inst_str, vol_str, eff_str, eff2_str) = format_cell_parts(cell);
 
             if is_cursor
                 && matches!(
@@ -316,11 +315,12 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
                 } else {
                     (theme.highlight_style(), theme.normal_inactive_style())
                 };
-                let (ns, is, vs, es) = match sub_column {
-                    SubColumn::Note => (active, inactive, inactive, inactive),
-                    SubColumn::Instrument => (inactive, active, inactive, inactive),
-                    SubColumn::Volume => (inactive, inactive, active, inactive),
-                    SubColumn::Effect => (inactive, inactive, inactive, active),
+                let (ns, is, vs, es, e2s) = match sub_column {
+                    SubColumn::Note => (active, inactive, inactive, inactive, inactive),
+                    SubColumn::Instrument => (inactive, active, inactive, inactive, inactive),
+                    SubColumn::Volume => (inactive, inactive, active, inactive, inactive),
+                    SubColumn::Effect => (inactive, inactive, inactive, active, inactive),
+                    SubColumn::Effect2 => (inactive, inactive, inactive, inactive, active),
                 };
                 row_spans.push(Span::styled(note_str, ns));
                 row_spans.push(Span::styled(" ", inactive));
@@ -329,16 +329,19 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
                 row_spans.push(Span::styled(vol_str, vs));
                 row_spans.push(Span::styled(" ", inactive));
                 row_spans.push(Span::styled(eff_str, es));
+                row_spans.push(Span::styled(" ", inactive));
+                row_spans.push(Span::styled(eff2_str, e2s));
             } else if is_cursor && mode.is_visual() && !is_playback_row {
                 // Visual mode cursor: active sub-column gets visual_cursor_style,
                 // inactive sub-columns get visual_selection_style — same granularity as Normal mode
                 let cur = theme.visual_cursor_style();
                 let sel = theme.visual_selection_style();
-                let (ns, is, vs, es) = match sub_column {
-                    SubColumn::Note => (cur, sel, sel, sel),
-                    SubColumn::Instrument => (sel, cur, sel, sel),
-                    SubColumn::Volume => (sel, sel, cur, sel),
-                    SubColumn::Effect => (sel, sel, sel, cur),
+                let (ns, is, vs, es, e2s) = match sub_column {
+                    SubColumn::Note => (cur, sel, sel, sel, sel),
+                    SubColumn::Instrument => (sel, cur, sel, sel, sel),
+                    SubColumn::Volume => (sel, sel, cur, sel, sel),
+                    SubColumn::Effect => (sel, sel, sel, cur, sel),
+                    SubColumn::Effect2 => (sel, sel, sel, sel, cur),
                 };
                 row_spans.push(Span::styled(note_str, ns));
                 row_spans.push(Span::styled(" ", sel));
@@ -347,6 +350,8 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
                 row_spans.push(Span::styled(vol_str, vs));
                 row_spans.push(Span::styled(" ", sel));
                 row_spans.push(Span::styled(eff_str, es));
+                row_spans.push(Span::styled(" ", sel));
+                row_spans.push(Span::styled(eff2_str, e2s));
             } else {
                 // Determine the base style for override situations (playback, cursor+playback, visual, muted)
                 let override_style = if is_cursor && is_playback_row {
@@ -373,7 +378,10 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
 
                 if let Some(cell_style) = override_style {
                     // Uniform style for special states (playback, visual, muted)
-                    let cell_text = format!("{} {} {} {}", note_str, inst_str, vol_str, eff_str);
+                    let cell_text = format!(
+                        "{} {} {} {} {}",
+                        note_str, inst_str, vol_str, eff_str, eff2_str
+                    );
                     row_spans.push(Span::styled(cell_text, cell_style));
                 } else {
                     // Normal state: color-code each sub-column distinctly
@@ -384,6 +392,7 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
                     let has_inst = inst_str != "..";
                     let has_vol = vol_str != "..";
                     let has_effect = eff_str != "....";
+                    let has_effect2 = eff2_str != "....";
 
                     let note_style = if is_note_cut {
                         Style::default()
@@ -413,6 +422,11 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
                     } else {
                         dimmed
                     };
+                    let eff2_style = if has_effect2 {
+                        Style::default().fg(theme.eff_color)
+                    } else {
+                        dimmed
+                    };
                     row_spans.push(Span::styled(note_str, note_style));
                     row_spans.push(Span::styled(" ", dimmed));
                     row_spans.push(Span::styled(inst_str, inst_style));
@@ -420,6 +434,8 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
                     row_spans.push(Span::styled(vol_str, vol_style));
                     row_spans.push(Span::styled(" ", dimmed));
                     row_spans.push(Span::styled(eff_str, eff_style));
+                    row_spans.push(Span::styled(" ", dimmed));
+                    row_spans.push(Span::styled(eff2_str, eff2_style));
                 }
             }
             let trailing_style = if is_playback_row {
@@ -440,10 +456,10 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
     frame.render_widget(paragraph, area);
 }
 
-/// Format a cell into its four sub-column parts: (note, instrument, volume, effect).
+/// Format a cell into its five sub-column parts: (note, instrument, volume, effect1, effect2).
 pub(super) fn format_cell_parts(
     cell: Option<&riffl_core::pattern::row::Cell>,
-) -> (String, String, String, String) {
+) -> (String, String, String, String, String) {
     match cell {
         Some(cell) => {
             let note_str = match &cell.note {
@@ -464,12 +480,17 @@ pub(super) fn format_cell_parts(
                 Some(eff) => format!("{}", eff),
                 None => "....".to_string(),
             };
-            (note_str, inst_str, vol_str, eff_str)
+            let eff2_str = match cell.second_effect() {
+                Some(eff) => format!("{}", eff),
+                None => "....".to_string(),
+            };
+            (note_str, inst_str, vol_str, eff_str, eff2_str)
         }
         None => (
             "---".to_string(),
             "..".to_string(),
             "..".to_string(),
+            "....".to_string(),
             "....".to_string(),
         ),
     }
@@ -499,7 +520,15 @@ pub(super) fn format_cell_display(cell: &riffl_core::pattern::row::Cell) -> Stri
         None => "....".to_string(),
     };
 
-    format!("{} {} {} {}", note_str, inst_str, vol_str, eff_str)
+    let eff2_str = match cell.second_effect() {
+        Some(eff) => format!("{}", eff),
+        None => "....".to_string(),
+    };
+
+    format!(
+        "{} {} {} {} {}",
+        note_str, inst_str, vol_str, eff_str, eff2_str
+    )
 }
 
 /// Calculate scroll offset to keep a target row visible

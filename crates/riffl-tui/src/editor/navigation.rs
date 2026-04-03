@@ -65,15 +65,15 @@ impl Editor {
             self.sub_column = self.sub_column.prev();
         } else if self.cursor_channel > 0 {
             self.cursor_channel -= 1;
-            self.sub_column = SubColumn::Effect;
+            self.sub_column = SubColumn::Effect2;
         }
     }
 
-    /// Move cursor right by sub-column, wrapping to the next channel after Effect.
+    /// Move cursor right by sub-column, wrapping to the next channel after Effect2.
     pub fn move_right(&mut self) {
         self.effect_digit_position = 0;
         let max_ch = self.pattern.num_channels().saturating_sub(1);
-        if self.sub_column != SubColumn::Effect {
+        if self.sub_column != SubColumn::Effect2 {
             self.sub_column = self.sub_column.next();
         } else if self.cursor_channel < max_ch {
             self.cursor_channel += 1;

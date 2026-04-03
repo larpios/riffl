@@ -493,7 +493,7 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) {
         if let crossterm::event::KeyCode::Char(c) = key.code {
             if let Some(digit) = hex_char_to_digit(c) {
                 match app.editor.sub_column() {
-                    SubColumn::Effect => app.editor.enter_effect_digit(digit),
+                    SubColumn::Effect | SubColumn::Effect2 => app.editor.enter_effect_digit(digit),
                     SubColumn::Instrument => app.editor.enter_instrument_digit(digit),
                     SubColumn::Volume => app.editor.enter_volume_digit(digit),
                     SubColumn::Note => {}

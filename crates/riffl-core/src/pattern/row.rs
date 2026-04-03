@@ -90,6 +90,22 @@ impl Cell {
         }
     }
 
+    /// Set the effect at the given slot (0 = first, 1 = second, …).
+    ///
+    /// If the slot does not yet exist, the effects vec is extended with
+    /// default effects up to `slot`, then the target slot is set.
+    pub fn set_effect_at(&mut self, slot: usize, effect: Effect) {
+        while self.effects.len() <= slot {
+            self.effects.push(Effect::new(0, 0));
+        }
+        self.effects[slot] = effect;
+    }
+
+    /// Get the effect at the given slot, if present.
+    pub fn effect_at(&self, slot: usize) -> Option<&Effect> {
+        self.effects.get(slot)
+    }
+
     /// Clear all effects from this cell.
     pub fn clear_effects(&mut self) {
         self.effects.clear();
@@ -315,9 +331,12 @@ mod tests {
         assert_eq!(cell.effects.len(), 1);
         assert!(cell.add_effect(Effect::new(0xC, 0x40)));
         assert_eq!(cell.effects.len(), 2);
-        // Third effect should fail
-        assert!(!cell.add_effect(Effect::new(0xF, 0x06)));
-        assert_eq!(cell.effects.len(), 2);
+        // Third effect now succeeds (MAX_EFFECTS_PER_CELL = 3)
+        assert!(cell.add_effect(Effect::new(0xF, 0x06)));
+        assert_eq!(cell.effects.len(), 3);
+        // Fourth effect should fail
+        assert!(!cell.add_effect(Effect::new(0x1, 0x00)));
+        assert_eq!(cell.effects.len(), 3);
     }
 
     #[test]

@@ -241,13 +241,21 @@ pub(super) fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app:
         }
 
         // Effect Description
-        if app.editor.sub_column() == SubColumn::Effect {
+        if matches!(
+            app.editor.sub_column(),
+            SubColumn::Effect | SubColumn::Effect2
+        ) {
+            let slot = if app.editor.sub_column() == SubColumn::Effect2 {
+                1
+            } else {
+                0
+            };
             if let Some(cell) = app
                 .editor
                 .pattern()
                 .get_cell(app.editor.cursor_row(), app.editor.cursor_channel())
             {
-                if let Some(effect) = cell.first_effect() {
+                if let Some(effect) = cell.effect_at(slot) {
                     let desc = effect.describe(app.song.effect_mode);
                     left_spans.push(Span::raw(" | "));
                     left_spans.push(Span::styled(

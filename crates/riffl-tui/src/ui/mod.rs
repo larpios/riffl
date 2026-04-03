@@ -420,7 +420,10 @@ fn render_instrument_tabs(
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
-pub const CHANNEL_COL_WIDTH: u16 = 17;
+/// Width of a single channel column (including separator): 22 chars.
+/// Layout: "│ " (2) + "C#4" (3) + " " (1) + "01" (2) + " " (1) + "40" (2) + " " (1)
+///       + "0C20" (4) + " " (1) + "0A04" (4) + " " (1) = 22
+pub const CHANNEL_COL_WIDTH: u16 = 22;
 
 /// Width of the row number column: "  XX  " = 6
 pub const ROW_NUM_WIDTH: u16 = 6;
