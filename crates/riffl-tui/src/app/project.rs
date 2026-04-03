@@ -290,4 +290,33 @@ impl App {
         export::export_sample_wav(path, &sample, bit_depth)
             .map_err(|e| format!("Export failed: {e}"))
     }
+
+    /// Export every named sample in the mixer pool to individual WAV files inside `dir`.
+    ///
+    /// Files are named `<index>_<sanitised_name>.wav`.  Returns the number of files written.
+    pub fn dump_samples_to_dir(&self, dir: &Path) -> Result<usize, String> {
+        std::fs::create_dir_all(dir)
+            .map_err(|e| format!("Could not create directory: {e}"))?;
+
+        let samples = self.loaded_samples();
+        if samples.is_empty() {
+            return Err("No samples loaded".to_string());
+        }
+
+        let mut count = 0usize;
+        for (idx, sample) in samples.iter().enumerate() {
+            let raw_name = sample.name().unwrap_or("unnamed");
+            // Sanitise: replace whitespace / path separators with underscores
+            let safe: String = raw_name
+                .chars()
+                .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+                .collect();
+            let filename = format!("{:02}_{}.wav", idx, safe);
+            let path = dir.join(&filename);
+            export::export_sample_wav(&path, sample, None)
+                .map_err(|e| format!("Failed to write {filename}: {e}"))?;
+            count += 1;
+        }
+        Ok(count)
+    }
 }

@@ -385,20 +385,15 @@ impl App {
             Config::load()
         };
 
-        // Generate a demo sine wave sample at 440Hz, 0.25s duration
-        let demo_sample = Self::generate_sine_sample(440.0, 0.25, 44100);
-        let demo_chip_render = ChipRenderData::from_sample(&demo_sample);
+        // Build the built-in instrument bank (wavetables + drum sounds)
+        let bank = riffl_core::audio::builtin::builtin_bank(output_sample_rate);
 
-        // Create a demo pattern: C4, E4, G4, C5 across 16 rows
-        let mut pattern = Pattern::new(config.default_pattern_rows, config.default_channels);
-        pattern.set_note(0, 0, Note::simple(Pitch::C, 4));
-        pattern.set_note(4, 0, Note::simple(Pitch::E, 4));
-        pattern.set_note(8, 0, Note::simple(Pitch::G, 4));
-        pattern.set_note(12, 0, Note::simple(Pitch::C, 5));
+        // Create a blank starting pattern
+        let pattern = Pattern::new(config.default_pattern_rows, config.default_channels);
 
         // Create mixer with engine's output sample rate
         let mixer = Arc::new(Mutex::new(Mixer::new(
-            vec![Arc::new(demo_sample)],
+            bank.samples,
             Vec::new(),
             pattern.num_channels(),
             output_sample_rate,
@@ -440,12 +435,9 @@ impl App {
         ));
         song.patterns[0] = pattern;
 
-        use riffl_core::song::Instrument;
-        let mut demo_inst = Instrument::new("sine440");
-        demo_inst.sample_index = Some(0);
-        demo_inst.sample_path = None;
-        demo_inst.chip_render = Some(demo_chip_render);
-        song.instruments.push(demo_inst);
+        for inst in bank.instruments {
+            song.instruments.push(inst);
+        }
 
         // Initialize file browser at default modules dir, sample browser at sample dirs
         let default_modules = crate::config::Config::default_modules_dir();

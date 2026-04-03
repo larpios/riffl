@@ -14,7 +14,10 @@ use std::time::Duration;
 
 use anyhow::Result;
 use crossterm::{
-    event::{self, Event, KeyEventKind},
+    event::{
+        self, Event, KeyEventKind, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
+        PushKeyboardEnhancementFlags,
+    },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -107,12 +110,20 @@ fn init_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     execute!(stdout, event::EnableMouseCapture)?;
+    // Enable kitty keyboard protocol so Ctrl+Enter (and similar combos) are
+    // distinguishable from plain Enter. Terminals that don't support it ignore
+    // the sequence silently, so this is safe to use unconditionally.
+    let _ = execute!(
+        stdout,
+        PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+    );
     let backend = CrosstermBackend::new(stdout);
     let terminal = Terminal::new(backend)?;
     Ok(terminal)
 }
 
 fn restore_terminal() -> Result<()> {
+    let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
     execute!(io::stdout(), event::DisableMouseCapture)?;
     disable_raw_mode()?;
     execute!(io::stdout(), LeaveAlternateScreen)?;

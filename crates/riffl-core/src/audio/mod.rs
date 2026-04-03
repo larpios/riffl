@@ -4,6 +4,7 @@
 
 #[cfg(feature = "adlib")]
 pub mod adlib;
+pub mod builtin;
 pub mod bus;
 pub mod channel_strip;
 pub mod chip;

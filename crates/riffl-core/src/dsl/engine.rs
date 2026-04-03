@@ -259,6 +259,20 @@ impl ScriptEngine {
         scope.push("bpm", bpm);
         scope.push("tpl", tpl as INT);
 
+        // Built-in instrument indices (matches riffl_core::audio::builtin::builtin_bank)
+        scope.push_constant("SINE", 0 as INT);
+        scope.push_constant("SAW", 1 as INT);
+        scope.push_constant("SQUARE", 2 as INT);
+        scope.push_constant("TRIANGLE", 3 as INT);
+        scope.push_constant("NOISE", 4 as INT);
+        scope.push_constant("KICK", 5 as INT);
+        scope.push_constant("SNARE", 6 as INT);
+        scope.push_constant("HIHAT", 7 as INT);
+        scope.push_constant("OHIHAT", 8 as INT);
+        scope.push_constant("CLAP", 9 as INT);
+        scope.push_constant("CRASH", 10 as INT);
+        scope.push_constant("TOM", 11 as INT);
+
         // Expose Zxx trigger data: array of #{ channel: int, param: int } maps.
         let trigger_array: rhai::Array = triggers
             .iter()
@@ -521,6 +535,19 @@ impl ScriptEngine {
         scope.push("bpm", bpm);
         scope.push("tpl", tpl as INT);
 
+        scope.push_constant("SINE", 0 as INT);
+        scope.push_constant("SAW", 1 as INT);
+        scope.push_constant("SQUARE", 2 as INT);
+        scope.push_constant("TRIANGLE", 3 as INT);
+        scope.push_constant("NOISE", 4 as INT);
+        scope.push_constant("KICK", 5 as INT);
+        scope.push_constant("SNARE", 6 as INT);
+        scope.push_constant("HIHAT", 7 as INT);
+        scope.push_constant("OHIHAT", 8 as INT);
+        scope.push_constant("CLAP", 9 as INT);
+        scope.push_constant("CRASH", 10 as INT);
+        scope.push_constant("TOM", 11 as INT);
+
         match engine.eval_with_scope::<Dynamic>(&mut scope, code) {
             Ok(result) => {
                 let cmds = commands.lock().unwrap_or_else(|e| e.into_inner()).clone();
@@ -689,6 +716,22 @@ fn register_music_functions(engine: &mut Engine) {
         }
         note_to_dynamic(Note::simple(pitch, octave as u8))
     });
+
+    // note(pitch_str, octave, instrument) -> note map  (explicit instrument index)
+    engine.register_fn(
+        "note",
+        |pitch_str: &str, octave: INT, instrument: INT| -> Dynamic {
+            let pitch = match Pitch::parse_str(pitch_str) {
+                Some(p) => p,
+                None => return Dynamic::UNIT,
+            };
+            if !(0..=9).contains(&octave) {
+                return Dynamic::UNIT;
+            }
+            let inst = instrument.clamp(0, 255) as u8;
+            note_to_dynamic(Note::new(pitch, octave as u8, 100, inst))
+        },
+    );
 
     // scale(root, mode, octave) -> array of note maps
     engine.register_fn("scale", |root: &str, mode: &str, octave: INT| -> Array {

@@ -1407,6 +1407,36 @@ impl super::App {
                     }
                 }
             }
+
+            Some(Command::DumpSamples) => {
+                if args.is_empty() {
+                    self.open_modal(Modal::error(
+                        "dump-samples".to_string(),
+                        "Usage: :dump-samples <directory>".to_string(),
+                    ));
+                } else {
+                    let dir = PathBuf::from(args);
+                    match self.dump_samples_to_dir(&dir) {
+                        Ok(count) => {
+                            self.open_modal(Modal::info(
+                                "Samples Exported".to_string(),
+                                format!(
+                                    "Wrote {} WAV file{} to\n{}",
+                                    count,
+                                    if count == 1 { "" } else { "s" },
+                                    dir.display()
+                                ),
+                            ));
+                        }
+                        Err(e) => {
+                            self.open_modal(Modal::error(
+                                "Export Failed".to_string(),
+                                e,
+                            ));
+                        }
+                    }
+                }
+            }
         }
     }
 }

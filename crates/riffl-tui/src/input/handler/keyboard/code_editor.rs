@@ -17,6 +17,12 @@ pub fn handle_code_editor_key(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    // F5: run script (works on all terminals, no kitty protocol required)
+    if key.modifiers == KeyModifiers::NONE && key.code == KeyCode::F(5) {
+        app.execute_script(&[]);
+        return;
+    }
+
     // Ctrl-modified keys: handle special code editor shortcuts
     if key.modifiers == KeyModifiers::CONTROL {
         match key.code {

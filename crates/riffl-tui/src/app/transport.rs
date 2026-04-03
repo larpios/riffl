@@ -35,9 +35,12 @@ impl App {
                 // Sync arrangement length before starting
                 self.transport
                     .set_arrangement_length(self.song.arrangement.len());
-                // In Song mode, load the pattern at the current arrangement position
+                // In Song mode, load the pattern at the current arrangement position.
+                // Flush first so any script-generated edits are preserved through the reload.
                 if self.transport.playback_mode() == PlaybackMode::Song {
-                    self.load_arrangement_pattern(self.transport.arrangement_position());
+                    let pos = self.transport.arrangement_position();
+                    self.flush_editor_pattern(pos);
+                    self.load_arrangement_pattern(pos);
                 }
 
                 // When starting from stopped, we perform a chase if the starting row is not 0
@@ -103,7 +106,9 @@ impl App {
         self.transport
             .set_arrangement_length(self.song.arrangement.len());
         if self.transport.playback_mode() == PlaybackMode::Song {
-            self.load_arrangement_pattern(self.transport.arrangement_position());
+            let pos = self.transport.arrangement_position();
+            self.flush_editor_pattern(pos);
+            self.load_arrangement_pattern(pos);
         }
         self.transport.play_from(start_row);
 

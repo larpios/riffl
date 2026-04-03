@@ -130,6 +130,7 @@ pub enum Command {
     Marker,
     Samples,
     Effects,
+    DumpSamples,
 }
 
 impl CommandMetadata for Command {
@@ -179,6 +180,7 @@ impl CommandMetadata for Command {
             Self::Marker => "marker",
             Self::Samples => "samples",
             Self::Effects => "effects",
+            Self::DumpSamples => "dump-samples",
         }
     }
 
@@ -228,6 +230,7 @@ impl CommandMetadata for Command {
             Self::Marker => "Add/remove a section marker in arrangement",
             Self::Samples => "List all loaded samples",
             Self::Effects => "Show effect command reference",
+            Self::DumpSamples => "Export all loaded samples to WAV files",
         }
     }
 
@@ -277,6 +280,7 @@ impl CommandMetadata for Command {
             Self::Marker => ":marker [label]",
             Self::Samples => ":samples",
             Self::Effects => ":effects [cmd]",
+            Self::DumpSamples => ":dump-samples <dir>",
         }
     }
 
@@ -315,7 +319,9 @@ impl CommandMetadata for Command {
             | Self::LoadSample
             | Self::Keyzone
             | Self::Wave => CommandCategory::Instrument,
-            Self::Mode | Self::Marker | Self::Samples | Self::Effects => CommandCategory::Misc,
+            Self::Mode | Self::Marker | Self::Samples | Self::Effects | Self::DumpSamples => {
+                CommandCategory::Misc
+            }
         }
     }
 
@@ -406,6 +412,7 @@ impl CommandRegistry {
             Command::Marker,
             Command::Samples,
             Command::Effects,
+            Command::DumpSamples,
         ]
     }
 

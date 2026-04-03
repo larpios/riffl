@@ -71,21 +71,24 @@ const SIMPLE_BEAT: &str = r#"// Simple Beat — 4/4 kick-snare using euclidean r
 //   - Kick:  4 hits across 16 steps (classic four-on-the-floor)
 //   - Snare: 2 hits across 16 steps (backbeat on 4 and 12)
 //   - Hat:   6 hits across 16 steps (syncopated hi-hat)
+//
+// Built-in instrument constants (slot 0-7 on a fresh song):
+//   SINE  SAW  SQUARE  TRIANGLE  NOISE  KICK  SNARE  HIHAT
 
 // Generate euclidean rhythms
 let kick_rhythm  = euclidean(4, num_rows);
 let snare_rhythm = euclidean(2, num_rows);
 let hat_rhythm   = euclidean(6, num_rows);
 
-// Create notes for each drum
-let kick  = note("C", 2);
-let snare = note("D", 2);
-let hat   = note("F#", 2);
+// note(pitch, octave, instrument) pins each channel to its drum sound
+let kick_note  = note("C", 2, KICK);
+let snare_note = note("D", 2, SNARE);
+let hat_note   = note("F#", 2, HIHAT);
 
 // Place the beats into channels 0, 1, 2
-generate_beat(0, kick_rhythm, kick);
-generate_beat(1, snare_rhythm, snare);
-generate_beat(2, hat_rhythm, hat);
+generate_beat(0, kick_rhythm,  kick_note);
+generate_beat(1, snare_rhythm, snare_note);
+generate_beat(2, hat_rhythm,   hat_note);
 "#;
 
 /// "Random Melody" — random notes from a pentatonic scale.
