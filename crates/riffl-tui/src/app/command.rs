@@ -552,6 +552,54 @@ impl super::App {
                 }
             }
 
+            Some(Command::Alias) => {
+                if let Some(idx) = args.parse::<usize>().ok().filter(|_| !args.is_empty()) {
+                    if idx >= self.song.patterns.len() {
+                        self.open_modal(Modal::error(
+                            "Alias Failed".to_string(),
+                            format!(
+                                "Pattern {} does not exist (max: {}).",
+                                idx,
+                                self.song.patterns.len().saturating_sub(1)
+                            ),
+                        ));
+                    } else {
+                        let arr_pos = self.transport.arrangement_position();
+                        self.flush_editor_pattern(arr_pos);
+                        self.arrangement_view.append_pattern(&mut self.song, idx);
+                        self.mark_dirty();
+                        let pat_name = self
+                            .song
+                            .patterns
+                            .get(idx)
+                            .map(|p| p.name.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let label = if pat_name.is_empty() {
+                            format!("Pattern {:02}", idx)
+                        } else {
+                            pat_name
+                        };
+                        self.open_modal(Modal::info(
+                            "Pattern Aliased".to_string(),
+                            format!(
+                                "Inserted {} as alias at position {}.",
+                                label,
+                                self.arrangement_view.cursor()
+                            ),
+                        ));
+                    }
+                } else {
+                    self.open_modal(Modal::info(
+                        "Alias Pattern".to_string(),
+                        format!(
+                            "Usage: :alias <pattern-index>  (0-{})\nInserts an existing pattern as a reference in the arrangement.",
+                            self.song.patterns.len().saturating_sub(1)
+                        ),
+                    ));
+                }
+            }
+
             Some(Command::Rename) => {
                 if args.is_empty() {
                     self.open_modal(Modal::error(
