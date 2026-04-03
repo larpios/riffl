@@ -295,8 +295,7 @@ impl App {
     ///
     /// Files are named `<index>_<sanitised_name>.wav`.  Returns the number of files written.
     pub fn dump_samples_to_dir(&self, dir: &Path) -> Result<usize, String> {
-        std::fs::create_dir_all(dir)
-            .map_err(|e| format!("Could not create directory: {e}"))?;
+        std::fs::create_dir_all(dir).map_err(|e| format!("Could not create directory: {e}"))?;
 
         let samples = self.loaded_samples();
         if samples.is_empty() {
@@ -309,7 +308,13 @@ impl App {
             // Sanitise: replace whitespace / path separators with underscores
             let safe: String = raw_name
                 .chars()
-                .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+                .map(|c| {
+                    if c.is_alphanumeric() || c == '-' || c == '_' {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
                 .collect();
             let filename = format!("{:02}_{}.wav", idx, safe);
             let path = dir.join(&filename);

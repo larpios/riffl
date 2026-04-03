@@ -276,8 +276,8 @@ pub fn builtin_bank(output_sample_rate: u32) -> BuiltinBank {
     let samples: Vec<Arc<Sample>> = raw.into_iter().map(Arc::new).collect();
 
     let names = [
-        "Sine", "Saw", "Square", "Triangle", "Noise",
-        "Kick", "Snare", "Hi-hat", "Open HH", "Clap", "Crash", "Tom",
+        "Sine", "Saw", "Square", "Triangle", "Noise", "Kick", "Snare", "Hi-hat", "Open HH", "Clap",
+        "Crash", "Tom",
     ];
     let instruments: Vec<Instrument> = names
         .iter()
