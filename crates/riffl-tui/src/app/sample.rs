@@ -83,6 +83,8 @@ impl super::App {
         self.song.instruments.push(instrument);
         self.sync_mixer_instruments();
         self.mark_dirty();
+        self.hooks
+            .on_sample_loaded(&path.to_string_lossy(), idx as i64);
         Ok(idx)
     }
 

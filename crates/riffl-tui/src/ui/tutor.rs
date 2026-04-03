@@ -678,5 +678,79 @@ fn tutor_content(theme: &Theme) -> Vec<Line<'static>> {
     ));
     lines.push(blank());
 
+    // ── Hooks ────────────────────────────────────────────────────────────────
+    lines.push(section("HOOKS  (hooks.rhai)", theme));
+    lines.push(blank());
+    lines.push(text(
+        "Place ~/.config/riffl/hooks.rhai to customise riffl with Rhai script.",
+        theme,
+    ));
+    lines.push(text(
+        "Run  riffl --dump-hooks  to print an annotated template to stdout.",
+        theme,
+    ));
+    lines.push(blank());
+    lines.push(subsection("Supported hook functions", theme));
+    lines.push(blank());
+    lines.push(key(
+        "normalize_picker_path(raw)",
+        "Transform raw picker output to a clean file path.",
+        theme,
+    ));
+    lines.push(text(
+        "Called before riffl opens a file selected by an external picker",
+        theme,
+    ));
+    lines.push(text(
+        "(yazi, lf, etc.). Return the corrected path string. If this",
+        theme,
+    ));
+    lines.push(text(
+        "function is not defined, built-in yazi search:// stripping runs.",
+        theme,
+    ));
+    lines.push(blank());
+    lines.push(key(
+        "on_project_loaded(path)",
+        "Called after a .rtm project is successfully loaded.",
+        theme,
+    ));
+    lines.push(key(
+        "on_sample_loaded(path, idx)",
+        "Called after a sample is loaded into instrument slot idx.",
+        theme,
+    ));
+    lines.push(key(
+        "on_startup()",
+        "Called once when riffl starts, after config is read.",
+        theme,
+    ));
+    lines.push(blank());
+    lines.push(subsection(
+        "Example: custom picker path normalisation",
+        theme,
+    ));
+    lines.push(blank());
+    lines.push(text("fn normalize_picker_path(raw) {", theme));
+    lines.push(text(
+        "  // strip \"file://\" prefix from a custom picker",
+        theme,
+    ));
+    lines.push(text(
+        "  if raw.starts_with(\"file://\") { return raw.sub_string(7); }",
+        theme,
+    ));
+    lines.push(text(
+        "  raw  // return unchanged → built-in yazi handling still runs",
+        theme,
+    ));
+    lines.push(text("}", theme));
+    lines.push(blank());
+    lines.push(text(
+        "Undefined hooks are silently skipped. Errors are printed to stderr.",
+        theme,
+    ));
+    lines.push(blank());
+
     lines
 }

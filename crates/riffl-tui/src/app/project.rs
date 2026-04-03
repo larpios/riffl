@@ -231,6 +231,7 @@ impl App {
                 }
                 self.sync_mixer_instruments();
                 self.project_path = Some(path.to_path_buf());
+                self.hooks.on_project_loaded(&path.to_string_lossy());
                 self.is_dirty = false;
                 self.arrangement_view = ArrangementView::new();
                 self.transport.stop();

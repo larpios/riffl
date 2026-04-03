@@ -38,6 +38,12 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    // Print an annotated hooks.rhai template to stdout.
+    if std::env::args().any(|arg| arg == "--dump-hooks") {
+        print!("{}", HOOKS_TEMPLATE);
+        return Ok(());
+    }
+
     // Set up panic hook to restore terminal before panicking
     let original_hook = panic::take_hook();
     panic::set_hook(Box::new(move |panic_info| {
@@ -153,6 +159,66 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App)
 
     Ok(())
 }
+
+/// Annotated hooks.rhai template printed by `--dump-hooks`.
+const HOOKS_TEMPLATE: &str = r#"// ~/.config/riffl/hooks.rhai
+//
+// Riffl hook script — place this file at ~/.config/riffl/hooks.rhai.
+// Define any subset of the functions below; undefined hooks are silently skipped.
+// Errors (syntax or runtime) are printed to stderr; riffl keeps running normally.
+//
+// Run  riffl --dump-hooks  to print this template again.
+
+// ---------------------------------------------------------------------------
+// normalize_picker_path(raw: string) -> string
+//
+// Transform the raw string written by an external file picker (yazi, lf, etc.)
+// to a clean, usable file path before riffl tries to open it.
+//
+// Called for: Ctrl-F (sample picker), Ctrl-I (module picker), Ctrl-O (project picker).
+//
+// If this function is NOT defined, riffl's built-in normalisation runs:
+//   • Strips yazi's search-mode URI prefix  search://<query>//<path>
+//   • Resolves relative paths against the picker's start directory
+//
+// Returning `raw` unchanged lets the built-in normalisation run afterwards.
+// ---------------------------------------------------------------------------
+// fn normalize_picker_path(raw) {
+//     // Example: strip a "file://" prefix produced by a custom picker
+//     if raw.starts_with("file://") {
+//         return raw.sub_string(7);
+//     }
+//     raw
+// }
+
+// ---------------------------------------------------------------------------
+// on_project_loaded(path: string)
+//
+// Called after a .rtm project file is successfully loaded from disk.
+// `path` is the absolute path of the loaded file.
+// ---------------------------------------------------------------------------
+// fn on_project_loaded(path) {
+//     // print(`loaded project: ${path}`);
+// }
+
+// ---------------------------------------------------------------------------
+// on_sample_loaded(path: string, inst_idx: int)
+//
+// Called after a sample file is loaded into instrument slot `inst_idx`.
+// `path` is the absolute path of the loaded sample file.
+// ---------------------------------------------------------------------------
+// fn on_sample_loaded(path, inst_idx) {
+//     // print(`loaded sample: ${path} → slot ${inst_idx}`);
+// }
+
+// ---------------------------------------------------------------------------
+// on_startup()
+//
+// Called once when riffl starts, after configuration is loaded.
+// ---------------------------------------------------------------------------
+// fn on_startup() {
+// }
+"#;
 
 /// Parse `--sample-dir <path>` from the process arguments, returning the value if present.
 fn parse_sample_dir_flag() -> Option<String> {

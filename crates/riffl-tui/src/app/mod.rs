@@ -108,12 +108,27 @@ pub enum AppView {
 
 /// Outcome sent from the background external-picker thread back to the main loop.
 pub(crate) enum PickerOutcome {
-    /// User selected a file.
-    File(std::path::PathBuf),
+    /// User selected a file. Carries the raw string from the chooser file plus
+    /// the directory the picker was opened in (needed for relative-path resolution).
+    File {
+        raw: String,
+        start_dir: std::path::PathBuf,
+    },
     /// Picker exited without a selection.
     Cancelled,
     /// Command was not found and the picker was "auto" — open the builtin browser instead.
     Fallback(std::path::PathBuf),
+}
+
+/// Which action to perform with the file selected by the external picker.
+#[derive(Clone, Copy)]
+pub(crate) enum PickerMode {
+    /// Load the file as an audio sample.
+    Sample,
+    /// Import the file as a tracker module.
+    Module,
+    /// Open the file as a project (.rtm).
+    Project,
 }
 
 /// Global undo snapshot types for non-pattern data (Instruments and Samples).
@@ -346,8 +361,11 @@ pub struct App {
     /// `Some` while the picker thread is running or has a pending result; `None` otherwise.
     picker_rx: Option<std::sync::mpsc::Receiver<PickerOutcome>>,
 
-    /// When true, the active picker is importing a module; when false, loading a sample.
-    picker_is_module: bool,
+    /// What to do with the file selected by the external picker.
+    picker_mode: PickerMode,
+
+    /// User-scriptable hook engine (loaded from hooks.rhai at startup).
+    pub(crate) hooks: riffl_core::dsl::HooksEngine,
 }
 
 impl App {
@@ -506,7 +524,15 @@ impl App {
             initial_bpm,
             initial_tpl,
             picker_rx: None,
-            picker_is_module: false,
+            picker_mode: PickerMode::Sample,
+            hooks: {
+                let hooks_path = riffl_core::metadata::config_dir()
+                    .map(|p| p.join("hooks.rhai"))
+                    .unwrap_or_default();
+                let h = riffl_core::dsl::HooksEngine::load(&hooks_path);
+                h.on_startup();
+                h
+            },
         }
     }
 

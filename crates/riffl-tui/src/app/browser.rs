@@ -1,4 +1,4 @@
-use crate::app::PickerOutcome;
+use crate::app::{PickerMode, PickerOutcome};
 use crate::ui::file_browser::FileBrowser;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -101,7 +101,7 @@ impl super::App {
             return;
         }
 
-        self.launch_external_picker(start_dir, false);
+        self.launch_external_picker(start_dir, PickerMode::Sample);
     }
 
     /// Open the module file picker (Ctrl-I). Imports the selection as a module.
@@ -114,12 +114,12 @@ impl super::App {
             return;
         }
 
-        self.launch_external_picker(start_dir, true);
+        self.launch_external_picker(start_dir, PickerMode::Module);
     }
 
     /// Spawn the external picker on a background thread and yield the terminal to it.
     /// Does nothing if a picker is already running.
-    fn launch_external_picker(&mut self, start_dir: std::path::PathBuf, is_module: bool) {
+    fn launch_external_picker(&mut self, start_dir: std::path::PathBuf, mode: PickerMode) {
         if self.picker_rx.is_some() {
             return;
         }
@@ -145,7 +145,7 @@ impl super::App {
 
         let (tx, rx) = std::sync::mpsc::channel::<PickerOutcome>();
         self.picker_rx = Some(rx);
-        self.picker_is_module = is_module;
+        self.picker_mode = mode;
 
         let is_auto = picker == "auto";
         std::thread::spawn(move || {
@@ -157,13 +157,12 @@ impl super::App {
 
             let outcome = match result {
                 Ok(s) if s.success() => {
-                    let selected = std::fs::read_to_string(&temp_file)
+                    let raw = std::fs::read_to_string(&temp_file)
                         .ok()
                         .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .map(std::path::PathBuf::from);
-                    match selected {
-                        Some(path) => PickerOutcome::File(path),
+                        .filter(|s| !s.is_empty());
+                    match raw {
+                        Some(raw) => PickerOutcome::File { raw, start_dir },
                         None => PickerOutcome::Cancelled,
                     }
                 }
@@ -209,16 +208,23 @@ impl super::App {
         let _ = execute!(stdout, EnterAlternateScreen);
         self.needs_full_redraw = true;
 
-        let is_module = self.picker_is_module;
+        let mode = self.picker_mode;
         match outcome {
             PickerOutcome::Cancelled => {}
             PickerOutcome::Fallback(start_dir) => {
                 self.file_browser = crate::ui::file_browser::FileBrowser::new(&start_dir);
                 self.file_browser.open();
             }
-            PickerOutcome::File(path) => {
-                if is_module {
-                    match self.import_file(&path) {
+            PickerOutcome::File { raw, start_dir } => {
+                let normalised = self.hooks.normalize_picker_path(&raw);
+                let p = std::path::PathBuf::from(&normalised);
+                let path = if p.is_absolute() {
+                    p
+                } else {
+                    start_dir.join(p)
+                };
+                match mode {
+                    PickerMode::Module => match self.import_file(&path) {
                         Ok(()) => {
                             let name = path
                                 .file_name()
@@ -236,9 +242,11 @@ impl super::App {
                                 msg,
                             ));
                         }
+                    },
+                    PickerMode::Project => {
+                        self.load_project(&path);
                     }
-                } else {
-                    match self.load_sample_from_path(&path) {
+                    PickerMode::Sample => match self.load_sample_from_path(&path) {
                         Ok(idx) => {
                             let name = self
                                 .song
@@ -257,7 +265,7 @@ impl super::App {
                                 msg,
                             ));
                         }
-                    }
+                    },
                 }
             }
         }
@@ -282,6 +290,12 @@ impl super::App {
             .and_then(|p| p.parent())
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+
+        if self.config.file_picker != "builtin" {
+            self.launch_external_picker(start_dir, PickerMode::Project);
+            return;
+        }
+
         self.file_browser = crate::ui::file_browser::FileBrowser::new_project(&start_dir);
         self.file_browser.open();
         self.is_project_browser = true;
