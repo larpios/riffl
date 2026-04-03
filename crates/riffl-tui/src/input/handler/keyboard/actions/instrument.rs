@@ -27,6 +27,9 @@ pub(super) fn handle(app: &mut App, action: &Action, key: KeyEvent) -> bool {
                     "Rename Instrument".to_string(),
                     "Enter new name in the terminal.".to_string(),
                 ));
+            } else if app.current_view == AppView::PatternList {
+                app.command_mode = true;
+                app.command_input = "pname ".to_string();
             }
         }
         Action::EditInstrument => {
