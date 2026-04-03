@@ -224,7 +224,28 @@ impl Editor {
     }
 
     /// Delete (clear) the current cell.
+    /// Clear only the sub-column under the cursor (vim-style `x`).
+    ///
+    /// - Note column: clears the note event
+    /// - Instrument column: clears the instrument number
+    /// - Volume column: clears the volume override
+    /// - Effect column: clears all effects
     pub fn delete_cell(&mut self) {
+        self.save_history();
+        let row = self.cursor_row;
+        let ch = self.cursor_channel;
+        if let Some(cell) = self.pattern.get_cell_mut(row, ch) {
+            match self.sub_column {
+                SubColumn::Note => cell.note = None,
+                SubColumn::Instrument => cell.instrument = None,
+                SubColumn::Volume => cell.volume = None,
+                SubColumn::Effect => cell.effects.clear(),
+            }
+        }
+    }
+
+    /// Clear the entire cell at the cursor (all sub-columns).
+    pub fn clear_cell(&mut self) {
         self.save_history();
         self.pattern
             .clear_cell(self.cursor_row, self.cursor_channel);
