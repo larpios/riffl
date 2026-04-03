@@ -122,7 +122,7 @@ pub fn handle_mouse_event(app: &mut App, mouse: MouseEvent) {
                                 ch_scroll,
                             );
 
-                            if app.editor.mode() != EditorMode::Visual {
+                            if !app.editor.mode().is_visual() {
                                 if app.editor.mode() == EditorMode::Insert {
                                     app.editor.enter_normal_mode();
                                 }
@@ -135,7 +135,7 @@ pub fn handle_mouse_event(app: &mut App, mouse: MouseEvent) {
                     }
                     MouseEventKind::Drag(_) => {
                         if app.current_view == AppView::PatternEditor
-                            && app.editor.mode() == EditorMode::Visual
+                            && app.editor.mode().is_visual()
                         {
                             let local_x = mouse_x.saturating_sub(pattern_x);
                             let local_y = mouse_y.saturating_sub(pattern_y);

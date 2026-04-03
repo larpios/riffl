@@ -9,6 +9,7 @@ pub(super) fn handle(app: &mut App, action: &Action) -> bool {
         Action::EnterInsertMode => app.editor.enter_insert_mode(),
         Action::EnterNormalMode => app.editor.enter_normal_mode(),
         Action::EnterVisualMode => app.editor.enter_visual_mode(),
+        Action::EnterVisualLineMode => app.editor.enter_visual_line_mode(),
         Action::EnterReplaceMode => app.editor.enter_replace_mode(),
 
         // Note entry
@@ -105,6 +106,23 @@ pub(super) fn handle(app: &mut App, action: &Action) -> bool {
             app.editor.randomize_notes();
             app.mark_dirty();
         }
+        Action::ReverseSelection => {
+            app.editor.reverse_selection();
+            app.mark_dirty();
+        }
+        Action::HumanizeNotes => {
+            app.editor.humanize_notes(8);
+            app.mark_dirty();
+        }
+
+        // Macro actions are handled in the keyboard handler layer, not here.
+        Action::SetMark(_)
+        | Action::GotoMark(_)
+        | Action::SetRegister(_)
+        | Action::StartMacroRecord(_)
+        | Action::StopMacroRecord
+        | Action::ReplayMacro(_)
+        | Action::ReplayLastMacro => {}
 
         // Bookmarks
         Action::AddBookmark => app.editor.add_bookmark(None),

@@ -537,7 +537,9 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) {
         return;
     }
 
-    // Chord handling for Normal mode (dd = delete row, gg = go to top).
+    // Chord / prefix handling for Normal mode.
+    // Covers: dd (delete row), gg (top), m{x} (set mark), '{x} (goto mark),
+    //         "{x} (set register), q{x} / q (macro record), @{x} / @@ (macro replay).
     if app.editor.mode() == EditorMode::Normal
         && key.modifiers == crossterm::event::KeyModifiers::NONE
     {
@@ -553,16 +555,66 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) {
                         app.editor.go_to_row(0);
                         return;
                     }
-                    _ => {}
+                    // m{x} — set mark
+                    ('m', x) if x.is_ascii_alphabetic() => {
+                        app.editor.set_mark(x);
+                        return;
+                    }
+                    // '{x} — goto mark
+                    ('\'', x) if x.is_ascii_alphabetic() => {
+                        app.editor.goto_mark(x);
+                        return;
+                    }
+                    // "{x} — set active register for next yank/paste/cut
+                    ('"', x) if x.is_ascii_alphanumeric() => {
+                        app.editor.set_active_register(x);
+                        return;
+                    }
+                    // q{x} — start recording macro into register x
+                    ('q', x) if x.is_ascii_alphabetic() => {
+                        if !app.replaying_macro {
+                            app.macros.entry(x).or_default().clear();
+                            app.macro_recording = Some(x);
+                        }
+                        return;
+                    }
+                    // @@ — replay last used macro
+                    ('@', '@') => {
+                        if let Some(slot) = app.last_macro {
+                            replay_macro(app, slot, key);
+                        }
+                        return;
+                    }
+                    // @{x} — replay macro in register x
+                    ('@', x) if x.is_ascii_alphabetic() => {
+                        replay_macro(app, x, key);
+                        return;
+                    }
+                    _ => {
+                        // Unknown chord — re-dispatch the second key normally
+                        // by falling through (pending already taken)
+                    }
                 }
             }
-            if c == 'd' {
-                app.pending_key = Some('d');
+
+            // Stop macro recording: q while recording (no second char needed)
+            if c == 'q' && app.macro_recording.is_some() {
+                app.macro_recording = None;
                 return;
             }
-            if c == 'g' {
-                app.pending_key = Some('g');
-                return;
+
+            // Start pending chords
+            match c {
+                'd' | 'g' | 'm' | '\'' | '"' | '@' => {
+                    app.pending_key = Some(c);
+                    return;
+                }
+                // q: if recording, stop; otherwise start pending for register char
+                'q' => {
+                    app.pending_key = Some('q');
+                    return;
+                }
+                _ => {}
             }
         } else {
             app.pending_key = None;
@@ -591,5 +643,33 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) {
         }
     }
 
+    dispatch_action(app, action, key);
+}
+
+/// Dispatch an action, recording it into the active macro if recording.
+fn dispatch_action(app: &mut App, action: Action, key: KeyEvent) {
+    // Record non-trivial actions to the active macro buffer.
+    if let Some(slot) = app.macro_recording {
+        if !matches!(action, Action::None) {
+            app.macros.entry(slot).or_default().push(action);
+        }
+    }
     actions::handle_action(app, action, key);
+}
+
+/// Replay a macro stored in the given register slot.
+fn replay_macro(app: &mut App, slot: char, original_key: KeyEvent) {
+    if app.replaying_macro {
+        return; // Prevent infinite loops
+    }
+    let actions_to_run: Vec<Action> = match app.macros.get(&slot) {
+        Some(v) if !v.is_empty() => v.clone(),
+        _ => return,
+    };
+    app.last_macro = Some(slot);
+    app.replaying_macro = true;
+    for action in actions_to_run {
+        actions::handle_action(app, action, original_key);
+    }
+    app.replaying_macro = false;
 }

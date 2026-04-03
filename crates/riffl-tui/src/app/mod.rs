@@ -366,6 +366,18 @@ pub struct App {
 
     /// User-scriptable hook engine (loaded from hooks.rhai at startup).
     pub(crate) hooks: riffl_core::dsl::HooksEngine,
+
+    /// Which macro register is currently being recorded into (None = not recording).
+    pub macro_recording: Option<char>,
+
+    /// Stored macro sequences: register char → list of actions to replay.
+    pub macros: std::collections::HashMap<char, Vec<crate::input::keybindings::Action>>,
+
+    /// The last macro register that was replayed, for `@@`.
+    pub last_macro: Option<char>,
+
+    /// Whether a macro replay is currently in progress (prevents nested recording).
+    pub replaying_macro: bool,
 }
 
 impl App {
@@ -525,6 +537,10 @@ impl App {
                 h.on_startup();
                 h
             },
+            macro_recording: None,
+            macros: std::collections::HashMap::new(),
+            last_macro: None,
+            replaying_macro: false,
         }
     }
 

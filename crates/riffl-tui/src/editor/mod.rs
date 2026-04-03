@@ -6,6 +6,7 @@ use riffl_core::pattern::effect::Effect;
 use riffl_core::pattern::note::{Note, NoteEvent, Pitch};
 use riffl_core::pattern::pattern::Pattern;
 use riffl_core::pattern::row::Cell;
+use std::collections::HashMap;
 
 /// Clipboard for copy/paste operations.
 ///
@@ -92,8 +93,10 @@ pub enum EditorMode {
     Normal,
     /// Note entry mode — typing inserts notes/data.
     Insert,
-    /// Selection mode — select ranges of cells.
+    /// Selection mode — select rectangular blocks of cells.
     Visual,
+    /// Selection mode — selects full rows across all channels.
+    VisualLine,
     /// Replace mode — overwrite cells without advancing cursor on each keystroke.
     Replace,
 }
@@ -105,8 +108,14 @@ impl EditorMode {
             EditorMode::Normal => "NORMAL",
             EditorMode::Insert => "INSERT",
             EditorMode::Visual => "VISUAL",
+            EditorMode::VisualLine => "V-LINE",
             EditorMode::Replace => "REPLACE",
         }
+    }
+
+    /// True if this is any visual selection mode.
+    pub fn is_visual(self) -> bool {
+        matches!(self, EditorMode::Visual | EditorMode::VisualLine)
     }
 }
 
@@ -153,8 +162,12 @@ pub struct Editor {
     redo_history: Vec<HistoryEntry>,
     /// Visual mode anchor (row, channel) — starting position of selection.
     visual_anchor: Option<(usize, usize)>,
-    /// Clipboard for copy/paste operations.
-    clipboard: Option<Clipboard>,
+    /// Named registers for copy/paste (0-9, a-z). Default register is '0'.
+    registers: HashMap<char, Clipboard>,
+    /// The register that the next yank/paste/cut will use (defaults to '0').
+    active_register: char,
+    /// Named marks: maps a char to (row, channel) within the current pattern.
+    marks: HashMap<char, (usize, usize)>,
     /// Current hex digit entry position for the effect column (0=command, 1=param_hi, 2=param_lo).
     effect_digit_position: u8,
     /// Current hex digit entry position for the Instrument sub-column (0=hi nibble, 1=lo nibble).
@@ -176,9 +189,43 @@ pub mod navigation;
 mod tests;
 
 impl Editor {
-    /// Get a reference to the clipboard contents.
+    /// Get the contents of the active register (for paste preview in UI).
     pub fn get_clipboard(&self) -> Option<&Clipboard> {
-        self.clipboard.as_ref()
+        self.registers.get(&self.active_register)
+    }
+
+    /// Set the active register (used before yank/paste/cut). Resets to '0' after use.
+    pub fn set_active_register(&mut self, c: char) {
+        self.active_register = c;
+    }
+
+    /// Read the active register name.
+    pub fn active_register(&self) -> char {
+        self.active_register
+    }
+
+    /// Set a mark at the current cursor position.
+    pub fn set_mark(&mut self, name: char) {
+        self.marks
+            .insert(name, (self.cursor_row, self.cursor_channel));
+    }
+
+    /// Jump to a named mark. Returns false if the mark doesn't exist.
+    pub fn goto_mark(&mut self, name: char) -> bool {
+        if let Some(&(row, ch)) = self.marks.get(&name) {
+            let max_row = self.pattern.num_rows().saturating_sub(1);
+            let max_ch = self.pattern.num_channels().saturating_sub(1);
+            self.cursor_row = row.min(max_row);
+            self.cursor_channel = ch.min(max_ch);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Return all current marks as (name, row, channel) triples.
+    pub fn marks(&self) -> impl Iterator<Item = (char, usize, usize)> + '_ {
+        self.marks.iter().map(|(&name, &(row, ch))| (name, row, ch))
     }
 
     /// Create a new editor wrapping the given pattern.
@@ -194,7 +241,9 @@ impl Editor {
             history: Vec::new(),
             redo_history: Vec::new(),
             visual_anchor: None,
-            clipboard: None,
+            registers: HashMap::new(),
+            active_register: '0',
+            marks: HashMap::new(),
             effect_digit_position: 0,
             instrument_digit_pos: 0,
             volume_digit_pos: 0,

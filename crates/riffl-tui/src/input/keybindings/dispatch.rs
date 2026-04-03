@@ -8,7 +8,7 @@ pub fn map_key_to_action(key: KeyEvent, mode: EditorMode) -> Action {
     match mode {
         EditorMode::Normal => map_normal_mode(key),
         EditorMode::Insert | EditorMode::Replace => map_insert_mode(key),
-        EditorMode::Visual => map_visual_mode(key),
+        EditorMode::Visual | EditorMode::VisualLine => map_visual_mode(key),
     }
 }
 
@@ -130,6 +130,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         // Mode transitions
         KeyCode::Char('i') => Action::EnterInsertMode,
         KeyCode::Char('v') => Action::EnterVisualMode,
+        KeyCode::Char('V') => Action::EnterVisualLineMode,
         KeyCode::Char('R') => Action::EnterReplaceMode,
 
         // Clipboard
@@ -193,7 +194,6 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         KeyCode::Char('t') => Action::TapTempo,
 
         // Application
-        KeyCode::Char('m') => Action::GoToRow,
         KeyCode::Char('?') => Action::ToggleHelp,
         KeyCode::Char('K') => Action::ToggleEffectHelp,
         KeyCode::Enter => Action::Confirm,
@@ -348,8 +348,8 @@ fn map_visual_mode(key: KeyEvent) -> Action {
     }
 
     match key.code {
-        // Escape or v returns to Normal mode
-        KeyCode::Esc | KeyCode::Char('v') => Action::EnterNormalMode,
+        // Escape, v, or V returns to Normal mode
+        KeyCode::Esc | KeyCode::Char('v') | KeyCode::Char('V') => Action::EnterNormalMode,
 
         // Command mode
         KeyCode::Char(':') => Action::EnterCommandMode,
@@ -369,6 +369,12 @@ fn map_visual_mode(key: KeyEvent) -> Action {
 
         // Interpolate
         KeyCode::Char('i') => Action::Interpolate,
+
+        // Reverse row order of selection
+        KeyCode::Char('r') => Action::ReverseSelection,
+
+        // Humanize note velocities
+        KeyCode::Char('H') => Action::HumanizeNotes,
 
         // Delete/cut selection (mirrors 'd' — both cut in Visual mode)
         KeyCode::Char('x') | KeyCode::Delete => Action::Cut,

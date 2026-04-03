@@ -291,7 +291,7 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
             let is_cursor = cursor_row == row_idx && cursor_channel == ch;
 
             // Check if this cell is inside a visual selection
-            let is_visual_selected = if mode == EditorMode::Visual {
+            let is_visual_selected = if mode.is_visual() {
                 visual_sel.is_some_and(|((r0, c0), (r1, c1))| {
                     row_idx >= r0 && row_idx <= r1 && ch >= c0 && ch <= c1
                 })
@@ -329,7 +329,7 @@ pub(super) fn render_pattern_with_area(frame: &mut Frame, area: ratatui::layout:
                 row_spans.push(Span::styled(vol_str, vs));
                 row_spans.push(Span::styled(" ", inactive));
                 row_spans.push(Span::styled(eff_str, es));
-            } else if is_cursor && mode == EditorMode::Visual && !is_playback_row {
+            } else if is_cursor && mode.is_visual() && !is_playback_row {
                 // Visual mode cursor: active sub-column gets visual_cursor_style,
                 // inactive sub-columns get visual_selection_style — same granularity as Normal mode
                 let cur = theme.visual_cursor_style();

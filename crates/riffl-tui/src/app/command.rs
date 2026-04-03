@@ -349,7 +349,7 @@ impl super::App {
                     let ch = self.editor.cursor_channel();
                     let num_rows = self.editor.pattern().num_rows();
                     use crate::editor::EditorMode;
-                    let (r0, r1) = if self.editor.mode() == EditorMode::Visual {
+                    let (r0, r1) = if self.editor.mode().is_visual() {
                         self.editor
                             .visual_selection()
                             .map(|((r0, _), (r1, _))| (r0, r1))
@@ -727,7 +727,7 @@ impl super::App {
                             use riffl_core::pattern::effect::Effect;
                             let ch = self.editor.cursor_channel();
                             let num_rows = self.editor.pattern().num_rows();
-                            let (r0, r1) = if self.editor.mode() == EditorMode::Visual {
+                            let (r0, r1) = if self.editor.mode().is_visual() {
                                 self.editor
                                     .visual_selection()
                                     .map(|((r0, _), (r1, _))| (r0, r1))
@@ -775,7 +775,7 @@ impl super::App {
                             use riffl_core::pattern::effect::Effect;
                             let ch = self.editor.cursor_channel();
                             let num_rows = self.editor.pattern().num_rows();
-                            let (r0, r1) = if self.editor.mode() == EditorMode::Visual {
+                            let (r0, r1) = if self.editor.mode().is_visual() {
                                 self.editor
                                     .visual_selection()
                                     .map(|((r0, _), (r1, _))| (r0, r1))
@@ -1115,7 +1115,7 @@ impl super::App {
                 use crate::editor::EditorMode;
                 let ch = self.editor.cursor_channel();
                 let num_rows = self.editor.pattern().num_rows();
-                let ((r0, c0), (r1, c1)) = if self.editor.mode() == EditorMode::Visual {
+                let ((r0, c0), (r1, c1)) = if self.editor.mode().is_visual() {
                     self.editor
                         .visual_selection()
                         .unwrap_or(((0, ch), (num_rows.saturating_sub(1), ch)))
@@ -1429,10 +1429,7 @@ impl super::App {
                             ));
                         }
                         Err(e) => {
-                            self.open_modal(Modal::error(
-                                "Export Failed".to_string(),
-                                e,
-                            ));
+                            self.open_modal(Modal::error("Export Failed".to_string(), e));
                         }
                     }
                 }

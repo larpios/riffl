@@ -160,6 +160,12 @@ impl Editor {
         self.visual_anchor = Some((self.cursor_row, self.cursor_channel));
     }
 
+    /// Enter Visual Line mode — selects full rows across all channels.
+    pub fn enter_visual_line_mode(&mut self) {
+        self.mode = EditorMode::VisualLine;
+        self.visual_anchor = Some((self.cursor_row, self.cursor_channel));
+    }
+
     /// Set the visual anchor position directly (used during mouse drag selection).
     pub fn set_visual_anchor(&mut self, row: usize, channel: usize) {
         self.visual_anchor = Some((row, channel));
@@ -167,13 +173,23 @@ impl Editor {
 
     /// Get the visual selection range as ((start_row, start_ch), (end_row, end_ch)),
     /// normalized so start <= end.
+    ///
+    /// In VisualLine mode the channel range always spans all channels.
     pub fn visual_selection(&self) -> Option<((usize, usize), (usize, usize))> {
         self.visual_anchor.map(|(ar, ac)| {
             let r0 = ar.min(self.cursor_row);
             let r1 = ar.max(self.cursor_row);
-            let c0 = ac.min(self.cursor_channel);
-            let c1 = ac.max(self.cursor_channel);
-            ((r0, c0), (r1, c1))
+            match self.mode {
+                EditorMode::VisualLine => {
+                    let c1 = self.pattern.num_channels().saturating_sub(1);
+                    ((r0, 0), (r1, c1))
+                }
+                _ => {
+                    let c0 = ac.min(self.cursor_channel);
+                    let c1 = ac.max(self.cursor_channel);
+                    ((r0, c0), (r1, c1))
+                }
+            }
         })
     }
 }

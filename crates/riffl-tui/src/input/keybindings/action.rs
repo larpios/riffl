@@ -16,6 +16,7 @@ pub enum Action {
     EnterInsertMode,
     EnterNormalMode,
     EnterVisualMode,
+    EnterVisualLineMode,
     EnterReplaceMode,
 
     // Editing (Insert mode)
@@ -69,6 +70,21 @@ pub enum Action {
     // Block transforms
     FillSelection,
     RandomizeNotes,
+    ReverseSelection,
+    HumanizeNotes,
+
+    // Marks (vim-style: m{a-z} to set, '{a-z} to jump)
+    SetMark(char),
+    GotoMark(char),
+
+    // Registers (vim-style: "{a-z} prefix before yank/paste/cut)
+    SetRegister(char),
+
+    // Macro recording/replay (vim-style: q{a-z} record, @{a-z} replay)
+    StartMacroRecord(char),
+    StopMacroRecord,
+    ReplayMacro(char),
+    ReplayLastMacro,
 
     // Bookmarks
     AddBookmark,
@@ -215,6 +231,7 @@ impl ActionMetadata for Action {
             Action::EnterInsertMode => "Insert Mode",
             Action::EnterNormalMode => "Normal Mode",
             Action::EnterVisualMode => "Visual Mode",
+            Action::EnterVisualLineMode => "Visual Line Mode",
             Action::EnterReplaceMode => "Replace Mode",
             Action::EnterNote(_) => "Enter Note",
             Action::SetOctave(_) => "Set Octave",
@@ -245,6 +262,15 @@ impl ActionMetadata for Action {
             Action::Interpolate => "Interpolate",
             Action::FillSelection => "Fill Selection",
             Action::RandomizeNotes => "Randomize Notes",
+            Action::ReverseSelection => "Reverse Selection",
+            Action::HumanizeNotes => "Humanize Notes",
+            Action::SetMark(_) => "Set Mark",
+            Action::GotoMark(_) => "Go to Mark",
+            Action::SetRegister(_) => "Set Register",
+            Action::StartMacroRecord(_) => "Start Macro Record",
+            Action::StopMacroRecord => "Stop Macro Record",
+            Action::ReplayMacro(_) => "Replay Macro",
+            Action::ReplayLastMacro => "Replay Last Macro",
             Action::AddBookmark => "Add Bookmark",
             Action::NextBookmark => "Next Bookmark",
             Action::PrevBookmark => "Prev Bookmark",
@@ -352,7 +378,8 @@ impl ActionMetadata for Action {
             Action::PageDown => "Move page down",
             Action::EnterInsertMode => "Enter insert mode for note entry",
             Action::EnterNormalMode => "Return to normal mode",
-            Action::EnterVisualMode => "Enter visual mode for selection",
+            Action::EnterVisualMode => "Enter visual mode for rectangular selection",
+            Action::EnterVisualLineMode => "Enter visual line mode (selects full rows)",
             Action::EnterReplaceMode => "Enter replace mode for overwriting cells",
             Action::EnterNote(_) => "Enter musical note",
             Action::SetOctave(_) => "Set current octave (0-9)",
@@ -383,6 +410,15 @@ impl ActionMetadata for Action {
             Action::Interpolate => "Interpolate selection between values",
             Action::FillSelection => "Fill selection with last entered note",
             Action::RandomizeNotes => "Randomize pitches of notes in selection",
+            Action::ReverseSelection => "Reverse row order of selection",
+            Action::HumanizeNotes => "Add small random velocity offsets to notes in selection",
+            Action::SetMark(_) => "Set a named mark at the cursor position",
+            Action::GotoMark(_) => "Jump to a named mark",
+            Action::SetRegister(_) => "Set active register for next yank/paste/cut",
+            Action::StartMacroRecord(_) => "Start recording keystrokes into a macro register",
+            Action::StopMacroRecord => "Stop recording macro",
+            Action::ReplayMacro(_) => "Replay a recorded macro",
+            Action::ReplayLastMacro => "Replay the last used macro",
             Action::AddBookmark => "Add/remove bookmark at cursor (toggle)",
             Action::NextBookmark => "Jump to next bookmark",
             Action::PrevBookmark => "Jump to previous bookmark",
@@ -499,6 +535,7 @@ impl ActionMetadata for Action {
             Action::EnterInsertMode
             | Action::EnterNormalMode
             | Action::EnterVisualMode
+            | Action::EnterVisualLineMode
             | Action::EnterReplaceMode => ActionCategory::Application,
 
             Action::EnterNote(_)
@@ -517,6 +554,10 @@ impl ActionMetadata for Action {
             | Action::Interpolate
             | Action::FillSelection
             | Action::RandomizeNotes
+            | Action::ReverseSelection
+            | Action::HumanizeNotes
+            | Action::SetMark(_)
+            | Action::GotoMark(_)
             | Action::AddBookmark
             | Action::NextBookmark
             | Action::PrevBookmark
@@ -526,6 +567,12 @@ impl ActionMetadata for Action {
             | Action::DeleteRow
             | Action::Undo
             | Action::ToggleDrawMode => ActionCategory::Editing,
+
+            Action::SetRegister(_)
+            | Action::StartMacroRecord(_)
+            | Action::StopMacroRecord
+            | Action::ReplayMacro(_)
+            | Action::ReplayLastMacro => ActionCategory::Application,
 
             Action::Copy | Action::Paste | Action::Cut | Action::Redo => ActionCategory::Clipboard,
 
