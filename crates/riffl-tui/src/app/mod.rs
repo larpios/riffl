@@ -812,6 +812,11 @@ impl App {
                 0.70
             };
             mixer.decay_channel_levels(decay);
+            // Clear oscilloscope ring buffers when transport is stopped so the
+            // waveform display shows silence instead of stale sample data.
+            if !self.transport.is_playing() {
+                mixer.reset_oscilloscope_buffers();
+            }
         }
 
         // Autosave: if enabled and there are dirty changes, save periodically
