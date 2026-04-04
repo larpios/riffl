@@ -65,6 +65,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
             KeyCode::Char('b') => Action::OpenBpmPrompt,
             KeyCode::Char('p') => Action::OpenLenPrompt,
             KeyCode::Char('m') => Action::ToggleMetronome,
+            KeyCode::Char('g') => Action::ToggleFollowMode,
             KeyCode::Enter => Action::ExecuteScript,
             KeyCode::Delete => Action::DeleteRow,
             KeyCode::Left => Action::ResetHorizontalView,
@@ -188,8 +189,9 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         // Pattern management (when in PatternList view)
         KeyCode::Char('c') => Action::ClonePattern,
 
-        // Follow mode
-        KeyCode::Char('f') => Action::ToggleFollowMode,
+        // Note jumping (f/F — jump to next/prev non-empty cell in channel)
+        KeyCode::Char('f') => Action::JumpToNextNote,
+        KeyCode::Char('F') => Action::JumpToPrevNote,
 
         // BPM tap-tempo
         KeyCode::Char('t') => Action::TapTempo,
@@ -387,6 +389,10 @@ fn map_visual_mode(key: KeyEvent) -> Action {
 
         // Reverse row order of selection
         KeyCode::Char('r') => Action::ReverseSelection,
+
+        // Note jumping — same as Normal mode, extends selection
+        KeyCode::Char('f') => Action::JumpToNextNote,
+        KeyCode::Char('F') => Action::JumpToPrevNote,
 
         // Humanize note velocities
         KeyCode::Char('H') => Action::HumanizeNotes,

@@ -140,6 +140,41 @@ impl Editor {
         self.effect_digit_position = 0;
     }
 
+    /// Jump downward to the next row that has a note in the current channel.
+    /// Stops at the last row without wrapping.
+    pub fn jump_to_next_note(&mut self) {
+        let num_rows = self.pattern.num_rows();
+        let ch = self.cursor_channel;
+        for row in (self.cursor_row + 1)..num_rows {
+            if self
+                .pattern
+                .get_cell(row, ch)
+                .is_some_and(|cell| cell.note.is_some())
+            {
+                self.cursor_row = row;
+                self.effect_digit_position = 0;
+                return;
+            }
+        }
+    }
+
+    /// Jump upward to the previous row that has a note in the current channel.
+    /// Stops at row 0 without wrapping.
+    pub fn jump_to_prev_note(&mut self) {
+        let ch = self.cursor_channel;
+        for row in (0..self.cursor_row).rev() {
+            if self
+                .pattern
+                .get_cell(row, ch)
+                .is_some_and(|cell| cell.note.is_some())
+            {
+                self.cursor_row = row;
+                self.effect_digit_position = 0;
+                return;
+            }
+        }
+    }
+
     // --- Mode Transitions ---
 
     /// Enter Insert mode.

@@ -74,6 +74,8 @@ pub(super) fn handle(app: &mut App, action: &Action, term_width: u16) -> bool {
             app.command_input = "goto ".to_string();
         }
         Action::ResetHorizontalView => app.reset_horizontal_view(),
+        Action::JumpToNextNote => app.editor.jump_to_next_note(),
+        Action::JumpToPrevNote => app.editor.jump_to_prev_note(),
         _ => return false,
     }
     true

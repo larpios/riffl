@@ -49,6 +49,10 @@ pub enum Action {
     GoToStart,
     GoToEnd,
     ResetHorizontalView,
+    /// Jump to the next row below cursor that has a note in the current channel.
+    JumpToNextNote,
+    /// Jump to the previous row above cursor that has a note in the current channel.
+    JumpToPrevNote,
 
     // Track management
     AddTrack,
@@ -252,6 +256,8 @@ impl ActionMetadata for Action {
             Action::GoToStart => "Go to Start",
             Action::GoToEnd => "Go to End",
             Action::ResetHorizontalView => "Reset Horizontal View",
+            Action::JumpToNextNote => "Next Note",
+            Action::JumpToPrevNote => "Prev Note",
             Action::AddTrack => "Add Track",
             Action::DeleteTrack => "Delete Track",
             Action::CloneTrack => "Clone Track",
@@ -401,6 +407,8 @@ impl ActionMetadata for Action {
             Action::GoToStart => "Jump to start of row",
             Action::GoToEnd => "Jump to end of row",
             Action::ResetHorizontalView => "Reset horizontal view to leftmost channel",
+            Action::JumpToNextNote => "Jump to next non-empty cell below in current channel",
+            Action::JumpToPrevNote => "Jump to previous non-empty cell above in current channel",
             Action::AddTrack => "Add a new track",
             Action::DeleteTrack => "Delete current track",
             Action::CloneTrack => "Clone current track",
@@ -534,7 +542,9 @@ impl ActionMetadata for Action {
             | Action::GoToEnd
             | Action::ResetHorizontalView
             | Action::NextTrack
-            | Action::PrevTrack => ActionCategory::Navigation,
+            | Action::PrevTrack
+            | Action::JumpToNextNote
+            | Action::JumpToPrevNote => ActionCategory::Navigation,
 
             Action::EnterInsertMode
             | Action::EnterNormalMode

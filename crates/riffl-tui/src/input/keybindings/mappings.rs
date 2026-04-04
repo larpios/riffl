@@ -133,6 +133,16 @@ pub(super) const KEY_MAPPINGS: &[KeyMapping] = &[
     },
     KeyMapping {
         key: "f",
+        action: Action::JumpToNextNote,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "F",
+        action: Action::JumpToPrevNote,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "Ctrl+G",
         action: Action::ToggleFollowMode,
         mode: EditorMode::Normal,
     },

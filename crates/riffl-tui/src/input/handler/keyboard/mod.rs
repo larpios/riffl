@@ -711,6 +711,8 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) {
             | Action::PrevTrack
             | Action::JumpNextPattern
             | Action::JumpPrevPattern
+            | Action::JumpToNextNote
+            | Action::JumpToPrevNote
     );
 
     if is_repeatable && count > 1 {
