@@ -1,5 +1,5 @@
 use ratatui::{
-    layout::Alignment,
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
@@ -15,11 +15,20 @@ pub fn content_line_count() -> u16 {
 
 /// Render the :tutor full-screen scrollable help view.
 /// `scroll` is the vertical scroll offset in lines.
-pub fn render_tutor(frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme, scroll: u16) {
+/// `filter` highlights / filters lines containing the term.
+/// `filter_active` determines whether the search bar cursor is shown.
+pub fn render_tutor(
+    frame: &mut Frame,
+    area: ratatui::layout::Rect,
+    theme: &Theme,
+    scroll: u16,
+    filter: &str,
+    filter_active: bool,
+) {
     let tutor_area = super::layout::create_centered_rect(area, 90, 92);
     frame.render_widget(Clear, tutor_area);
 
-    let title = " RIFFL TUTOR  (j/k scroll · q/Esc close) ";
+    let title = " RIFFL TUTOR  (j/k · Ctrl+D/U · / search · q/Esc close) ";
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.primary))
@@ -30,12 +39,66 @@ pub fn render_tutor(frame: &mut Frame, area: ratatui::layout::Rect, theme: &Them
     let inner = block.inner(tutor_area);
     frame.render_widget(block, tutor_area);
 
+    let (content_area, search_area) = if filter_active || !filter.is_empty() {
+        let split = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(1), Constraint::Length(1)])
+            .split(inner);
+        (split[0], Some(split[1]))
+    } else {
+        (inner, None)
+    };
+
+    let content = if filter.is_empty() {
+        tutor_content(theme)
+    } else {
+        filter_tutor_lines(tutor_content(theme), filter)
+    };
+
     frame.render_widget(
-        Paragraph::new(tutor_content(theme))
+        Paragraph::new(content)
             .scroll((scroll, 0))
             .style(Style::default().fg(theme.text).bg(theme.bg_surface)),
-        inner,
+        content_area,
     );
+
+    if let Some(bar) = search_area {
+        render_search_bar(frame, bar, filter, filter_active, theme);
+    }
+}
+
+/// Render a one-line search bar at the bottom of the overlay.
+fn render_search_bar(frame: &mut Frame, area: Rect, filter: &str, active: bool, theme: &Theme) {
+    let cursor = if active { "_" } else { "" };
+    let bar_line = Line::from(vec![
+        Span::styled(
+            "/ ",
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            format!("{}{}", filter, cursor),
+            Style::default().fg(theme.text),
+        ),
+    ]);
+    frame.render_widget(
+        Paragraph::new(bar_line).style(Style::default().bg(theme.bg_surface)),
+        area,
+    );
+}
+
+/// Filter tutor lines to those containing `filter` (case-insensitive).
+/// Section headers (bold primary lines) are retained only when they have matching content nearby.
+fn filter_tutor_lines(lines: Vec<Line<'static>>, filter: &str) -> Vec<Line<'static>> {
+    let filter_lower = filter.to_lowercase();
+    lines
+        .into_iter()
+        .filter(|line| {
+            let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+            text.to_lowercase().contains(&filter_lower)
+        })
+        .collect()
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────

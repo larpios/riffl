@@ -1,5 +1,5 @@
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
@@ -38,11 +38,20 @@ pub fn effect_help_line_count(mode: EffectMode) -> u16 {
 
 /// Render help/cheatsheet overlay — two-column scrollable layout.
 /// `scroll` is the vertical scroll offset in lines.
-pub fn render_help(frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme, scroll: u16) {
+/// `filter` narrows displayed entries to those whose key or description contains the term.
+/// `filter_active` determines whether the search bar cursor is shown.
+pub fn render_help(
+    frame: &mut Frame,
+    area: ratatui::layout::Rect,
+    theme: &Theme,
+    scroll: u16,
+    filter: &str,
+    filter_active: bool,
+) {
     let help_area = super::layout::create_centered_rect(area, 84, 85);
     frame.render_widget(Clear, help_area);
 
-    let title = " KEYBOARD SHORTCUTS  (j/k scroll · ?/Esc close) ";
+    let title = " KEYBOARD SHORTCUTS  (j/k · Ctrl+D/U · / search · ?/Esc close) ";
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.info_color()))
@@ -53,25 +62,123 @@ pub fn render_help(frame: &mut Frame, area: ratatui::layout::Rect, theme: &Theme
     let inner = block.inner(help_area);
     frame.render_widget(block, help_area);
 
-    // Split inner area into two equal columns
+    // Reserve the last line for the search bar when filter is active or non-empty.
+    let (content_area, search_area) = if filter_active || !filter.is_empty() {
+        let split = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(1), Constraint::Length(1)])
+            .split(inner);
+        (split[0], Some(split[1]))
+    } else {
+        (inner, None)
+    };
+
+    // Split content area into two equal columns
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(inner);
+        .split(content_area);
 
     let col_style = Style::default().fg(theme.text).bg(theme.bg_surface);
     frame.render_widget(
-        Paragraph::new(left_column(theme))
+        Paragraph::new(filter_lines(left_column(theme), filter))
             .scroll((scroll, 0))
             .style(col_style),
         cols[0],
     );
     frame.render_widget(
-        Paragraph::new(right_column(theme))
+        Paragraph::new(filter_lines(right_column(theme), filter))
             .scroll((scroll, 0))
             .style(col_style),
         cols[1],
     );
+
+    if let Some(bar) = search_area {
+        render_search_bar(frame, bar, filter, filter_active, theme);
+    }
+}
+
+/// Render a one-line search bar showing the current filter text.
+fn render_search_bar(frame: &mut Frame, area: Rect, filter: &str, active: bool, theme: &Theme) {
+    let cursor = if active { "_" } else { "" };
+    let bar_line = Line::from(vec![
+        Span::styled(
+            "/ ",
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            format!("{}{}", filter, cursor),
+            Style::default().fg(theme.text),
+        ),
+    ]);
+    frame.render_widget(
+        Paragraph::new(bar_line).style(Style::default().bg(theme.bg_surface)),
+        area,
+    );
+}
+
+/// Filter `lines` to sections that have at least one entry matching `filter`.
+/// Section headers are retained only when they have matching entries.
+/// Passes through all lines unchanged when `filter` is empty.
+fn filter_lines(lines: Vec<Line<'static>>, filter: &str) -> Vec<Line<'static>> {
+    if filter.is_empty() {
+        return lines;
+    }
+    let filter_lower = filter.to_lowercase();
+    let mut result: Vec<Line<'static>> = Vec::new();
+    let mut i = 0;
+
+    while i < lines.len() {
+        let text = line_plain_text(&lines[i]);
+
+        // Blank line — skip (re-added after sections that have matches)
+        if text.trim().is_empty() {
+            i += 1;
+            continue;
+        }
+
+        // Section header: no leading spaces
+        if !text.starts_with(' ') {
+            let header_idx = i;
+            i += 1;
+            let mut matching_entries: Vec<Line<'static>> = Vec::new();
+            // Collect entries until blank or another header
+            while i < lines.len() {
+                let entry_text = line_plain_text(&lines[i]);
+                if entry_text.trim().is_empty() {
+                    i += 1;
+                    break;
+                }
+                if !entry_text.starts_with(' ') {
+                    // Next section header — don't consume
+                    break;
+                }
+                if entry_text.to_lowercase().contains(&filter_lower) {
+                    matching_entries.push(lines[i].clone());
+                }
+                i += 1;
+            }
+            if !matching_entries.is_empty() {
+                result.push(lines[header_idx].clone());
+                result.extend(matching_entries);
+                result.push(Line::from(""));
+            }
+        } else {
+            // Entry outside a section (shouldn't normally happen) — include if it matches
+            if text.to_lowercase().contains(&filter_lower) {
+                result.push(lines[i].clone());
+            }
+            i += 1;
+        }
+    }
+    result
+}
+
+/// Collect the plain text content of all spans in a Line.
+fn line_plain_text(line: &Line<'_>) -> String {
+    line.spans.iter().map(|s| s.content.as_ref()).collect()
 }
 
 /// Render effect command explorer overlay.

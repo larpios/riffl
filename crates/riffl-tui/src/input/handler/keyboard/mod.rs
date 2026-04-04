@@ -302,9 +302,33 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
         },
 
         InputContext::TutorOverlay => {
+            // Search input mode: chars feed the filter, Esc/Enter exit it.
+            if app.tutor_filter_active {
+                match key.code {
+                    KeyCode::Char(c) if key.modifiers == KeyModifiers::NONE => {
+                        app.tutor_filter.push(c);
+                        app.tutor_scroll = 0;
+                    }
+                    KeyCode::Backspace => {
+                        app.tutor_filter.pop();
+                        app.tutor_scroll = 0;
+                    }
+                    KeyCode::Enter => {
+                        app.tutor_filter_active = false;
+                    }
+                    KeyCode::Esc => {
+                        app.tutor_filter_active = false;
+                        app.tutor_filter.clear();
+                        app.tutor_scroll = 0;
+                    }
+                    _ => {}
+                }
+                return;
+            }
+            let term_rows = crossterm::terminal::size().map(|(_, h)| h).unwrap_or(24);
+            let half_page = ((term_rows / 2) as u16).max(5);
             let max_scroll = {
                 let content = ui::tutor::content_line_count();
-                let term_rows = crossterm::terminal::size().map(|(_, h)| h).unwrap_or(24);
                 let visible = ((term_rows as u32 * 92 / 100) as u16).saturating_sub(2);
                 content.saturating_sub(visible)
             };
@@ -312,12 +336,25 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                 KeyCode::Esc | KeyCode::Char('q') => {
                     app.show_tutor = false;
                     app.tutor_scroll = 0;
+                    app.tutor_filter.clear();
+                    app.tutor_filter_active = false;
+                }
+                KeyCode::Char('/') => {
+                    app.tutor_filter_active = true;
+                    app.tutor_filter.clear();
+                    app.tutor_scroll = 0;
                 }
                 KeyCode::Char('j') | KeyCode::Down => {
                     app.tutor_scroll = app.tutor_scroll.saturating_add(1).min(max_scroll);
                 }
                 KeyCode::Char('k') | KeyCode::Up => {
                     app.tutor_scroll = app.tutor_scroll.saturating_sub(1);
+                }
+                KeyCode::Char('d') if key.modifiers == KeyModifiers::CONTROL => {
+                    app.tutor_scroll = app.tutor_scroll.saturating_add(half_page).min(max_scroll);
+                }
+                KeyCode::Char('u') if key.modifiers == KeyModifiers::CONTROL => {
+                    app.tutor_scroll = app.tutor_scroll.saturating_sub(half_page);
                 }
                 KeyCode::PageDown => {
                     app.tutor_scroll = app.tutor_scroll.saturating_add(10).min(max_scroll);
@@ -361,9 +398,33 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
         }
 
         InputContext::HelpOverlay => {
+            // Search input mode: chars feed the filter, Esc/Enter exit it.
+            if app.help_filter_active {
+                match key.code {
+                    KeyCode::Char(c) if key.modifiers == KeyModifiers::NONE => {
+                        app.help_filter.push(c);
+                        app.help_scroll = 0;
+                    }
+                    KeyCode::Backspace => {
+                        app.help_filter.pop();
+                        app.help_scroll = 0;
+                    }
+                    KeyCode::Enter => {
+                        app.help_filter_active = false;
+                    }
+                    KeyCode::Esc => {
+                        app.help_filter_active = false;
+                        app.help_filter.clear();
+                        app.help_scroll = 0;
+                    }
+                    _ => {}
+                }
+                return;
+            }
+            let term_rows = crossterm::terminal::size().map(|(_, h)| h).unwrap_or(24);
+            let half_page = ((term_rows / 2) as u16).max(5);
             let max_scroll = {
                 let content = ui::help::content_line_count();
-                let term_rows = crossterm::terminal::size().map(|(_, h)| h).unwrap_or(24);
                 let visible = ((term_rows as u32 * 85 / 100) as u16).saturating_sub(2);
                 content.saturating_sub(visible)
             };
@@ -371,12 +432,25 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
                 KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') => {
                     app.show_help = false;
                     app.help_scroll = 0;
+                    app.help_filter.clear();
+                    app.help_filter_active = false;
+                }
+                KeyCode::Char('/') => {
+                    app.help_filter_active = true;
+                    app.help_filter.clear();
+                    app.help_scroll = 0;
                 }
                 KeyCode::Char('j') | KeyCode::Down => {
                     app.help_scroll = app.help_scroll.saturating_add(1).min(max_scroll);
                 }
                 KeyCode::Char('k') | KeyCode::Up => {
                     app.help_scroll = app.help_scroll.saturating_sub(1);
+                }
+                KeyCode::Char('d') if key.modifiers == KeyModifiers::CONTROL => {
+                    app.help_scroll = app.help_scroll.saturating_add(half_page).min(max_scroll);
+                }
+                KeyCode::Char('u') if key.modifiers == KeyModifiers::CONTROL => {
+                    app.help_scroll = app.help_scroll.saturating_sub(half_page);
                 }
                 KeyCode::PageDown => {
                     app.help_scroll = app.help_scroll.saturating_add(10).min(max_scroll);

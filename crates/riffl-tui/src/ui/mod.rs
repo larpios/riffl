@@ -179,7 +179,14 @@ pub fn render(frame: &mut Frame, app: &App) {
 
     // Render help overlay on top if active
     if app.show_help {
-        render_help(frame, full_area, &app.theme, app.help_scroll);
+        render_help(
+            frame,
+            full_area,
+            &app.theme,
+            app.help_scroll,
+            &app.help_filter,
+            app.help_filter_active,
+        );
     }
 
     // Render effect help overlay on top if active
@@ -195,7 +202,14 @@ pub fn render(frame: &mut Frame, app: &App) {
 
     // Render tutor view on top if active
     if app.show_tutor {
-        render_tutor(frame, full_area, &app.theme, app.tutor_scroll);
+        render_tutor(
+            frame,
+            full_area,
+            &app.theme,
+            app.tutor_scroll,
+            &app.tutor_filter,
+            app.tutor_filter_active,
+        );
     }
 
     // Render which-key popup when a chord is pending

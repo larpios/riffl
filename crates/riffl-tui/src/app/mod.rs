@@ -234,6 +234,12 @@ pub struct App {
     /// Scroll offset for the help overlay (in lines)
     pub help_scroll: u16,
 
+    /// Active filter text for the help overlay (empty = no filter)
+    pub help_filter: String,
+
+    /// Whether the help filter input is currently being typed
+    pub help_filter_active: bool,
+
     /// Whether effect command help overlay is shown
     pub show_effect_help: bool,
 
@@ -257,6 +263,12 @@ pub struct App {
 
     /// Scroll offset for the tutor view (in lines)
     pub tutor_scroll: u16,
+
+    /// Active filter text for the tutor overlay (empty = no filter)
+    pub tutor_filter: String,
+
+    /// Whether the tutor filter input is currently being typed
+    pub tutor_filter_active: bool,
 
     /// Whether follow mode is active: edit cursor chases playhead during playback
     pub follow_mode: bool,
@@ -486,6 +498,8 @@ impl App {
             live_mode: false,
             show_help: false,
             help_scroll: 0,
+            help_filter: String::new(),
+            help_filter_active: false,
             show_effect_help: false,
             effect_help_scroll: 0,
             which_key_mode: false,
@@ -494,6 +508,8 @@ impl App {
             pending_replace: false,
             show_tutor: false,
             tutor_scroll: 0,
+            tutor_filter: String::new(),
+            tutor_filter_active: false,
             follow_mode: initial_follow_mode,
             is_dirty: false,
             pending_quit: false,
