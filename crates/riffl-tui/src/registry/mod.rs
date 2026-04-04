@@ -47,6 +47,7 @@ pub enum CommandCategory {
     Track,
     Navigation,
     Instrument,
+    View,
     Misc,
 }
 
@@ -60,6 +61,7 @@ impl CommandCategory {
             Self::Track => "Track",
             Self::Navigation => "Navigation",
             Self::Instrument => "Instrument",
+            Self::View => "View",
             Self::Misc => "Misc",
         }
     }
@@ -133,6 +135,24 @@ pub enum Command {
     Samples,
     Effects,
     DumpSamples,
+    // Transport control
+    Play,
+    Stop,
+    Follow,
+    // Track targeting
+    Mute,
+    Solo,
+    TrackVol,
+    TrackPan,
+    // Pattern management
+    NewPat,
+    DelPat,
+    // Editing transforms
+    Octave,
+    Humanize,
+    Randomize,
+    // View switching
+    View,
 }
 
 impl CommandMetadata for Command {
@@ -185,6 +205,19 @@ impl CommandMetadata for Command {
             Self::Samples => "samples",
             Self::Effects => "effects",
             Self::DumpSamples => "dump-samples",
+            Self::Play => "play",
+            Self::Stop => "stop",
+            Self::Follow => "follow",
+            Self::Mute => "mute",
+            Self::Solo => "solo",
+            Self::TrackVol => "tvol",
+            Self::TrackPan => "tpan",
+            Self::NewPat => "newpat",
+            Self::DelPat => "delpat",
+            Self::Octave => "octave",
+            Self::Humanize => "humanize",
+            Self::Randomize => "randomize",
+            Self::View => "view",
         }
     }
 
@@ -237,6 +270,19 @@ impl CommandMetadata for Command {
             Self::Samples => "List all loaded samples",
             Self::Effects => "Show effect command reference",
             Self::DumpSamples => "Export all loaded samples to WAV files",
+            Self::Play => "Start or resume playback",
+            Self::Stop => "Stop playback",
+            Self::Follow => "Toggle or set follow mode",
+            Self::Mute => "Toggle mute on a track",
+            Self::Solo => "Toggle solo on a track",
+            Self::TrackVol => "Set track volume (0-100)",
+            Self::TrackPan => "Set track pan (-100 to 100)",
+            Self::NewPat => "Add a new empty pattern",
+            Self::DelPat => "Delete a pattern",
+            Self::Octave => "Set current octave (0-9)",
+            Self::Humanize => "Add timing jitter to notes in selection",
+            Self::Randomize => "Randomize pitches of notes in selection",
+            Self::View => "Switch to a named view",
         }
     }
 
@@ -289,6 +335,19 @@ impl CommandMetadata for Command {
             Self::Samples => ":samples",
             Self::Effects => ":effects [cmd]",
             Self::DumpSamples => ":dump-samples <dir>",
+            Self::Play => ":play",
+            Self::Stop => ":stop",
+            Self::Follow => ":follow [on|off]",
+            Self::Mute => ":mute [track]",
+            Self::Solo => ":solo [track]",
+            Self::TrackVol => ":tvol [track] <0-100>",
+            Self::TrackPan => ":tpan [track] <-100..100>",
+            Self::NewPat => ":newpat [name]",
+            Self::DelPat => ":delpat [idx]",
+            Self::Octave => ":octave <0-9>",
+            Self::Humanize => ":humanize [amount]",
+            Self::Randomize => ":randomize",
+            Self::View => ":view <pat|arr|inst|code|plist|samples>",
         }
     }
 
@@ -332,6 +391,11 @@ impl CommandMetadata for Command {
             Self::Mode | Self::Marker | Self::Samples | Self::Effects | Self::DumpSamples => {
                 CommandCategory::Misc
             }
+            Self::Play | Self::Stop | Self::Follow => CommandCategory::Transport,
+            Self::Mute | Self::Solo | Self::TrackVol | Self::TrackPan => CommandCategory::Track,
+            Self::NewPat | Self::DelPat => CommandCategory::Pattern,
+            Self::Octave | Self::Humanize | Self::Randomize => CommandCategory::Editing,
+            Self::View => CommandCategory::View,
         }
     }
 
@@ -359,6 +423,13 @@ impl CommandMetadata for Command {
             Self::Effects => vec!["fx", "efx"],
             Self::Marker => vec!["mark"],
             Self::Samples => vec!["samps"],
+            Self::Play => vec!["start"],
+            Self::TrackVol => vec!["trackvol"],
+            Self::TrackPan => vec!["trackpan"],
+            Self::NewPat => vec!["np"],
+            Self::DelPat => vec!["dp"],
+            Self::Octave => vec!["oct"],
+            Self::Randomize => vec!["rand"],
             _ => vec![],
         }
     }
@@ -423,6 +494,24 @@ impl CommandRegistry {
             Command::Samples,
             Command::Effects,
             Command::DumpSamples,
+            // Transport control
+            Command::Play,
+            Command::Stop,
+            Command::Follow,
+            // Track targeting
+            Command::Mute,
+            Command::Solo,
+            Command::TrackVol,
+            Command::TrackPan,
+            // Pattern management
+            Command::NewPat,
+            Command::DelPat,
+            // Editing transforms
+            Command::Octave,
+            Command::Humanize,
+            Command::Randomize,
+            // View switching
+            Command::View,
         ]
     }
 

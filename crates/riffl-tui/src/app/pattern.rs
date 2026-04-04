@@ -118,6 +118,30 @@ impl App {
         self.mark_dirty();
     }
 
+    /// Toggle mute on an arbitrary channel index.
+    /// Syncs with the global song track state so it persists across pattern changes.
+    pub fn toggle_mute_channel(&mut self, ch: usize) {
+        if let Some(track) = self.editor.pattern_mut().get_track_mut(ch) {
+            track.toggle_mute();
+        }
+        if let Some(track) = self.song.tracks.get_mut(ch) {
+            track.toggle_mute();
+        }
+        self.mark_dirty();
+    }
+
+    /// Toggle solo on an arbitrary channel index.
+    /// Syncs with the global song track state so it persists across pattern changes.
+    pub fn toggle_solo_channel(&mut self, ch: usize) {
+        if let Some(track) = self.editor.pattern_mut().get_track_mut(ch) {
+            track.toggle_solo();
+        }
+        if let Some(track) = self.song.tracks.get_mut(ch) {
+            track.toggle_solo();
+        }
+        self.mark_dirty();
+    }
+
     /// Adjust volume of the current track by `delta` (range 0.0..=1.0, step ~0.05).
     /// Syncs with the global song track state and the mixer.
     pub fn adjust_track_volume(&mut self, delta: f32) {

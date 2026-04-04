@@ -1,3 +1,4 @@
+use crate::app::AppView;
 use crate::registry::{Command, CommandRegistry};
 use crate::ui::modal::Modal;
 use std::path::PathBuf;
@@ -530,11 +531,16 @@ impl super::App {
                     self.sync_mixer_channels();
                     self.mark_dirty();
                 }
+                "clone" | "dup" => {
+                    self.editor.clone_track();
+                    self.sync_mixer_channels();
+                    self.mark_dirty();
+                }
                 _ => {
                     let channels = self.editor.pattern().num_channels();
                     self.open_modal(Modal::info(
                         "Track".to_string(),
-                        format!("Channels: {}\nUsage: :track <add|del>", channels),
+                        format!("Channels: {}\nUsage: :track <add|del|clone>", channels),
                     ));
                 }
             },
@@ -1639,6 +1645,348 @@ impl super::App {
                         }
                     }
                 }
+            }
+
+            // :play — start/resume playback (no-op if already playing)
+            Some(Command::Play) => {
+                if !self.transport.is_playing() {
+                    self.toggle_play();
+                }
+            }
+
+            // :stop — stop playback
+            Some(Command::Stop) => {
+                self.stop();
+            }
+
+            // :follow [on|off] — toggle or set follow mode
+            Some(Command::Follow) => match args {
+                "on" => self.follow_mode = true,
+                "off" => self.follow_mode = false,
+                _ => self.follow_mode = !self.follow_mode,
+            },
+
+            // :mute [track] — toggle mute on track N (1-indexed) or current track
+            Some(Command::Mute) => {
+                let ch = if args.is_empty() {
+                    self.editor.cursor_channel()
+                } else if let Ok(n) = args.trim().parse::<usize>() {
+                    if n == 0 || n > self.editor.pattern().num_channels() {
+                        self.open_modal(Modal::error(
+                            "Mute".to_string(),
+                            format!(
+                                "Track {} out of range (1-{}).",
+                                n,
+                                self.editor.pattern().num_channels()
+                            ),
+                        ));
+                        return;
+                    }
+                    n - 1
+                } else {
+                    self.open_modal(Modal::error(
+                        "Mute".to_string(),
+                        "Usage: :mute [track]  (1-indexed, omit for current track)".to_string(),
+                    ));
+                    return;
+                };
+                self.toggle_mute_channel(ch);
+            }
+
+            // :solo [track] — toggle solo on track N (1-indexed) or current track
+            Some(Command::Solo) => {
+                let ch = if args.is_empty() {
+                    self.editor.cursor_channel()
+                } else if let Ok(n) = args.trim().parse::<usize>() {
+                    if n == 0 || n > self.editor.pattern().num_channels() {
+                        self.open_modal(Modal::error(
+                            "Solo".to_string(),
+                            format!(
+                                "Track {} out of range (1-{}).",
+                                n,
+                                self.editor.pattern().num_channels()
+                            ),
+                        ));
+                        return;
+                    }
+                    n - 1
+                } else {
+                    self.open_modal(Modal::error(
+                        "Solo".to_string(),
+                        "Usage: :solo [track]  (1-indexed, omit for current track)".to_string(),
+                    ));
+                    return;
+                };
+                self.toggle_solo_channel(ch);
+            }
+
+            // :tvol [track] <0-100> — set per-track volume absolutely
+            Some(Command::TrackVol) => {
+                let tokens: Vec<&str> = args.split_whitespace().collect();
+                let (ch, val_str) = match tokens.as_slice() {
+                    [val] => (self.editor.cursor_channel(), *val),
+                    [track, val] => {
+                        if let Ok(n) = track.parse::<usize>() {
+                            if n == 0 || n > self.editor.pattern().num_channels() {
+                                self.open_modal(Modal::error(
+                                    "Track Volume".to_string(),
+                                    format!(
+                                        "Track {} out of range (1-{}).",
+                                        n,
+                                        self.editor.pattern().num_channels()
+                                    ),
+                                ));
+                                return;
+                            }
+                            (n - 1, *val)
+                        } else {
+                            self.open_modal(Modal::error(
+                                "Track Volume".to_string(),
+                                "Usage: :tvol [track] <0-100>".to_string(),
+                            ));
+                            return;
+                        }
+                    }
+                    _ => {
+                        let ch = self.editor.cursor_channel();
+                        let vol = self
+                            .song
+                            .tracks
+                            .get(ch)
+                            .map(|t| (t.volume * 100.0).round() as i32)
+                            .unwrap_or(100);
+                        self.open_modal(Modal::info(
+                            "Track Volume".to_string(),
+                            format!(
+                                "Track {} volume: {}%\nUsage: :tvol [track] <0-100>",
+                                ch + 1,
+                                vol
+                            ),
+                        ));
+                        return;
+                    }
+                };
+                if let Ok(pct) = val_str.parse::<f32>() {
+                    let v = (pct / 100.0).clamp(0.0, 1.0);
+                    if let Some(t) = self.editor.pattern_mut().get_track_mut(ch) {
+                        t.set_volume(v);
+                    }
+                    if let Some(t) = self.song.tracks.get_mut(ch) {
+                        t.set_volume(v);
+                    }
+                    self.sync_mixer_tracks();
+                    self.mark_dirty();
+                } else {
+                    self.open_modal(Modal::error(
+                        "Track Volume".to_string(),
+                        "Usage: :tvol [track] <0-100>".to_string(),
+                    ));
+                }
+            }
+
+            // :tpan [track] <-100..100> — set per-track pan absolutely
+            Some(Command::TrackPan) => {
+                let tokens: Vec<&str> = args.split_whitespace().collect();
+                let (ch, val_str) = match tokens.as_slice() {
+                    [val] => (self.editor.cursor_channel(), *val),
+                    [track, val] => {
+                        if let Ok(n) = track.parse::<usize>() {
+                            if n == 0 || n > self.editor.pattern().num_channels() {
+                                self.open_modal(Modal::error(
+                                    "Track Pan".to_string(),
+                                    format!(
+                                        "Track {} out of range (1-{}).",
+                                        n,
+                                        self.editor.pattern().num_channels()
+                                    ),
+                                ));
+                                return;
+                            }
+                            (n - 1, *val)
+                        } else {
+                            self.open_modal(Modal::error(
+                                "Track Pan".to_string(),
+                                "Usage: :tpan [track] <-100..100>".to_string(),
+                            ));
+                            return;
+                        }
+                    }
+                    _ => {
+                        let ch = self.editor.cursor_channel();
+                        let pan = self
+                            .song
+                            .tracks
+                            .get(ch)
+                            .map(|t| (t.pan * 100.0).round() as i32)
+                            .unwrap_or(0);
+                        self.open_modal(Modal::info(
+                            "Track Pan".to_string(),
+                            format!(
+                                "Track {} pan: {}\nUsage: :tpan [track] <-100..100>",
+                                ch + 1,
+                                pan
+                            ),
+                        ));
+                        return;
+                    }
+                };
+                if let Ok(pct) = val_str.parse::<f32>() {
+                    let v = (pct / 100.0).clamp(-1.0, 1.0);
+                    if let Some(t) = self.editor.pattern_mut().get_track_mut(ch) {
+                        t.set_pan(v);
+                    }
+                    if let Some(t) = self.song.tracks.get_mut(ch) {
+                        t.set_pan(v);
+                    }
+                    self.sync_mixer_tracks();
+                    self.mark_dirty();
+                } else {
+                    self.open_modal(Modal::error(
+                        "Track Pan".to_string(),
+                        "Usage: :tpan [track] <-100..100>".to_string(),
+                    ));
+                }
+            }
+
+            // :newpat [name] — add a new empty pattern
+            Some(Command::NewPat) => {
+                use riffl_core::pattern::pattern::Pattern;
+                let mut pat = Pattern::default();
+                if !args.is_empty() {
+                    pat.name = args.to_string();
+                }
+                let name = pat.name.clone();
+                if let Some(idx) = self.song.add_pattern(pat) {
+                    self.pattern_selection = Some(idx);
+                    self.mark_dirty();
+                    let label = if name.is_empty() {
+                        format!("Pattern {:02}", idx + 1)
+                    } else {
+                        name
+                    };
+                    self.open_modal(Modal::info(
+                        "Pattern Added".to_string(),
+                        format!("Created {}", label),
+                    ));
+                } else {
+                    self.open_modal(Modal::error(
+                        "Pattern Add Failed".to_string(),
+                        "Pattern pool is full (max 256 patterns).".to_string(),
+                    ));
+                }
+            }
+
+            // :delpat [idx] — delete pattern at 1-based idx (default: selected)
+            Some(Command::DelPat) => {
+                if !args.is_empty() {
+                    if let Ok(n) = args.trim().parse::<usize>() {
+                        if n == 0 || n > self.song.patterns.len() {
+                            self.open_modal(Modal::error(
+                                "Delete Pattern".to_string(),
+                                format!(
+                                    "Pattern {} does not exist (1-{}).",
+                                    n,
+                                    self.song.patterns.len()
+                                ),
+                            ));
+                            return;
+                        }
+                        self.pattern_selection = Some(n - 1);
+                    } else {
+                        self.open_modal(Modal::error(
+                            "Delete Pattern".to_string(),
+                            "Usage: :delpat [idx]  (1-indexed, omit for selected pattern)"
+                                .to_string(),
+                        ));
+                        return;
+                    }
+                }
+                if self.delete_pattern() {
+                    self.mark_dirty();
+                } else {
+                    self.open_modal(Modal::error(
+                        "Delete Pattern".to_string(),
+                        "No pattern selected or delete failed.".to_string(),
+                    ));
+                }
+            }
+
+            // :view <name> — switch to a named view
+            Some(Command::View) => {
+                let view = match args.trim() {
+                    "pattern" | "pat" | "pe" | "p" => Some(AppView::PatternEditor),
+                    "arrangement" | "arr" | "a" => Some(AppView::Arrangement),
+                    "instruments" | "instrument" | "inst" | "i" => Some(AppView::InstrumentList),
+                    "code" | "c" => Some(AppView::CodeEditor),
+                    "patterns" | "plist" | "pl" => Some(AppView::PatternList),
+                    "samples" | "sample" | "samp" | "s" => Some(AppView::SampleBrowser),
+                    _ => None,
+                };
+                if let Some(v) = view {
+                    self.set_view(v);
+                } else if args.is_empty() {
+                    let current = match self.current_view {
+                        AppView::PatternEditor => "pattern",
+                        AppView::Arrangement => "arrangement",
+                        AppView::InstrumentList => "instruments",
+                        AppView::CodeEditor => "code",
+                        AppView::PatternList => "patterns",
+                        AppView::SampleBrowser => "samples",
+                    };
+                    self.open_modal(Modal::info(
+                        "View".to_string(),
+                        format!(
+                            "Current: {}\nUsage: :view <pat|arr|inst|code|plist|samples>",
+                            current
+                        ),
+                    ));
+                } else {
+                    self.open_modal(Modal::error(
+                        "Unknown view".to_string(),
+                        format!(
+                            "\"{}\" is not a valid view.\nChoices: pat, arr, inst, code, plist, samples",
+                            args
+                        ),
+                    ));
+                }
+            }
+
+            // :octave <0-9> — set current octave
+            Some(Command::Octave) => {
+                if let Some(n) = args
+                    .trim()
+                    .parse::<u8>()
+                    .ok()
+                    .filter(|&n| n <= 9 && !args.is_empty())
+                {
+                    self.editor.set_octave(n);
+                } else if args.is_empty() {
+                    self.open_modal(Modal::info(
+                        "Octave".to_string(),
+                        format!(
+                            "Current: {}\nUsage: :octave <0-9>",
+                            self.editor.current_octave()
+                        ),
+                    ));
+                } else {
+                    self.open_modal(Modal::error(
+                        "Octave".to_string(),
+                        "Usage: :octave <0-9>".to_string(),
+                    ));
+                }
+            }
+
+            // :humanize [amount] — add timing jitter to notes in selection (default 8)
+            Some(Command::Humanize) => {
+                let amount = args.trim().parse::<u8>().unwrap_or(8);
+                self.editor.humanize_notes(amount);
+                self.mark_dirty();
+            }
+
+            // :randomize — randomize pitches of notes in selection
+            Some(Command::Randomize) => {
+                self.editor.randomize_notes();
+                self.mark_dirty();
             }
         }
     }
