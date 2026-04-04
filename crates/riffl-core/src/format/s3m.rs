@@ -763,8 +763,8 @@ pub fn import_s3m(data: &[u8]) -> Result<FormatData, String> {
                         if let Some(pitch) = Pitch::from_semitone(note_idx) {
                             p_cell.note = Some(NoteEvent::On(Note::new(
                                 pitch, octave,
-                                64, // S3M doesn't have note velocity, default to mid/max? 64 is max vol in S3M.
-                                0,  // Instrument set below
+                                127, // S3M has no per-note velocity; use max MIDI velocity.
+                                0,   // Instrument set below
                             )));
                         }
                     }

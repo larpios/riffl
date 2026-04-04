@@ -149,9 +149,9 @@ impl Note {
         }
     }
 
-    /// Create a note with default velocity (100) and instrument (0).
+    /// Create a note with default velocity (127) and instrument (0).
     pub fn simple(pitch: Pitch, octave: u8) -> Self {
-        Self::new(pitch, octave, 100, 0)
+        Self::new(pitch, octave, 127, 0)
     }
 
     /// Parse a note from a tracker-style string like "C#4", "A-5", "D#3".
@@ -297,10 +297,10 @@ mod tests {
 
     #[test]
     fn test_note_creation() {
-        let note = Note::new(Pitch::C, 4, 100, 0);
+        let note = Note::new(Pitch::C, 4, 127, 0);
         assert_eq!(note.pitch, Pitch::C);
         assert_eq!(note.octave, 4);
-        assert_eq!(note.velocity, 100);
+        assert_eq!(note.velocity, 127);
         assert_eq!(note.instrument, 0);
     }
 
@@ -309,7 +309,7 @@ mod tests {
         let note = Note::simple(Pitch::A, 4);
         assert_eq!(note.pitch, Pitch::A);
         assert_eq!(note.octave, 4);
-        assert_eq!(note.velocity, 100);
+        assert_eq!(note.velocity, 127);
         assert_eq!(note.instrument, 0);
     }
 
@@ -320,7 +320,7 @@ mod tests {
         ignore = "panic unwinding broken on macOS ARM64 toolchain"
     )]
     fn test_note_invalid_octave() {
-        Note::new(Pitch::C, 10, 100, 0);
+        Note::new(Pitch::C, 10, 127, 0);
     }
 
     #[test]

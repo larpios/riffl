@@ -413,7 +413,7 @@ mod tests {
 
         let mut song = Song::new("Test", 120.0);
         // Add a note to the first row
-        song.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+        song.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
 
         let config = ExportConfig::default();
         let mut progress_values = Vec::new();
@@ -452,7 +452,7 @@ mod tests {
         let mut song = Song::new("Test", 120.0);
         // Default: 1 pattern, 64 rows, BPM 120, 4 rows/beat
         // Duration = 64 rows * (60 / 120 / 4) = 64 * 0.125 = 8 seconds
-        song.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+        song.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
 
         let config = ExportConfig {
             sample_rate: 44100,
@@ -522,7 +522,7 @@ mod tests {
 
         let mut song = Song::new("Audio", 120.0);
         song.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
-        song.patterns[0].set_note(4, 1, Note::new(Pitch::C, 4, 100, 0));
+        song.patterns[0].set_note(4, 1, Note::new(Pitch::C, 4, 127, 0));
 
         let config = ExportConfig::default();
         export_wav(
@@ -556,7 +556,7 @@ mod tests {
         let sample = make_test_sample(48000, 1.0);
 
         let mut song = Song::new("48k", 120.0);
-        song.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+        song.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
 
         let config = ExportConfig {
             sample_rate: 48000,
@@ -585,7 +585,7 @@ mod tests {
         let sample = make_test_sample(44100, 1.0);
 
         let mut song = Song::new("24bit", 120.0);
-        song.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+        song.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
 
         let config = ExportConfig {
             sample_rate: 44100,
@@ -647,7 +647,7 @@ mod tests {
         let sample = make_test_sample(44100, 1.0);
 
         let mut song = Song::new("Test", 120.0);
-        song.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+        song.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
 
         let config = ExportConfig::default();
         let mut progress_values = Vec::new();
@@ -677,10 +677,10 @@ mod tests {
 
         let mut song = Song::new("Multi", 120.0);
         // Pattern 0: 64 rows with a note
-        song.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+        song.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
         // Pattern 1: 32 rows
         let mut pat1 = Pattern::new(32, 8);
-        pat1.set_note(0, 0, Note::new(Pitch::C, 4, 100, 0));
+        pat1.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
         song.add_pattern(pat1);
         song.arrangement = vec![0, 1];
 
@@ -717,9 +717,9 @@ mod tests {
         let sample = make_test_sample(44100, 1.0);
 
         let mut song = Song::new("Valid", 120.0);
-        song.patterns[0].set_note(0, 0, Note::new(Pitch::C, 4, 100, 0));
-        song.patterns[0].set_note(8, 0, Note::new(Pitch::E, 4, 100, 0));
-        song.patterns[0].set_note(16, 0, Note::new(Pitch::G, 4, 100, 0));
+        song.patterns[0].set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
+        song.patterns[0].set_note(8, 0, Note::new(Pitch::E, 4, 127, 0));
+        song.patterns[0].set_note(16, 0, Note::new(Pitch::G, 4, 127, 0));
 
         let config = ExportConfig::default();
         export_wav(
@@ -753,7 +753,7 @@ mod tests {
         let sample = make_test_sample(48000, 2.0);
 
         let mut song = Song::new("MetaCheck", 140.0);
-        song.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+        song.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
 
         let config = ExportConfig {
             sample_rate: 48000,
@@ -837,7 +837,7 @@ mod tests {
         let mut song = Song::new("Varying", 120.0);
         // Put notes on multiple channels at different rows
         song.patterns[0].set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
-        song.patterns[0].set_note(0, 1, Note::new(Pitch::E, 4, 100, 0));
+        song.patterns[0].set_note(0, 1, Note::new(Pitch::E, 4, 127, 0));
         song.patterns[0].set_note(16, 0, Note::new(Pitch::G, 4, 80, 0));
         song.patterns[0].set_note(32, 2, Note::new(Pitch::A, 4, 127, 0));
 
@@ -880,7 +880,7 @@ mod tests {
 
         let path_slow = temp_wav_path("test_export_bpm_slow.wav");
         let mut song_slow = Song::new("Slow", 60.0); // 60 BPM
-        song_slow.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+        song_slow.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
         export_wav(
             &path_slow,
             &song_slow,
@@ -892,7 +892,7 @@ mod tests {
 
         let path_fast = temp_wav_path("test_export_bpm_fast.wav");
         let mut song_fast = Song::new("Fast", 240.0); // 240 BPM
-        song_fast.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+        song_fast.patterns[0].set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
         export_wav(
             &path_fast,
             &song_fast,

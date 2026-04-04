@@ -76,7 +76,8 @@ const C4_PERIOD: f64 = 428.0;
 const MOD_SAMPLE_RATE: u32 = 8287;
 
 /// Default note velocity for imported pattern cells.
-const DEFAULT_VELOCITY: u8 = 100;
+/// MOD has no per-note velocity; use max MIDI velocity so inst.volume drives the gain.
+const DEFAULT_VELOCITY: u8 = 127;
 
 /// Default BPM when no tempo info is found in the MOD file.
 const _DEFAULT_BPM: f64 = 125.0;
@@ -1072,7 +1073,7 @@ mod tests {
             0,
             0,
             Cell {
-                note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 100, 0))),
+                note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0))),
                 instrument: Some(0),
                 volume: None,
                 effects: vec![],
@@ -1098,7 +1099,7 @@ mod tests {
             0,
             0,
             Cell {
-                note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 100, 0))),
+                note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0))),
                 instrument: Some(0),
                 volume: None,
                 effects: vec![],
@@ -1108,7 +1109,7 @@ mod tests {
             1,
             0,
             Cell {
-                note: Some(NoteEvent::On(Note::new(Pitch::E, 4, 100, 0))),
+                note: Some(NoteEvent::On(Note::new(Pitch::E, 4, 127, 0))),
                 instrument: Some(0),
                 volume: None,
                 effects: vec![],
@@ -1118,7 +1119,7 @@ mod tests {
             2,
             1,
             Cell {
-                note: Some(NoteEvent::On(Note::new(Pitch::G, 4, 100, 2))),
+                note: Some(NoteEvent::On(Note::new(Pitch::G, 4, 127, 2))),
                 instrument: Some(2),
                 volume: None,
                 effects: vec![],
@@ -1206,7 +1207,7 @@ mod tests {
                 actual_row,
                 actual_ch,
                 Cell {
-                    note: Some(NoteEvent::On(Note::new(pitch, octave, 100, 0))),
+                    note: Some(NoteEvent::On(Note::new(pitch, octave, 127, 0))),
                     instrument: Some(0),
                     volume: None,
                     effects: vec![],
@@ -1331,7 +1332,7 @@ mod tests {
             0,
             0,
             Cell {
-                note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 100, 0))),
+                note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0))),
                 instrument: Some(0),
                 volume: None,
                 effects: vec![Effect::new(0x0C, 64)], // Set volume C-4 to 64
@@ -1359,7 +1360,7 @@ mod tests {
             5,
             2,
             Cell {
-                note: Some(NoteEvent::On(Note::new(Pitch::A, 3, 100, 1))),
+                note: Some(NoteEvent::On(Note::new(Pitch::A, 3, 127, 1))),
                 instrument: Some(1),
                 volume: None,
                 effects: vec![
@@ -1423,7 +1424,7 @@ mod tests {
             0,
             0,
             Cell {
-                note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 100, 0))),
+                note: Some(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0))),
                 instrument: Some(0),
                 volume: None,
                 effects: vec![],
@@ -1434,7 +1435,7 @@ mod tests {
             10,
             1,
             Cell {
-                note: Some(NoteEvent::On(Note::new(Pitch::E, 4, 100, 0))),
+                note: Some(NoteEvent::On(Note::new(Pitch::E, 4, 127, 0))),
                 instrument: Some(1),
                 volume: None,
                 effects: vec![],
@@ -1444,7 +1445,7 @@ mod tests {
             20,
             3,
             Cell {
-                note: Some(NoteEvent::On(Note::new(Pitch::G, 4, 100, 2))),
+                note: Some(NoteEvent::On(Note::new(Pitch::G, 4, 127, 2))),
                 instrument: Some(2),
                 volume: None,
                 effects: vec![],
@@ -1481,7 +1482,7 @@ mod tests {
             5,
             2,
             Cell {
-                note: Some(NoteEvent::On(Note::new(Pitch::D, 4, 100, 1))),
+                note: Some(NoteEvent::On(Note::new(Pitch::D, 4, 127, 1))),
                 instrument: Some(1),
                 volume: None,
                 effects: vec![],

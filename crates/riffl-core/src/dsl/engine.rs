@@ -729,7 +729,7 @@ fn register_music_functions(engine: &mut Engine) {
                 return Dynamic::UNIT;
             }
             let inst = instrument.clamp(0, 255) as u8;
-            note_to_dynamic(Note::new(pitch, octave as u8, 100, inst))
+            note_to_dynamic(Note::new(pitch, octave as u8, 127, inst))
         },
     );
 
@@ -839,9 +839,10 @@ fn register_music_functions(engine: &mut Engine) {
     engine.register_fn("get_velocity", |note: &mut rhai::Map| -> INT {
         note.get("velocity")
             .and_then(|v| v.as_int().ok())
-            .unwrap_or(100)
+            .unwrap_or(127)
     });
 }
+
 
 /// Convert a Note to a Rhai Dynamic map.
 fn note_to_dynamic(note: Note) -> Dynamic {
@@ -885,7 +886,7 @@ fn map_to_note(note: &rhai::Map) -> Option<Note> {
     let velocity = note
         .get("velocity")
         .and_then(|v| v.as_int().ok())
-        .unwrap_or(100) as u8;
+        .unwrap_or(127) as u8;
     let instrument = note
         .get("instrument")
         .and_then(|v| v.as_int().ok())
@@ -907,7 +908,7 @@ fn map_to_set_note_command(row: INT, channel: INT, note: &rhai::Map) -> Option<P
     let velocity = note
         .get("velocity")
         .and_then(|v| v.as_int().ok())
-        .unwrap_or(100) as u8;
+        .unwrap_or(127) as u8;
     let instrument = note
         .get("instrument")
         .and_then(|v| v.as_int().ok())
@@ -1455,7 +1456,7 @@ mod tests {
         let engine = ScriptEngine::new();
         let result = engine.eval(r#"let n = note("A", 4); n.velocity"#).unwrap();
         match result {
-            ScriptResult::Value(v) => assert_eq!(v, "100"),
+            ScriptResult::Value(v) => assert_eq!(v, "127"),
             _ => panic!("Expected Value result"),
         }
     }
@@ -1579,8 +1580,8 @@ mod tests {
     fn test_script_humanize() {
         let engine = ScriptEngine::new();
         let mut pattern = Pattern::new(4, 1);
-        pattern.set_note(0, 0, Note::new(Pitch::C, 4, 100, 0));
-        pattern.set_note(1, 0, Note::new(Pitch::E, 4, 100, 0));
+        pattern.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
+        pattern.set_note(1, 0, Note::new(Pitch::E, 4, 127, 0));
 
         let code = r#"humanize(10);"#;
         let (_, commands) = engine.eval_with_pattern(code, &pattern).unwrap();
@@ -1590,7 +1591,7 @@ mod tests {
         for row in 0..2 {
             if let Some(NoteEvent::On(n)) = &pattern.get_cell(row, 0).unwrap().note {
                 assert!(
-                    n.velocity >= 90 && n.velocity <= 110,
+                    n.velocity >= 110 && n.velocity <= 127,
                     "Velocity {} out of expected range for row {}",
                     n.velocity,
                     row
@@ -1633,8 +1634,8 @@ mod tests {
                 assert!(v.contains("C"), "pitch should be C, got: {}", v);
                 assert!(v.contains("4"), "octave should be 4, got: {}", v);
                 assert!(
-                    v.contains("100"),
-                    "default velocity should be 100, got: {}",
+                    v.contains("127"),
+                    "default velocity should be 127, got: {}",
                     v
                 );
             }
@@ -2057,7 +2058,7 @@ mod tests {
             )
             .unwrap();
         match result {
-            ScriptResult::Value(v) => assert_eq!(v, "100"),
+            ScriptResult::Value(v) => assert_eq!(v, "127"),
             _ => panic!("Expected Value result"),
         }
     }
@@ -2273,7 +2274,7 @@ mod tests {
         use crate::pattern::{note::NoteEvent, row::Cell};
         let engine = ScriptEngine::new();
         let mut pattern = Pattern::new(8, 2);
-        let note_c4 = Note::new(Pitch::C, 4, 100, 0);
+        let note_c4 = Note::new(Pitch::C, 4, 127, 0);
         pattern.set_cell(2, 0, Cell::with_note(NoteEvent::On(note_c4)));
 
         // Select only rows 2-4, channel 0
@@ -2299,8 +2300,8 @@ mod tests {
         use crate::pattern::{note::NoteEvent, row::Cell};
         let engine = ScriptEngine::new();
         let mut pattern = Pattern::new(4, 1);
-        let note_c4 = Note::new(Pitch::C, 4, 100, 0);
-        let note_g4 = Note::new(Pitch::G, 4, 100, 0);
+        let note_c4 = Note::new(Pitch::C, 4, 127, 0);
+        let note_g4 = Note::new(Pitch::G, 4, 127, 0);
         pattern.set_cell(0, 0, Cell::with_note(NoteEvent::On(note_c4)));
         pattern.set_cell(3, 0, Cell::with_note(NoteEvent::On(note_g4)));
 
@@ -2329,17 +2330,17 @@ mod tests {
         pattern.set_cell(
             0,
             0,
-            Cell::with_note(NoteEvent::On(Note::new(Pitch::C, 4, 100, 0))),
+            Cell::with_note(NoteEvent::On(Note::new(Pitch::C, 4, 127, 0))),
         );
         pattern.set_cell(
             2,
             0,
-            Cell::with_note(NoteEvent::On(Note::new(Pitch::E, 4, 100, 0))),
+            Cell::with_note(NoteEvent::On(Note::new(Pitch::E, 4, 127, 0))),
         );
         pattern.set_cell(
             4,
             0,
-            Cell::with_note(NoteEvent::On(Note::new(Pitch::G, 4, 100, 0))),
+            Cell::with_note(NoteEvent::On(Note::new(Pitch::G, 4, 127, 0))),
         );
 
         let sel = PatternSelection::new(0, 7, 0, 0);
@@ -2401,7 +2402,7 @@ mod tests {
         use crate::pattern::{note::NoteEvent, row::Cell};
         let engine = ScriptEngine::new();
         let mut pattern = Pattern::new(16, 4);
-        let note = Note::new(Pitch::C, 4, 100, 0);
+        let note = Note::new(Pitch::C, 4, 127, 0);
         pattern.set_cell(0, 0, Cell::with_note(NoteEvent::On(note)));
 
         let code = r#"
