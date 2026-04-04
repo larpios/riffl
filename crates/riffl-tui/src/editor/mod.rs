@@ -186,6 +186,8 @@ pub struct Editor {
     bookmarks: Vec<(usize, usize, String)>,
     /// Index of the last-visited bookmark (for cycling through bookmarks).
     bookmark_cursor: usize,
+    /// Pending count prefix digits accumulated before a motion (e.g. "10" before "j").
+    count_prefix: String,
 }
 
 pub mod clipboard;
@@ -195,6 +197,31 @@ pub mod navigation;
 mod tests;
 
 impl Editor {
+    /// Append a digit to the count prefix buffer (called from input handler).
+    pub fn push_count_digit(&mut self, c: char) {
+        self.count_prefix.push(c);
+    }
+
+    /// Drain the count prefix buffer and parse it as a count (defaults to 1 if empty).
+    pub fn take_count(&mut self) -> usize {
+        if self.count_prefix.is_empty() {
+            1
+        } else {
+            let s = std::mem::take(&mut self.count_prefix);
+            s.parse::<usize>().unwrap_or(1).max(1)
+        }
+    }
+
+    /// Peek at the accumulated count prefix string (for status bar display).
+    pub fn count_prefix(&self) -> &str {
+        &self.count_prefix
+    }
+
+    /// Discard the count prefix (e.g. on Esc or unknown key).
+    pub fn clear_count(&mut self) {
+        self.count_prefix.clear();
+    }
+
     /// Get the contents of the active register (for paste preview in UI).
     pub fn get_clipboard(&self) -> Option<&Clipboard> {
         self.registers.get(&self.active_register)
@@ -256,6 +283,7 @@ impl Editor {
             step_size: 1,
             bookmarks: Vec::new(),
             bookmark_cursor: 0,
+            count_prefix: String::new(),
         }
     }
 

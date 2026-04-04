@@ -537,19 +537,35 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    // Count prefix accumulation (Normal and Visual modes, no pending chord).
+    // Digits 1-9 grow the repetition count; '0' extends it only when prefix is
+    // non-empty (empty prefix → '0' is the GoToStart motion, not a count).
+    let in_modal_mode = matches!(
+        app.editor.mode(),
+        EditorMode::Normal | EditorMode::Visual | EditorMode::VisualLine
+    );
+    if in_modal_mode
+        && key.modifiers == crossterm::event::KeyModifiers::NONE
+        && app.pending_key.is_none()
+    {
+        if let crossterm::event::KeyCode::Char(c) = key.code {
+            if c.is_ascii_digit() && (c != '0' || !app.editor.count_prefix().is_empty()) {
+                app.editor.push_count_digit(c);
+                return;
+            }
+        }
+    }
+
     // Chord / prefix handling.
     // 'gg' (go to top) works in Normal and Visual modes.
     // All other chords (dd, m{x}, '{x}, "{x}, q{x}, @{x}) are Normal-mode only.
     let in_visual = app.editor.mode().is_visual();
-    if matches!(
-        app.editor.mode(),
-        EditorMode::Normal | EditorMode::Visual | EditorMode::VisualLine
-    ) && key.modifiers == crossterm::event::KeyModifiers::NONE
-    {
+    if in_modal_mode && key.modifiers == crossterm::event::KeyModifiers::NONE {
         if let crossterm::event::KeyCode::Char(c) = key.code {
             if let Some(pending) = app.pending_key.take() {
-                // 'gg' works in all three modes
+                // 'gg' works in all three modes; clears any pending count.
                 if pending == 'g' && c == 'g' {
+                    app.editor.clear_count();
                     app.editor.go_to_row(0);
                     return;
                 }
@@ -558,27 +574,32 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) {
                 if !in_visual {
                     match (pending, c) {
                         ('d', 'd') => {
+                            app.editor.clear_count();
                             app.editor.delete_row();
                             app.mark_dirty();
                             return;
                         }
                         // m{x} — set mark
                         ('m', x) if x.is_ascii_alphabetic() => {
+                            app.editor.clear_count();
                             app.editor.set_mark(x);
                             return;
                         }
                         // '{x} — goto mark
                         ('\'', x) if x.is_ascii_alphabetic() => {
+                            app.editor.clear_count();
                             app.editor.goto_mark(x);
                             return;
                         }
                         // "{x} — set active register for next yank/paste/cut
                         ('"', x) if x.is_ascii_alphanumeric() => {
+                            app.editor.clear_count();
                             app.editor.set_active_register(x);
                             return;
                         }
                         // q{x} — start recording macro into register x
                         ('q', x) if x.is_ascii_alphabetic() => {
+                            app.editor.clear_count();
                             if !app.replaying_macro {
                                 app.macros.entry(x).or_default().clear();
                                 app.macro_recording = Some(x);
@@ -587,6 +608,7 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) {
                         }
                         // @@ — replay last used macro
                         ('@', '@') => {
+                            app.editor.clear_count();
                             if let Some(slot) = app.last_macro {
                                 replay_macro(app, slot, key);
                             }
@@ -594,6 +616,7 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) {
                         }
                         // @{x} — replay macro in register x
                         ('@', x) if x.is_ascii_alphabetic() => {
+                            app.editor.clear_count();
                             replay_macro(app, x, key);
                             return;
                         }
@@ -615,19 +638,23 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) {
 
             // Set pending chord starters.
             // 'g' starts a pending chord in all modes (for 'gg').
+            // Starting a chord discards any accumulated count.
             // Other chord starters are Normal-mode only.
             if c == 'g' {
+                app.editor.clear_count();
                 app.pending_key = Some('g');
                 return;
             }
             if !in_visual {
                 match c {
                     'd' | 'm' | '\'' | '"' | '@' => {
+                        app.editor.clear_count();
                         app.pending_key = Some(c);
                         return;
                     }
                     // q: if recording, stop; otherwise start pending for register char
                     'q' => {
+                        app.editor.clear_count();
                         app.pending_key = Some('q');
                         return;
                     }
@@ -642,6 +669,9 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) {
     }
 
     let action = map_key_to_action(key, app.editor_mode());
+
+    // Consume the count prefix. Any action clears it; motions may repeat.
+    let count = app.editor.take_count();
 
     // In InstrumentList, preview notes instead of editing the pattern.
     if app.current_view == AppView::InstrumentList {
@@ -661,7 +691,41 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) {
         }
     }
 
-    dispatch_action(app, action, key);
+    // nG / ngg: with a count > 1, go to that specific row (1-indexed).
+    // This mirrors vim's behaviour where `5G` jumps to row 5.
+    if count > 1 && matches!(action, Action::GoToBottom | Action::GoToTop) {
+        app.editor.go_to_row(count.saturating_sub(1));
+        return;
+    }
+
+    // Repeatable motions run count times.
+    let is_repeatable = matches!(
+        action,
+        Action::MoveDown
+            | Action::MoveUp
+            | Action::MoveLeft
+            | Action::MoveRight
+            | Action::PageUp
+            | Action::PageDown
+            | Action::NextTrack
+            | Action::PrevTrack
+            | Action::JumpNextPattern
+            | Action::JumpPrevPattern
+    );
+
+    if is_repeatable && count > 1 {
+        // Record a single action entry to the macro (not count copies).
+        if let Some(slot) = app.macro_recording {
+            if !matches!(action, Action::None) {
+                app.macros.entry(slot).or_default().push(action);
+            }
+        }
+        for _ in 0..count {
+            actions::handle_action(app, action, key);
+        }
+    } else {
+        dispatch_action(app, action, key);
+    }
 }
 
 /// Dispatch an action, recording it into the active macro if recording.

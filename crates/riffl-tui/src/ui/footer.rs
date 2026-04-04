@@ -104,6 +104,17 @@ pub(super) fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, app:
         Span::raw(" "),
     ];
 
+    // Show accumulated count prefix (e.g. "10" before pressing "j")
+    let count_prefix = app.editor.count_prefix();
+    if !count_prefix.is_empty() {
+        left_spans.push(Span::styled(
+            format!("{} ", count_prefix),
+            Style::default()
+                .fg(theme.warning_color())
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+
     // Code editor cursor position
     if app.is_code_editor_active() {
         let ln = app.code_editor.cursor_row() + 1;
