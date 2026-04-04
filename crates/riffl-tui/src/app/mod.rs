@@ -816,6 +816,7 @@ impl App {
             // waveform display shows silence instead of stale sample data.
             if !self.transport.is_playing() {
                 mixer.reset_oscilloscope_buffers();
+                mixer.reset_fft_buffer();
             }
         }
 
