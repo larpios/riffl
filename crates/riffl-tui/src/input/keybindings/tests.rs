@@ -129,21 +129,21 @@ fn test_normal_mode_bpm_down() {
 }
 
 #[test]
-fn test_normal_mode_view_switching_1_2_3() {
+fn test_normal_mode_view_switching_f1_f2_f3() {
     use crate::app::AppView;
-    let k1 = KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE);
-    let k2 = KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE);
-    let k3 = KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE);
+    let f1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
+    let f2 = KeyEvent::new(KeyCode::F(2), KeyModifiers::NONE);
+    let f3 = KeyEvent::new(KeyCode::F(3), KeyModifiers::NONE);
     assert_eq!(
-        map_key_to_action(k1, EditorMode::Normal),
+        map_key_to_action(f1, EditorMode::Normal),
         Action::SwitchView(AppView::PatternEditor)
     );
     assert_eq!(
-        map_key_to_action(k2, EditorMode::Normal),
+        map_key_to_action(f2, EditorMode::Normal),
         Action::SwitchView(AppView::Arrangement)
     );
     assert_eq!(
-        map_key_to_action(k3, EditorMode::Normal),
+        map_key_to_action(f3, EditorMode::Normal),
         Action::SwitchView(AppView::InstrumentList)
     );
 }
@@ -560,10 +560,10 @@ fn test_normal_mode_ctrl_e_opens_export() {
 // --- Code Editor Keybinding Tests ---
 
 #[test]
-fn test_normal_mode_4_switches_to_code_editor() {
-    let k4 = KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE);
+fn test_normal_mode_f4_switches_to_code_editor() {
+    let f4 = KeyEvent::new(KeyCode::F(4), KeyModifiers::NONE);
     assert_eq!(
-        map_key_to_action(k4, EditorMode::Normal),
+        map_key_to_action(f4, EditorMode::Normal),
         Action::SwitchView(AppView::CodeEditor)
     );
 }

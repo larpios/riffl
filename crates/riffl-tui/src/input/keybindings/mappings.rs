@@ -162,7 +162,7 @@ pub(super) const KEY_MAPPINGS: &[KeyMapping] = &[
         mode: EditorMode::Normal,
     },
     KeyMapping {
-        key: "1-6",
+        key: "F1-F6",
         action: Action::SwitchView(AppView::PatternEditor),
         mode: EditorMode::Normal,
     },

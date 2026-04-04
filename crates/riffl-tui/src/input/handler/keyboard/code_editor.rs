@@ -62,28 +62,33 @@ pub fn handle_code_editor_key(app: &mut App, key: KeyEvent) {
                         app.code_editor.mode = ModeKind::Visual;
                         return;
                     }
-                    // View switching (same as pattern editor)
-                    KeyCode::Char('1') => {
+                    // View switching with F-keys (same as pattern editor)
+                    KeyCode::F(1) => {
                         app.set_view(AppView::PatternEditor);
                         app.split_view = false;
                         return;
                     }
-                    KeyCode::Char('2') => {
+                    KeyCode::F(2) => {
                         app.set_view(AppView::Arrangement);
                         app.split_view = false;
                         return;
                     }
-                    KeyCode::Char('3') => {
+                    KeyCode::F(3) => {
                         app.set_view(AppView::InstrumentList);
                         app.split_view = false;
                         return;
                     }
-                    KeyCode::Char('4') => {
+                    KeyCode::F(4) => {
                         app.set_view(AppView::CodeEditor);
                         return;
                     }
-                    KeyCode::Char('5') => {
+                    KeyCode::F(5) => {
                         app.set_view(AppView::PatternList);
+                        app.split_view = false;
+                        return;
+                    }
+                    KeyCode::F(6) => {
+                        app.set_view(AppView::SampleBrowser);
                         app.split_view = false;
                         return;
                     }
@@ -195,7 +200,7 @@ pub fn handle_code_editor_key(app: &mut App, key: KeyEvent) {
                         app.code_editor.page_down(20);
                         return;
                     }
-                    // View switching with F-keys still works
+                    // View switching with F-keys still works in Insert mode
                     KeyCode::F(1) => {
                         app.set_view(AppView::PatternEditor);
                         app.split_view = false;
@@ -213,6 +218,16 @@ pub fn handle_code_editor_key(app: &mut App, key: KeyEvent) {
                     }
                     KeyCode::F(4) => {
                         app.set_view(AppView::CodeEditor);
+                        return;
+                    }
+                    KeyCode::F(5) => {
+                        app.set_view(AppView::PatternList);
+                        app.split_view = false;
+                        return;
+                    }
+                    KeyCode::F(6) => {
+                        app.set_view(AppView::SampleBrowser);
+                        app.split_view = false;
                         return;
                     }
                     KeyCode::Tab => {

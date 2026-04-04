@@ -169,13 +169,13 @@ fn map_normal_mode(key: KeyEvent) -> Action {
         KeyCode::Char(']') => Action::JumpNextPattern,
         KeyCode::Char('[') => Action::JumpPrevPattern,
 
-        // View switching
-        KeyCode::Char('1') => Action::SwitchView(AppView::PatternEditor),
-        KeyCode::Char('2') => Action::SwitchView(AppView::Arrangement),
-        KeyCode::Char('3') => Action::SwitchView(AppView::InstrumentList),
-        KeyCode::Char('4') => Action::SwitchView(AppView::CodeEditor),
-        KeyCode::Char('5') => Action::SwitchView(AppView::PatternList),
-        KeyCode::Char('6') => Action::SwitchView(AppView::SampleBrowser),
+        // View switching — F-keys free up number keys for count prefix motions
+        KeyCode::F(1) => Action::SwitchView(AppView::PatternEditor),
+        KeyCode::F(2) => Action::SwitchView(AppView::Arrangement),
+        KeyCode::F(3) => Action::SwitchView(AppView::InstrumentList),
+        KeyCode::F(4) => Action::SwitchView(AppView::CodeEditor),
+        KeyCode::F(5) => Action::SwitchView(AppView::PatternList),
+        KeyCode::F(6) => Action::SwitchView(AppView::SampleBrowser),
 
         // Instrument management (when in InstrumentList view)
         KeyCode::Char('n') => Action::AddInstrument,
