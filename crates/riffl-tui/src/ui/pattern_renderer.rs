@@ -473,7 +473,7 @@ pub(super) fn format_cell_parts(
                 None => "..".to_string(),
             };
             let vol_str = match cell.volume {
-                Some(vol) => format!("{:02X}", vol),
+                Some(vol) => format!("{:02}", vol),
                 None => "..".to_string(),
             };
             let eff_str = match cell.first_effect() {
@@ -511,7 +511,7 @@ pub(super) fn format_cell_display(cell: &riffl_core::pattern::row::Cell) -> Stri
     };
 
     let vol_str = match cell.volume {
-        Some(vol) => format!("{:02X}", vol),
+        Some(vol) => format!("{:02}", vol),
         None => "..".to_string(),
     };
 

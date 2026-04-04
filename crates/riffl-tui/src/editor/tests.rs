@@ -891,7 +891,7 @@ fn test_transpose_is_undoable() {
 #[test]
 fn test_interpolate_volume_ramp() {
     let mut editor = Editor::new(Pattern::new(8, 1));
-    // Set volume at row 0 = 0, row 4 = 100
+    // Set volume at row 0 = 0, row 4 = 64
     editor.pattern_mut().set_cell(
         0,
         0,
@@ -904,7 +904,7 @@ fn test_interpolate_volume_ramp() {
         4,
         0,
         Cell {
-            volume: Some(100),
+            volume: Some(64),
             ..Cell::empty()
         },
     );
@@ -915,10 +915,10 @@ fn test_interpolate_volume_ramp() {
     editor.interpolate();
     // Check interpolated values
     assert_eq!(editor.pattern().get_cell(0, 0).unwrap().volume, Some(0));
-    assert_eq!(editor.pattern().get_cell(1, 0).unwrap().volume, Some(25));
-    assert_eq!(editor.pattern().get_cell(2, 0).unwrap().volume, Some(50));
-    assert_eq!(editor.pattern().get_cell(3, 0).unwrap().volume, Some(75));
-    assert_eq!(editor.pattern().get_cell(4, 0).unwrap().volume, Some(100));
+    assert_eq!(editor.pattern().get_cell(1, 0).unwrap().volume, Some(16));
+    assert_eq!(editor.pattern().get_cell(2, 0).unwrap().volume, Some(32));
+    assert_eq!(editor.pattern().get_cell(3, 0).unwrap().volume, Some(48));
+    assert_eq!(editor.pattern().get_cell(4, 0).unwrap().volume, Some(64));
 }
 
 #[test]
@@ -936,7 +936,7 @@ fn test_interpolate_requires_visual_mode() {
         4,
         0,
         Cell {
-            volume: Some(100),
+            volume: Some(64),
             ..Cell::empty()
         },
     );
@@ -980,7 +980,7 @@ fn test_interpolate_is_undoable() {
         4,
         0,
         Cell {
-            volume: Some(100),
+            volume: Some(64),
             ..Cell::empty()
         },
     );
@@ -988,7 +988,7 @@ fn test_interpolate_is_undoable() {
     editor.enter_visual_mode();
     editor.cursor_row = 4;
     editor.interpolate();
-    assert_eq!(editor.pattern().get_cell(2, 0).unwrap().volume, Some(50));
+    assert_eq!(editor.pattern().get_cell(2, 0).unwrap().volume, Some(32));
     editor.undo();
     assert!(editor.pattern().get_cell(2, 0).unwrap().volume.is_none());
 }
@@ -1000,7 +1000,7 @@ fn test_interpolate_descending_ramp() {
         0,
         0,
         Cell {
-            volume: Some(120),
+            volume: Some(60),
             ..Cell::empty()
         },
     );
@@ -1016,9 +1016,9 @@ fn test_interpolate_descending_ramp() {
     editor.enter_visual_mode();
     editor.cursor_row = 3;
     editor.interpolate();
-    assert_eq!(editor.pattern().get_cell(0, 0).unwrap().volume, Some(120));
-    assert_eq!(editor.pattern().get_cell(1, 0).unwrap().volume, Some(80));
-    assert_eq!(editor.pattern().get_cell(2, 0).unwrap().volume, Some(40));
+    assert_eq!(editor.pattern().get_cell(0, 0).unwrap().volume, Some(60));
+    assert_eq!(editor.pattern().get_cell(1, 0).unwrap().volume, Some(40));
+    assert_eq!(editor.pattern().get_cell(2, 0).unwrap().volume, Some(20));
     assert_eq!(editor.pattern().get_cell(3, 0).unwrap().volume, Some(0));
 }
 

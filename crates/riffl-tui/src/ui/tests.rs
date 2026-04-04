@@ -56,12 +56,12 @@ fn test_format_cell_full() {
     use riffl_core::pattern::effect::Effect;
     use riffl_core::pattern::note::{Note, Pitch};
     let cell = riffl_core::pattern::row::Cell {
-        note: Some(NoteEvent::On(Note::new(Pitch::CSharp, 4, 100, 1))),
+        note: Some(NoteEvent::On(Note::new(Pitch::CSharp, 4, 127, 1))),
         instrument: Some(1),
-        volume: Some(0x40),
+        volume: Some(64),
         effects: vec![Effect::new(0xC, 0x20)],
     };
-    assert_eq!(format_cell_display(&cell), "C#4 01 40 0C20 ....");
+    assert_eq!(format_cell_display(&cell), "C#4 01 64 0C20 ....");
 }
 
 // --- format_cell_parts tests ---
@@ -101,15 +101,15 @@ fn test_format_cell_parts_full() {
     use riffl_core::pattern::effect::Effect;
     use riffl_core::pattern::note::{Note, Pitch};
     let cell = riffl_core::pattern::row::Cell {
-        note: Some(NoteEvent::On(Note::new(Pitch::CSharp, 4, 100, 1))),
+        note: Some(NoteEvent::On(Note::new(Pitch::CSharp, 4, 127, 1))),
         instrument: Some(1),
-        volume: Some(0x40),
+        volume: Some(64),
         effects: vec![Effect::new(0xC, 0x20)],
     };
     let (n, i, v, e, _) = format_cell_parts(Some(&cell));
     assert_eq!(n, "C#4");
     assert_eq!(i, "01");
-    assert_eq!(v, "40");
+    assert_eq!(v, "64");
     assert_eq!(e, "0C20");
 }
 

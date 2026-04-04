@@ -90,7 +90,7 @@ impl Editor {
     /// Pushes an undo snapshot before the change.
     pub fn replace_once(&mut self, pitch: Pitch) {
         self.save_history();
-        let note = Note::new(pitch, self.current_octave, 100, self.current_instrument);
+        let note = Note::new(pitch, self.current_octave, 127, self.current_instrument);
         self.pattern.set_cell(
             self.cursor_row,
             self.cursor_channel,
@@ -208,18 +208,24 @@ impl Editor {
         if !self.is_entry_mode() || self.sub_column != SubColumn::Volume {
             return;
         }
-        let digit = digit & 0x0F;
+        let digit = digit.min(9); // clamp to 0-9 for decimal
         self.save_history();
         if let Some(cell) = self
             .pattern
             .get_cell_mut(self.cursor_row, self.cursor_channel)
         {
             let current = cell.volume.unwrap_or(0);
-            let new_val = if self.volume_digit_pos == 0 {
-                (digit << 4) | (current & 0x0F)
+            let mut new_val = if self.volume_digit_pos == 0 {
+                // First digit is tens place
+                digit * 10
             } else {
-                (current & 0xF0) | digit
+                // Second digit is units place
+                (current / 10) * 10 + digit
             };
+            
+            // Cap at 64 for tracker standard volume
+            new_val = new_val.min(64);
+            
             cell.volume = Some(new_val);
             self.volume_digit_pos = (self.volume_digit_pos + 1) % 2;
             if self.volume_digit_pos == 0 {
@@ -329,7 +335,7 @@ impl Editor {
             return;
         }
         self.save_history();
-        let note = Note::new(pitch, octave, 100, self.current_instrument);
+        let note = Note::new(pitch, octave, 127, self.current_instrument);
         self.pattern.set_cell(
             self.cursor_row,
             self.cursor_channel,
