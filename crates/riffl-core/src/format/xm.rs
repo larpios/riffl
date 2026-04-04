@@ -76,14 +76,13 @@ fn read_i8(data: &[u8], offset: &mut usize) -> i8 {
 
 struct XmHeader {
     name: String,
-    #[allow(dead_code)]
+    #[allow(unused)]
     song_length: u16,
-    #[allow(dead_code)]
+    #[allow(unused)]
     restart_position: u16,
     num_channels: u16,
     num_patterns: u16,
     num_instruments: u16,
-    #[allow(dead_code)]
     linear_frequencies: bool,
     default_tempo: u16,
     default_bpm: u16,
@@ -290,7 +289,6 @@ fn parse_xm_patterns(
 
 // ─── XM Instrument + Sample ─────────────────────────────────────────────────
 
-#[allow(dead_code)]
 struct XmSampleHeader {
     length: u32,
     loop_start: u32,
@@ -303,7 +301,6 @@ struct XmSampleHeader {
     name: String,
 }
 
-#[allow(dead_code)]
 struct XmInstrData {
     name: String,
     sample_for_pitch: [u8; 96],
@@ -892,6 +889,11 @@ pub fn import_xm(data: &[u8]) -> Result<FormatData, String> {
                 let (vol_set, vol_effect) = convert_xm_volume_column(slot.volume);
                 if let Some(v) = vol_set {
                     cell.volume = Some(v);
+                } else if explicit_inst && matches!(&cell.note, Some(NoteEvent::On(_))) {
+                    // No explicit volume column: reset the sticky channel volume
+                    // multiplier to 100% (64) so the new note plays at its
+                    // full sample default volume (DVS).
+                    cell.volume = Some(64);
                 }
                 if let Some(eff) = vol_effect {
                     if cell.effects.len() < crate::pattern::effect::MAX_EFFECTS_PER_CELL {

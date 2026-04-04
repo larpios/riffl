@@ -60,7 +60,7 @@ fn test_mixer_tick_triggers_voice() {
     let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
     let mut pattern = Pattern::new(16, 4);
-    let note = Note::new(Pitch::A, 4, 100, 0);
+    let note = Note::new(Pitch::A, 4, 127, 0);
     pattern.set_note(0, 0, note);
 
     mixer.tick(0, &pattern);
@@ -73,7 +73,7 @@ fn test_mixer_tick_note_off() {
     let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
     let mut pattern = Pattern::new(16, 4);
-    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
     pattern.set_cell(1, 0, Cell::with_note(NoteEvent::Off));
 
     mixer.tick(0, &pattern);
@@ -89,7 +89,7 @@ fn test_mixer_tick_empty_row_continues() {
     let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
     let mut pattern = Pattern::new(16, 4);
-    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
 
     mixer.tick(0, &pattern);
     assert_eq!(mixer.active_voice_count(), 1);
@@ -142,7 +142,7 @@ fn test_mixer_render_produces_audio() {
     let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
     let mut pattern = Pattern::new(16, 4);
-    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
 
     mixer.tick(0, &pattern);
 
@@ -193,9 +193,9 @@ fn test_mixer_render_multiple_voices() {
     let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
     let mut pattern = Pattern::new(16, 4);
-    pattern.set_note(0, 0, Note::new(Pitch::C, 4, 100, 0));
-    pattern.set_note(0, 1, Note::new(Pitch::E, 4, 100, 0));
-    pattern.set_note(0, 2, Note::new(Pitch::G, 4, 100, 0));
+    pattern.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
+    pattern.set_note(0, 1, Note::new(Pitch::E, 4, 127, 0));
+    pattern.set_note(0, 2, Note::new(Pitch::G, 4, 127, 0));
 
     mixer.tick(0, &pattern);
     assert_eq!(mixer.active_voice_count(), 3);
@@ -240,8 +240,8 @@ fn test_mixer_stop_all() {
     let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
     let mut pattern = Pattern::new(16, 4);
-    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
-    pattern.set_note(0, 1, Note::new(Pitch::C, 4, 100, 0));
+    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
+    pattern.set_note(0, 1, Note::new(Pitch::C, 4, 127, 0));
 
     mixer.tick(0, &pattern);
     assert_eq!(mixer.active_voice_count(), 2);
@@ -260,15 +260,13 @@ fn test_mixer_sample_and_instrument_volume() {
 
     let mut pattern = Pattern::new(16, 4);
     // velocity 127 (1.0), inst volume 0.8, sample volume 0.5 (DVS)
-    // velocity_gain = vel × inst_vol = 1.0 × 0.8 = 0.8
-    // DVS (0.5) goes into volume_override, not velocity_gain.
-    // Final output = velocity_gain × volume_override = 0.8 × 0.5 = 0.4
+    // velocity_gain = vel × inst_vol × sample_vol = 1.0 × 0.8 × 0.5 = 0.4
     pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
 
     mixer.tick(0, &pattern);
 
     if let Some(voice) = &mixer.voices[0] {
-        assert!((voice.velocity_gain - 0.8).abs() < 0.001);
+        assert!((voice.velocity_gain - 0.4).abs() < 0.001);
     } else {
         panic!("Voice should be triggered");
     }
@@ -283,7 +281,7 @@ fn test_mixer_voice_ends_at_sample_boundary() {
     let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
     let mut pattern = Pattern::new(16, 4);
-    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
 
     mixer.tick(0, &pattern);
     assert_eq!(mixer.active_voice_count(), 1);
@@ -362,7 +360,7 @@ fn test_mixer_c4_plays_at_original_rate() {
     let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
     let mut pattern = Pattern::new(16, 4);
     // C-4 note should play at original rate
-    pattern.set_note(0, 0, Note::new(Pitch::C, 4, 100, 0));
+    pattern.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
 
     mixer.tick(0, &pattern);
     assert_eq!(mixer.active_voice_count(), 1);
@@ -384,10 +382,10 @@ fn test_mixer_higher_note_plays_faster() {
     let mut mixer_high = Mixer::new(vec![Arc::clone(&sample)], Vec::new(), 4, 44100);
 
     let mut pattern_low = Pattern::new(16, 4);
-    pattern_low.set_note(0, 0, Note::new(Pitch::C, 3, 100, 0)); // C-3: one octave below base
+    pattern_low.set_note(0, 0, Note::new(Pitch::C, 3, 127, 0)); // C-3: one octave below base
 
     let mut pattern_high = Pattern::new(16, 4);
-    pattern_high.set_note(0, 0, Note::new(Pitch::C, 5, 100, 0)); // C-5: one octave above base
+    pattern_high.set_note(0, 0, Note::new(Pitch::C, 5, 127, 0)); // C-5: one octave above base
 
     mixer_low.tick(0, &pattern_low);
     mixer_high.tick(0, &pattern_high);
@@ -418,7 +416,7 @@ fn test_mixer_custom_base_note() {
 
     let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
     let mut pattern = Pattern::new(16, 4);
-    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
 
     mixer.tick(0, &pattern);
 
@@ -426,9 +424,9 @@ fn test_mixer_custom_base_note() {
     mixer.render(&mut output);
 
     // At original rate (1.0), each frame reads consecutive samples
-    // All samples are 0.8, so output should be ~0.8 * (100/127) * pan_gain
+    // All samples are 0.8, so output should be ~0.8 * (127/127) * pan_gain
     // Default center pan with equal-power law: gain = 1/√2 ≈ 0.707
-    let velocity_gain = 100.0 / 127.0;
+    let velocity_gain = 127.0 / 127.0;
     // Center pan gain is cos(45 deg)
     let center_pan_gain = std::f32::consts::FRAC_PI_4.cos();
     let expected_val = 0.8 * velocity_gain * center_pan_gain;
@@ -509,7 +507,7 @@ fn test_mixer_note_off_stops_sample() {
     let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
     let mut pattern = Pattern::new(16, 4);
-    pattern.set_note(0, 0, Note::new(Pitch::C, 4, 100, 0));
+    pattern.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
     pattern.set_cell(1, 0, Cell::with_note(NoteEvent::Off));
 
     // Trigger note
@@ -554,7 +552,7 @@ fn test_mixer_empty_sample_deactivates() {
     let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
     let mut pattern = Pattern::new(16, 4);
-    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
 
     mixer.tick(0, &pattern);
     // Voice was created but sample is empty
@@ -1183,7 +1181,7 @@ fn test_mixer_render_peak_levels_accumulate() {
     let mut mixer = Mixer::new(vec![Arc::new(sample)], Vec::new(), 4, 44100);
 
     let mut pattern = Pattern::new(16, 4);
-    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
 
     mixer.tick(0, &pattern);
 
@@ -1507,12 +1505,12 @@ fn test_mixer_voice_stealing_on_new_note() {
     let mut pattern = Pattern::new(16, 4);
 
     // Start note on channel 0
-    pattern.set_note(0, 0, Note::new(Pitch::C, 4, 100, 0));
+    pattern.set_note(0, 0, Note::new(Pitch::C, 4, 127, 0));
     mixer.tick(0, &pattern);
     assert_eq!(mixer.active_voice_count(), 1);
 
     // New note on same channel should steal the voice
-    pattern.set_note(1, 0, Note::new(Pitch::E, 4, 100, 0));
+    pattern.set_note(1, 0, Note::new(Pitch::E, 4, 127, 0));
     mixer.tick(1, &pattern);
 
     // Should still have 1 voice, just restarted
@@ -1934,7 +1932,7 @@ fn test_mixer_keyzone_sample_selection() {
 
     // Trigger a low note (C-3 = MIDI 36) on instrument 0
     let mut pattern = Pattern::new(16, 4);
-    let low_note = Note::new(Pitch::C, 3, 100, 0);
+    let low_note = Note::new(Pitch::C, 3, 127, 0);
     pattern.set_note(0, 0, low_note);
 
     mixer.tick(0, &pattern);
@@ -1946,7 +1944,7 @@ fn test_mixer_keyzone_sample_selection() {
 
     // Now trigger a high note (C-6 = MIDI 72) on instrument 0
     let mut pattern2 = Pattern::new(16, 4);
-    let high_note = Note::new(Pitch::C, 6, 100, 0);
+    let high_note = Note::new(Pitch::C, 6, 127, 0);
     pattern2.set_note(0, 1, high_note);
 
     mixer.tick(0, &pattern2);
@@ -1969,7 +1967,7 @@ fn test_mixer_keyzone_no_match_silent() {
 
     // Trigger note outside keyzone range (C-3 = MIDI 36)
     let mut pattern = Pattern::new(16, 4);
-    pattern.set_note(0, 0, Note::new(Pitch::C, 3, 100, 0));
+    pattern.set_note(0, 0, Note::new(Pitch::C, 3, 127, 0));
 
     mixer.tick(0, &pattern);
     // No keyzone matches, so no voice should be triggered
@@ -1987,7 +1985,7 @@ fn test_mixer_no_keyzones_backward_compat() {
     let mut mixer = Mixer::new(vec![sample], instruments, 4, 44100);
 
     let mut pattern = Pattern::new(16, 4);
-    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 100, 0));
+    pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
 
     mixer.tick(0, &pattern);
     assert_eq!(mixer.active_voice_count(), 1);

@@ -50,6 +50,7 @@ impl super::Mixer {
                 _ => None,
             };
 
+
             // Process effects for this channel
             let cmds = self
                 .effect_processor
@@ -57,7 +58,8 @@ impl super::Mixer {
 
             if let Some(vol) = cell.volume {
                 if let Some(state) = self.effect_processor.channel_state_mut(ch) {
-                    state.volume_override = Some((vol as f32 / 64.0).clamp(0.0, 1.0));
+                    let v = (vol as f32 / 64.0).clamp(0.0, 1.0);
+                    state.volume_override = Some(v);
                 }
             }
 
@@ -183,22 +185,10 @@ impl super::Mixer {
                                 .map(|inst| inst.volume)
                                 .unwrap_or(1.0);
                             let velocity = note.velocity as f32;
-                            // velocity_gain does NOT include sample.volume (DVS).
-                            // DVS is placed into volume_override below so that the
-                            // volume column can cleanly replace it (FT2/IT spec).
-                            let velocity_gain = (velocity / 127.0) * inst_vol;
-
-                            // If no volume column was set this row, initialise
-                            // volume_override from the sample's default volume (DVS).
-                            // This lets volume slides start from the correct base value
-                            // and keeps the note volume formula consistent:
-                            //   output ∝ velocity_gain × volume_override (= vol_col or DVS)
-                            if let Some(state) = self.effect_processor.channel_state_mut(ch) {
-                                if state.volume_override.is_none() {
-                                    state.volume_override =
-                                        Some(sample.volume.clamp(0.0, 1.0));
-                                }
-                            }
+                            // velocity_gain includes sample.volume (DVS) as a base property
+                            // of the note. volume_override (from volume column) acts as a
+                            // sticky channel modifier.
+                            let velocity_gain = (velocity / 127.0) * inst_vol * sample.volume;
 
                             // Apply instrument panning to instrument_pan_override.
                             // If the instrument has no default panning, clear it so the
@@ -350,7 +340,7 @@ impl super::Mixer {
                                 if inst.keyzones.is_empty() {
                                     Some(instrument_idx)
                                 } else {
-                                    inst.resolve_sample_index(midi_note, 100) // Default velocity
+                                    inst.resolve_sample_index(midi_note, 127) // Default velocity
                                 }
                             } else {
                                 Some(instrument_idx)
@@ -389,15 +379,11 @@ impl super::Mixer {
                                         .map(|inst| inst.volume)
                                         .unwrap_or(1.0);
                                     // Same DVS-replacement logic as the NoteOn path above.
-                                    let velocity_gain = (100.0 / 127.0) * inst_vol;
+                                    let velocity_gain = (127.0 / 127.0) * inst_vol * sample.volume;
 
                                     // Apply instrument panning to instrument_pan_override.
                                     if let Some(state) = self.effect_processor.channel_state_mut(ch)
                                     {
-                                        if state.volume_override.is_none() {
-                                            state.volume_override =
-                                                Some(sample.volume.clamp(0.0, 1.0));
-                                        }
                                         state.instrument_pan_override = self
                                             .instruments
                                             .get(instrument_idx)
