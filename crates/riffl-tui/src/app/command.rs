@@ -2,6 +2,61 @@ use crate::registry::{Command, CommandRegistry};
 use crate::ui::modal::Modal;
 use std::path::PathBuf;
 
+/// Parsed components of a `:goto` argument string.
+/// All fields are 1-indexed when `Some`.
+struct GotoTarget {
+    pattern: Option<usize>,
+    row: Option<usize>,
+    channel: Option<usize>,
+}
+
+/// Parse a `:goto` argument like `p2r16c3`, `p2:r8`, `r16`, `c3`, etc.
+/// Returns `None` if the string has unrecognised content.
+fn parse_goto(s: &str) -> Option<GotoTarget> {
+    let mut pattern = None;
+    let mut row = None;
+    let mut channel = None;
+
+    let mut chars = s.chars().peekable();
+
+    while chars.peek().is_some() {
+        // Skip optional separators (`:`, `,`, ` `)
+        while matches!(chars.peek(), Some(':') | Some(',') | Some(' ')) {
+            chars.next();
+        }
+
+        let prefix = match chars.next() {
+            Some(p @ ('p' | 'r' | 'c')) => p,
+            Some(_) => return None, // unexpected character
+            None => break,
+        };
+
+        let digits: String = std::iter::from_fn(|| chars.next_if(|c| c.is_ascii_digit())).collect();
+
+        if digits.is_empty() {
+            return None;
+        }
+
+        let n: usize = digits.parse().ok()?;
+        match prefix {
+            'p' => pattern = Some(n),
+            'r' => row = Some(n),
+            'c' => channel = Some(n),
+            _ => unreachable!(),
+        }
+    }
+
+    if pattern.is_none() && row.is_none() && channel.is_none() {
+        None
+    } else {
+        Some(GotoTarget {
+            pattern,
+            row,
+            channel,
+        })
+    }
+}
+
 impl super::App {
     /// Execute the current command-line input and exit command mode.
     pub fn execute_command(&mut self) {
@@ -1031,14 +1086,61 @@ impl super::App {
             }
 
             Some(Command::Goto) => {
-                if let Some(row) = args.parse::<usize>().ok().filter(|_| !args.is_empty()) {
+                if args.is_empty() {
+                    let cur_row = self.editor.cursor_row() + 1;
+                    let cur_ch = self.editor.cursor_channel() + 1;
+                    let cur_pat = self.transport.arrangement_position() + 1;
+                    self.open_modal(Modal::info(
+                        "Go to".to_string(),
+                        format!(
+                            "Current: p{} r{} c{}\nUsage: :goto [p<pat>][r<row>][c<ch>]\nExamples: :goto r16  :goto p2r8  :goto p1r16c3\n(bare number = row, all 1-indexed)",
+                            cur_pat, cur_row, cur_ch
+                        ),
+                    ));
+                } else if let Ok(row) = args.trim().parse::<usize>() {
+                    // Backward-compatible: bare number = row (1-indexed)
                     self.editor.go_to_row(row.saturating_sub(1));
                 } else {
-                    let current = self.editor.cursor_row() + 1;
-                    self.open_modal(Modal::info(
-                        "Go to Row".to_string(),
-                        format!("Current: row {}. Usage: :goto <row>", current),
-                    ));
+                    match parse_goto(args.trim()) {
+                        Some(target) => {
+                            // Switch pattern first (arrangement position, 1-indexed)
+                            if let Some(pat_1idx) = target.pattern {
+                                let new_pos = pat_1idx.saturating_sub(1);
+                                if new_pos < self.song.arrangement.len() {
+                                    let old_pos = self.transport.arrangement_position();
+                                    self.transport.jump_to_arrangement_position(new_pos);
+                                    self.switch_editor_pattern(old_pos, new_pos);
+                                } else {
+                                    self.open_modal(Modal::error(
+                                        "Go to".to_string(),
+                                        format!(
+                                            "Pattern {} out of range (1–{})",
+                                            pat_1idx,
+                                            self.song.arrangement.len()
+                                        ),
+                                    ));
+                                    return;
+                                }
+                            }
+                            // Then row (1-indexed)
+                            if let Some(row_1idx) = target.row {
+                                self.editor.go_to_row(row_1idx.saturating_sub(1));
+                            }
+                            // Then channel (1-indexed)
+                            if let Some(ch_1idx) = target.channel {
+                                self.editor.set_cursor_channel(ch_1idx.saturating_sub(1));
+                            }
+                        }
+                        None => {
+                            self.open_modal(Modal::error(
+                                "Go to".to_string(),
+                                format!(
+                                    "Cannot parse '{}'. Usage: :goto [p<pat>][r<row>][c<ch>]",
+                                    args.trim()
+                                ),
+                            ));
+                        }
+                    }
                 }
             }
 
