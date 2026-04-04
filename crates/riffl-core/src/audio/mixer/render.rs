@@ -171,8 +171,14 @@ impl super::Mixer {
                                         voice.velocity_gain =
                                             (voice.velocity_gain + 16.0 / 64.0).min(1.0)
                                     }
-                                    14 => voice.velocity_gain *= 3.0 / 2.0,
-                                    15 => voice.velocity_gain *= 2.0,
+                                    14 => {
+                                        voice.velocity_gain =
+                                            (voice.velocity_gain * 3.0 / 2.0).min(1.0)
+                                    }
+                                    15 => {
+                                        voice.velocity_gain =
+                                            (voice.velocity_gain * 2.0).min(1.0)
+                                    }
                                     _ => {}
                                 }
                             }

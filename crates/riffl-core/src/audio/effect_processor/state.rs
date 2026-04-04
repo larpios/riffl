@@ -601,7 +601,7 @@ impl ChannelEffectState {
             let current_vol = self.volume_override.unwrap_or(1.0);
             let delta_per_tick =
                 (self.volume_slide_up as f32 - self.volume_slide_down as f32) / 64.0;
-            self.volume_override = Some((current_vol + delta_per_tick).clamp(0.0, 2.0));
+            self.volume_override = Some((current_vol + delta_per_tick).clamp(0.0, 1.0));
         }
 
         if self.channel_volume_slide_up > 0 || self.channel_volume_slide_down > 0 {

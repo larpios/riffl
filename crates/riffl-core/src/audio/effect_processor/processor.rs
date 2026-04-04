@@ -293,12 +293,12 @@ impl TrackerEffectProcessor {
                             // Fine volume slide up (xF): applied once at row start, not per tick
                             let cur = state.volume_override.unwrap_or(1.0);
                             state.volume_override =
-                                Some((cur + effect.param_x() as f32 / 64.0).clamp(0.0, 2.0));
+                                Some((cur + effect.param_x() as f32 / 64.0).clamp(0.0, 1.0));
                         } else if effect.param_x() == 0x0F && effect.param_y() > 0 {
                             // Fine volume slide down (Fy): applied once at row start, not per tick
                             let cur = state.volume_override.unwrap_or(1.0);
                             state.volume_override =
-                                Some((cur - effect.param_y() as f32 / 64.0).clamp(0.0, 2.0));
+                                Some((cur - effect.param_y() as f32 / 64.0).clamp(0.0, 1.0));
                         } else {
                             state.volume_slide_up = effect.param_x();
                             state.volume_slide_down = effect.param_y();

@@ -259,14 +259,16 @@ fn test_mixer_sample_and_instrument_volume() {
     let mut mixer = Mixer::new(vec![sample], instruments, 4, 44100);
 
     let mut pattern = Pattern::new(16, 4);
-    // velocity 127 (1.0), inst volume 0.8, sample volume 0.5
-    // expected final gain = 1.0 * 0.8 * 0.5 = 0.4
+    // velocity 127 (1.0), inst volume 0.8, sample volume 0.5 (DVS)
+    // velocity_gain = vel × inst_vol = 1.0 × 0.8 = 0.8
+    // DVS (0.5) goes into volume_override, not velocity_gain.
+    // Final output = velocity_gain × volume_override = 0.8 × 0.5 = 0.4
     pattern.set_note(0, 0, Note::new(Pitch::A, 4, 127, 0));
 
     mixer.tick(0, &pattern);
 
     if let Some(voice) = &mixer.voices[0] {
-        assert!((voice.velocity_gain - 0.4).abs() < 0.001);
+        assert!((voice.velocity_gain - 0.8).abs() < 0.001);
     } else {
         panic!("Voice should be triggered");
     }

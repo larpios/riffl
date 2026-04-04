@@ -44,14 +44,6 @@ impl super::Mixer {
                 .get(ch)
                 .is_some_and(ChannelStrip::is_silent);
 
-            // In classical trackers, specifying an instrument number OR triggering a new
-            // note resets the channel volume, clearing any previous volume slides or overrides.
-            if cell.instrument.is_some() || matches!(&cell.note, Some(NoteEvent::On(_))) {
-                if let Some(state) = self.effect_processor.channel_state_mut(ch) {
-                    state.volume_override = None;
-                }
-            }
-
             // Determine the note frequency for effect processing
             let note_frequency = match &cell.note {
                 Some(NoteEvent::On(note)) => Some(note.frequency()),
@@ -65,7 +57,7 @@ impl super::Mixer {
 
             if let Some(vol) = cell.volume {
                 if let Some(state) = self.effect_processor.channel_state_mut(ch) {
-                    state.volume_override = Some((vol as f32 / 64.0).clamp(0.0, 2.0));
+                    state.volume_override = Some((vol as f32 / 64.0).clamp(0.0, 1.0));
                 }
             }
 
@@ -191,7 +183,22 @@ impl super::Mixer {
                                 .map(|inst| inst.volume)
                                 .unwrap_or(1.0);
                             let velocity = note.velocity as f32;
-                            let velocity_gain = (velocity / 127.0) * inst_vol * sample.volume;
+                            // velocity_gain does NOT include sample.volume (DVS).
+                            // DVS is placed into volume_override below so that the
+                            // volume column can cleanly replace it (FT2/IT spec).
+                            let velocity_gain = (velocity / 127.0) * inst_vol;
+
+                            // If no volume column was set this row, initialise
+                            // volume_override from the sample's default volume (DVS).
+                            // This lets volume slides start from the correct base value
+                            // and keeps the note volume formula consistent:
+                            //   output ∝ velocity_gain × volume_override (= vol_col or DVS)
+                            if let Some(state) = self.effect_processor.channel_state_mut(ch) {
+                                if state.volume_override.is_none() {
+                                    state.volume_override =
+                                        Some(sample.volume.clamp(0.0, 1.0));
+                                }
+                            }
 
                             // Apply instrument panning to instrument_pan_override.
                             // If the instrument has no default panning, clear it so the
@@ -381,11 +388,16 @@ impl super::Mixer {
                                         .get(instrument_idx)
                                         .map(|inst| inst.volume)
                                         .unwrap_or(1.0);
-                                    let velocity_gain = (100.0 / 127.0) * inst_vol * sample.volume;
+                                    // Same DVS-replacement logic as the NoteOn path above.
+                                    let velocity_gain = (100.0 / 127.0) * inst_vol;
 
                                     // Apply instrument panning to instrument_pan_override.
                                     if let Some(state) = self.effect_processor.channel_state_mut(ch)
                                     {
+                                        if state.volume_override.is_none() {
+                                            state.volume_override =
+                                                Some(sample.volume.clamp(0.0, 1.0));
+                                        }
                                         state.instrument_pan_override = self
                                             .instruments
                                             .get(instrument_idx)
