@@ -25,6 +25,7 @@ pub(super) fn handle(app: &mut App, action: &Action) -> bool {
         Action::TrackPanLeft => app.adjust_track_pan(-0.1),
         Action::TrackPanRight => app.adjust_track_pan(0.1),
         Action::NextTrack => app.editor.next_track(),
+        Action::PrevTrack => app.editor.prev_track(),
         _ => return false,
     }
     true

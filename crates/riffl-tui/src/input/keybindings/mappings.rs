@@ -67,6 +67,11 @@ pub(super) const KEY_MAPPINGS: &[KeyMapping] = &[
         mode: EditorMode::Normal,
     },
     KeyMapping {
+        key: "Shift+Tab",
+        action: Action::PrevTrack,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
         key: "i",
         action: Action::EnterInsertMode,
         mode: EditorMode::Normal,
@@ -74,6 +79,11 @@ pub(super) const KEY_MAPPINGS: &[KeyMapping] = &[
     KeyMapping {
         key: "v",
         action: Action::EnterVisualMode,
+        mode: EditorMode::Normal,
+    },
+    KeyMapping {
+        key: "V",
+        action: Action::EnterVisualLineMode,
         mode: EditorMode::Normal,
     },
     KeyMapping {

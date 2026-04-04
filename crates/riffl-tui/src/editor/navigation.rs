@@ -128,6 +128,18 @@ impl Editor {
         self.effect_digit_position = 0;
     }
 
+    /// Move cursor to the previous track (channel), wrapping around to the last.
+    pub fn prev_track(&mut self) {
+        let max_ch = self.pattern.num_channels();
+        self.cursor_channel = if self.cursor_channel == 0 {
+            max_ch.saturating_sub(1)
+        } else {
+            self.cursor_channel - 1
+        };
+        self.sub_column = SubColumn::Note;
+        self.effect_digit_position = 0;
+    }
+
     // --- Mode Transitions ---
 
     /// Enter Insert mode.

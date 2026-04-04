@@ -537,84 +537,102 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) {
         return;
     }
 
-    // Chord / prefix handling for Normal mode.
-    // Covers: dd (delete row), gg (top), m{x} (set mark), '{x} (goto mark),
-    //         "{x} (set register), q{x} / q (macro record), @{x} / @@ (macro replay).
-    if app.editor.mode() == EditorMode::Normal
-        && key.modifiers == crossterm::event::KeyModifiers::NONE
+    // Chord / prefix handling.
+    // 'gg' (go to top) works in Normal and Visual modes.
+    // All other chords (dd, m{x}, '{x}, "{x}, q{x}, @{x}) are Normal-mode only.
+    let in_visual = app.editor.mode().is_visual();
+    if matches!(
+        app.editor.mode(),
+        EditorMode::Normal | EditorMode::Visual | EditorMode::VisualLine
+    ) && key.modifiers == crossterm::event::KeyModifiers::NONE
     {
         if let crossterm::event::KeyCode::Char(c) = key.code {
             if let Some(pending) = app.pending_key.take() {
-                match (pending, c) {
-                    ('d', 'd') => {
-                        app.editor.delete_row();
-                        app.mark_dirty();
-                        return;
-                    }
-                    ('g', 'g') => {
-                        app.editor.go_to_row(0);
-                        return;
-                    }
-                    // m{x} — set mark
-                    ('m', x) if x.is_ascii_alphabetic() => {
-                        app.editor.set_mark(x);
-                        return;
-                    }
-                    // '{x} — goto mark
-                    ('\'', x) if x.is_ascii_alphabetic() => {
-                        app.editor.goto_mark(x);
-                        return;
-                    }
-                    // "{x} — set active register for next yank/paste/cut
-                    ('"', x) if x.is_ascii_alphanumeric() => {
-                        app.editor.set_active_register(x);
-                        return;
-                    }
-                    // q{x} — start recording macro into register x
-                    ('q', x) if x.is_ascii_alphabetic() => {
-                        if !app.replaying_macro {
-                            app.macros.entry(x).or_default().clear();
-                            app.macro_recording = Some(x);
+                // 'gg' works in all three modes
+                if pending == 'g' && c == 'g' {
+                    app.editor.go_to_row(0);
+                    return;
+                }
+
+                // The remaining chords are Normal-mode only
+                if !in_visual {
+                    match (pending, c) {
+                        ('d', 'd') => {
+                            app.editor.delete_row();
+                            app.mark_dirty();
+                            return;
                         }
-                        return;
-                    }
-                    // @@ — replay last used macro
-                    ('@', '@') => {
-                        if let Some(slot) = app.last_macro {
-                            replay_macro(app, slot, key);
+                        // m{x} — set mark
+                        ('m', x) if x.is_ascii_alphabetic() => {
+                            app.editor.set_mark(x);
+                            return;
                         }
-                        return;
-                    }
-                    // @{x} — replay macro in register x
-                    ('@', x) if x.is_ascii_alphabetic() => {
-                        replay_macro(app, x, key);
-                        return;
-                    }
-                    _ => {
-                        // Unknown chord — re-dispatch the second key normally
-                        // by falling through (pending already taken)
+                        // '{x} — goto mark
+                        ('\'', x) if x.is_ascii_alphabetic() => {
+                            app.editor.goto_mark(x);
+                            return;
+                        }
+                        // "{x} — set active register for next yank/paste/cut
+                        ('"', x) if x.is_ascii_alphanumeric() => {
+                            app.editor.set_active_register(x);
+                            return;
+                        }
+                        // q{x} — start recording macro into register x
+                        ('q', x) if x.is_ascii_alphabetic() => {
+                            if !app.replaying_macro {
+                                app.macros.entry(x).or_default().clear();
+                                app.macro_recording = Some(x);
+                            }
+                            return;
+                        }
+                        // @@ — replay last used macro
+                        ('@', '@') => {
+                            if let Some(slot) = app.last_macro {
+                                replay_macro(app, slot, key);
+                            }
+                            return;
+                        }
+                        // @{x} — replay macro in register x
+                        ('@', x) if x.is_ascii_alphabetic() => {
+                            replay_macro(app, x, key);
+                            return;
+                        }
+                        _ => {
+                            // Unknown chord — re-dispatch the second key normally
+                            // by falling through (pending already taken)
+                        }
                     }
                 }
+                // Unknown chord in visual mode or unmatched normal-mode chord:
+                // fall through and re-dispatch the second key.
             }
 
-            // Stop macro recording: q while recording (no second char needed)
-            if c == 'q' && app.macro_recording.is_some() {
+            // Stop macro recording: q while recording (Normal mode only, no second char)
+            if !in_visual && c == 'q' && app.macro_recording.is_some() {
                 app.macro_recording = None;
                 return;
             }
 
-            // Start pending chords
-            match c {
-                'd' | 'g' | 'm' | '\'' | '"' | '@' => {
-                    app.pending_key = Some(c);
-                    return;
+            // Set pending chord starters.
+            // 'g' starts a pending chord in all modes (for 'gg').
+            // Other chord starters are Normal-mode only.
+            if c == 'g' {
+                app.pending_key = Some('g');
+                return;
+            }
+            if !in_visual {
+                match c {
+                    'd' | 'm' | '\'' | '"' | '@' => {
+                        app.pending_key = Some(c);
+                        return;
+                    }
+                    // q: if recording, stop; otherwise start pending for register char
+                    'q' => {
+                        app.pending_key = Some('q');
+                        return;
+                    }
+                    _ => {}
                 }
-                // q: if recording, stop; otherwise start pending for register char
-                'q' => {
-                    app.pending_key = Some('q');
-                    return;
-                }
-                _ => {}
             }
         } else {
             app.pending_key = None;

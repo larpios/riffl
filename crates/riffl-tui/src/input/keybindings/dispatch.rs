@@ -126,6 +126,7 @@ fn map_normal_mode(key: KeyEvent) -> Action {
 
         // Track navigation
         KeyCode::Tab => Action::NextTrack,
+        KeyCode::BackTab => Action::PrevTrack,
 
         // Mode transitions
         KeyCode::Char('i') => Action::EnterInsertMode,
@@ -339,6 +340,8 @@ fn map_visual_mode(key: KeyEvent) -> Action {
             KeyCode::Down => Action::TransposeDown,
             // ':' (Shift+';') — command mode, same as Normal mode
             KeyCode::Char(':') => Action::EnterCommandMode,
+            // G also works with SHIFT modifier in terminals that report it
+            KeyCode::Char('G') => Action::GoToBottom,
             _ => Action::None,
         };
     }
@@ -354,13 +357,25 @@ fn map_visual_mode(key: KeyEvent) -> Action {
         // Command mode
         KeyCode::Char(':') => Action::EnterCommandMode,
 
-        // Navigation in Visual mode
+        // Navigation in Visual mode — all motions that exist in Normal mode
+        // also work here (they extend the selection by moving the cursor).
         KeyCode::Char('h') | KeyCode::Left => Action::MoveLeft,
         KeyCode::Char('j') | KeyCode::Down => Action::MoveDown,
         KeyCode::Char('k') | KeyCode::Up => Action::MoveUp,
         KeyCode::Char('l') | KeyCode::Right => Action::MoveRight,
         KeyCode::PageUp => Action::PageUp,
         KeyCode::PageDown => Action::PageDown,
+        // Go to boundaries
+        KeyCode::Char('G') => Action::GoToBottom,
+        KeyCode::Char('0') => Action::GoToStart,
+        KeyCode::Home => Action::GoToTop,
+        KeyCode::End => Action::GoToBottom,
+        // Pattern jumps
+        KeyCode::Char('[') => Action::JumpPrevPattern,
+        KeyCode::Char(']') => Action::JumpNextPattern,
+        // Track navigation
+        KeyCode::Tab => Action::NextTrack,
+        KeyCode::BackTab => Action::PrevTrack,
 
         // Clipboard operations
         KeyCode::Char('y') => Action::Copy,

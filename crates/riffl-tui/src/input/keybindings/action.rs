@@ -121,6 +121,7 @@ pub enum Action {
     TrackPanLeft,
     TrackPanRight,
     NextTrack,
+    PrevTrack,
 
     // View switching
     SwitchView(AppView),
@@ -299,6 +300,7 @@ impl ActionMetadata for Action {
             Action::TrackPanLeft => "Track Pan Left",
             Action::TrackPanRight => "Track Pan Right",
             Action::NextTrack => "Next Track",
+            Action::PrevTrack => "Prev Track",
             Action::SwitchView(_) => "Switch View",
             Action::SaveProject => "Save Project",
             Action::LoadProject => "Load Project",
@@ -447,6 +449,7 @@ impl ActionMetadata for Action {
             Action::TrackPanLeft => "Pan current track left by 10%",
             Action::TrackPanRight => "Pan current track right by 10%",
             Action::NextTrack => "Jump to next track",
+            Action::PrevTrack => "Jump to previous track",
             Action::SwitchView(_) => "Switch to another application view",
             Action::SaveProject => "Save current project",
             Action::LoadProject => "Load project from file",
@@ -530,7 +533,8 @@ impl ActionMetadata for Action {
             | Action::GoToStart
             | Action::GoToEnd
             | Action::ResetHorizontalView
-            | Action::NextTrack => ActionCategory::Navigation,
+            | Action::NextTrack
+            | Action::PrevTrack => ActionCategory::Navigation,
 
             Action::EnterInsertMode
             | Action::EnterNormalMode
