@@ -27,7 +27,7 @@ pub(super) fn handle(app: &mut App, action: &Action) -> bool {
                 {
                     use riffl_core::pattern::note::{Note, NoteEvent};
                     let inst = app.editor.current_instrument();
-                    app.draw_note = Some(NoteEvent::On(Note::new(pitch, octave, 100, inst)));
+                    app.draw_note = Some(NoteEvent::On(Note::new(pitch, octave, 127, inst)));
                 }
                 app.mark_dirty();
                 if app.current_view == AppView::PatternEditor {
@@ -97,7 +97,7 @@ pub(super) fn handle(app: &mut App, action: &Action) -> bool {
         Action::FillSelection => {
             use riffl_core::pattern::note::{Note, NoteEvent, Pitch};
             let note = app.draw_note.unwrap_or_else(|| {
-                NoteEvent::On(Note::new(Pitch::C, 4, 100, app.editor.current_instrument()))
+                NoteEvent::On(Note::new(Pitch::C, 4, 127, app.editor.current_instrument()))
             });
             app.editor.fill_selection_with_note(note);
             app.mark_dirty();
