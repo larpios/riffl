@@ -50,7 +50,6 @@ impl super::Mixer {
                 _ => None,
             };
 
-
             // Process effects for this channel
             let cmds = self
                 .effect_processor
@@ -379,7 +378,7 @@ impl super::Mixer {
                                         .map(|inst| inst.volume)
                                         .unwrap_or(1.0);
                                     // Same DVS-replacement logic as the NoteOn path above.
-                                    let velocity_gain = (127.0 / 127.0) * inst_vol * sample.volume;
+                                    let velocity_gain = inst_vol * sample.volume;
 
                                     // Apply instrument panning to instrument_pan_override.
                                     if let Some(state) = self.effect_processor.channel_state_mut(ch)

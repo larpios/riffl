@@ -222,10 +222,10 @@ impl Editor {
                 // Second digit is units place
                 (current / 10) * 10 + digit
             };
-            
+
             // Cap at 64 for tracker standard volume
             new_val = new_val.min(64);
-            
+
             cell.volume = Some(new_val);
             self.volume_digit_pos = (self.volume_digit_pos + 1) % 2;
             if self.volume_digit_pos == 0 {

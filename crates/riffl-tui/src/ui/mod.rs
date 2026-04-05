@@ -55,7 +55,7 @@ use overlays::{render_command_completions, render_file_browser, render_which_key
 use pattern_renderer::render_pattern_with_area;
 
 /// Render the application UI
-pub fn render(frame: &mut Frame, app: &App) {
+pub fn render(frame: &mut Frame, app: &mut App) {
     use ratatui::layout::{Constraint, Direction, Layout};
 
     let full_area = frame.area();
@@ -150,11 +150,12 @@ pub fn render(frame: &mut Frame, app: &App) {
                 sample_browser::render_sample_browser(
                     frame,
                     content_area,
-                    &app.sample_browser,
+                    &mut app.sample_browser,
                     &app.theme,
                     preview_pos,
                     total_frames,
                     sample_rate,
+                    app.image_picker.as_mut(),
                 );
             }
         }
@@ -321,7 +322,12 @@ fn render_instrument_view_empty(frame: &mut Frame, area: ratatui::layout::Rect, 
 /// Render the two-column instrument view:
 ///   left  (~38%): instrument list
 ///   right (~62%): tabbed instrument editor
-fn render_instrument_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &App, idx: usize) {
+fn render_instrument_view(
+    frame: &mut Frame,
+    area: ratatui::layout::Rect,
+    app: &mut App,
+    idx: usize,
+) {
     use ratatui::layout::{Constraint, Direction, Layout};
 
     let cols = Layout::default()
@@ -371,8 +377,9 @@ fn render_instrument_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &
                 right_chunks[1],
                 &app.song.instruments[idx],
                 sample.as_deref(),
-                &app.waveform_editor,
+                &mut app.waveform_editor,
                 &app.theme,
+                app.image_picker.as_mut(),
             );
         }
         InstrumentTab::Envelopes => {

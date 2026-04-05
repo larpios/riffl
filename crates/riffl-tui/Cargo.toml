@@ -29,6 +29,8 @@ anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
 sysinfo = "0.32"
+ratatui-image = { version = "10", default-features = false, features = ["crossterm"] }
+image = { version = "0.25", default-features = false }
 
 [dev-dependencies]
 hound = "3.5"

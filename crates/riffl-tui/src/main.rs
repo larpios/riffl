@@ -22,6 +22,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui_image::picker::Picker;
 
 /// Tick rate for the event loop (16ms ≈ 60 FPS for smooth BPM timing)
 const TICK_RATE: Duration = Duration::from_millis(16);
@@ -78,8 +79,24 @@ fn main() -> Result<()> {
     let default_modules = crate::config::Config::default_modules_dir();
     let _ = std::fs::create_dir_all(&default_modules);
 
+    // Detect terminal graphics protocol for pixel-based waveform rendering.
+    // Must run after init_terminal() (raw mode + alternate screen required for
+    // Picker::from_query_stdio to send/receive capability escape sequences).
+    let mut image_picker_inner =
+        Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
+
+    // ratatui-image v10 blacklists WezTerm from Kitty/Sixel and expects iTerm2,
+    // but if font-size detection fails it falls back to Halfblocks and discards
+    // the iTerm2 detection result. Force iTerm2 explicitly for WezTerm.
+    if std::env::var("WEZTERM_EXECUTABLE").is_ok_and(|s| !s.is_empty()) {
+        image_picker_inner.set_protocol_type(ratatui_image::picker::ProtocolType::Iterm2);
+    }
+
+    let image_picker: Option<Picker> = Some(image_picker_inner);
+
     // Create and initialize app
     let mut app = App::new();
+    app.image_picker = image_picker;
     app.set_sample_dirs(sample_dirs);
 
     // Apply config: set theme from config file (or default "mocha")

@@ -843,7 +843,6 @@ fn register_music_functions(engine: &mut Engine) {
     });
 }
 
-
 /// Convert a Note to a Rhai Dynamic map.
 fn note_to_dynamic(note: Note) -> Dynamic {
     let mut map = rhai::Map::new();

@@ -10,7 +10,9 @@ use ratatui::{
     Frame,
 };
 
-use riffl_core::audio::sample::Sample;
+use image::{DynamicImage, ImageBuffer, Rgba, RgbaImage};
+use ratatui_image::protocol::StatefulProtocol;
+use riffl_core::audio::sample::{LoopMode, Sample};
 use riffl_core::song::Instrument;
 
 use crate::ui::theme::Theme;
@@ -28,7 +30,6 @@ pub enum LoopMarkerDrag {
     End,
 }
 
-#[derive(Debug, Clone, PartialEq)]
 pub struct WaveformEditorState {
     pub focused: bool,
     pub edit_mode: WaveformEditMode,
@@ -36,6 +37,26 @@ pub struct WaveformEditorState {
     pub pencil_value: f32,
     pub dragging_loop_marker: LoopMarkerDrag,
     pub loop_mode_toggle: bool,
+    /// Cached pixel-image render state. `None` when no picker is available or
+    /// no sample is loaded yet.
+    pub image_state: Option<StatefulProtocol>,
+    /// When `true` the pixel image must be rebuilt before the next render.
+    pub image_dirty: bool,
+    /// Pixel dimensions used when `image_state` was last built; used to detect
+    /// terminal resize and force a rebuild.
+    pub image_last_size: (u32, u32),
+}
+
+impl std::fmt::Debug for WaveformEditorState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WaveformEditorState")
+            .field("focused", &self.focused)
+            .field("edit_mode", &self.edit_mode)
+            .field("cursor_sample", &self.cursor_sample)
+            .field("pencil_value", &self.pencil_value)
+            .field("image_dirty", &self.image_dirty)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Default for WaveformEditorState {
@@ -47,6 +68,9 @@ impl Default for WaveformEditorState {
             pencil_value: 0.0,
             dragging_loop_marker: LoopMarkerDrag::None,
             loop_mode_toggle: false,
+            image_state: None,
+            image_dirty: true,
+            image_last_size: (0, 0),
         }
     }
 }
@@ -131,6 +155,108 @@ impl WaveformEditorState {
     pub fn toggle_loop_mode(&mut self) {
         self.loop_mode_toggle = !self.loop_mode_toggle;
     }
+}
+
+/// Convert a ratatui Color to an RGBA pixel value with the given alpha.
+pub(crate) fn color_to_rgba(color: ratatui::style::Color, alpha: u8) -> Rgba<u8> {
+    use ratatui::style::Color::*;
+    match color {
+        Rgb(r, g, b) => Rgba([r, g, b, alpha]),
+        Cyan => Rgba([0, 255, 255, alpha]),
+        LightCyan => Rgba([150, 255, 255, alpha]),
+        Blue => Rgba([0, 0, 255, alpha]),
+        LightBlue => Rgba([100, 149, 237, alpha]),
+        Green => Rgba([0, 200, 0, alpha]),
+        LightGreen => Rgba([100, 220, 100, alpha]),
+        Yellow => Rgba([255, 220, 0, alpha]),
+        LightYellow => Rgba([255, 240, 100, alpha]),
+        Red => Rgba([220, 0, 0, alpha]),
+        LightRed => Rgba([255, 100, 100, alpha]),
+        Magenta => Rgba([200, 0, 200, alpha]),
+        LightMagenta => Rgba([255, 100, 255, alpha]),
+        White => Rgba([255, 255, 255, alpha]),
+        Gray => Rgba([170, 170, 170, alpha]),
+        DarkGray => Rgba([85, 85, 85, alpha]),
+        Black => Rgba([0, 0, 0, alpha]),
+        Reset => Rgba([20, 20, 20, alpha]),
+        _ => Rgba([200, 200, 200, alpha]),
+    }
+}
+
+/// Build a pixel-accurate waveform image from sample data.
+///
+/// `px_w` × `px_h` are the pixel dimensions of the target area.
+/// Returns a `DynamicImage` to pass to `picker.new_resize_protocol()`.
+pub(crate) fn build_waveform_image(
+    sample: &Sample,
+    px_w: u32,
+    px_h: u32,
+    theme: &Theme,
+) -> DynamicImage {
+    let px_w = px_w.max(1);
+    let px_h = px_h.max(1);
+    let mut img: RgbaImage = ImageBuffer::new(px_w, px_h);
+
+    // Transparent background — composites against terminal bg for Kitty/Sixel;
+    // halfblock blends against the cell background color.
+    for p in img.pixels_mut() {
+        *p = Rgba([0, 0, 0, 0]);
+    }
+
+    let center_y = px_h / 2;
+    let dim_color = color_to_rgba(theme.text_dimmed, 120);
+
+    // Center line (drawn first, waveform bars overdraw it if tall enough).
+    for x in 0..px_w {
+        img.put_pixel(x, center_y, dim_color);
+    }
+
+    let frame_count = sample.frame_count();
+    if frame_count == 0 {
+        return DynamicImage::ImageRgba8(img);
+    }
+
+    let wf_color = color_to_rgba(theme.primary, 220);
+    let channels = sample.channels() as usize;
+
+    for px_x in 0..px_w {
+        let start = (px_x as usize * frame_count) / px_w as usize;
+        let end = (((px_x as usize + 1) * frame_count) / px_w as usize)
+            .max(start + 1)
+            .min(frame_count);
+
+        let mut peak_pos: f32 = 0.0;
+        let mut peak_neg: f32 = 0.0;
+        for frame_idx in start..end {
+            let idx = frame_idx * channels;
+            if idx < sample.data().len() {
+                let v = sample.data()[idx];
+                if v > peak_pos {
+                    peak_pos = v;
+                }
+                if -v > peak_neg {
+                    peak_neg = -v;
+                }
+            }
+        }
+
+        if peak_pos > 0.001 {
+            let bar = (peak_pos * center_y as f32) as u32;
+            let top_y = center_y.saturating_sub(bar);
+            for py in top_y..=center_y {
+                img.put_pixel(px_x, py, wf_color);
+            }
+        }
+        if peak_neg > 0.001 {
+            let bar = (peak_neg * (px_h - center_y - 1) as f32) as u32;
+            let bot_y = (center_y + bar).min(px_h - 1);
+            for py in center_y..=bot_y {
+                img.put_pixel(px_x, py, wf_color);
+            }
+        }
+    }
+
+    DynamicImage::ImageRgba8(img)
 }
 
 const MAX_WAVEFORM_DISPLAY_HEIGHT: usize = 8;
@@ -332,14 +458,88 @@ fn format_chip_preview(bytes: &[u8], count: usize) -> String {
         .join(" ")
 }
 
-#[allow(unused_variables)]
+/// Render cursor and loop markers as a ratatui text overlay on top of the
+/// Write cursor and loop-marker characters directly into specific buffer cells,
+/// without touching any other cells so the pixel image underneath shows through.
+fn render_waveform_overlays(
+    frame: &mut Frame,
+    area: ratatui::layout::Rect,
+    sample: &Sample,
+    state: &WaveformEditorState,
+    theme: &Theme,
+) {
+    let width = area.width as usize;
+    let height = area.height as usize;
+    let frame_count = sample.frame_count();
+    if width == 0 || height == 0 || frame_count == 0 {
+        return;
+    }
+
+    let center_row = (height / 2).min(height.saturating_sub(1)) as u16;
+    let cursor_col = (state.cursor_sample * width / frame_count.max(1)) as u16;
+
+    // Collect (col, char, style) triples — lower index = lower priority.
+    let mut marks: Vec<(u16, &str, Style)> = Vec::new();
+
+    if (cursor_col as usize) < width {
+        let (ch, s) = match state.edit_mode {
+            WaveformEditMode::Pencil => (
+                "◆",
+                Style::default()
+                    .fg(theme.warning_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
+            WaveformEditMode::Navigate => ("│", Style::default().fg(theme.cursor_fg)),
+        };
+        marks.push((cursor_col, ch, s));
+    }
+
+    if sample.loop_mode != LoopMode::NoLoop {
+        let ls = (sample.loop_start * width / frame_count.max(1)) as u16;
+        let le = (sample.loop_end * width / frame_count.max(1)) as u16;
+        if (ls as usize) < width {
+            marks.push((
+                ls,
+                "◁",
+                Style::default()
+                    .fg(theme.status_success)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
+        if (le as usize) < width {
+            marks.push((
+                le,
+                "▷",
+                Style::default()
+                    .fg(theme.status_error)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
+    }
+
+    // Write only the marked cells — leaves all image-widget cells untouched.
+    let buf = frame.buffer_mut();
+    let row_y = area.top() + center_row;
+    for (col, ch, style) in marks {
+        let x = area.left() + col;
+        if x < area.right() {
+            if let Some(cell) = buf.cell_mut((x, row_y)) {
+                cell.set_symbol(ch);
+                cell.set_style(style);
+                cell.set_skip(false);
+            }
+        }
+    }
+}
+
 pub fn render_waveform_editor(
     frame: &mut Frame,
     area: ratatui::layout::Rect,
     instrument: &Instrument,
     sample: Option<&Sample>,
-    state: &WaveformEditorState,
+    state: &mut WaveformEditorState,
     theme: &Theme,
+    picker: Option<&mut ratatui_image::picker::Picker>,
 ) {
     let border_style = if state.focused {
         theme.focused_border_style()
@@ -347,12 +547,22 @@ pub fn render_waveform_editor(
         theme.border_style()
     };
 
+    let proto_tag = match &picker {
+        Some(p) => match p.protocol_type() {
+            ratatui_image::picker::ProtocolType::Kitty => "[kitty]",
+            ratatui_image::picker::ProtocolType::Sixel => "[sixel]",
+            ratatui_image::picker::ProtocolType::Iterm2 => "[iterm2]",
+            ratatui_image::picker::ProtocolType::Halfblocks => "[half]",
+        },
+        None => "[chr]",
+    };
     let title = format!(
-        " Waveform Editor {} ",
+        " Waveform Editor {} {} ",
         match state.edit_mode {
             WaveformEditMode::Navigate => "[NAV]",
             WaveformEditMode::Pencil => "[PENCIL]",
-        }
+        },
+        proto_tag,
     );
 
     let block = Block::default()
@@ -371,6 +581,7 @@ pub fn render_waveform_editor(
         return;
     }
 
+    // ── Header (sample metadata + chip info) ──────────────────────────────────
     let sample_info = if let Some(s) = sample {
         if s.is_empty() {
             "No sample loaded".to_string()
@@ -379,7 +590,7 @@ pub fn render_waveform_editor(
             let sr = s.sample_rate();
             let frames = s.frame_count();
             let dur = s.duration();
-            let loop_info = if s.loop_mode != riffl_core::audio::sample::LoopMode::NoLoop {
+            let loop_info = if s.loop_mode != LoopMode::NoLoop {
                 format!(
                     " · ◁{:05} ▷{:05}",
                     s.loop_start.min(frames.saturating_sub(1)),
@@ -408,83 +619,164 @@ pub fn render_waveform_editor(
         "Enter to edit"
     };
 
-    let mut lines: Vec<Line> = Vec::new();
+    // Number of header rows (info + optional chip line + blank separator).
+    let has_chip = instrument.chip_render.is_some();
+    let header_rows: u16 = if has_chip { 3 } else { 2 };
 
-    lines.push(Line::from(vec![
-        Span::raw("  "),
-        Span::styled(sample_info, Style::default().fg(theme.text_secondary)),
-    ]));
+    // Number of footer rows (blank + help, plus pencil status when active).
+    let pencil_active = state.focused && state.edit_mode == WaveformEditMode::Pencil;
+    let footer_rows: u16 = if pencil_active { 4 } else { 2 };
 
-    if let Some(chip) = instrument.chip_render.as_ref() {
-        lines.push(Line::from(vec![
+    // Waveform area sits between header and footer.
+    let waveform_rows = inner
+        .height
+        .saturating_sub(header_rows)
+        .saturating_sub(footer_rows);
+
+    let header_rect = ratatui::layout::Rect {
+        x: inner.x,
+        y: inner.y,
+        width: inner.width,
+        height: header_rows,
+    };
+    let waveform_rect = ratatui::layout::Rect {
+        x: inner.x,
+        y: inner.y + header_rows,
+        width: inner.width,
+        height: waveform_rows,
+    };
+    let footer_rect = ratatui::layout::Rect {
+        x: inner.x,
+        y: inner.y + header_rows + waveform_rows,
+        width: inner.width,
+        height: footer_rows,
+    };
+
+    // ── Render header ─────────────────────────────────────────────────────────
+    {
+        let mut header_lines: Vec<Line> = Vec::new();
+        header_lines.push(Line::from(vec![
             Span::raw("  "),
-            Span::styled(
-                format!(
-                    "Chip WT32 [{}] e={:.03} · DPCM{} [{}] e={:.03}",
-                    format_chip_preview(&chip.wavetable_2a03, 8),
-                    chip.wavetable_error,
-                    chip.dpcm.len(),
-                    format_chip_preview(&chip.dpcm, 6),
-                    chip.dpcm_error
-                ),
-                Style::default().fg(theme.text_dimmed),
-            ),
+            Span::styled(sample_info, Style::default().fg(theme.text_secondary)),
         ]));
+        if let Some(chip) = instrument.chip_render.as_ref() {
+            header_lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(
+                    format!(
+                        "Chip WT32 [{}] e={:.03} · DPCM{} [{}] e={:.03}",
+                        format_chip_preview(&chip.wavetable_2a03, 8),
+                        chip.wavetable_error,
+                        chip.dpcm.len(),
+                        format_chip_preview(&chip.dpcm, 6),
+                        chip.dpcm_error
+                    ),
+                    Style::default().fg(theme.text_dimmed),
+                ),
+            ]));
+        }
+        header_lines.push(Line::from("")); // blank separator
+        frame.render_widget(
+            Paragraph::new(header_lines).alignment(Alignment::Left),
+            header_rect,
+        );
     }
 
-    lines.push(Line::from(""));
-
+    // ── Render waveform ───────────────────────────────────────────────────────
     if let Some(s) = sample {
-        let graphic = draw_waveform_graphic(
-            s,
-            width,
-            height.saturating_sub(4),
-            theme,
-            Some(state.cursor_sample),
-            state.edit_mode,
-        );
-        for line in graphic {
-            let mut spans = vec![Span::raw("  ")];
-            spans.extend(line.spans);
-            lines.push(Line::from(spans));
-        }
+        if waveform_rows >= 2 {
+            // Try pixel rendering when a picker is available.
+            if let Some(picker) = picker {
+                let font_size = picker.font_size();
+                let px_w = waveform_rect.width as u32 * font_size.0 as u32;
+                let px_h = waveform_rect.height as u32 * font_size.1 as u32;
+                let cur_size = (px_w, px_h);
 
-        if state.focused && state.edit_mode == WaveformEditMode::Pencil {
-            let current_value = if state.cursor_sample < s.frame_count() {
-                s.data()[state.cursor_sample * s.channels() as usize]
+                if state.image_dirty || state.image_last_size != cur_size {
+                    let img = build_waveform_image(s, px_w, px_h, theme);
+                    state.image_state = Some(picker.new_resize_protocol(img));
+                    state.image_dirty = false;
+                    state.image_last_size = cur_size;
+                }
+
+                if let Some(img_state) = state.image_state.as_mut() {
+                    frame.render_stateful_widget(
+                        ratatui_image::StatefulImage::default(),
+                        waveform_rect,
+                        img_state,
+                    );
+                    render_waveform_overlays(frame, waveform_rect, s, state, theme);
+                }
             } else {
-                0.0
-            };
-            let pencil_val = state.pencil_value;
-            lines.push(Line::from(""));
-            lines.push(Line::from(vec![Span::styled(
-                format!(
-                    "  Cursor: {:4}  Pencil: {}  ",
-                    state.cursor_sample,
-                    format_sample_value(pencil_val)
-                ),
-                Style::default().fg(theme.text),
-            )]));
-            lines.push(Line::from(vec![Span::styled(
-                format!("  Current: {}  ", format_sample_value(current_value)),
-                Style::default().fg(theme.text_dimmed),
-            )]));
+                // Character fallback.
+                let graphic = draw_waveform_graphic(
+                    s,
+                    width,
+                    waveform_rows as usize,
+                    theme,
+                    Some(state.cursor_sample),
+                    state.edit_mode,
+                );
+                let char_lines: Vec<Line> = graphic
+                    .into_iter()
+                    .map(|line| {
+                        let mut spans = vec![Span::raw("  ")];
+                        spans.extend(line.spans);
+                        Line::from(spans)
+                    })
+                    .collect();
+                frame.render_widget(
+                    Paragraph::new(char_lines).alignment(Alignment::Left),
+                    waveform_rect,
+                );
+            }
         }
     } else {
-        lines.push(Line::from(vec![Span::styled(
-            "  No sample to edit. Load a sample first.",
-            Style::default().fg(theme.text_dimmed),
-        )]));
+        frame.render_widget(
+            Paragraph::new(vec![Line::from(vec![Span::styled(
+                "  No sample to edit. Load a sample first.",
+                Style::default().fg(theme.text_dimmed),
+            )])])
+            .alignment(Alignment::Left),
+            waveform_rect,
+        );
     }
 
-    lines.push(Line::from(""));
-    lines.push(Line::from(vec![Span::styled(
-        format!("  {}", help_text),
-        Style::default().fg(theme.text_dimmed),
-    )]));
-
-    let content = Paragraph::new(lines).alignment(Alignment::Left);
-    frame.render_widget(content, inner);
+    // ── Render footer ─────────────────────────────────────────────────────────
+    {
+        let mut footer_lines: Vec<Line> = Vec::new();
+        footer_lines.push(Line::from("")); // blank separator
+        if pencil_active {
+            if let Some(s) = sample {
+                let current_value = if state.cursor_sample < s.frame_count() {
+                    s.data()[state.cursor_sample * s.channels() as usize]
+                } else {
+                    0.0
+                };
+                let pencil_val = state.pencil_value;
+                footer_lines.push(Line::from(vec![Span::styled(
+                    format!(
+                        "  Cursor: {:4}  Pencil: {}  ",
+                        state.cursor_sample,
+                        format_sample_value(pencil_val)
+                    ),
+                    Style::default().fg(theme.text),
+                )]));
+                footer_lines.push(Line::from(vec![Span::styled(
+                    format!("  Current: {}  ", format_sample_value(current_value)),
+                    Style::default().fg(theme.text_dimmed),
+                )]));
+            }
+        }
+        footer_lines.push(Line::from(vec![Span::styled(
+            format!("  {}", help_text),
+            Style::default().fg(theme.text_dimmed),
+        )]));
+        frame.render_widget(
+            Paragraph::new(footer_lines).alignment(Alignment::Left),
+            footer_rect,
+        );
+    }
 }
 
 #[cfg(test)]
@@ -565,14 +857,14 @@ mod tests {
     #[test]
     fn test_render_no_panic() {
         let inst = Instrument::new("TestInst");
-        let state = WaveformEditorState::default();
+        let mut state = WaveformEditorState::default();
         let theme = Theme::default();
 
         let backend = ratatui::backend::TestBackend::new(80, 20);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         terminal
             .draw(|frame| {
-                render_waveform_editor(frame, frame.area(), &inst, None, &state, &theme);
+                render_waveform_editor(frame, frame.area(), &inst, None, &mut state, &theme, None);
             })
             .unwrap();
     }
@@ -581,14 +873,22 @@ mod tests {
     fn test_render_with_sample_no_panic() {
         let inst = Instrument::new("TestInst");
         let sample = make_sample();
-        let state = WaveformEditorState::default();
+        let mut state = WaveformEditorState::default();
         let theme = Theme::default();
 
         let backend = ratatui::backend::TestBackend::new(80, 20);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         terminal
             .draw(|frame| {
-                render_waveform_editor(frame, frame.area(), &inst, Some(&sample), &state, &theme);
+                render_waveform_editor(
+                    frame,
+                    frame.area(),
+                    &inst,
+                    Some(&sample),
+                    &mut state,
+                    &theme,
+                    None,
+                );
             })
             .unwrap();
     }
@@ -607,7 +907,15 @@ mod tests {
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         terminal
             .draw(|frame| {
-                render_waveform_editor(frame, frame.area(), &inst, Some(&sample), &state, &theme);
+                render_waveform_editor(
+                    frame,
+                    frame.area(),
+                    &inst,
+                    Some(&sample),
+                    &mut state,
+                    &theme,
+                    None,
+                );
             })
             .unwrap();
     }

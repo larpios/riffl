@@ -2,11 +2,7 @@ use crate::app::{App, AppView};
 use crate::editor::EditorMode;
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 
-pub fn handle_mouse_event(
-    app: &mut App,
-    mouse: MouseEvent,
-    full_area: ratatui::layout::Rect,
-) {
+pub fn handle_mouse_event(app: &mut App, mouse: MouseEvent, full_area: ratatui::layout::Rect) {
     if app.has_modal() || app.has_export_dialog() || app.has_file_browser() {
         return;
     }

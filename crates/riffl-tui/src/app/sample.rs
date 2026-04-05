@@ -50,6 +50,7 @@ impl super::App {
         self.song.instruments.push(instrument);
         self.sync_mixer_instruments();
         self.mark_dirty();
+        self.waveform_editor.image_dirty = true;
         Ok(idx)
     }
 
@@ -83,6 +84,7 @@ impl super::App {
         self.song.instruments.push(instrument);
         self.sync_mixer_instruments();
         self.mark_dirty();
+        self.waveform_editor.image_dirty = true;
         self.hooks
             .on_sample_loaded(&path.to_string_lossy(), idx as i64);
         Ok(idx)
@@ -101,10 +103,14 @@ impl super::App {
             .sample_index
             .ok_or_else(|| "Selected instrument has no sample".to_string())?;
 
-        let wf_editor = self.waveform_editor.clone();
+        let cursor_sample = self.waveform_editor.cursor_sample;
+        let pencil_value = self.waveform_editor.pencil_value;
         self.modify_sample(inst_idx, sample_idx, true, |sample| {
-            wf_editor.draw_at_cursor(sample);
+            if cursor_sample < sample.frame_count() {
+                sample.set_sample(cursor_sample, pencil_value);
+            }
         });
+        self.waveform_editor.image_dirty = true;
         Ok(())
     }
     /// Preview a note pitch through the current pattern editor instrument's sample.

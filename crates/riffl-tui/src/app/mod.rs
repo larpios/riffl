@@ -334,6 +334,10 @@ pub struct App {
     /// Waveform editor state for manual sample editing
     pub waveform_editor: WaveformEditorState,
 
+    /// Image protocol picker for pixel-based waveform rendering.
+    /// `None` = fall back to character-based rendering.
+    pub image_picker: Option<ratatui_image::picker::Picker>,
+
     /// Whether the sample browser has an active user-initiated preview.
     pub browser_preview_active: bool,
 
@@ -531,6 +535,7 @@ impl App {
             env_editor: EnvelopeEditorState::default(),
             lfo_editor: LfoEditorState::default(),
             waveform_editor: WaveformEditorState::default(),
+            image_picker: None,
             browser_preview_active: false,
             browser_preview_sample: None,
             browser_preview_rate: 1.0,

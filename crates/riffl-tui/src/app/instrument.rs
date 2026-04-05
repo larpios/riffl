@@ -102,6 +102,7 @@ impl App {
                 }
                 let _ =
                     self.replace_instrument_sample(inst_idx, sample_idx, snapshot.as_ref().clone());
+                self.waveform_editor.image_dirty = true;
                 true
             }
         }
@@ -145,6 +146,7 @@ impl App {
                 }
                 let _ =
                     self.replace_instrument_sample(inst_idx, sample_idx, snapshot.as_ref().clone());
+                self.waveform_editor.image_dirty = true;
                 true
             }
         }
@@ -171,6 +173,7 @@ impl App {
             Some(0) => self.instrument_selection = Some(count - 1),
             Some(i) => self.instrument_selection = Some(i - 1),
         }
+        self.waveform_editor.image_dirty = true;
     }
 
     /// Move instrument selection down.
@@ -185,6 +188,7 @@ impl App {
             Some(i) if i >= count - 1 => self.instrument_selection = Some(0),
             Some(i) => self.instrument_selection = Some(i + 1),
         }
+        self.waveform_editor.image_dirty = true;
     }
 
     /// Add a new empty instrument.
@@ -264,6 +268,7 @@ impl App {
             sample.loop_start = loop_start;
             sample.loop_end = loop_end;
         });
+        self.waveform_editor.image_dirty = true;
     }
 
     /// Adjust volume of the selected instrument by `delta` percentage points (clamped 0..=100).
@@ -317,6 +322,7 @@ impl App {
                         sample.loop_end = sample.frame_count().saturating_sub(1);
                     }
                 });
+                self.waveform_editor.image_dirty = true;
             }
         }
     }
@@ -330,6 +336,7 @@ impl App {
                         (sample.loop_start as i32 + delta).clamp(0, sample.loop_end as i32);
                     sample.loop_start = new_val as usize;
                 });
+                self.waveform_editor.image_dirty = true;
             }
         }
     }
@@ -344,6 +351,7 @@ impl App {
                         .clamp(sample.loop_start as i32, frame_count.saturating_sub(1));
                     sample.loop_end = new_val as usize;
                 });
+                self.waveform_editor.image_dirty = true;
             }
         }
     }
@@ -513,6 +521,7 @@ impl App {
         inst.chip_render = Some(chip_render);
         self.sync_mixer_instruments();
         self.mark_dirty();
+        self.waveform_editor.image_dirty = true;
         Ok(())
     }
 

@@ -9,6 +9,7 @@
 
 use std::path::{Path, PathBuf};
 
+use image::{DynamicImage, ImageBuffer, Rgba, RgbaImage};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
@@ -18,6 +19,7 @@ use ratatui::{
 };
 
 use crate::ui::theme::Theme;
+use crate::ui::waveform_editor::color_to_rgba;
 
 const AUDIO_EXTENSIONS: &[&str] = &["wav", "flac", "ogg", "mod"];
 
@@ -48,7 +50,6 @@ enum BrowserMode {
 }
 
 /// State for the dedicated sample browser view.
-#[derive(Debug, Clone)]
 pub struct SampleBrowser {
     /// Configured (pinned) roots — set via [`new`] / [`set_roots`].
     pinned_roots: Vec<PathBuf>,
@@ -64,6 +65,22 @@ pub struct SampleBrowser {
     pub waveform_peaks: Vec<f32>,
     /// The file path whose waveform is currently cached.
     pub waveform_path: Option<PathBuf>,
+    /// Cached pixel-image render state for the waveform preview panel.
+    pub image_state: Option<ratatui_image::protocol::StatefulProtocol>,
+    /// When `true` the pixel image must be rebuilt before the next render.
+    pub image_dirty: bool,
+    /// Pixel dimensions used when `image_state` was last built.
+    pub image_last_size: (u32, u32),
+}
+
+impl std::fmt::Debug for SampleBrowser {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SampleBrowser")
+            .field("selected", &self.selected)
+            .field("waveform_path", &self.waveform_path)
+            .field("image_dirty", &self.image_dirty)
+            .finish_non_exhaustive()
+    }
 }
 
 impl SampleBrowser {
@@ -79,6 +96,9 @@ impl SampleBrowser {
             selected: 0,
             waveform_peaks: Vec::new(),
             waveform_path: None,
+            image_state: None,
+            image_dirty: true,
+            image_last_size: (0, 0),
         };
         browser.refresh_entries();
         browser
@@ -213,12 +233,15 @@ impl SampleBrowser {
     pub fn set_waveform_peaks(&mut self, path: PathBuf, peaks: Vec<f32>) {
         self.waveform_path = Some(path);
         self.waveform_peaks = peaks;
+        self.image_dirty = true;
     }
 
     /// Clear cached waveform data (called when selection moves to a non-WAV entry).
     pub fn clear_waveform(&mut self) {
         self.waveform_path = None;
         self.waveform_peaks.clear();
+        self.image_state = None;
+        self.image_dirty = true;
     }
 
     /// The file path whose waveform peaks are currently cached, if any.
@@ -481,14 +504,16 @@ pub(crate) fn cursor_col_for(pos: usize, total: usize, width: usize) -> usize {
 /// `preview_pos` and `total_frames` are the current playback position and
 /// total frame count (both in output-rate frames) for the active browser preview.
 /// `output_sample_rate` converts frame counts to wall-clock time.
+#[allow(clippy::too_many_arguments)]
 pub fn render_sample_browser(
     frame: &mut Frame,
     area: Rect,
-    browser: &SampleBrowser,
+    browser: &mut SampleBrowser,
     theme: &Theme,
     preview_pos: usize,
     total_frames: usize,
     output_sample_rate: u32,
+    picker: Option<&mut ratatui_image::picker::Picker>,
 ) {
     let show_waveform =
         !browser.waveform_peaks.is_empty() && browser.waveform_path.is_some() && area.width >= 60;
@@ -505,16 +530,178 @@ pub fn render_sample_browser(
 
     render_browser_list(frame, list_area, browser, theme);
 
-    if let (Some(wave_area), Some(wpath)) = (wave_area_opt, browser.waveform_path.as_deref()) {
-        render_waveform_panel(
-            frame,
-            wave_area,
-            &browser.waveform_peaks,
-            wpath,
-            theme,
-            preview_pos,
-            total_frames,
-            output_sample_rate,
+    // Snapshot the path as owned so we can release the immutable borrow before
+    // passing `browser` mutably to the pixel rendering function.
+    let wpath_owned: Option<PathBuf> = browser.waveform_path.clone();
+
+    if let (Some(wave_area), Some(wpath)) = (wave_area_opt, wpath_owned.as_deref()) {
+        if let Some(picker) = picker {
+            render_waveform_panel_pixel(
+                frame,
+                wave_area,
+                browser,
+                wpath,
+                theme,
+                preview_pos,
+                total_frames,
+                output_sample_rate,
+                picker,
+            );
+        } else {
+            render_waveform_panel(
+                frame,
+                wave_area,
+                &browser.waveform_peaks,
+                wpath,
+                theme,
+                preview_pos,
+                total_frames,
+                output_sample_rate,
+            );
+        }
+    }
+}
+
+/// Build a pixel image from browser peak data (unipolar, bars from bottom up).
+fn build_browser_waveform_image(
+    peaks: &[f32],
+    px_w: u32,
+    px_h: u32,
+    theme: &Theme,
+) -> DynamicImage {
+    let px_w = px_w.max(1);
+    let px_h = px_h.max(1);
+    let mut img: RgbaImage = ImageBuffer::new(px_w, px_h);
+    for p in img.pixels_mut() {
+        *p = Rgba([0, 0, 0, 0]);
+    }
+
+    if peaks.is_empty() {
+        return DynamicImage::ImageRgba8(img);
+    }
+
+    let wf_color = color_to_rgba(theme.primary, 220);
+
+    for px_x in 0..px_w {
+        let idx = (px_x as usize * peaks.len()) / px_w as usize;
+        let amp = peaks[idx.min(peaks.len() - 1)];
+        let bar_height = (amp * px_h as f32) as u32;
+        let top_y = px_h.saturating_sub(bar_height);
+        for py in top_y..px_h {
+            img.put_pixel(px_x, py, wf_color);
+        }
+    }
+
+    DynamicImage::ImageRgba8(img)
+}
+
+/// Render the waveform preview using pixel graphics protocol.
+#[allow(clippy::too_many_arguments)]
+fn render_waveform_panel_pixel(
+    frame: &mut Frame,
+    area: Rect,
+    browser: &mut SampleBrowser,
+    path: &Path,
+    theme: &Theme,
+    preview_pos: usize,
+    total_frames: usize,
+    output_sample_rate: u32,
+    picker: &mut ratatui_image::picker::Picker,
+) {
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("waveform");
+    let title = format!(" {name} ");
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(theme.border_style())
+        .title(Span::styled(title, Style::default().fg(theme.text)))
+        .title_alignment(Alignment::Center);
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    if inner.width == 0 || inner.height == 0 || browser.waveform_peaks.is_empty() {
+        return;
+    }
+
+    // Reserve bottom row for time display.
+    let show_time = total_frames > 0 && output_sample_rate > 0;
+    let waveform_rows = if show_time && inner.height > 1 {
+        inner.height - 1
+    } else {
+        inner.height
+    };
+
+    let waveform_rect = Rect {
+        x: inner.x,
+        y: inner.y,
+        width: inner.width,
+        height: waveform_rows,
+    };
+
+    let font_size = picker.font_size();
+    let px_w = waveform_rect.width as u32 * font_size.0 as u32;
+    let px_h = waveform_rect.height as u32 * font_size.1 as u32;
+    let cur_size = (px_w, px_h);
+
+    if browser.image_dirty || browser.image_last_size != cur_size {
+        let img = build_browser_waveform_image(&browser.waveform_peaks, px_w, px_h, theme);
+        browser.image_state = Some(picker.new_resize_protocol(img));
+        browser.image_dirty = false;
+        browser.image_last_size = cur_size;
+    }
+
+    if let Some(img_state) = browser.image_state.as_mut() {
+        frame.render_stateful_widget(
+            ratatui_image::StatefulImage::default(),
+            waveform_rect,
+            img_state,
+        );
+    }
+
+    // Playback cursor overlay — write only the cursor cell, preserving the image.
+    if total_frames > 0 {
+        let w = inner.width as usize;
+        let cursor_col = cursor_col_for(preview_pos, total_frames, w);
+        if cursor_col < w {
+            let cursor_style = Style::default().fg(theme.warning_color());
+            let cursor_y = waveform_rect.bottom().saturating_sub(1);
+            let cursor_x = waveform_rect.left() + cursor_col as u16;
+            if cursor_x < waveform_rect.right() && cursor_y >= waveform_rect.top() {
+                let buf = frame.buffer_mut();
+                if let Some(cell) = buf.cell_mut((cursor_x, cursor_y)) {
+                    cell.set_symbol("▏");
+                    cell.set_style(cursor_style);
+                    cell.set_skip(false);
+                }
+            }
+        }
+    }
+
+    // Time display row.
+    if show_time && inner.height > waveform_rows {
+        let rate = output_sample_rate as f64;
+        let elapsed = format_preview_time(preview_pos as f64 / rate);
+        let total_t = format_preview_time(total_frames as f64 / rate);
+        let time_str = format!("{elapsed} / {total_t}");
+        let time_rect = Rect {
+            x: inner.x,
+            y: inner.y + waveform_rows,
+            width: inner.width,
+            height: 1,
+        };
+        frame.render_widget(
+            Paragraph::new(
+                Line::from(Span::styled(
+                    time_str,
+                    Style::default().fg(theme.text_dimmed),
+                ))
+                .centered(),
+            ),
+            time_rect,
         );
     }
 }
