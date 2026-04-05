@@ -377,6 +377,18 @@ impl Editor {
         self.cursor_channel = new_channel.min(self.pattern.num_channels().saturating_sub(1));
         self.cursor_channel = self.cursor_channel.max(0);
 
+        // Determine sub-column from position within the channel.
+        // Layout per channel: "│ " (0-1) | note (2-4) | " " (5) | inst (6-7) | " " (8) |
+        //                     vol (9-10) | " " (11) | eff (12-15) | " " (16) | eff2 (17-20)
+        let within_ch = col_offset % CHANNEL_COL_WIDTH;
+        self.sub_column = match within_ch {
+            0..=5 => SubColumn::Note,
+            6..=8 => SubColumn::Instrument,
+            9..=11 => SubColumn::Volume,
+            12..=16 => SubColumn::Effect,
+            _ => SubColumn::Effect2,
+        };
+
         (self.cursor_row, self.cursor_channel)
     }
 

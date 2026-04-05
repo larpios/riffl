@@ -2,9 +2,11 @@ use crate::app::{App, AppView};
 use crate::editor::EditorMode;
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 
-pub fn handle_mouse_event(app: &mut App, mouse: MouseEvent) {
-    use crate::ui::layout;
-
+pub fn handle_mouse_event(
+    app: &mut App,
+    mouse: MouseEvent,
+    full_area: ratatui::layout::Rect,
+) {
     if app.has_modal() || app.has_export_dialog() || app.has_file_browser() {
         return;
     }
@@ -29,9 +31,16 @@ pub fn handle_mouse_event(app: &mut App, mouse: MouseEvent) {
         }
         return;
     }
-
-    let full_area = ratatui::layout::Rect::new(0, 0, 80, 24);
-    let (_header_area, content_area, _footer_area) = layout::create_main_layout(full_area, 3, 1);
+    let chunks = ratatui::layout::Layout::default()
+        .direction(ratatui::layout::Direction::Vertical)
+        .constraints([
+            ratatui::layout::Constraint::Length(3),
+            ratatui::layout::Constraint::Length(1),
+            ratatui::layout::Constraint::Min(0),
+            ratatui::layout::Constraint::Length(1),
+        ])
+        .split(full_area);
+    let content_area = chunks[2];
 
     if app.current_view == AppView::InstrumentList {
         handle_instrument_view_mouse(app, mouse, content_area);
@@ -96,11 +105,12 @@ pub fn handle_mouse_event(app: &mut App, mouse: MouseEvent) {
                 app.editor.pattern().num_channels(),
             );
 
-            let header_height = 1u16;
+            let meter_rows: u16 = if pattern_height >= 4 { 2 } else { 0 };
+            let header_height = 1u16 + meter_rows; // VU meters + channel header row
             let visible_rows = pattern_height.saturating_sub(header_height) as usize;
             let scroll_offset = calculate_scroll_offset_for_mouse(
                 app.editor.cursor_row(),
-                visible_rows,
+                visible_rows.saturating_sub(1),
                 app.editor.pattern().num_rows(),
             );
 

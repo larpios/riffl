@@ -157,7 +157,8 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App)
                     }
                 }
                 Event::Mouse(mouse) => {
-                    handle_mouse_event(app, mouse);
+                    let area = terminal.size().unwrap_or_default().into();
+                    handle_mouse_event(app, mouse, area);
                 }
                 Event::Resize(_width, _height) => {}
                 _ => {}
